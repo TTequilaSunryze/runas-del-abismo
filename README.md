@@ -9,9 +9,9 @@ Zona 1: **Las Catacumbas Olvidadas**.
 | --- | --- |
 | `core`: azar por semilla, estado serializable, combate por iniciativa, línea de visión, estados, IA básica | Hecho, con tests |
 | Clases (Guerrero, Mago, Clérigo) con 4 rutas y bloqueo de rutas opuestas | Hecho (2 hechizos por ruta) |
-| Guardado en Supabase (`save_run` / `load_run`) | Base de datos lista; falta el cliente |
-| Interfaz jugable (render, menús) | Pendiente |
-| Online (salas con Supabase Realtime) | Pendiente |
+| Guardado en Supabase (`save_run` / `load_run`) | Se guarda tras cada combate; el anfitrión puede reanudar |
+| Interfaz jugable (inicio, sala, clase y rutas, tablero) | Versión mínima |
+| Online (salas con código, Supabase Realtime, anfitrión autoritativo) | Hecho; probado entre pestañas, falta prueba entre dispositivos |
 | Equipo de 8 ranuras y loot | Pendiente |
 | Mazmorra de la Zona 1, eventos de grupo y jefe | Pendiente |
 
@@ -30,7 +30,12 @@ Cada `push` a `main` pasa los tests y publica en GitHub Pages.
 
 - `src/core/` — lógica pura, sin DOM ni red (lo único que decide qué pasa en el juego)
 - `src/content/zona1/` — enemigos, objetos y eventos de la zona
+- `src/game/` — partida (run) y sesión anfitrión/cliente
 - `src/net/` — salas y guardado online
 - `src/render/`, `src/ui/`, `src/audio/` — presentación
 - `supabase/migrations/` — esquema de la base de datos
 - `tests/` — pruebas de `core`
+
+## Pruebas locales del online
+
+Añade `?local=1&p=nombre` a la URL en varias pestañas del mismo navegador: las salas funcionan sin servidor.

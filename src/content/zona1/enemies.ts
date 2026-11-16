@@ -19,6 +19,7 @@ export const ZONA1_ENEMIES: Record<string, EnemyDef> = {
   murcielago: { id: 'murcielago', name: 'Murciélago de cripta', hp: 13, armor: 0, ap: 3, mp: 5, initiative: 16, ai: 'melee', spell: 'e_mordisco' },
   esqueleto: { id: 'esqueleto', name: 'Esqueleto guardián', hp: 24, armor: 1, ap: 3, mp: 3, initiative: 9, ai: 'melee', spell: 'e_golpe' },
   arquero: { id: 'arquero', name: 'Arquero óseo', hp: 17, armor: 0, ap: 3, mp: 2, initiative: 12, ai: 'ranged', spell: 'e_flecha' },
+  caballero: { id: 'caballero', name: 'Caballero sepulcral', hp: 70, armor: 2, ap: 6, mp: 3, initiative: 11, ai: 'melee', spell: 'e_tajo' },
   necrofago: { id: 'necrofago', name: 'Necrófago', hp: 30, armor: 1, ap: 3, mp: 3, initiative: 7, ai: 'melee', spell: 'e_zarpazo' },
 };
 

@@ -4,23 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Runas del Abismo</title>
-    <style>
-      body { margin: 0; background: #0d0a14; color: #e8e0f5; font: 16px/1.5 ui-monospace, Menlo, Consolas, monospace; }
-      main { max-width: 760px; margin: 0 auto; padding: 24px 16px; }
-      h1 { color: #f2c14e; font-size: 22px; }
-      button { font: inherit; color: inherit; background: #6b3fb5; border: 2px solid #a77cf0; padding: 8px 14px; cursor: pointer; }
-      pre { background: #1a1426; border: 2px solid #3b2f57; padding: 12px; white-space: pre-wrap; max-height: 60vh; overflow: auto; }
-      .dim { color: #9a8fb5; }
-    </style>
+    <link rel="stylesheet" href="/src/ui/style.css" />
   </head>
   <body>
-    <main>
-      <h1>Runas del Abismo</h1>
-      <p class="dim">Zona 1: Las Catacumbas Olvidadas · versión en construcción</p>
-      <p>El motor de combate por iniciativa ya funciona. La interfaz jugable y el modo online llegan en los siguientes módulos.</p>
-      <p><button id="sim">Simular un combate de prueba</button></p>
-      <pre id="out">Pulsa el botón para ver un combate jugado por el motor.</pre>
-    </main>
+    <main id="app"></main>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
