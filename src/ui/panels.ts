@@ -5,18 +5,20 @@ import { SPELLS } from '../core/classes/spells';
 import { BAG_SIZE, PRICE, RARITY_NAME, SLOTS, SLOT_NAME, STAT_NAME, statDiff, statsText, type Item, type Slot, type StatKey } from '../core/items/items';
 import { SETS, setCounts } from '../core/items/sets';
 import { RELICS } from '../content/relics';
+import { PATRONS, patronBonus, patronOf } from '../content/boons';
 import { RUNES } from '../core/runes';
 import { UPGRADES, tuned } from '../core/upgrades';
-import { heroMaxHp, heroSpec, zoneOf, type HeroSave, type RunState } from '../game/run';
+import { heroMaxHp, heroSpec, pendingOf, statBreakdown, zoneOf, type HeroSave, type RunState } from '../game/run';
 import { esc, mine, tip, ui } from './ctx';
 import { itemIcon, spellIcon, spellTip } from './icons';
+import { rangeText, spellSummary } from './spellicons';
 
 const RAR = ['r0', 'r1', 'r2', 'r3'];
 
 export function sysButtons(): string {
   const s = ui.session;
   const warn = s?.isHost && s.t.kind === 'online' ? '¿Seguro? Termina para todos' : '¿Seguro? Pulsa otra vez';
-  return `<button class="sq" data-act="mute" ${tip('Sonido y música')}>${isMuted() ? '🔇' : '🔊'}</button><button data-act="leave" class="${ui.leaveArmed ? 'danger' : ''}">${ui.leaveArmed ? warn : 'Abandonar'}</button>`;
+  return `${ui.session?.run && !ui.session.run.arena ? `<button class="sq" data-act="stats" ${tip('Ficha del personaje: estadísticas totales (S)')}>📊</button>` : ''}<button class="sq" data-act="mute" ${tip('Sonido y música')}>${isMuted() ? '🔇' : '🔊'}</button><button data-act="leave" class="${ui.leaveArmed ? 'danger' : ''}">${ui.leaveArmed ? warn : 'Abandonar'}</button>`;
 }
 
 export function hpBar(hp: number, max: number, shield = 0): string {
@@ -130,6 +132,35 @@ export function upgradeRow(run: RunState): string {
     return `<div class="lootcard r2"><div class="row">${spellIcon(d)}<div><b>${esc(d.name)}</b><div class="pill sm">${up.icon} ${esc(up.name)}</div><div class="sm">${esc(up.text)}</div>${ch ? `<div class="good sm">${ch}</div>` : ''}</div></div><button class="pri" data-act="upgrade" data-id="${i}">Elegir</button></div>`; }).join('')}</div></div>`;
 }
 
+/** Bendición pendiente: 3 habilidades de un patrón (las del mismo patrón se potencian entre sí). */
+export function boonRow(run: RunState): string {
+  const h = mine(run);
+  if (!h?.boonOffer) return '';
+  const p = PATRONS[h.boonOffer.patron]!;
+  const counts = patronBonus(h.boons).counts;
+  return `<div class="panel loot boon"><div class="row"><h3>${p.icon} Bendición de ${esc(p.name)}: elige una habilidad</h3><span class="grow"></span><span class="dim sm">Habilidades extra: ${h.boons.length}/4</span></div>
+  <div class="dim sm">Con 2 del mismo patrón: ${esc(p.twoText)} · con 3: ${esc(p.threeText)}. ${counts[p.id] ? `Ya tienes ${counts[p.id]} de ${esc(p.name)}.` : ''}</div>
+  <div class="cards c3">${h.boonOffer.spells.map((id, i) => { const d = SPELLS[id]!; const pp = patronOf(id)!; const n = (counts[pp.id] ?? 0) + 1;
+    return `<div class="lootcard r2"><div class="row">${spellIcon(d)}<div><b>${esc(d.name)}</b><div class="pill sm">${pp.icon} ${esc(pp.name)}</div></div></div><div class="sm">${esc(spellSummary(d))}</div><div class="dim sm">${d.ap} PA · ${rangeText(d)}${d.cd ? ` · espera ${d.cd}` : ''}</div>${n >= 2 ? `<div class="good sm">Con esta: ${n} de ${esc(pp.name)} → ${esc(n >= 3 ? pp.threeText : pp.twoText)}</div>` : ''}<button class="pri" data-act="boon" data-id="${i}">Elegir</button></div>`; }).join('')}</div>
+  <button class="mini" data-act="boon" data-id="-1">Rechazar</button></div>`;
+}
+
+/** Todo lo que el jugador tiene pendiente de elegir. */
+export const pendingRows = (run: RunState): string => `${boonRow(run)}${upgradeRow(run)}${lootRow(run)}`;
+
+/** Control para cambiar de sala: el anfitrión espera a que todos estén listos; los demás pulsan «Listo». */
+export function advanceBar(run: RunState, label: string, act = 'leavenode'): string {
+  const s = ui.session!;
+  const h = mine(run);
+  const wait = s.waiting();
+  const others = run.heroes.filter((x) => x.owner !== s.myId);
+  const status = others.length ? `<span class="sm">${others.map((x) => { const p = pendingOf(run, x); const ok = !p.length && run.ready[x.owner] === run.stamp; return `<span class="${ok ? 'good' : 'dim'}" ${tip(p.length ? `Le falta elegir: ${p.join(', ')}` : ok ? 'Listo' : 'Aún no ha pulsado Listo')}>${ok ? '✔' : '⏳'} ${esc(x.name)}</span>`; }).join(' ')}</span>` : '';
+  if (s.isHost) return `<div class="row advance">${status}<span class="grow"></span>${act ? `<button class="pri" data-act="${act}" ${wait.length ? 'disabled' : ''} ${wait.length ? tip(`Esperando a: ${wait.map((x) => esc(x.name)).join(', ')}`) : ''}>${wait.length ? `⏳ Esperando (${wait.length})` : label}</button>` : ''}</div>`;
+  const pend = h ? pendingOf(run, h) : [];
+  const ready = !!h && run.ready[h.owner] === run.stamp;
+  return `<div class="row advance">${status}<span class="grow"></span>${h ? `<button class="${ready ? '' : 'pri'}" data-act="ready" ${pend.length ? 'disabled' : ''} ${pend.length ? tip(`Antes elige: ${pend.join(', ')}`) : ''}>${ready ? '✔ Listo (deshacer)' : pend.length ? `Elige tu ${pend[0]}` : 'Estoy listo'}</button>` : ''}<span class="dim sm">El anfitrión avanza cuando todos estén listos</span></div>`;
+}
+
 /** Botín pendiente: tarjetas grandes con icono, datos y comparación. */
 export function lootRow(run: RunState): string {
   const h = mine(run);
@@ -139,3 +170,25 @@ export function lootRow(run: RunState): string {
   <div class="cards">${offer.map((it, i) => `<div class="lootcard ${RAR[it.rarity]}"><div class="row"><div class="cell ${RAR[it.rarity]} big">${itemIcon(it)}</div><div>${itemHtml(it)}</div></div>${diffHtml(it, h)}<button class="pri" data-act="pick" data-id="${i}">Quedármelo</button></div>`).join('')}</div>
   <div class="dim sm">Si la ranura está ocupada, va a tu mochila y decides después.</div></div>`;
 }
+
+/** Ficha del personaje: estadísticas base + todo lo que las modifica, habilidades, reliquias y bendiciones. */
+export function statsModal(run: RunState): string {
+  const h = mine(run);
+  if (!h) return '';
+  const rows = statBreakdown(h);
+  const spec = heroSpec(h);
+  const pat = patronBonus(h.boons);
+  return `<div class="modal" id="statsmodal" data-act="stats"><div class="panel wide" onclick="event.stopPropagation()">
+  <div class="row"><h2>📊 ${esc(h.name)}</h2><span class="dim">${esc(findRoute(h.cls, h.routes[0] ?? '')?.name ?? '')}${h.routes[1] ? ` + ${esc(findRoute(h.cls, h.routes[1])?.name ?? '')}` : ''} · Nv ${h.level}</span><span class="grow"></span><button class="mini" data-act="stats">Cerrar ✕</button></div>
+  <table class="stattab"><tr><th>Estadística</th><th>Base</th><th>Modificadores</th><th>Total</th></tr>
+  ${rows.map((r) => `<tr><td>${esc(r.name)}</td><td class="dim">${r.base}</td><td class="sm">${r.parts.map(([n, v]) => `<span class="${v > 0 ? 'good' : 'bad'}">${v > 0 ? '+' : ''}${v} ${esc(n)}</span>`).join(' · ') || '<span class="dim">—</span>'}</td><td><b>${r.key === 'hp' ? `${h.hp}/${r.total}` : r.total}</b></td></tr>`).join('')}
+  </table>
+  <div class="cards c2">
+    <div><div class="lbl">Habilidades</div><div class="chips">${spec.spells.filter((x) => x.charges === undefined).map((sp) => { const d = tuned(SPELLS[sp.id]!, sp); return `<span class="chip" ${tip(spellTip(d))}>${spellIcon(d)} ${esc(d.name)}</span>`; }).join('')}</div>
+    ${Object.values(h.bag2).some((n) => n > 0) ? `<div class="lbl">Consumibles</div><div class="chips">${Object.entries(h.bag2).filter(([, n]) => n > 0).map(([id, n]) => `<span class="chip" ${tip(spellTip(SPELLS[id]!))}>${spellIcon(SPELLS[id]!, false)} ${esc(SPELLS[id]!.name)} x${n}</span>`).join('')}</div>` : ''}</div>
+    <div>${h.relics.length ? `<div class="lbl">Reliquias</div><div class="chips">${h.relics.map((r) => RELICS[r]).filter(Boolean).map((r) => `<span class="chip" ${tip(esc(r!.text))}>${r!.icon} ${esc(r!.name)}</span>`).join('')}</div>` : ''}
+    ${Object.keys(pat.counts).length ? `<div class="lbl">Bendiciones</div>${Object.entries(pat.counts).map(([id, n]) => { const p = PATRONS[id]!; return `<div class="sm ${n >= 2 ? 'good' : 'dim'}">${p.icon} ${esc(p.name)} ${n}/3 · ${n >= 3 ? esc(p.threeText) : n >= 2 ? esc(p.twoText) : `con 2: ${esc(p.twoText)}`}</div>`; }).join('')}` : ''}
+    ${(spec.traits ?? []).length ? `<div class="lbl">Efectos especiales</div>${(spec.traits ?? []).map((t) => `<div class="sm">${esc(TRAIT_LABEL[t] ?? t)}</div>`).join('')}` : ''}</div>
+  </div></div></div>`;
+}
+const TRAIT_LABEL: Record<string, string> = { venom: 'Tus venenos aplican 1 carga más', ignite: 'Todo tu daño quema', execute: 'Tus críticos hacen el doble', mender: 'Curas y escudos +30%', guard: 'Empiezas cada turno con escudo', thorns: 'Devuelves el 30% del daño cuerpo a cuerpo', regen: 'Te regeneras cada turno', enrage: '+40% de daño con poca vida' };

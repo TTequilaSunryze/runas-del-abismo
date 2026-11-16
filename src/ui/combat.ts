@@ -1,6 +1,6 @@
 // Pantalla de combate: tablero, orden de iniciativa, barra de hechizos y registro.
 import { SPELLS } from '../core/classes/spells';
-import { current, getUnit, spellOf } from '../core/combat/engine';
+import { current, getUnit, spellOf, usableMp } from '../core/combat/engine';
 import { RUNES } from '../core/runes';
 import { OMENS } from '../content/modes';
 import type { GameEvent } from '../core/state';
@@ -28,6 +28,10 @@ export function addLog(events: GameEvent[]): void {
     else if (e.t === 'split') s = `<span class="bad">${n(e.unit)} se divide</span>`;
     else if (e.t === 'blink') s = `<span class="bad">${n(e.unit)} aparece de las sombras</span>`;
     else if (e.t === 'snare') s = `· ${n(e.unit)} cae en un cepo`;
+    else if (e.t === 'drain' && (e.ap < 0 || e.mp < 0)) s = `· ${n(e.unit)} pierde ${[e.ap ? `${-e.ap} PA` : '', e.mp ? `${-e.mp} PM` : ''].filter(Boolean).join(' y ')}`;
+    else if (e.t === 'resist') s = `· ${n(e.unit)}: ${esc(e.what)}`;
+    else if (e.t === 'tackle') s = `· ${n(e.unit)} queda placado y pierde ${e.lost} PM`;
+    else if (e.t === 'revive') s = `<span class="good">${n(e.unit)} vuelve a la vida</span>`;
     else if (e.t === 'stuck') s = `· ${n(e.unit)} queda atrapado en el charco`;
     else if (e.t === 'devour') s = `<span class="bad">${n(e.unit)} devora un cadáver</span>`;
     else if (e.t === 'raise') s = `<span class="bad">${n(e.unit)} alza a un muerto</span>`;
@@ -62,7 +66,7 @@ export function combatScreen(events: GameEvent[]): void {
   if (!myTurn && board.sel) board.sel = null;
   const left = s.turnEndsAt ? Math.max(0, Math.ceil((s.turnEndsAt - Date.now()) / 1000)) : 0;
   const kind = run.arena ? `🏟️ Duelo: ${esc(run.arena.nameA)} contra ${esc(run.arena.nameB)}` : run.kind === 'boss' ? '👑 JEFE' : run.kind === 'elite' ? '☠️ Élite' : '⚔️ Combate';
-  document.getElementById('info')!.innerHTML = `<b>${kind}</b><span class="dim sm">${run.arena ? '' : `Zona ${run.zone + 1} · sala ${run.step + 1}/${run.map.length} · `}ronda ${c.round}</span>${c.round >= 20 ? `<span class="bad sm" ${tip('Desde la ronda 20 nadie se regenera ni recibe escudos automáticos, y los pilares dejan de curar.')}>⌛ Sin regeneración</span>` : c.round >= 16 ? `<span class="dim sm">⌛ ronda 20: fin de regeneración</span>` : ''}${omenDef ? `<span class="pill sm omen" ${tip(`<b>${omenDef.icon} ${esc(omenDef.name)}</b><div class="sm">${esc(omenDef.text)}</div>`)}>${omenDef.icon} ${esc(omenDef.name)}</span>` : ''}
+  document.getElementById('info')!.innerHTML = `<b>${kind}</b><span class="dim sm">${run.arena ? '' : `Zona ${run.zone + 1} · sala ${run.step + 1}/${run.map.length} · `}ronda ${c.round}</span>${c.round >= 30 ? `<span class="bad sm" ${tip('Muerte súbita: el Abismo consume a todos al empezar su turno (5% de la vida máxima por cada ronda desde la 30).')}>☠ El Abismo consume</span>` : c.round >= 26 ? `<span class="bad sm">☠ ronda 30: muerte súbita</span>` : ''}${c.round >= 20 ? `<span class="bad sm" ${tip('Desde la ronda 20 nadie se regenera ni recibe escudos automáticos, y los pilares dejan de curar.')}>⌛ Sin regeneración</span>` : c.round >= 16 ? `<span class="dim sm">⌛ ronda 20: fin de regeneración</span>` : ''}${omenDef ? `<span class="pill sm omen" ${tip(`<b>${omenDef.icon} ${esc(omenDef.name)}</b><div class="sm">${esc(omenDef.text)}</div>`)}>${omenDef.icon} ${esc(omenDef.name)}</span>` : ''}
     <span class="turn ${myTurn ? 'mine' : ''}">${c.over ? (c.over === 'win' ? '¡Victoria!' : 'Derrota') : myTurn ? 'TU TURNO' : cur ? `Turno de ${esc(cur.name)}` : ''}</span><span id="clock" class="dim">${left && !c.over ? `${left}s` : ''}</span>
     ${ui.notice ? `<span class="bad">${esc(ui.notice)}</span>` : ''}${!s.hostPresent() ? '<span class="bad">Anfitrión desconectado: partida en pausa</span>' : ''}
     ${s.isHost && cur && !cur.ai && !myTurn && !c.over ? '<button class="mini" data-act="skip">Pasar su turno</button>' : ''}<span class="grow"></span>${sysButtons()}`;
@@ -72,9 +76,12 @@ export function combatScreen(events: GameEvent[]): void {
     .map((u) => `<span class="ini ${cur?.id === u.id ? 'on' : ''} ${u.team === mineTeam ? `p${(heroIdx.get(u.id) ?? 0) % 4}` : 'en'}" ${tip(`<b>${esc(u.name)}</b><div class="sm">${u.hp}/${u.maxHp} PV · iniciativa ${u.initiative}</div>${(u.traits ?? []).map((t) => `<div class="sm dim">${esc(TRAIT_TEXT[t] ?? t)}</div>`).join('')}`)}>${esc(u.name.split(' ')[0])}<i style="width:${(u.hp / u.maxHp) * 100}%"></i></span>`).join('');
   document.getElementById('hud')!.innerHTML = me
     ? `<div class="me"><b>${esc(me.name)}</b>${hpBar(me.hp, me.maxHp, me.shield)}<div class="row"><span class="sm pill">PA</span>${pips(me.ap, me.maxAp, 'ap')}</div><div class="row"><span class="sm blu">PM</span>${pips(me.mp, me.maxMp, 'mp')}</div></div>
-      <div class="spellbar">${me.spells.map((sp, i) => { const d = spellOf(me, sp.id)!; const rn = sp.rune ? RUNES[sp.rune] : undefined; const off = !myTurn || me.ap < d.ap || sp.cd > 0 || me.hp <= 0;
+      ${usableMp(c, me) < me.mp && myTurn ? `<div class="sm blu" ${tip('Placaje: los enemigos pegados a ti te retienen. Al alejarte pierdes PM según tu Huida y su Placaje.')}>⛓ Placado: ${usableMp(c, me)}/${me.mp} PM útiles</div>` : ''}
+      <div class="spellbar">${me.spells.map((sp, i) => ({ sp, i })).filter(({ sp }) => sp.charges === undefined).map(({ sp, i }) => { const d = spellOf(me, sp.id)!; const rn = sp.rune ? RUNES[sp.rune] : undefined; const off = !myTurn || me.ap < d.ap || sp.cd > 0 || me.hp <= 0;
         return `<button class="sbtn ${board.sel === d.id ? 'on' : ''} ${sp.cd > 0 ? 'cd' : ''}" data-act="spell" data-id="${d.id}" ${off ? 'disabled' : ''} ${tip(spellTip(d, `${rn ? `<div class="sm pill">${rn.icon} ${esc(rn.name)}: ${esc(rn.text)}</div>` : ''}${sp.cd > 0 ? `<div class="sm bad">Disponible en ${sp.cd} turno(s)</div>` : ''}`))}>
-          <kbd>${i + 1}</kbd>${spellIcon(d, false)}<span class="cost">${d.ap}</span>${rn ? `<span class="rn">${rn.icon}</span>` : ''}${sp.cd > 0 ? `<span class="cdn">${sp.cd}</span>` : ''}<small>${esc(d.name)}</small></button>`; }).join('')}</div>
+          <kbd>${i + 1}</kbd>${spellIcon(d, false)}<span class="cost">${d.ap}</span>${rn ? `<span class="rn">${rn.icon}</span>` : ''}${sp.cd > 0 ? `<span class="cdn">${sp.cd}</span>` : ''}<small>${esc(d.name)}</small></button>`; }).join('')}
+      ${me.spells.some((sp) => sp.charges !== undefined) ? `<span class="itemsep"></span>${me.spells.filter((sp) => sp.charges !== undefined).map((sp) => { const d = spellOf(me, sp.id)!; const off = !myTurn || me.ap < d.ap || (sp.charges ?? 0) <= 0 || me.hp <= 0;
+        return `<button class="sbtn item ${board.sel === d.id ? 'on' : ''}" data-act="spell" data-id="${d.id}" ${off ? 'disabled' : ''} ${tip(spellTip(d, `<div class="sm">Te quedan ${sp.charges}</div>`))}>${spellIcon(d, false)}<span class="cost">${d.ap}</span><span class="cdn qty">x${sp.charges}</span><small>${esc(d.name.replace('Poción de ', 'P. ').replace('Bomba de ', 'B. '))}</small></button>`; }).join('')}` : ''}</div>
       <button class="pri endturn" data-act="end" ${myTurn ? '' : 'disabled'}>Terminar<br>turno<br><small>(E)</small></button>`
     : '<span class="dim">Estás como espectador en este combate.</span>';
   const lg = document.getElementById('log')!;

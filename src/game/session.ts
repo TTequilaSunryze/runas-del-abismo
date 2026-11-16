@@ -5,6 +5,7 @@ import { cast, current, endTurn, move, type ActionResult } from '../core/combat/
 import type { ClassId, GameEvent, Pos } from '../core/state';
 import { saveRun, type Peer, type Transport } from '../net/transport';
 import type { Perks } from '../content/modes';
+import { waitingFor, type HeroSave } from './run';
 import { bossInfo, chooseNode, recordEvents, finishFight, leaveNode, metaAction, newArena, newRun, resolveEvent, type MetaAction, type RunState } from './run';
 
 export type Action = { a: 'move'; to: Pos } | { a: 'cast'; spell: string; at: Pos } | { a: 'end' } | MetaAction;
@@ -70,7 +71,7 @@ export class Session {
     t.on('sync', (p) => {
       if (this.isHost) return;
       const m = p as { run: RunState; ev: GameEvent[] };
-      if (!m?.run || m.run.version !== 8) return;
+      if (!m?.run || m.run.version !== 9) return;
       this.run = m.run;
       this.noteTurn();
       this.onChange(Array.isArray(m.ev) ? m.ev : []);
@@ -217,12 +218,29 @@ export class Session {
 
   /** Elige un nodo del mapa. */
   choose(idx: number): void {
-    if (this.isHost && this.run?.phase === 'map') this.afterChange(chooseNode(this.run, idx));
+    if (!this.isHost || this.run?.phase !== 'map') return;
+    if (this.blocked()) return;
+    this.afterChange(chooseNode(this.run, idx));
+  }
+
+  /** Jugadores conectados por los que hay que esperar (botín sin elegir o sin pulsar «Listo»). */
+  waiting(): HeroSave[] {
+    if (!this.run) return [];
+    const present = [this.myId, ...this.lobby().map((p) => p.id)];
+    return waitingFor(this.run, present, this.myId);
+  }
+
+  private blocked(): boolean {
+    const w = this.waiting();
+    if (!w.length) return false;
+    this.onError(`Esperando a: ${w.map((h) => h.name).join(', ')}`);
+    return true;
   }
 
   /** Vuelve al mapa desde la tienda o desde un evento resuelto. */
   leaveNode(): void {
     if (!this.isHost || !this.run) return;
+    if (this.blocked()) return;
     leaveNode(this.run);
     this.afterChange([]);
   }

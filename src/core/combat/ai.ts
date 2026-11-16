@@ -36,7 +36,7 @@ function attackAll(s: CombatState, u: Unit, def: SpellDef, ev: GameEvent[]): voi
 function fight(s: CombatState, u: Unit, def: SpellDef, keepAway: boolean, ev: GameEvent[]): void {
   attackAll(s, u, def, ev);
   if (s.over || !alive(u) || current(s)?.id !== u.id || u.mp <= 0) return;
-  let foes = s.units.filter((h) => h.team !== u.team && alive(h));
+  let foes = s.units.filter((h) => h.team !== u.team && alive(h) && !h.statuses.invis);
   // los cazadores van a por el más frágil
   if (hasTrait(u, 'hunter') && foes.length) foes = [foes.reduce((a, b) => (b.maxHp < a.maxHp ? b : a))];
   const ghost = hasTrait(u, 'ghost');
@@ -71,7 +71,7 @@ function fight(s: CombatState, u: Unit, def: SpellDef, keepAway: boolean, ev: Ga
 function trapper(s: CombatState, u: Unit, ev: GameEvent[]): void {
   const mine = (s.snares ?? []).filter((t) => t.team === u.team).length;
   if (mine >= 3 || u.ap < 2) return;
-  const foe = s.units.filter((h) => h.team !== u.team && alive(h)).sort((a, b) => dist(a.pos, u.pos) - dist(b.pos, u.pos))[0];
+  const foe = s.units.filter((h) => h.team !== u.team && alive(h) && !h.statuses.invis).sort((a, b) => dist(a.pos, u.pos) - dist(b.pos, u.pos))[0];
   if (!foe) return;
   const cells = [[1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [-2, 0], [0, 2], [0, -2]]
     .map(([dx, dy]) => ({ x: foe.pos.x + dx!, y: foe.pos.y + dy! }))
@@ -85,7 +85,7 @@ function trapper(s: CombatState, u: Unit, ev: GameEvent[]): void {
 /** Salto sombrío: si no tiene a nadie al lado, aparece junto al héroe más frágil (cada dos rondas). */
 function blink(s: CombatState, u: Unit, ev: GameEvent[]): void {
   if (s.round % 2 === 1) return;
-  const foes = s.units.filter((h) => h.team !== u.team && alive(h));
+  const foes = s.units.filter((h) => h.team !== u.team && alive(h) && !h.statuses.invis);
   if (!foes.length || foes.some((f) => dist(f.pos, u.pos) <= 1)) return;
   const prey = foes.reduce((a, b) => (b.hp < a.hp ? b : a));
   for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
@@ -195,7 +195,7 @@ function pillarTurn(s: CombatState, ev: GameEvent[]): void {
 function champCast(s: CombatState, u: Unit, ev: GameEvent[]): boolean {
   const defs = u.spells.filter((sp) => sp.cd === 0).map((sp) => spellOf(u, sp.id)!).filter((d) => d && d.ap <= u.ap);
   const allies = s.units.filter((a) => a.team === u.team && alive(a));
-  const foes = s.units.filter((f) => f.team !== u.team && alive(f));
+  const foes = s.units.filter((f) => f.team !== u.team && alive(f) && !f.statuses.invis);
   let best: { d: SpellDef; at: Pos; score: number } | null = null;
   const consider = (d: SpellDef, at: Pos, score: number): void => {
     if (score > 0 && (!best || score > best.score) && !castProblem(s, u, SPELLS[d.id]!, at)) best = { d, at, score };

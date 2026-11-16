@@ -93,6 +93,15 @@ const LOOK: Record<string, [string, string]> = {
   rapido: ['multi', 'nature'], andanada: ['arrowrain', 'nature'], salto_atras: ['leap', 'nature'],
   cepo: ['trap', 'steel'], flecha_hielo: ['arrow', 'ice'], red: ['net', 'nature'],
   lobo: ['wolf', 'nature'], orden: ['paw', 'gold'], vinculo: ['link', 'poison'],
+  hachazo: ['axe', 'steel'], sed_sangre: ['heart', 'blood'], chispa: ['dart', 'fire'], escudo_arcano: ['hexshield', 'storm'],
+  castigo: ['bolt', 'holy'], fervor: ['sun', 'blood'], tiro_rasante: ['arrow', 'steel'], ojo_halcon: ['eye', 'nature'],
+  cuchillo: ['dagger', 'storm'], desvanecer: ['cloud', 'shadow'],
+  c_vida: ['vial', 'blood'], c_resu: ['chalice', 'holy'], c_fuego: ['fireball', 'fire'], c_humo: ['cloud', 'steel'],
+  b_relampago: ['bolt', 'arcane'], b_cadena: ['storm', 'arcane'], b_trueno: ['whirl', 'storm'],
+  b_llamarada: ['flame', 'blood'], b_infierno: ['rain', 'fire'], b_fenix: ['heart', 'fire'],
+  b_lanza: ['dart', 'ice'], b_prision: ['iceblock', 'arcane'], b_coraza: ['shield', 'ice'],
+  b_drenar: ['drop', 'shadow'], b_paso: ['leap', 'shadow'], b_maldicion: ['skull', 'poison'],
+  b_espinas: ['whip', 'poison'], b_brote: ['heart', 'nature'], b_corteza: ['shield', 'nature'],
 };
 
 const EL_PAL: Record<string, string> = { fire: 'fire', ice: 'ice', poison: 'poison', holy: 'holy', shadow: 'shadow' };

@@ -36,11 +36,16 @@ export const ui = {
   asc: 0,
   daily: false,
   /** pestaña de la pantalla de inicio */
-  homeTab: 'jugar' as 'jugar' | 'mejoras' | 'clases' | 'logros' | 'salon' | 'diario' | 'cuenta',
+  homeTab: 'jugar' as 'jugar' | 'mejoras' | 'clases' | 'logros' | 'salon' | 'diario' | 'cuenta' | 'amigos',
   /** mensajes de la pestaña de cuenta y del salón */
   acctMsg: '',
   /** lo escrito en el formulario de cuenta, para no perderlo al redibujar */
   acEmail: '',
+  forgeTab: 'equipo' as 'equipo' | 'mochila',
+  friendMsg: '',
+  invites: [] as Array<{ from: string; code: string; at: number }>,
+  /** ventana de estadísticas abierta */
+  statsOpen: false,
   acName: '',
   hallMsg: '',
   busy: false,

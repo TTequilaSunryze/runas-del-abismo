@@ -29,10 +29,12 @@ export interface Meta {
   /** última modificación (ms) y cuenta a la que está ligado */
   t: number;
   acct: string | null;
+  /** nombres de cuenta de mis amigos */
+  friends: string[];
 }
 
 const KEY = 'rda_meta';
-const fresh = (): Meta => ({ v: 1, ecos: 0, perks: {}, unlocked: [], maxAsc: 0, achievements: [], stats: { runs: 0, wins: 0, kills: 0, bosses: 0, bestZone: 0 }, seenTutorial: false, combats: 0, claimed: [], mastery: {}, hall: [], team: [], t: 0, acct: null });
+const fresh = (): Meta => ({ v: 1, ecos: 0, perks: {}, unlocked: [], maxAsc: 0, achievements: [], stats: { runs: 0, wins: 0, kills: 0, bosses: 0, bestZone: 0 }, seenTutorial: false, combats: 0, claimed: [], mastery: {}, hall: [], team: [], t: 0, acct: null, friends: [] });
 
 let cache: Meta | null = null;
 export function meta(): Meta {
@@ -79,7 +81,7 @@ export function mergeMeta(a: Meta, b: Partial<Meta>): Meta {
     maxAsc: Math.max(a.maxAsc, b.maxAsc ?? 0), achievements: uniq([...a.achievements, ...(b.achievements ?? [])]),
     stats: maxRec(a.stats, b.stats) as Meta['stats'], seenTutorial: a.seenTutorial || !!b.seenTutorial, combats: Math.max(a.combats, b.combats ?? 0),
     claimed: uniq([...a.claimed, ...(b.claimed ?? [])]).slice(-40), mastery: maxRec(a.mastery, b.mastery), hall: hall.slice(-HALL_SIZE),
-    team: (a.team?.length ? a.team : b.team) ?? [], t: Date.now(), acct: a.acct,
+    team: (a.team?.length ? a.team : b.team) ?? [], t: Date.now(), acct: a.acct, friends: uniq([...(a.friends ?? []), ...(b.friends ?? [])]).slice(0, 30),
   };
 }
 

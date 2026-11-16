@@ -1,7 +1,7 @@
 import { SPELLS } from '../core/classes/spells';
 // Tablero de combate: dibuja el estado y convierte clics en acciones.
 import { ZONES } from '../content/zones';
-import { castProblem, current, spellOf } from '../core/combat/engine';
+import { castProblem, current, spellOf, usableMp } from '../core/combat/engine';
 import { alive, dist, hasLineOfSight, reachable } from '../core/combat/grid';
 import type { CombatState, GameEvent, Pos, Unit } from '../core/state';
 import type { Session } from '../game/session';
@@ -9,7 +9,7 @@ import { PLAYER_COLORS, drawUnit } from './sprites';
 
 const TILE = 56;
 const STATUS_COLOR: Record<string, string> = { burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0' };
-export const STATUS_NAME: Record<string, string> = { burn: 'Quemadura', poison: 'Veneno', slow: 'Ralentizado', stun: 'Aturdido', mark: 'Marcado' };
+export const STATUS_NAME: Record<string, string> = { burn: 'Quemadura', poison: 'Veneno', slow: 'Ralentizado', stun: 'Aturdido', mark: 'Marcado', empower: 'Potenciado', reach: 'Alcance+', invis: 'Invisible', exposed: 'Expuesto' };
 
 interface Float { x: number; y: number; text: string; color: string; t0: number }
 interface Shot { x0: number; y0: number; x1: number; y1: number; color: string; t0: number; dur: number }
@@ -120,6 +120,10 @@ export class Board {
       else if (e.t === 'trap') float(e.unit, '¡Púas!', '#ff8a30');
       else if (e.t === 'stuck') float(e.unit, '¡Atrapado!', '#7fe05a');
       else if (e.t === 'snare') float(e.unit, '¡Cepo!', '#d8b060');
+      else if (e.t === 'drain') { if (e.mp) float(e.unit, `${e.mp > 0 ? '+' : ''}${e.mp} PM`, '#58a6ff'); if (e.ap) float(e.unit, `${e.ap > 0 ? '+' : ''}${e.ap} PA`, '#f2c14e'); }
+      else if (e.t === 'resist') float(e.unit, e.what, '#c8c8d8');
+      else if (e.t === 'tackle') float(e.unit, `¡Placado! -${e.lost} PM`, '#58a6ff');
+      else if (e.t === 'revive') float(e.unit, '¡Resucita!', '#7fe05a');
       else if (e.t === 'explode') { float(e.unit, '¡BUM!', '#ff8a30'); if (from) for (let i = 0; i < 6; i++) this.shots.push({ x0: (from.x + 0.5) * TILE, y0: (from.y + 0.5) * TILE, x1: (from.x + 0.5 + Math.cos(i * 1.05) * 1.3) * TILE, y1: (from.y + 0.5 + Math.sin(i * 1.05) * 1.3) * TILE, color: '#ff8a30', t0: now, dur: 260 }); }
       else if (e.t === 'split') float(e.unit, 'Se divide', '#c9a0ff');
       else if (e.t === 'blink') { this.shown.set(e.unit, { ...e.to }); float(e.unit, 'Salto sombrío', '#c77dff'); }
@@ -200,7 +204,7 @@ export class Board {
           for (let y = 0; y < c.h; y++) for (let x = 0; x < c.w; x++) if (dist({ x, y }, this.hover) <= def.area) fill({ x, y }, 'rgba(255,60,60,.2)');
         }
       } else {
-        for (const [k, cost] of reachable(c, me.pos, me.mp).cost) {
+        for (const [k, cost] of reachable(c, me.pos, usableMp(c, me)).cost) {
           if (!cost) continue;
           const [x, y] = k.split(',').map(Number) as [number, number];
           fill({ x, y }, 'rgba(88,166,255,.2)');
@@ -228,7 +232,7 @@ export class Board {
       const def0 = u.team === 'hero';
       const left = this.faceLeft.get(u.id) ?? !def0;
       drawUnit(g, u.kind, u.team, heroIdx.get(u.id) ?? 0, cx + (lg ? lg.dx * swing * TILE * 0.3 : 0), by + bob + (lg ? lg.dy * swing * TILE * 0.3 : 0), TILE,
-        { flash: (this.flash.get(u.id) ?? 0) > now, swing, flip: def0 ? left : !left });
+        { flash: (this.flash.get(u.id) ?? 0) > now, swing, flip: def0 ? left : !left, alpha: u.statuses.invis ? 0.4 : 1 });
       this.bars(u, cx, s.y * TILE + 2, heroIdx.get(u.id));
     }
     // caídos: se desvanecen hacia arriba
@@ -296,15 +300,31 @@ export class Board {
     const def = me && this.sel ? spellOf(me, this.sel) : undefined;
     if (me && def?.dmg && u.team !== me.team) {
       const res = def.element ? Math.min(75, u.resist[def.element] ?? 0) : 0;
-      const f = (1 + me.power / 100) * (u.statuses.mark ? 1.3 : 1) * (1 - res / 100);
-      const lo = Math.max(1, Math.round(def.dmg[0] * f) - (def.pierce ? 0 : u.armor)), hi = Math.max(1, Math.round(def.dmg[1] * f) - (def.pierce ? 0 : u.armor));
+      const f = (1 + (me.power + (me.statuses.empower?.stacks ?? 0)) / 100) * (u.statuses.mark ? 1.3 : 1) * (1 - res / 100);
+      const arm = def.pierce ? 0 : Math.max(0, u.armor - (u.statuses.exposed?.stacks ?? 0));
+      const lo = Math.max(1, Math.round(def.dmg[0] * f) - arm), hi = Math.max(1, Math.round(def.dmg[1] * f) - arm);
       est = `${def.name}: ${lo}-${hi} de daño${lo >= u.hp + u.shield ? ' · ¡LO MATA!' : hi >= u.hp + u.shield ? ' · puede matarlo' : ''}`;
     }
-    const lines = [...(est ? [est] : []), `${u.name}  ${u.hp}/${u.maxHp} PV${u.shield ? `  escudo ${u.shield}` : ''}`, `PA ${u.maxAp} · PM ${u.maxMp} · Armadura ${u.armor}`, ...(res ? [res] : []), ...(st ? [st] : [])];
+    // PA y PM: los de ahora si es su turno; si no, los que tendrá en su próximo turno (con lo que le han quitado)
+    const isCur = current(c)?.id === u.id;
+    const apNow = isCur ? u.ap : Math.max(0, u.maxAp + u.apMod);
+    const mpNow = isCur ? u.mp : Math.max(0, u.maxMp + u.mpMod - (u.statuses.slow?.stacks ?? 0));
+    const armorNow = Math.max(0, u.armor - (u.statuses.exposed?.stacks ?? 0));
+    const tk = me && u.team !== me.team && u.ai !== 'pillar' ? ` · Placaje ${u.tackle ?? 0}` : '';
+    const L: Array<[string, string]> = [];
+    if (est) L.push([est, '#f2c14e']);
+    L.push([`${u.name}  ${u.hp}/${u.maxHp} PV${u.shield ? `  escudo ${u.shield}` : ''}`, '#e8e0f5']);
+    if (u.rank) L.push([`${u.rank === 'boss' ? 'Jefe' : 'Élite'}: inmune a aturdir · resiste PA/PM y empujones`, '#c9a0ff']);
+    L.push([`PA ${apNow}${apNow !== u.maxAp ? `/${u.maxAp}` : ''}${isCur ? '' : ' (próx. turno)'}`, apNow < u.maxAp ? '#f2c14e' : '#9a8fb5']);
+    L.push([`PM ${mpNow}${mpNow !== u.maxMp ? `/${u.maxMp}` : ''}${mpNow < u.maxMp ? ` (−${u.maxMp - mpNow})` : ''}`, mpNow < u.maxMp ? '#58a6ff' : '#9a8fb5']);
+    L.push([`Armadura ${armorNow}${armorNow !== u.armor ? ` (−${u.armor - armorNow})` : ''} · Huida ${u.dodge ?? 0}${tk}`, '#9a8fb5']);
+    if (res) L.push([res, '#9a8fb5']);
+    if (st) L.push([st, '#9a8fb5']);
+    const lines = L.map((l) => l[0]);
     g.font = '14px ui-monospace, monospace'; g.textAlign = 'left';
     const w = Math.max(...lines.map((l) => g.measureText(l).width)) + 14, hh = lines.length * 18 + 8;
     const x = Math.min(c.w * TILE - w - 4, (h.x + 1) * TILE), y = Math.max(4, Math.min(c.h * TILE - hh - 4, h.y * TILE - 10));
     g.fillStyle = 'rgba(10,6,20,.93)'; g.fillRect(x, y, w, hh); g.strokeStyle = '#3b2f57'; g.lineWidth = 2; g.strokeRect(x, y, w, hh);
-    lines.forEach((l, i) => { g.fillStyle = est && i === 0 ? '#f2c14e' : i > (est ? 1 : 0) ? '#9a8fb5' : '#e8e0f5'; g.fillText(l, x + 7, y + 18 + i * 18); });
+    L.forEach(([l, col], i) => { g.fillStyle = col; g.fillText(l, x + 7, y + 18 + i * 18); });
   }
 }

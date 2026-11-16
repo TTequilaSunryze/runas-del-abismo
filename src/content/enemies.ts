@@ -79,6 +79,10 @@ export function makeEnemy(id: string, pos: Pos, depth = 0, players = 1, opts: En
     hp, maxHp: hp, shield: 0, armor: e.armor, power: depth * 12 + (opts.power ?? 0), crit: 0,
     ap: e.ap, maxAp: e.ap, mp: e.mp, maxMp: e.mp, initiative: e.initiative, apMod: 0, mpMod: 0, resist: { ...e.resist }, statusBonus: 0,
     statuses: {}, spells: [e.spell, ...(e.more ?? [])].map((sid) => ({ id: sid, cd: 0 })), ai: e.ai, traits: e.traits ? [...e.traits] : undefined,
+    // placaje según su forma de luchar; los jefes retienen mucho
+    tackle: e.ai === 'boss' ? 10 : e.ai === 'melee' ? 5 + Math.floor(depth / 3) : e.ai === 'pillar' ? 0 : 2,
+    dodge: e.ai === 'boss' ? 6 : e.ai === 'ranged' ? 5 : 3,
+    ...(e.ai === 'boss' ? { rank: 'boss' as const } : {}),
   };
   const names: string[] = [];
   for (const a of opts.affixes ?? []) {

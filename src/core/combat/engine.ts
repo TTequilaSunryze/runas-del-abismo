@@ -29,6 +29,7 @@ const TRAP_DMG = 6;
 const GUARD_SHIELD = 0.15;
 const GUARD_CAP = 24;
 export const LATE_ROUND = 20;
+export const SUDDEN_ROUND = 30;
 const PACK_BONUS = 15;
 const EXECUTE_MULT = 2;
 const MENDER_MULT = 1.3;
@@ -37,6 +38,12 @@ const THORNS = 0.3;
 const ENRAGE_POWER = 40;
 const BOMB_DMG = 8;
 const BOMB_PCT = 0.15;
+/** Élites y jefes: cada punto de PA/PM (o casilla de empuje) se tira dos veces y solo entra si salen las dos. */
+export const RANK_ROLL = 0.7;
+/** Placaje: proporción de PM que conservas al salir de casillas pegadas a enemigos. */
+export function tackleKeep(dodge: number, tackle: number): number {
+  return tackle <= 0 ? 1 : Math.min(1, (dodge + 2) / (2 * (tackle + 2)));
+}
 
 export const hasTrait = (u: Unit, t: string): boolean => !!u.traits?.includes(t);
 const fail = (reason: string): ActionResult => ({ ok: false, reason });
@@ -81,7 +88,8 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
   if (!alive(u)) return 0;
   const res = opts.element ? Math.min(75, u.resist[opts.element] ?? 0) : 0;
   raw *= 1 - res / 100;
-  let dmg = opts.pierce ? Math.max(1, Math.round(raw)) : Math.max(1, Math.round(raw) - u.armor);
+  const armor = Math.max(0, u.armor - (u.statuses.exposed?.stacks ?? 0));
+  let dmg = opts.pierce ? Math.max(1, Math.round(raw)) : Math.max(1, Math.round(raw) - armor);
   const absorbed = Math.min(u.shield, dmg);
   u.shield -= absorbed;
   dmg -= absorbed;
@@ -153,6 +161,9 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     }
     for (const sp of u.spells) if (sp.cd > 0) sp.cd--;
     if (hasTrait(u, 'regen') && !late) heal(u, u.maxHp * REGEN, ev);
+    // muerte súbita: desde la ronda 30 el Abismo consume a todos, cada vez más
+    if (s.round >= SUDDEN_ROUND && u.ai !== 'pillar') hurt(s, u, u.maxHp * 0.05 * (s.round - SUDDEN_ROUND + 1), ev, 'abismo', { pierce: true });
+    if (!alive(u) || s.over) continue;
     if (u.statuses.burn) hurt(s, u, BURN_DMG, ev, 'burn', { pierce: true, element: 'fire' });
     if (alive(u) && u.statuses.poison) hurt(s, u, POISON_DMG * u.statuses.poison.stacks, ev, 'poison', { pierce: true, element: 'poison' });
     tick(u, 'burn');
@@ -164,6 +175,10 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     u.mpMod = 0;
     tick(u, 'slow');
     tick(u, 'mark');
+    tick(u, 'empower');
+    tick(u, 'reach');
+    tick(u, 'invis');
+    tick(u, 'exposed');
     if (u.statuses.stun) {
       tick(u, 'stun');
       ev.push({ t: 'skip', unit: u.id, reason: 'stun' });
@@ -190,6 +205,13 @@ export function move(s: CombatState, unitId: number, to: Pos): ActionResult {
   const ev: GameEvent[] = [];
   const walked: Pos[] = [];
   for (const p of path) {
+    // placaje: al salir de una casilla pegada a enemigos se pierden PM
+    const keep = Math.floor(u.mp * tackleKeep(u.dodge ?? 0, tacklersOf(s, u)));
+    if (keep < u.mp) {
+      ev.push({ t: 'tackle', unit: u.id, lost: u.mp - keep });
+      u.mp = keep;
+      if (u.mp <= 0) break;
+    }
     u.pos = { ...p };
     u.mp--;
     walked.push(p);
@@ -209,6 +231,25 @@ export function move(s: CombatState, unitId: number, to: Pos): ActionResult {
   ev.unshift({ t: 'move', unit: u.id, path: walked });
   if (!alive(u) && !s.over) beginNext(s, ev);
   return { ok: true, events: ev };
+}
+
+/** Placaje total de los enemigos pegados a `u` (los espectros y los invisibles no se dejan placar). */
+export function tacklersOf(s: CombatState, u: Unit): number {
+  if (hasTrait(u, 'ghost') || u.statuses.invis) return 0;
+  return s.units.filter((o) => o.team !== u.team && alive(o) && o.ai !== 'pillar' && !o.statuses.invis && dist(o.pos, u.pos) === 1).reduce((a, o) => a + (o.tackle ?? 0), 0);
+}
+
+/** PM con los que `u` puede moverse desde donde está, contando el placaje. */
+export function usableMp(s: CombatState, u: Unit): number {
+  return Math.floor(u.mp * tackleKeep(u.dodge ?? 0, tacklersOf(s, u)));
+}
+
+/** Para élites y jefes: cuántos de `n` puntos entran (dos tiradas por punto). */
+function landed(s: CombatState, t: Unit, n: number): number {
+  if (!t.rank) return n;
+  let ok = 0;
+  for (let i = 0; i < n; i++) if (rand(s) < RANK_ROLL && rand(s) < RANK_ROLL) ok++;
+  return ok;
 }
 
 /** Si `u` pisa un cepo rival, salta: daño y se queda sin moverse. Devuelve true si saltó. */
@@ -233,14 +274,22 @@ export function castProblem(s: CombatState, u: Unit, base: SpellDef, at: Pos): s
   if (!slot) return 'No conoces ese hechizo';
   const def = tuned(SPELLS[base.id] ?? base, slot);
   if (slot.cd > 0) return 'Hechizo en enfriamiento';
+  if (slot.charges !== undefined && slot.charges <= 0) return 'No te quedan';
   if (u.ap < def.ap) return 'No tienes PA suficientes';
   const d = dist(u.pos, at);
-  if (d < def.range[0] || d > def.range[1]) return 'Fuera de alcance';
+  const extra = def.range[1] > 1 ? u.statuses.reach?.stacks ?? 0 : 0;
+  if (d < def.range[0] || d > def.range[1] + extra) return 'Fuera de alcance';
   if (def.los && d > 1 && !hasLineOfSight(s, u.pos, at)) return 'Sin línea de visión';
   const t = unitAt(s, at);
   const around = def.range[1] === 0;
   if ((def.target === 'self' || around) && !same(at, u.pos)) return 'Solo sobre ti';
   if (around) return null;
+  if (def.revive) {
+    if (t) return 'La casilla está ocupada';
+    const dead = s.units.find((x) => !alive(x) && same(x.pos, at) && x.team === u.team && x.summoner === undefined);
+    return dead ? null : 'Necesitas un aliado caído';
+  }
+  if (t && t.team !== u.team && t.statuses.invis) return 'No puedes ver al objetivo';
   if (def.target === 'cell') {
     if (!isFree(s, at)) return 'Necesitas una casilla libre';
     if (def.summon && s.units.some((x) => alive(x) && x.summoner === u.id)) return 'Ya tienes un compañero invocado';
@@ -292,7 +341,11 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
 
   const ev: GameEvent[] = [{ t: 'cast', unit: u.id, spell: def.id, at: { ...at }, element: def.element }];
   u.ap -= def.ap;
-  u.spells.find((x) => x.id === def.id)!.cd = def.cd > 0 ? def.cd + 1 : 0;
+  const slotUsed = u.spells.find((x) => x.id === def.id)!;
+  slotUsed.cd = def.cd > 0 ? def.cd + 1 : 0;
+  if (slotUsed.charges !== undefined) slotUsed.charges--;
+  // atacar rompe la invisibilidad
+  if (def.dmg && u.statuses.invis) delete u.statuses.invis;
   if (def.dash) {
     const cell = dashCell(s, u, at)!;
     if (!same(cell, u.pos)) {
@@ -301,6 +354,18 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
     }
   }
   if (def.selfDmg) u.hp = Math.max(1, u.hp - def.selfDmg);
+  if (def.selfDmgPct) { const lost = Math.min(u.hp - 1, Math.round(u.hp * def.selfDmgPct)); u.hp -= lost; ev.push({ t: 'damage', unit: u.id, amount: lost, absorbed: 0, crit: false, source: def.id }); }
+  if (def.buff) addStatus(u, def.buff.kind, def.buff.turns, def.buff.stacks ?? 1, ev);
+  if (def.selfMp) { u.mp += def.selfMp; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: def.selfMp }); }
+  if (def.revive) {
+    const dead = s.units.find((x) => !alive(x) && same(x.pos, at) && x.team === u.team && x.summoner === undefined)!;
+    dead.hp = Math.max(1, Math.round(dead.maxHp * def.revive));
+    dead.statuses = {};
+    dead.shield = 0;
+    dead.used = true;
+    ev.push({ t: 'revive', unit: dead.id });
+    return { ok: true, events: ev };
+  }
 
   if (def.target === 'cell') {
     if (def.snare) (s.snares ??= []).push({ k: key(at), team: u.team, dmg: Math.round(def.snare.dmg * (1 + u.power / 100)) });
@@ -324,7 +389,7 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
       const crit = rand(s) * 100 < u.crit + (def.crit ?? 0);
       const pack = hasTrait(u, 'pack') ? s.units.filter((o) => o !== u && o.team === u.team && alive(o) && hasTrait(o, 'pack')).length * PACK_BONUS : 0;
       const fury = hasTrait(u, 'enrage') && u.hp < u.maxHp / 2 ? ENRAGE_POWER : 0;
-      const raw = randInt(s, def.dmg[0], def.dmg[1]) * (1 + (u.power + pack + fury) / 100) * (crit ? (hasTrait(u, 'execute') ? EXECUTE_MULT : CRIT_MULT) : 1) * (t.statuses.mark ? MARK_MULT : 1) * (t === main || def.range[1] === 0 || def.line ? 1 : 0.5);
+      const raw = randInt(s, def.dmg[0], def.dmg[1]) * (1 + (u.power + pack + fury + (u.statuses.empower?.stacks ?? 0)) / 100) * (crit ? (hasTrait(u, 'execute') ? EXECUTE_MULT : CRIT_MULT) : 1) * (t.statuses.mark ? MARK_MULT : 1) * (t === main || def.range[1] === 0 || def.line ? 1 : 0.5);
       const got = hurt(s, t, raw, ev, def.id, { crit, element: def.element, pierce: def.pierce });
       dealt += got;
       // espinas: devuelven parte del daño cuerpo a cuerpo
@@ -332,16 +397,38 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
       if (hasTrait(u, 'ignite') && alive(t)) addStatus(t, 'burn', 2, 1, ev);
     }
     if (def.heal) heal(t, def.heal * mend, ev);
+    if (def.healPct) heal(t, t.maxHp * def.healPct * mend, ev);
     if (def.shield && alive(t)) {
       const sh = Math.round(def.shield * mend);
       t.shield += sh;
       ev.push({ t: 'shield', unit: t.id, amount: sh });
     }
-    for (const st of [def.status, def.extraStatus]) if (st) addStatus(t, st.kind, st.turns + (st.kind === 'stun' ? 0 : u.statusBonus), (st.stacks ?? 1) + (st.kind === 'poison' && hasTrait(u, 'venom') ? 1 : 0), ev);
-    if (def.drainAp) t.apMod -= def.drainAp;
+    for (const st of [def.status, def.extraStatus]) {
+      if (!st || !alive(t)) continue;
+      // élites y jefes: inmunes a aturdir y resisten la ralentización punto a punto
+      if (st.kind === 'stun' && t.rank) { ev.push({ t: 'resist', unit: t.id, what: 'Inmune a aturdir' }); continue; }
+      let stacks = (st.stacks ?? 1) + (st.kind === 'poison' && hasTrait(u, 'venom') ? 1 : 0);
+      if (st.kind === 'slow' && t.team !== u.team) {
+        const want = stacks;
+        stacks = landed(s, t, want);
+        if (stacks < want) ev.push({ t: 'resist', unit: t.id, what: `Resiste ${want - stacks} PM` });
+        if (!stacks) continue;
+        ev.push({ t: 'drain', unit: t.id, ap: 0, mp: -stacks });
+      }
+      addStatus(t, st.kind, st.turns + (st.kind === 'stun' ? 0 : u.statusBonus), stacks, ev);
+    }
+    if (def.drainAp && alive(t)) {
+      const n = t.team !== u.team ? landed(s, t, def.drainAp) : def.drainAp;
+      if (n < def.drainAp) ev.push({ t: 'resist', unit: t.id, what: `Resiste ${def.drainAp - n} PA` });
+      if (n) { t.apMod -= n; ev.push({ t: 'drain', unit: t.id, ap: -n, mp: 0 }); }
+    }
     if (def.giveAp) t.apMod += def.giveAp;
     if (def.giveMp) t.mpMod += def.giveMp;
-    if (def.push && t === main) push(s, u.pos, t, def.push, ev);
+    if (def.push && t === main) {
+      const n = landed(s, t, def.push);
+      if (n < def.push) ev.push({ t: 'resist', unit: t.id, what: n ? 'Resiste parte del empujón' : 'Resiste el empujón' });
+      if (n) push(s, u.pos, t, n, ev);
+    }
   }
   if (def.lifesteal && dealt > 0) heal(u, dealt * def.lifesteal, ev);
   if (def.retreat && main && alive(u)) {

@@ -5,9 +5,9 @@ export const SLOTS = ['casco', 'capa', 'arma', 'peto', 'anillo', 'amuleto', 'bot
 export type Slot = (typeof SLOTS)[number];
 export const SLOT_NAME: Record<Slot, string> = { casco: 'Casco', capa: 'Capa', arma: 'Arma', peto: 'Peto', anillo: 'Anillo', amuleto: 'Amuleto', botas: 'Botas', guantes: 'Guantes' };
 
-export type StatKey = 'hp' | 'armor' | 'power' | 'crit' | 'ap' | 'mp' | 'initiative' | 'resFire' | 'resIce' | 'resPoison' | 'resShadow' | 'status';
+export type StatKey = 'hp' | 'armor' | 'power' | 'crit' | 'ap' | 'mp' | 'initiative' | 'resFire' | 'resIce' | 'resPoison' | 'resShadow' | 'status' | 'tackle' | 'dodge';
 export type Stats = Partial<Record<StatKey, number>>;
-export const STAT_NAME: Record<StatKey, string> = { hp: 'Vida', armor: 'Armadura', power: '% Daño', crit: '% Crítico', ap: 'PA', mp: 'PM', initiative: 'Iniciativa', resFire: '% Res. fuego', resIce: '% Res. hielo', resPoison: '% Res. veneno', resShadow: '% Res. sombra', status: 'turno(s) a tus estados' };
+export const STAT_NAME: Record<StatKey, string> = { hp: 'Vida', armor: 'Armadura', power: '% Daño', crit: '% Crítico', ap: 'PA', mp: 'PM', initiative: 'Iniciativa', resFire: '% Res. fuego', resIce: '% Res. hielo', resPoison: '% Res. veneno', resShadow: '% Res. sombra', status: 'turno(s) a tus estados', tackle: 'Placaje', dodge: 'Huida' };
 
 /** 0 Común, 1 Raro, 2 Épico, 3 Legendario */
 export type Rarity = 0 | 1 | 2 | 3;
@@ -21,6 +21,8 @@ export interface Item {
   lore?: string;
   /** set al que pertenece (ver sets.ts) */
   set?: string;
+  /** mejoras de forja (+1 a +5) */
+  lvl?: number;
 }
 
 /** Temática de una zona: nombres por ranura y legendarios fijos. */
@@ -31,14 +33,14 @@ export interface ItemTheme {
 }
 
 const POOL: Record<Slot, StatKey[]> = {
-  casco: ['hp', 'armor', 'initiative', 'resShadow'],
-  capa: ['hp', 'crit', 'initiative', 'resIce', 'resShadow'],
+  casco: ['hp', 'armor', 'initiative', 'resShadow', 'tackle'],
+  capa: ['hp', 'crit', 'initiative', 'resIce', 'resShadow', 'dodge'],
   arma: ['power', 'crit', 'status'],
-  peto: ['hp', 'armor', 'resFire'],
+  peto: ['hp', 'armor', 'resFire', 'tackle'],
   anillo: ['power', 'crit', 'ap', 'resPoison'],
   amuleto: ['power', 'hp', 'ap', 'status', 'resFire'],
-  botas: ['initiative', 'hp', 'mp', 'resIce'],
-  guantes: ['crit', 'power', 'armor', 'resPoison'],
+  botas: ['initiative', 'hp', 'mp', 'resIce', 'dodge'],
+  guantes: ['crit', 'power', 'armor', 'resPoison', 'tackle'],
 };
 const MULT = [1, 1.35, 1.75, 2.2];
 
@@ -50,12 +52,15 @@ function roll(box: RngBox, k: StatKey, rarity: Rarity, depth: number): number {
   if (k === 'hp') return Math.round((randInt(box, 5, 8) + depth * 2) * m);
   if (k === 'power') return Math.round((randInt(box, 4, 7) + depth) * m);
   if (k === 'crit') return Math.round(randInt(box, 3, 5) * m);
+  if (k === 'tackle' || k === 'dodge') return Math.round(randInt(box, 2, 3) * m + depth / 6);
   return Math.round(randInt(box, 2, 4) * m);
 }
 
 export function rollRarity(box: RngBox, depth: number, min: Rarity = 0): Rarity {
   const r = rand(box);
-  const base: Rarity = r < 0.03 + depth * 0.015 ? 3 : r < 0.13 + depth * 0.035 ? 2 : r < 0.5 ? 1 : 0;
+  // cuanto más profundo, más probable lo raro (con techo para que lo legendario siga siendo especial)
+  const leg = Math.min(0.2, 0.02 + depth * 0.007), epic = Math.min(0.55, 0.1 + depth * 0.02), rare = Math.min(0.85, 0.42 + depth * 0.015);
+  const base: Rarity = r < leg ? 3 : r < leg + epic ? 2 : r < leg + epic + rare ? 1 : 0;
   return Math.max(base, min) as Rarity;
 }
 
@@ -98,7 +103,7 @@ export function statDiff(next: Stats, old: Stats | undefined): Stats {
 }
 
 export function sumStats(list: Array<Stats | undefined>): Record<StatKey, number> {
-  const total: Record<StatKey, number> = { hp: 0, armor: 0, power: 0, crit: 0, ap: 0, mp: 0, initiative: 0, resFire: 0, resIce: 0, resPoison: 0, resShadow: 0, status: 0 };
+  const total: Record<StatKey, number> = { hp: 0, armor: 0, power: 0, crit: 0, ap: 0, mp: 0, initiative: 0, resFire: 0, resIce: 0, resPoison: 0, resShadow: 0, status: 0, tackle: 0, dodge: 0 };
   for (const s of list) if (s) for (const k of Object.keys(s) as StatKey[]) total[k] += s[k] ?? 0;
   return total;
 }

@@ -20,7 +20,11 @@ export interface ClassDef {
   ap: number;
   mp: number;
   initiative: number;
-  baseSpell: string;
+  /** las 3 habilidades iniciales: 2 de daño y 1 de potenciación propia */
+  base: string[];
+  /** placaje (retener al que huye) y huida (escapar del placaje) */
+  tackle: number;
+  dodge: number;
   routes: RouteDef[];
 }
 
@@ -28,7 +32,7 @@ const R = (id: string, name: string, opposite: string, spells: string[], text: s
 
 export const CLASSES: Record<ClassId, ClassDef> = {
   guerrero: {
-    id: 'guerrero', name: 'Guerrero', hp: 64, armor: 2, power: 0, crit: 5, ap: 6, mp: 3, initiative: 10, baseSpell: 'tajo',
+    id: 'guerrero', name: 'Guerrero', hp: 64, armor: 2, power: 0, crit: 5, ap: 6, mp: 3, initiative: 10, base: ['tajo', 'hachazo', 'sed_sangre'], tackle: 8, dodge: 2,
     routes: [
       R('baluarte', 'Baluarte', 'berserker', ['muro', 'proteger', 'embate'], 'Tanque: escudos y protección de aliados.'),
       R('berserker', 'Berserker', 'baluarte', ['frenesi', 'sed', 'torbellino'], 'Daño bruto pagado con tu propia vida.'),
@@ -37,7 +41,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     ],
   },
   mago: {
-    id: 'mago', name: 'Mago', hp: 42, armor: 0, power: 8, crit: 5, ap: 6, mp: 3, initiative: 14, baseSpell: 'dardo',
+    id: 'mago', name: 'Mago', hp: 42, armor: 0, power: 8, crit: 5, ap: 6, mp: 3, initiative: 14, base: ['dardo', 'chispa', 'escudo_arcano'], tackle: 2, dodge: 4,
     routes: [
       R('fuego', 'Fuego', 'hielo', ['ignicion', 'bola', 'lluvia'], 'Daño en área y Quemadura.'),
       R('hielo', 'Hielo', 'fuego', ['escarcha', 'congelar', 'ventisca'], 'Control: quita PM y congela.'),
@@ -46,7 +50,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     ],
   },
   picaro: {
-    id: 'picaro', name: 'Pícaro', hp: 50, armor: 1, power: 0, crit: 15, ap: 7, mp: 4, initiative: 16, baseSpell: 'punalada',
+    id: 'picaro', name: 'Pícaro', hp: 50, armor: 1, power: 0, crit: 15, ap: 7, mp: 4, initiative: 16, base: ['punalada', 'cuchillo', 'desvanecer'], tackle: 3, dodge: 9,
     routes: [
       R('veneno', 'Veneno', 'asesino', ['daga_ven', 'nube', 'toxina'], 'Daño por turno que se acumula.'),
       R('asesino', 'Asesino', 'veneno', ['apunalar', 'emboscada', 'golpe_mortal'], 'Daño directo a un objetivo.'),
@@ -55,7 +59,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     ],
   },
   clerigo: {
-    id: 'clerigo', name: 'Clérigo', hp: 56, armor: 1, power: 4, crit: 5, ap: 6, mp: 3, initiative: 8, baseSpell: 'maza',
+    id: 'clerigo', name: 'Clérigo', hp: 56, armor: 1, power: 4, crit: 5, ap: 6, mp: 3, initiative: 8, base: ['maza', 'castigo', 'fervor'], tackle: 4, dodge: 3,
     routes: [
       R('luz', 'Luz', 'penitencia', ['sanar', 'aura', 'plegaria'], 'Curación directa y en área.'),
       R('penitencia', 'Penitencia', 'luz', ['flagelo', 'expiar', 'martirio'], 'Daño sagrado con robo de vida.'),
@@ -64,7 +68,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     ],
   },
   arquero: {
-    id: 'arquero', name: 'Arquero', hp: 46, armor: 0, power: 4, crit: 10, ap: 6, mp: 4, initiative: 15, baseSpell: 'flecha',
+    id: 'arquero', name: 'Arquero', hp: 46, armor: 0, power: 4, crit: 10, ap: 6, mp: 4, initiative: 15, base: ['flecha', 'tiro_rasante', 'ojo_halcon'], tackle: 2, dodge: 6,
     routes: [
       R('francotirador', 'Francotirador', 'rafaga', ['certero', 'marca_caza', 'perforante'], 'Un disparo lejano y devastador.'),
       R('rafaga', 'Ráfaga', 'francotirador', ['rapido', 'andanada', 'salto_atras'], 'Muchos disparos baratos y movilidad.'),
@@ -96,5 +100,5 @@ export const MAX_LEVEL = 12;
 /** Hechizos disponibles: el básico siempre; de cada ruta elegida, 1 a nivel 1, 2 a nivel 2 y 3 desde nivel 3. */
 export function spellsFor(cls: ClassId, chosen: readonly string[], level = 3): string[] {
   const c = CLASSES[cls];
-  return [c.baseSpell, ...c.routes.filter((r) => chosen.includes(r.id)).flatMap((r) => r.spells.slice(0, Math.max(1, Math.min(3, level))))];
+  return [...c.base, ...c.routes.filter((r) => chosen.includes(r.id)).flatMap((r) => r.spells.slice(0, Math.max(1, Math.min(3, level))))];
 }

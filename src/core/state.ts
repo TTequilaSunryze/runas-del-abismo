@@ -7,7 +7,8 @@ export interface Pos {
 }
 
 export type Team = 'hero' | 'enemy';
-export type StatusKind = 'burn' | 'poison' | 'slow' | 'stun' | 'mark';
+/** empower: +daño (stacks = %); reach: +alcance; invis: no se le puede apuntar; exposed: -armadura (stacks). */
+export type StatusKind = 'burn' | 'poison' | 'slow' | 'stun' | 'mark' | 'empower' | 'reach' | 'invis' | 'exposed';
 export type ClassId = 'guerrero' | 'mago' | 'clerigo' | 'picaro' | 'arquero';
 
 export interface StatusState {
@@ -24,6 +25,8 @@ export interface SpellSlot {
   rune?: string;
   /** mejoras elegidas al subir de nivel (ids de UPGRADES) */
   ups?: string[];
+  /** consumibles: usos que quedan (sin definir = hechizo normal) */
+  charges?: number;
 }
 
 export interface Unit {
@@ -75,6 +78,11 @@ export interface Unit {
   phase?: number;
   /** unidad que lo invocó */
   summoner?: number;
+  /** élites y jefes: inmunes a aturdir y resisten la pérdida de PA/PM y los empujones */
+  rank?: 'elite' | 'boss';
+  /** placaje (retiene a quien se aleja) y huida (escapa del placaje) */
+  tackle?: number;
+  dodge?: number;
 }
 
 /** Cepo colocado por una unidad: daña y detiene al primer rival que lo pisa. */
@@ -121,6 +129,10 @@ export type GameEvent =
   | { t: 'trap'; unit: number }
   | { t: 'stuck'; unit: number }
   | { t: 'snare'; unit: number }
+  | { t: 'drain'; unit: number; ap: number; mp: number }
+  | { t: 'resist'; unit: number; what: string }
+  | { t: 'tackle'; unit: number; lost: number }
+  | { t: 'revive'; unit: number }
   | { t: 'explode'; unit: number }
   | { t: 'split'; unit: number }
   | { t: 'blink'; unit: number; to: Pos }

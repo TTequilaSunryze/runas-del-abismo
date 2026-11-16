@@ -85,17 +85,26 @@ describe('contenido', () => {
 
 const P = [{ owner: 'a', name: 'A', cls: 'guerrero' as const, routes: ['baluarte'] }];
 describe('salas, reliquias y presagios', () => {
-  it('forja: mejora una pieza equipada una sola vez', () => {
+  it('forja: cuesta oro, sirve para equipo y mochila y sube hasta +5', () => {
     const run = newRun('T', 3, P);
     const h = run.heroes[0]!;
     h.equip.arma = { slot: 'arma', name: 'Espada', rarity: 0, stats: { power: 10 } };
+    h.bag.push({ slot: 'casco', name: 'Yelmo', rarity: 1, stats: { hp: 15 } });
     run.map[run.step] = ['forge'];
     chooseNode(run, 0);
     expect(run.phase).toBe('camp');
+    h.gold = 0;
+    expect(metaAction(run, 'a', { a: 'forge', slot: 'arma' })).toBe('No tienes oro suficiente');
+    h.gold = 5000;
     expect(metaAction(run, 'a', { a: 'forge', slot: 'arma' })).toBeNull();
-    expect(h.equip.arma!.rarity).toBe(1);
-    expect(h.equip.arma!.stats.power).toBe(13);
+    expect(h.equip.arma!.stats.power).toBe(12);
+    expect(h.equip.arma!.name).toBe('Espada +1');
+    expect(metaAction(run, 'a', { a: 'forge', bag: 0 })).toBeNull();
+    expect(h.bag[0]!.stats.hp).toBe(18);
+    for (let i = 0; i < 4; i++) expect(metaAction(run, 'a', { a: 'forge', slot: 'arma' })).toBeNull();
+    expect(h.equip.arma!.lvl).toBe(5);
     expect(metaAction(run, 'a', { a: 'forge', slot: 'arma' })).toBeTruthy();
+    expect(h.gold).toBeLessThan(5000);
     leaveNode(run);
     expect(run.phase).toBe('map');
   });
@@ -117,6 +126,11 @@ describe('salas, reliquias y presagios', () => {
     const run = newRun('T', 3, P);
     run.map[run.step] = ['cage'];
     chooseNode(run, 0);
+    // la jaula es un combate: el aliado se une al ganarlo
+    expect(run.phase).toBe('combat');
+    expect(run.allies).toHaveLength(0);
+    run.combat!.over = 'win';
+    finishFight(run);
     expect(run.allies).toHaveLength(1);
     run.kind = 'combat';
     const ally = buildFight(run).units.find((u) => u.summoner === -1)!;

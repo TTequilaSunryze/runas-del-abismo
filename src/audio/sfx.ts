@@ -1,10 +1,8 @@
-// Sonido sintetizado con Web Audio: efectos y una melodía en bucle. Sin archivos.
+// Efectos sintetizados con Web Audio y música en archivos (public/music).
 import type { GameEvent } from '../core/state';
 
 let ctx: AudioContext | null = null;
 let muted = false;
-let musicTimer: ReturnType<typeof setInterval> | null = null;
-let beat = 0;
 
 try { muted = localStorage.getItem('rda_mute') === '1'; } catch { /* sin almacenamiento */ }
 
@@ -62,32 +60,60 @@ export function playEvents(events: GameEvent[]): void {
   }
 }
 
-// Música sencilla distinta por zona y para jefes: cambia la escala, el ritmo y el pulso grave.
-const THEMES: Record<string, { scale: number[]; pat: number[]; ms: number; wave: OscillatorType; low: number }> = {
-  menu: { scale: [220, 261.6, 293.7, 329.6, 392, 440], pat: [0, 2, 4, 2, 0, 3, 5, 3, 1, 3, 5, 3, 0, 2, 4, 2], ms: 300, wave: 'triangle', low: 4 },
-  '0': { scale: [196, 220, 233.1, 293.7, 311.1, 392], pat: [0, 2, 3, 2, 0, 4, 3, 2, 1, 2, 5, 4, 0, 2, 3, 1], ms: 320, wave: 'triangle', low: 4 },
-  '1': { scale: [174.6, 196, 233.1, 261.6, 311.1, 349.2], pat: [0, 1, 3, 4, 3, 1, 0, 2, 5, 4, 3, 2, 1, 3, 4, 2], ms: 260, wave: 'sine', low: 4 },
-  '2': { scale: [164.8, 174.6, 207.7, 247, 261.6, 329.6], pat: [0, 0, 2, 1, 0, 3, 2, 1, 4, 3, 2, 1, 0, 5, 4, 3], ms: 230, wave: 'square', low: 2 },
-  '3': { scale: [138.6, 146.8, 174.6, 207.7, 220, 277.2], pat: [0, 3, 1, 4, 0, 5, 2, 1, 0, 3, 4, 2, 5, 1, 3, 0], ms: 340, wave: 'sine', low: 3 },
-  boss: { scale: [146.8, 155.6, 185, 220, 233.1, 293.7], pat: [0, 0, 1, 0, 3, 0, 1, 4, 0, 0, 2, 0, 5, 4, 3, 1], ms: 175, wave: 'sawtooth', low: 2 },
+// Música: pistas propias (public/music) según la situación, con fundido entre ellas.
+// Cada pista se carga solo cuando hace falta y recuerda por dónde iba.
+const TRACKS: Record<string, string> = {
+  menu: 'menu', lobby: 'aldea', map0: 'ruta_nocturna', map1: 'bosque_nocturno', map2: 'isla_volcanica', map3: 'bosque_acido',
+  combat: 'combate', boss: 'jefe', calm: 'descanso', choice: 'torre', end: 'final',
 };
-let theme = 'menu';
+export const TRACK_TITLE: Record<string, string> = {
+  menu: 'Aventura nocturna', aldea: 'La aldea', ruta_nocturna: 'Ruta nocturna', bosque_nocturno: 'Bosque de noche', isla_volcanica: 'Isla volcánica',
+  bosque_acido: 'Bosque ácido', combate: 'Combate', jefe: 'El campeón', descanso: 'Descanso', torre: 'La torre', final: 'Final del camino',
+};
+const VOL = 0.4;
+const FADE_MS = 1200;
+const players = new Map<string, HTMLAudioElement>();
+let wanted = 'menu';
+let playing: HTMLAudioElement | null = null;
+let unlocked = false;
 
-export function setZoneMusic(name: string): void {
-  if (!THEMES[name] || name === theme) return;
-  theme = name;
-  if (musicTimer) { clearInterval(musicTimer); musicTimer = null; startMusic(); }
+function fade(a: HTMLAudioElement, to: number, then?: () => void): void {
+  const from = a.volume, t0 = performance.now();
+  const step = (): void => {
+    const k = Math.min(1, (performance.now() - t0) / FADE_MS);
+    a.volume = Math.max(0, Math.min(1, from + (to - from) * k));
+    if (k < 1) requestAnimationFrame(step); else then?.();
+  };
+  requestAnimationFrame(step);
 }
 
-function startMusic(): void {
-  if (musicTimer || muted) return;
-  const t = THEMES[theme]!;
-  musicTimer = setInterval(() => {
-    const f = t.scale[t.pat[beat % t.pat.length]!]!;
-    tone(f / 2, 0.28, t.wave, t.wave === 'sine' || t.wave === 'triangle' ? 0.022 : 0.012);
-    if (beat % t.low === 0) tone(f / 4, 0.5, 'sine', 0.03);
-    beat++;
-  }, t.ms);
+function playWanted(): void {
+  if (!unlocked || muted) return;
+  const file = TRACKS[wanted] ?? 'menu';
+  let a = players.get(file);
+  if (a && a === playing) { if (a.paused) void a.play().catch(() => {}); return; }
+  if (!a) {
+    a = new Audio(`${import.meta.env.BASE_URL}music/${file}.mp3`);
+    a.loop = true;
+    a.preload = 'auto';
+    players.set(file, a);
+  }
+  const old = playing;
+  if (old) fade(old, 0, () => old.pause());
+  playing = a;
+  a.volume = 0;
+  void a.play().then(() => fade(a!, VOL)).catch(() => { /* el navegador aún no deja sonar */ });
+}
+
+/** Contextos: menu, lobby, map0..map3, combat, boss, calm, choice, end. */
+export function setZoneMusic(name: string): void {
+  if (!TRACKS[name] || name === wanted) return;
+  wanted = name;
+  playWanted();
+}
+
+export function nowPlaying(): string {
+  return TRACK_TITLE[TRACKS[wanted] ?? ''] ?? '';
 }
 
 export function isMuted(): boolean {
@@ -97,8 +123,9 @@ export function isMuted(): boolean {
 export function toggleMute(): void {
   muted = !muted;
   try { localStorage.setItem('rda_mute', muted ? '1' : '0'); } catch { /* sin almacenamiento */ }
-  if (muted && musicTimer) { clearInterval(musicTimer); musicTimer = null; } else startMusic();
+  if (muted) { if (playing) fade(playing, 0, () => playing?.pause()); } else playWanted();
 }
 
 // los navegadores solo dejan sonar tras una interacción del usuario
-addEventListener('pointerdown', () => { ac(); startMusic(); }, { once: true });
+addEventListener('pointerdown', () => { ac(); unlocked = true; playWanted(); }, { once: true });
+addEventListener('keydown', () => { ac(); unlocked = true; playWanted(); }, { once: true });

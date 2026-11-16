@@ -54,3 +54,6 @@ Cuenta con email y contraseña, maestría por clase que desbloquea rutas, mejora
 
 ## v4
 Iconos de hechizo en pixel art, 31 enemigos nuevos, jefes alternativos, zona 4 (El Abismo), forja, altar, apostador, jaulas con aliados, 22 reliquias, presagios, 14 eventos nuevos y modificadores elegibles. Las partidas guardadas anteriores no son compatibles.
+
+## v5
+Placaje, élites y jefes resistentes al control, 3 habilidades iniciales por clase, bendiciones estilo Hades, consumibles, forja de pago con vista previa, jaula con combate, botón «Listo», ficha de estadísticas, amigos con invitaciones y música propia. La música (carpeta `public/music`) es de Lucho y se usa con su permiso. Las partidas guardadas anteriores no son compatibles.

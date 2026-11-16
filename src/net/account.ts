@@ -1,5 +1,6 @@
 // Cuenta opcional (email y contraseña): guarda el progreso en la nube para no perderlo al cambiar de dispositivo.
 import { mergeMeta, meta, myTeam, replaceMeta, saveMeta, setSaveHook, type Meta } from '../game/meta';
+import { goOffline, goOnline } from './social';
 import { supabase } from './transport';
 
 export interface Account {
@@ -49,6 +50,7 @@ async function attach(user: { id: string; email?: string | null; user_metadata?:
   if (local.acct !== user.id) replaceMeta({ ...mergeMeta(local, cloud), acct: user.id });
   else if ((cloud.t ?? 0) > local.t && cloud.v === 1) replaceMeta({ ...(cloud as Meta), acct: user.id });
   account = { id: user.id, email: user.email ?? '', name: row!.name as string };
+  goOnline(account.name);
   setSaveHook(() => { if (timer) clearTimeout(timer); timer = setTimeout(() => void push(), 1500); });
   saveMeta();
   return null;
@@ -90,6 +92,7 @@ export async function signOut(): Promise<void> {
   await push().catch(() => {});
   setSaveHook(null);
   account = null;
+  goOffline();
   try { await supabase().auth.signOut(); } catch { /* da igual */ }
 }
 

@@ -39,9 +39,9 @@ describe('rutas de clase', () => {
     expect(() => makeHero({ cls: 'mago', name: 'x', owner: 'p', routes: ['fuego', 'hielo'], pos: { x: 0, y: 0 } })).toThrow();
   });
   it('los hechizos salen de las rutas elegidas', () => {
-    expect(spellsFor('clerigo', ['luz'], 1)).toEqual(['maza', 'sanar']);
-    expect(spellsFor('clerigo', ['luz'], 2)).toEqual(['maza', 'sanar', 'aura']);
-    expect(spellsFor('clerigo', ['luz'], 6)).toEqual(['maza', 'sanar', 'aura', 'plegaria']);
+    expect(spellsFor('clerigo', ['luz'], 1)).toEqual(['maza', 'castigo', 'fervor', 'sanar']);
+    expect(spellsFor('clerigo', ['luz'], 2)).toEqual(['maza', 'castigo', 'fervor', 'sanar', 'aura']);
+    expect(spellsFor('clerigo', ['luz'], 6)).toEqual(['maza', 'castigo', 'fervor', 'sanar', 'aura', 'plegaria']);
   });
   it('todos los hechizos de ruta existen', () => {
     for (const cls of ['guerrero', 'mago', 'clerigo'] as const)

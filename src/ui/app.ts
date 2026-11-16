@@ -9,12 +9,14 @@ import { Session } from '../game/session';
 import { dailyScore } from '../game/run';
 import { joinRoom, loadRun, submitDaily, topDaily } from '../net/transport';
 import { addLog, combatScreen } from './combat';
-import { params, randomText, store, today, ui } from './ctx';
+import { esc, params, randomText, store, today, ui } from './ctx';
 import { buyPerk, masteryOf, meta, myNemesis, myTeam, openRoutes, removeChampion, saveChampion, saveMeta, toggleTeam } from '../game/meta';
 import { currentAccount, fetchTeam, restoreAccount, signIn, signOut, signUp } from '../net/account';
+import { addFriend, invite, removeFriend, setRoom, socialHandlers } from '../net/social';
 import { championOf } from '../game/run';
 import { MAX_ASC } from '../content/modes';
 import { setZoneMusic } from '../audio/sfx';
+import { statsModal } from './panels';
 import { campScreen, endScreen, eventScreen, homeScreen, lobbyScreen, mapScreen, shopScreen } from './screens';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -27,6 +29,8 @@ function publish(): void {
 }
 
 function home(msg = ''): void {
+  setZoneMusic('menu');
+  setRoom(null);
   ui.session?.leave();
   ui.session = null;
   ui.board?.destroy();
@@ -56,11 +60,12 @@ async function enter(code: string, isHost: boolean, local: boolean, resume = fal
   }
   ui.session = session;
   session.teamProvider = () => myTeam();
+  if (session.t.kind === 'online') setRoom(code);
   ui.saved = null;
   ui.notice = '';
   if (resume) {
     const run = (await loadRun(code)) as RunState | null;
-    if (run && run.version === 8 && run.phase === 'map') ui.saved = run;
+    if (run && run.version === 9 && run.phase === 'map') ui.saved = run;
     else ui.notice = 'No se encontró una partida guardada que se pueda continuar.';
   }
   let wasMyTurn = false;
@@ -87,11 +92,13 @@ function render(events: GameEvent[]): void {
   const run = s.run;
   const want = !run ? 'lobby' : run.phase === 'combat' && run.combat ? 'combat' : run.phase === 'event' && run.event ? 'event' : run.phase === 'shop' ? 'shop' : run.phase === 'camp' && run.camp ? 'camp' : run.phase === 'map' ? 'map' : 'end';
   // sin cambios reales no se redibuja: así un latido de red no interrumpe un clic
-  const key = want + JSON.stringify([meta().ecos, ui.asc, ui.daily, ui.mods, ui.abyss, run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selRune, ui.selItem, ui.tab, ui.logOpen]);
+  const key = want + JSON.stringify([meta().ecos, ui.asc, ui.daily, ui.mods, ui.abyss, run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selRune, ui.selItem, ui.tab, ui.logOpen, ui.statsOpen, ui.forgeTab]);
   if (key === lastKey && want === ui.screen && !events.length) return;
   lastKey = key;
   if (want !== ui.screen) hideTip();
-  setZoneMusic(want === 'combat' && run?.kind === 'boss' ? 'boss' : want === 'lobby' || !run ? 'menu' : String(run.zone));
+  const meH = run?.heroes.find((h) => h.owner === ui.myId);
+  setZoneMusic(!run ? 'lobby' : want === 'combat' ? (run.kind === 'boss' ? 'boss' : 'combat') : want === 'end' ? 'end' : want === 'shop' || want === 'camp' ? 'calm'
+    : want === 'event' || meH?.boonOffer || meH?.upOffer ? 'choice' : `map${Math.min(3, run.zone)}`);
   if (want === 'combat') combatScreen(events);
   else {
     ui.board?.destroy();
@@ -99,6 +106,9 @@ function render(events: GameEvent[]): void {
     ({ lobby: lobbyScreen, event: eventScreen, shop: shopScreen, camp: campScreen, map: mapScreen, end: endScreen })[want]();
   }
   ui.screen = want;
+  // ficha del personaje por encima de cualquier pantalla
+  document.getElementById('statsmodal')?.remove();
+  if (ui.statsOpen && run) ui.root.insertAdjacentHTML('beforeend', statsModal(run));
   if (want === 'end' && run && run.daily && s.isHost && run.heroes.length) {
     const k = `${run.code}:${run.daily}:${run.zone}:${run.step}:${run.phase}`;
     if (k !== submitted) { submitted = k; void submitDaily({ day: run.daily, code: run.code, names: run.heroes.map((h) => h.name).join(', ').slice(0, 60), players: run.heroes.length, score: dailyScore(run), won: run.phase === 'won', zone: Math.min(2, run.zone) }); }
@@ -172,7 +182,21 @@ document.addEventListener('click', (e) => {
     case 'again': ui.log.length = 0; s?.backToLobby(); break;
     case 'reroll': s?.act({ a: 'reroll' }); break;
     case 'upgrade': s?.act({ a: 'upgrade', idx: Number(id) }); break;
-    case 'forge': s?.act({ a: 'forge', slot: id as Slot }); break;
+    case 'forge': s?.act(id.startsWith('b:') ? { a: 'forge', bag: Number(id.slice(2)) } : { a: 'forge', slot: id.slice(2) as Slot }); sfx.coin(); break;
+    case 'forgetab': ui.forgeTab = id as typeof ui.forgeTab; lastKey = ''; render([]); break;
+    case 'boon': s?.act({ a: 'boon', idx: Number(id) }); break;
+    case 'ready': s?.act({ a: 'ready' }); break;
+    case 'addfriend': {
+      const name = (document.getElementById('friend') as HTMLInputElement).value;
+      ui.friendMsg = 'Buscando…'; homeScreen('');
+      void addFriend(name).then((err) => { ui.friendMsg = err ?? 'Amigo añadido. Pídele que te añada también para recibir sus invitaciones.'; if (ui.screen === 'home') homeScreen(''); });
+      break;
+    }
+    case 'delfriend': removeFriend(id); homeScreen(''); break;
+    case 'joinfriend': case 'acceptinv': ui.invites = ui.invites.filter((x) => x.code !== id); drawInvites(); void enter(id, false, false); break;
+    case 'dropinv': ui.invites = ui.invites.filter((x) => x.code !== id); drawInvites(); break;
+    case 'invite': if (s) { invite(id, s.code); ui.notice = `Invitación enviada a ${id}`; render([]); setTimeout(() => { ui.notice = ''; render([]); }, 2500); } break;
+    case 'stats': ui.statsOpen = !ui.statsOpen; lastKey = ''; render([]); break;
     case 'altar': s?.act({ a: 'altar', opt: Number(id) }); break;
     case 'gamble': s?.act({ a: 'gamble', opt: Number(id) }); sfx.coin(); break;
     case 'mod': ui.mods = ui.mods.includes(id) ? ui.mods.filter((x) => x !== id) : ui.mods.length < 3 ? [...ui.mods, id] : ui.mods; publish(); render([]); break;
@@ -229,12 +253,13 @@ document.addEventListener('change', (e) => {
 
 document.addEventListener('keydown', (e) => {
   const s = ui.session;
+  if ((e.target as HTMLElement).tagName !== 'INPUT' && s?.run && !s.run.arena && (e.key === 's' || e.key === 'S' || (e.key === 'Escape' && ui.statsOpen))) { ui.statsOpen = e.key === 'Escape' ? false : !ui.statsOpen; lastKey = ''; render([]); return; }
   if (ui.screen !== 'combat' || !s?.isMyTurn() || (e.target as HTMLElement).tagName === 'INPUT') return;
   const u = s.myUnit();
   const n = Number(e.key);
   if (u && n >= 1 && n <= u.spells.length) {
     const sp = u.spells[n - 1]!;
-    if (sp.cd === 0 && u.ap >= spellOf(u, sp.id)!.ap) pickSpell(sp.id);
+    if (sp.cd === 0 && (sp.charges === undefined || sp.charges > 0) && u.ap >= spellOf(u, sp.id)!.ap) pickSpell(sp.id);
   } else if (e.key === 'e' || e.key === 'E' || e.key === ' ') { e.preventDefault(); s.act({ a: 'end' }); }
   else if (e.key === 'Escape') ui.board?.select(null);
 });
@@ -268,6 +293,19 @@ setInterval(() => {
 
 // Acceso para pruebas automáticas (no lo usa el juego).
 (window as unknown as { __rda: unknown }).__rda = { get session() { return ui.session; } };
+
+/** Invitaciones recibidas: aviso flotante con «Unirme». */
+function drawInvites(): void {
+  document.getElementById('invites')?.remove();
+  const fresh = ui.invites.filter((i) => Date.now() - i.at < 120000);
+  if (!fresh.length) return;
+  document.body.insertAdjacentHTML('beforeend', `<div id="invites" class="toast">${fresh.map((i) => `<div class="panel"><b>✉ ${esc(i.from)}</b> te invita a su sala <b>${i.code}</b><div class="row"><button class="pri mini" data-act="acceptinv" data-id="${i.code}">Unirme</button><button class="mini" data-act="dropinv" data-id="${i.code}">Ahora no</button></div></div>`).join('')}</div>`);
+}
+socialHandlers(() => { if (ui.screen === 'home') homeScreen(''); else if (ui.screen === 'lobby') { lastKey = ''; render([]); } }, (inv) => {
+  ui.invites = [...ui.invites.filter((x) => x.code !== inv.code), inv].slice(-3);
+  drawInvites();
+  sfx.coin();
+});
 
 export function boot(): void {
   home();

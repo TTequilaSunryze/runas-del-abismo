@@ -187,3 +187,20 @@ span.cell { display: inline-flex; align-items: center; justify-content: center; 
 .k-dmg { --kc: #e0475b; } .k-heal { --kc: #4cb85a; } .k-shield { --kc: #58a6ff; } .k-ctrl { --kc: #e8c84a; } .k-buff { --kc: #c77dff; } .k-summon { --kc: #b08040; }
 .kt { font-size: 11px; border-radius: 8px; padding: 0 6px; border: 1px solid var(--kc); color: var(--kc); }
 .schip { display: inline-flex; align-items: center; gap: 4px; }
+
+/* ficha del personaje, consumibles, bendiciones y avance */
+.modal .panel.wide { max-width: 820px; width: 100%; max-height: 90vh; overflow: auto; }
+.stattab { width: 100%; border-collapse: collapse; margin: 6px 0 10px; }
+.stattab th { text-align: left; font-size: 11px; color: var(--dim, #9a8fb5); text-transform: uppercase; letter-spacing: 1px; padding: 4px 6px; border-bottom: 1px solid var(--edge); }
+.stattab td { padding: 3px 6px; border-bottom: 1px solid rgba(255,255,255,.04); }
+.stattab td:last-child { text-align: right; }
+.itemsep { width: 2px; align-self: stretch; background: var(--edge); margin: 0 4px; }
+.sbtn.item { border-style: dashed; }
+.cdn.qty { background: #4cb85a; color: #000; }
+.advance { padding: 6px 8px; border: 1px solid var(--edge); border-radius: 8px; background: rgba(0,0,0,.2); margin: 6px 0; gap: 10px; }
+.panel.boon { border-color: #c77dff; }
+.blu { color: #58a6ff; }
+.toast { position: fixed; right: 12px; bottom: 12px; z-index: 60; max-width: 340px; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 4px; background: #555; margin-right: 4px; }
+.dot.on { background: #4cb85a; }
+.sbtn .cdn.qty { inset: auto; left: 3px; top: 3px; bottom: auto; right: auto; width: auto; height: auto; padding: 0 5px; border-radius: 8px; font-size: 11px; background: #4cb85a; color: #000; display: block; }

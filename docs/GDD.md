@@ -50,5 +50,21 @@ Tutorial de 5 pasos la primera vez, textos de zona y clase, pantalla final con r
 - **Modificadores elegibles**: hasta 3 de 11, +15% de ecos cada uno.
 - **Curva de dificultad**: los enemigos suben un 15% de vida y daño por zona (y un 30% más en el Abismo).
 
+## v5: combate táctico, progresión dentro de la partida y cooperación
+- **Élites y jefes**: inmunes a aturdir. Cada PM/PA que se les intenta quitar (y cada casilla de empuje) se tira dos veces (70% cada una) y solo entra si salen las dos (~49%).
+- **Placaje y huida**: al salir de una casilla pegada a enemigos se conserva solo una parte de los PM: (huida + 2) / (2 × (placaje total + 2)). Clases: guerrero placa mucho, pícaro y arquero huyen bien. Espectros e invisibles lo ignoran. Objetos con Placaje/Huida.
+- **Kit inicial**: 3 habilidades desde el nivel 1 (2 de daño + 1 de potenciación): Guerrero *Sed de sangre* (15% de vida → +35% daño), Mago *Escudo arcano*, Clérigo *Fervor*, Arquero *Ojo de halcón* (+2 alcance) y *Tiro rasante* (sí alcanza a pegados), Pícaro *Desvanecerse* (invisible).
+- **Bendiciones (estilo Hades)**: 5 patrones (Tormenta, Llama, Escarcha, Sombra, Vida) con 3 habilidades cada uno. El Santuario y los élites ofrecen 3 a elegir, a menudo del patrón que ya llevas; 2 y 3 del mismo patrón dan bonus. Hasta 4 habilidades extra.
+- **Consumibles**: poción de curación, poción de resurrección, bomba de fuego, bomba de humo (máx. 3 de cada). Salen tras los combates (siempre tras élite y jefe) y en la tienda.
+- **Botín por profundidad**: más probabilidad de raro, épico y legendario cuanto más avanzada la partida (con techo).
+- **Vida al equipar**: la vida máxima que da un objeto se suma también a la actual.
+- **Jaula**: ahora es un combate; al ganarlo, el prisionero se une al grupo.
+- **Forja**: cuesta oro, mejora equipo o mochila (+20% por nivel, hasta +5) con vista previa en verde.
+- **Listo**: el anfitrión no puede cambiar de sala hasta que todos los conectados hayan elegido botín, mejoras y bendiciones y pulsado «Listo».
+- **Ficha del personaje** (botón 📊 o tecla S): estadísticas base + equipo, sets, reliquias, bendiciones y eventos.
+- **Estadísticas en vivo de los enemigos**: −PM en azul y −PA en amarillo al aplicarse; la ayuda muestra PA/PM de su próximo turno, armadura, placaje y huida.
+- **Amigos e invitaciones** (con cuenta): lista de amigos por nombre de cuenta, ver quién está en línea y en qué sala, invitar desde la sala con un clic.
+- **Música**: 11 pistas propias (menú, sala, mapa de cada zona, combate, jefe, descanso, elecciones, final) con fundido.
+
 ## Pendiente / ideas
 Sincronizar ecos en la nube con cuenta, más zonas y clases, sprites animados, balance con datos de partidas reales.

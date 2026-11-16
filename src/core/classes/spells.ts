@@ -42,6 +42,16 @@ export interface SpellDef {
   lifesteal?: number;
   /** el lanzador salta junto al objetivo antes de golpear */
   dash?: boolean;
+  /** efecto sobre el propio lanzador (potenciarse, alcance, invisibilidad…) */
+  buff?: { kind: StatusKind; turns: number; stacks?: number };
+  /** cuesta este % de tu vida actual */
+  selfDmgPct?: number;
+  /** cura un % de la vida máxima del objetivo */
+  healPct?: number;
+  /** resucita a un aliado caído con este % de vida */
+  revive?: number;
+  /** PM que gana el lanzador */
+  selfMp?: number;
   /** ignora la armadura */
   pierce?: boolean;
   /** alcanza a todos los enemigos en la línea hasta el objetivo */
@@ -129,6 +139,38 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
     S({ id: 'lobo', name: 'Invocar lobo', route: 'bestias', ap: 4, cd: 4, range: [1, 2], los: true, target: 'cell', summon: { kind: 'lobo', name: 'Lobo', hpPct: 0.6, armor: 1, ap: 6, mp: 5, initiative: 12, spell: 'e_mordida' }, text: 'Un lobo lucha a tu lado (uno a la vez). Hereda tu % de daño.' }),
     S({ id: 'orden', name: 'Orden de caza', route: 'bestias', ap: 2, cd: 2, range: [1, 6], los: false, target: 'ally', giveAp: 3, giveMp: 2, text: 'Tu lobo (o un aliado) gana 3 PA y 2 PM en su próximo turno.' }),
     S({ id: 'vinculo', name: 'Vínculo', route: 'bestias', ap: 3, cd: 3, range: [0, 0], los: false, target: 'ally', area: 3, heal: 10, text: 'Cura 10 a ti y a los aliados en área 3.' }),
+    // ---------- Kit inicial: segunda habilidad de daño y potenciación propia ----------
+    S({ id: 'hachazo', name: 'Hachazo', route: 'base', ap: 4, cd: 1, range: [1, 1], los: false, target: 'enemy', dmg: [11, 15], text: 'Golpe pesado cuerpo a cuerpo.' }),
+    S({ id: 'sed_sangre', name: 'Sed de sangre', route: 'base', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', selfDmgPct: 0.15, buff: { kind: 'empower', turns: 2, stacks: 35 }, text: 'Pierdes el 15% de tu vida actual: +35% de daño este turno y el siguiente.' }),
+    S({ id: 'chispa', name: 'Chispa ígnea', route: 'base', ap: 3, cd: 1, range: [1, 4], los: true, target: 'enemy', dmg: [7, 10], status: { kind: 'burn', turns: 1 }, text: 'Daño de fuego que quema 1 turno.' }),
+    S({ id: 'escudo_arcano', name: 'Escudo arcano', route: 'base', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', shield: 14, buff: { kind: 'empower', turns: 2, stacks: 15 }, text: 'Escudo de 14 y +15% de daño este turno y el siguiente.' }),
+    S({ id: 'castigo', name: 'Castigo divino', route: 'base', ap: 3, cd: 1, range: [1, 4], los: true, target: 'enemy', dmg: [7, 10], text: 'Rayo de luz a distancia.' }),
+    S({ id: 'fervor', name: 'Fervor', route: 'base', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', heal: 8, buff: { kind: 'empower', turns: 2, stacks: 20 }, text: 'Te curas 8 y ganas +20% de daño este turno y el siguiente.' }),
+    S({ id: 'tiro_rasante', name: 'Tiro rasante', route: 'base', ap: 3, cd: 1, range: [1, 4], los: true, target: 'enemy', dmg: [6, 9], push: 1, text: 'Disparo corto que sí alcanza a los pegados y los empuja 1 casilla.' }),
+    S({ id: 'ojo_halcon', name: 'Ojo de halcón', route: 'base', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', buff: { kind: 'reach', turns: 2, stacks: 2 }, text: '+2 de alcance a tus ataques a distancia este turno y el siguiente.' }),
+    S({ id: 'cuchillo', name: 'Cuchillo arrojadizo', route: 'base', ap: 3, cd: 1, range: [2, 4], los: true, target: 'enemy', dmg: [6, 9], text: 'Lanzas un cuchillo a media distancia.' }),
+    S({ id: 'desvanecer', name: 'Desvanecerse', route: 'base', ap: 3, cd: 4, range: [0, 0], los: false, target: 'self', buff: { kind: 'invis', turns: 2 }, text: 'Invisible este turno y el siguiente: no te pueden apuntar ni placar. Atacar te hace visible.' }),
+    // ---------- Consumibles ----------
+    S({ id: 'c_vida', name: 'Poción de curación', route: 'item', ap: 2, cd: 0, range: [0, 0], los: false, target: 'self', healPct: 0.35, text: 'Recuperas el 35% de tu vida.' }),
+    S({ id: 'c_resu', name: 'Poción de resurrección', route: 'item', ap: 4, cd: 0, range: [1, 2], los: false, target: 'ally', revive: 0.4, text: 'Levanta a un aliado caído con el 40% de su vida. Apunta a su casilla.' }),
+    S({ id: 'c_fuego', name: 'Bomba de fuego', route: 'item', ap: 3, cd: 0, range: [1, 4], los: true, target: 'enemy', area: 1, dmg: [12, 16], status: { kind: 'burn', turns: 2 }, text: 'Explota en área 1 y quema 2 turnos.' }),
+    S({ id: 'c_humo', name: 'Bomba de humo', route: 'item', ap: 2, cd: 0, range: [0, 0], los: false, target: 'self', selfMp: 2, buff: { kind: 'invis', turns: 2 }, text: 'Te vuelves invisible y ganas +2 PM para escapar.' }),
+    // ---------- Bendiciones (habilidades extra por patrón) ----------
+    S({ id: 'b_relampago', name: 'Relámpago', route: 'tormenta_p', ap: 3, cd: 1, range: [1, 6], los: true, target: 'enemy', dmg: [8, 11], drainAp: 1, text: 'Rayo que quita 1 PA.' }),
+    S({ id: 'b_cadena', name: 'Cadena de rayos', route: 'tormenta_p', ap: 4, cd: 2, range: [2, 5], los: true, target: 'enemy', area: 1, dmg: [8, 11], text: 'Salta a todo lo que esté al lado del objetivo.' }),
+    S({ id: 'b_trueno', name: 'Trueno', route: 'tormenta_p', ap: 4, cd: 3, range: [0, 0], los: false, target: 'enemy', area: 2, dmg: [9, 12], push: 1, text: 'Estalla a tu alrededor (radio 2) y empuja.' }),
+    S({ id: 'b_llamarada', name: 'Llamarada', route: 'llama_p', ap: 3, cd: 1, range: [1, 4], los: true, target: 'enemy', dmg: [9, 12], status: { kind: 'burn', turns: 2 }, text: 'Fuego que quema 2 turnos.' }),
+    S({ id: 'b_infierno', name: 'Muro de llamas', route: 'llama_p', ap: 4, cd: 2, range: [2, 5], los: true, target: 'enemy', area: 1, dmg: [7, 9], status: { kind: 'burn', turns: 2 }, text: 'Área 1 que quema.' }),
+    S({ id: 'b_fenix', name: 'Corazón de fénix', route: 'llama_p', ap: 2, cd: 4, range: [0, 0], los: false, target: 'self', healPct: 0.2, buff: { kind: 'empower', turns: 2, stacks: 20 }, text: 'Te curas un 20% y ganas +20% de daño.' }),
+    S({ id: 'b_lanza', name: 'Lanza de hielo', route: 'escarcha_p', ap: 3, cd: 1, range: [2, 6], los: true, target: 'enemy', dmg: [8, 11], status: { kind: 'slow', turns: 1, stacks: 1 }, text: 'Quita 1 PM.' }),
+    S({ id: 'b_prision', name: 'Prisión gélida', route: 'escarcha_p', ap: 4, cd: 3, range: [1, 4], los: true, target: 'enemy', dmg: [4, 6], status: { kind: 'slow', turns: 2, stacks: 3 }, text: 'Quita 3 PM durante 2 turnos.' }),
+    S({ id: 'b_coraza', name: 'Coraza de hielo', route: 'escarcha_p', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', shield: 20, text: 'Escudo de 20.' }),
+    S({ id: 'b_drenar', name: 'Drenar alma', route: 'sombra_p', ap: 3, cd: 1, range: [1, 4], los: true, target: 'enemy', dmg: [7, 10], lifesteal: 0.5, text: 'Te curas la mitad del daño.' }),
+    S({ id: 'b_paso', name: 'Paso sombrío', route: 'sombra_p', ap: 3, cd: 2, range: [2, 5], los: true, target: 'enemy', dash: true, dmg: [8, 11], text: 'Apareces junto al objetivo y lo golpeas.' }),
+    S({ id: 'b_maldicion', name: 'Maldición', route: 'sombra_p', ap: 3, cd: 3, range: [1, 6], los: true, target: 'enemy', dmg: [3, 5], status: { kind: 'mark', turns: 3 }, extraStatus: { kind: 'poison', turns: 3, stacks: 2 }, text: 'Marca y envenena x2 durante 3 turnos.' }),
+    S({ id: 'b_espinas', name: 'Látigo de zarzas', route: 'vida_p', ap: 3, cd: 1, range: [1, 3], los: true, target: 'enemy', dmg: [7, 10], status: { kind: 'poison', turns: 2, stacks: 1 }, text: 'Envenena 2 turnos.' }),
+    S({ id: 'b_brote', name: 'Brote vital', route: 'vida_p', ap: 3, cd: 2, range: [0, 0], los: false, target: 'ally', area: 2, heal: 12, text: 'Cura 12 a ti y a los aliados en radio 2.' }),
+    S({ id: 'b_corteza', name: 'Piel de corteza', route: 'vida_p', ap: 2, cd: 3, range: [1, 4], los: false, target: 'ally', shield: 14, text: 'Escudo de 14 a un aliado (o a ti).' }),
     // ---------- Enemigos (Zona 1) ----------
     S({ id: 'e_golpe', name: 'Golpe', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [5, 7], text: '' }),
     S({ id: 'e_tajo', name: 'Tajo sepulcral', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [8, 10], text: '' }),
@@ -173,8 +215,9 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
 );
 
 // Elemento del daño según la ruta (o el hechizo, en los enemigos).
-const ROUTE_ELEMENT: Record<string, Element> = { fuego: 'fire', hielo: 'ice', veneno: 'poison', luz: 'holy', penitencia: 'holy', juicio: 'holy' };
+const ROUTE_ELEMENT: Record<string, Element> = { fuego: 'fire', hielo: 'ice', veneno: 'poison', luz: 'holy', penitencia: 'holy', juicio: 'holy', llama_p: 'fire', escarcha_p: 'ice', sombra_p: 'shadow', vida_p: 'poison' };
 const SPELL_ELEMENT: Record<string, Element> = {
+  chispa: 'fire', castigo: 'holy', c_fuego: 'fire',
   e_maldicion: 'shadow', e_toque: 'shadow', e_zarpazo: 'poison', e_llama: 'fire', e_mordisco: 'shadow', e_espora: 'poison', e_latigo: 'poison',
   e_dentellada: 'fire', e_bola: 'fire', e_pira: 'fire', e_cataclismo: 'fire',
   e_espinas: 'poison', e_zarpa: 'shadow', e_ascua: 'fire', e_lamento: 'shadow', e_fundir: 'fire', e_vacio: 'shadow', e_mirada: 'shadow', e_mordaza: 'shadow', e_devorar: 'shadow', e_eco: 'shadow',
