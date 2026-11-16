@@ -15,9 +15,13 @@ export interface StatusState {
   stacks: number;
 }
 
+export type Element = 'fire' | 'ice' | 'poison' | 'shadow' | 'holy';
+
 export interface SpellSlot {
   id: string;
   cd: number;
+  /** runa engarzada */
+  rune?: string;
 }
 
 export interface Unit {
@@ -45,6 +49,10 @@ export interface Unit {
   /** PA/PM extra (o de menos, si es negativo) que se aplican al empezar su próximo turno */
   apMod: number;
   mpMod: number;
+  /** % de daño que resiste de cada elemento (negativo = debilidad) */
+  resist: Partial<Record<Element, number>>;
+  /** turnos extra de los estados que aplica */
+  statusBonus: number;
   statuses: Partial<Record<StatusKind, StatusState>>;
   spells: SpellSlot[];
   ai: 'melee' | 'ranged' | 'boss' | null;
@@ -73,7 +81,7 @@ export interface CombatState extends RngBox {
 export type GameEvent =
   | { t: 'turn'; unit: number; round: number }
   | { t: 'move'; unit: number; path: Pos[] }
-  | { t: 'cast'; unit: number; spell: string; at: Pos }
+  | { t: 'cast'; unit: number; spell: string; at: Pos; element?: Element }
   | { t: 'damage'; unit: number; amount: number; absorbed: number; crit: boolean; source: string }
   | { t: 'heal'; unit: number; amount: number }
   | { t: 'shield'; unit: number; amount: number }

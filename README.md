@@ -15,7 +15,9 @@ Zona 1: **Las Catacumbas Olvidadas**.
 | Equipo de 8 ranuras, 4 rarezas, mochila, comparación, dar objetos a compañeros | Hecho |
 | Zona 1: mapa de 9 salas con caminos a elegir, élite, eventos de grupo, descanso, tesoro, tienda con oro, trampas y jefe en dos fases | Hecho; falta equilibrar |
 | Sonido sintetizado (efectos y música) | Hecho |
-| Runas, resistencias en objetos, arte definitivo | Pendiente |
+| Runas (12, una por hechizo), elementos y resistencias, estados más largos por equipo | Hecho |
+| Sprites por clase, animaciones de ataque, proyectiles, muerte e iluminación | Hecho (dibujados por código) |
+| Zonas 2 y 3, más enemigos y jefes, equilibrio fino | Pendiente |
 
 ## Desarrollo
 

@@ -32,6 +32,7 @@ export function makeHero(opts: HeroBuild): UnitSpec {
     team: 'hero', kind: c.id, name: opts.name, owner: opts.owner, pos: opts.pos,
     hp, maxHp: hp, shield: 0, armor: Math.max(0, c.armor + b.armor), power: c.power + 6 * (level - 1) + b.power, crit: c.crit + b.crit,
     ap, maxAp: ap, mp, maxMp: mp, initiative: c.initiative + b.initiative, apMod: 0, mpMod: 0,
+    resist: { fire: b.resFire, ice: b.resIce, poison: b.resPoison, shadow: b.resShadow }, statusBonus: Math.max(0, Math.min(2, b.status)),
     statuses: {}, spells: spellsFor(opts.cls, chosen, level).map((id) => ({ id, cd: 0 })), ai: null,
   };
 }

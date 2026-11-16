@@ -50,7 +50,7 @@ export class Session {
     t.on('sync', (p) => {
       if (this.isHost) return;
       const m = p as { run: RunState; ev: GameEvent[] };
-      if (!m?.run || m.run.version !== 3) return;
+      if (!m?.run || m.run.version !== 4) return;
       this.run = m.run;
       this.noteTurn();
       this.onChange(Array.isArray(m.ev) ? m.ev : []);

@@ -2,7 +2,8 @@
 // Todas las funciones modifican el estado y devuelven los eventos ocurridos.
 import { SPELLS, type SpellDef } from '../classes/spells';
 import { rand, randInt } from '../rng';
-import { key, type CombatState, type GameEvent, type Pos, type StatusKind, type Unit } from '../state';
+import { withRune } from '../runes';
+import { key, type CombatState, type Element, type GameEvent, type Pos, type StatusKind, type Unit } from '../state';
 import { alive, dist, hasLineOfSight, isFree, pathTo, reachable, same, unitAt } from './grid';
 
 export type UnitSpec = Omit<Unit, 'id'>;
@@ -60,9 +61,11 @@ function checkOver(s: CombatState, ev: GameEvent[]): void {
 }
 
 /** Aplica daño ya calculado (antes de armadura). Devuelve la vida perdida. */
-function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: string, opts: { pierce?: boolean; crit?: boolean } = {}): number {
+function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: string, opts: { pierce?: boolean; crit?: boolean; element?: Element } = {}): number {
   if (!alive(u)) return 0;
-  let dmg = opts.pierce ? Math.round(raw) : Math.max(1, Math.round(raw) - u.armor);
+  const res = opts.element ? Math.min(75, u.resist[opts.element] ?? 0) : 0;
+  raw *= 1 - res / 100;
+  let dmg = opts.pierce ? Math.max(1, Math.round(raw)) : Math.max(1, Math.round(raw) - u.armor);
   const absorbed = Math.min(u.shield, dmg);
   u.shield -= absorbed;
   dmg -= absorbed;
@@ -110,8 +113,8 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     ev.push({ t: 'turn', unit: u.id, round: s.round });
     u.shield = 0;
     for (const sp of u.spells) if (sp.cd > 0) sp.cd--;
-    if (u.statuses.burn) hurt(s, u, BURN_DMG, ev, 'burn', { pierce: true });
-    if (alive(u) && u.statuses.poison) hurt(s, u, POISON_DMG * u.statuses.poison.stacks, ev, 'poison', { pierce: true });
+    if (u.statuses.burn) hurt(s, u, BURN_DMG, ev, 'burn', { pierce: true, element: 'fire' });
+    if (alive(u) && u.statuses.poison) hurt(s, u, POISON_DMG * u.statuses.poison.stacks, ev, 'poison', { pierce: true, element: 'poison' });
     tick(u, 'burn');
     tick(u, 'poison');
     if (!alive(u) || s.over) continue;
@@ -161,10 +164,17 @@ export function move(s: CombatState, unitId: number, to: Pos): ActionResult {
   return { ok: true, events: ev };
 }
 
+/** El hechizo tal como lo lanza `u`: con su runa aplicada. */
+export function spellOf(u: Unit, id: string): SpellDef | undefined {
+  const def = SPELLS[id];
+  return def && withRune(def, u.spells.find((x) => x.id === id)?.rune);
+}
+
 /** Motivo por el que `u` no puede lanzar el hechizo sobre `at`, o null si puede. */
-export function castProblem(s: CombatState, u: Unit, def: SpellDef, at: Pos): string | null {
-  const slot = u.spells.find((x) => x.id === def.id);
+export function castProblem(s: CombatState, u: Unit, base: SpellDef, at: Pos): string | null {
+  const slot = u.spells.find((x) => x.id === base.id);
   if (!slot) return 'No conoces ese hechizo';
+  const def = withRune(base, slot.rune);
   if (slot.cd > 0) return 'Hechizo en enfriamiento';
   if (u.ap < def.ap) return 'No tienes PA suficientes';
   const d = dist(u.pos, at);
@@ -211,12 +221,13 @@ function push(s: CombatState, from: Pos, u: Unit, cells: number, ev: GameEvent[]
 export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): ActionResult {
   const u = actor(s, unitId);
   if (typeof u === 'string') return fail(u);
-  const def = SPELLS[spellId];
-  if (!def) return fail('Hechizo desconocido');
-  const problem = castProblem(s, u, def, at);
+  const base = SPELLS[spellId];
+  if (!base) return fail('Hechizo desconocido');
+  const problem = castProblem(s, u, base, at);
   if (problem) return fail(problem);
+  const def = spellOf(u, spellId)!;
 
-  const ev: GameEvent[] = [{ t: 'cast', unit: u.id, spell: def.id, at: { ...at } }];
+  const ev: GameEvent[] = [{ t: 'cast', unit: u.id, spell: def.id, at: { ...at }, element: def.element }];
   u.ap -= def.ap;
   u.spells.find((x) => x.id === def.id)!.cd = def.cd > 0 ? def.cd + 1 : 0;
   if (def.dash) {
@@ -235,22 +246,26 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
   for (const t of targets) {
     if (s.over) break;
     if (def.dmg) {
-      const crit = rand(s) * 100 < u.crit;
+      const crit = rand(s) * 100 < u.crit + (def.crit ?? 0);
       const raw = randInt(s, def.dmg[0], def.dmg[1]) * (1 + u.power / 100) * (crit ? CRIT_MULT : 1) * (t.statuses.mark ? MARK_MULT : 1) * (t === main || def.range[1] === 0 ? 1 : 0.5);
-      dealt += hurt(s, t, raw, ev, def.id, { crit });
+      dealt += hurt(s, t, raw, ev, def.id, { crit, element: def.element });
     }
     if (def.heal) heal(t, def.heal, ev);
     if (def.shield && alive(t)) {
       t.shield += def.shield;
       ev.push({ t: 'shield', unit: t.id, amount: def.shield });
     }
-    if (def.status) addStatus(t, def.status.kind, def.status.turns, def.status.stacks ?? 1, ev);
+    for (const st of [def.status, def.extraStatus]) if (st) addStatus(t, st.kind, st.turns + (st.kind === 'stun' ? 0 : u.statusBonus), st.stacks ?? 1, ev);
     if (def.drainAp) t.apMod -= def.drainAp;
     if (def.giveAp) t.apMod += def.giveAp;
     if (def.giveMp) t.mpMod += def.giveMp;
     if (def.push && t === main) push(s, u.pos, t, def.push, ev);
   }
   if (def.lifesteal && dealt > 0) heal(u, dealt * def.lifesteal, ev);
+  if (def.selfShield && alive(u)) {
+    u.shield += def.selfShield;
+    ev.push({ t: 'shield', unit: u.id, amount: def.selfShield });
+  }
   return { ok: true, events: ev };
 }
 

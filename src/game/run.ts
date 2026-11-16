@@ -8,7 +8,8 @@ import { makeHero } from '../core/classes/factory';
 import { createCombat, type CombatSetup } from '../core/combat/engine';
 import { reachable } from '../core/combat/grid';
 import { BAG_SIZE, PRICE, genItem, type Item, type Rarity, type Slot, type Stats } from '../core/items/items';
-import { pick, randInt, shuffle, type RngBox } from '../core/rng';
+import { pick, rand, randInt, shuffle, type RngBox } from '../core/rng';
+import { RUNES } from '../core/runes';
 import type { ClassId, CombatState, GameEvent, Pos } from '../core/state';
 
 export interface HeroSave {
@@ -21,6 +22,10 @@ export interface HeroSave {
   gold: number;
   equip: Partial<Record<Slot, Item>>;
   bag: Item[];
+  /** runas sin engarzar */
+  runes: string[];
+  /** runa engarzada en cada hechizo: id de hechizo → id de runa */
+  sockets: Record<string, string>;
   /** bendiciones y maldiciones de eventos */
   boon: Stats;
 }
@@ -41,13 +46,14 @@ export const NODE_HINT: Record<NodeKind, string> = {
 };
 
 export interface ShopSlot {
-  item: Item;
+  item?: Item;
+  rune?: string;
   price: number;
   sold: boolean;
 }
 
 export interface RunState extends RngBox {
-  version: 3;
+  version: 4;
   code: string;
   /** combates ganados: marca la dificultad y el nivel */
   fight: number;
@@ -83,17 +89,30 @@ function makeMap(box: RngBox): NodeKind[][] {
 
 export function newRun(code: string, seed: number, players: Array<Pick<HeroSave, 'owner' | 'name' | 'cls' | 'routes'>>): RunState {
   const run: RunState = {
-    version: 3, code, rng: seed >>> 0, fight: 0, step: 0, map: [], phase: 'map', kind: 'combat', combat: null,
+    version: 4, code, rng: seed >>> 0, fight: 0, step: 0, map: [], phase: 'map', kind: 'combat', combat: null,
     offers: {}, event: null, eventsSeen: [], shop: null, ambush: false, note: 'Las Catacumbas Olvidadas se abren ante vosotros.',
-    heroes: players.map((p) => ({ ...p, hp: 0, level: 1, gold: 0, equip: {}, bag: [], boon: {} })),
+    heroes: players.map((p) => ({ ...p, hp: 0, level: 1, gold: 0, equip: {}, bag: [], runes: [], sockets: {}, boon: {} })),
   };
   run.map = makeMap(run);
-  for (const h of run.heroes) h.hp = heroMaxHp(h);
+  for (const h of run.heroes) {
+    h.hp = heroMaxHp(h);
+    h.runes.push(randomRune(run, false));
+  }
   return run;
 }
 
+export const RUNE_PRICE = [45, 90] as const;
+
+/** Runa al azar: `rare` true = rara, false = común, undefined = cualquiera (las raras salen menos). */
+export function randomRune(box: RngBox, rare?: boolean): string {
+  const want = rare ?? rand(box) < 0.25;
+  return pick(box, Object.values(RUNES).filter((r) => r.rare === want)).id;
+}
+
 export function heroSpec(h: HeroSave, pos: Pos = { x: 0, y: 0 }) {
-  return makeHero({ cls: h.cls, name: h.name, owner: h.owner, routes: h.routes, pos, level: h.level, bonus: [...Object.values(h.equip).map((i) => i.stats), h.boon] });
+  const u = makeHero({ cls: h.cls, name: h.name, owner: h.owner, routes: h.routes, pos, level: h.level, bonus: [...Object.values(h.equip).map((i) => i.stats), h.boon] });
+  for (const sp of u.spells) if (h.sockets[sp.id]) sp.rune = h.sockets[sp.id];
+  return u;
 }
 
 export const heroMaxHp = (h: HeroSave): number => heroSpec(h).maxHp;
@@ -108,7 +127,7 @@ function enemyList(run: RunState): string[] {
   const n = run.heroes.length;
   const d = run.fight;
   if (run.kind === 'boss') return ['prior', ...Array.from({ length: n }, () => pick(run, ['esqueleto', 'arquero']))];
-  const pool = d < 1 ? ['limo', 'murcielago', 'esqueleto'] : d < 3 ? ['limo', 'murcielago', 'esqueleto', 'arquero'] : ['murcielago', 'esqueleto', 'arquero', 'necrofago'];
+  const pool = d < 1 ? ['limo', 'murcielago', 'esqueleto'] : d < 3 ? ['limo', 'murcielago', 'esqueleto', 'arquero'] : ['murcielago', 'esqueleto', 'arquero', 'necrofago', 'acolito'];
   const elite = run.kind === 'elite';
   const count = n + (d >= 1 ? 1 : 0) + (d >= 4 ? 1 : 0) - (elite ? 1 : 0) + (run.ambush ? 2 : 0);
   const list = Array.from({ length: Math.max(1, count) }, () => pick(run, pool));
@@ -176,10 +195,11 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
     run.event = { id: e.id, votes: {} };
     run.phase = 'event';
   } else if (node === 'shop') {
-    run.shop = Array.from({ length: 6 }, (_, i) => {
+    run.shop = Array.from({ length: 6 }, (_, i): ShopSlot => {
       const item = genItem(run, ZONA1_ITEMS, run.fight + 1, i < 2 ? 2 : i < 4 ? 1 : 0);
       return { item, price: PRICE[item.rarity], sold: false };
     });
+    for (const rare of [false, true]) run.shop.push({ rune: randomRune(run, rare), price: RUNE_PRICE[rare ? 1 : 0], sold: false });
     run.phase = 'shop';
   } else if (node === 'rest') {
     for (const h of run.heroes) h.hp = Math.min(heroMaxHp(h), h.hp + Math.ceil(heroMaxHp(h) * 0.4));
@@ -187,7 +207,8 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
     run.step++;
   } else {
     offerAll(run, 3, 1);
-    run.note = 'Encontráis un ajuar funerario intacto. Cada uno puede quedarse un objeto.';
+    for (const h of run.heroes) h.runes.push(randomRune(run));
+    run.note = 'Encontráis un ajuar funerario intacto: una runa para cada uno y un objeto a elegir.';
     run.step++;
   }
   return [];
@@ -239,10 +260,13 @@ export function finishFight(run: RunState): void {
     // los caídos vuelven con el 30%; los demás recuperan un 35% entre combates
     h.hp = left <= 0 ? Math.ceil(max * 0.3) : Math.min(max, left + Math.ceil(max * 0.35));
     h.gold += gold;
+    // runas: seguras (y raras) tras élite o jefe; a veces tras un combate normal
+    if (run.kind !== 'combat') h.runes.push(randomRune(run, true));
+    else if (rand(run) < 0.45) h.runes.push(randomRune(run, false));
   }
   run.offers = {};
   offerAll(run, run.ambush ? 4 : 3, run.ambush ? 2 : run.kind === 'elite' ? 1 : 0);
-  run.note = `Victoria: cada uno gana ${gold} de oro y sube un nivel.`;
+  run.note = `Victoria: cada uno gana ${gold} de oro y sube un nivel.${run.kind !== 'combat' ? ' Además, una runa rara para cada uno.' : ' Puede que alguno haya encontrado una runa.'}`;
   run.ambush = false;
   run.fight++;
   run.step++;
@@ -266,6 +290,8 @@ export type MetaAction =
   | { a: 'give'; idx: number; to: string }
   | { a: 'sell'; idx: number }
   | { a: 'buy'; idx: number }
+  | { a: 'socket'; spell: string; idx: number }
+  | { a: 'unsocket'; spell: string }
   | { a: 'potion' };
 
 /** Acciones de un jugador fuera del combate. Devuelve un mensaje de error o null si se aplicó. */
@@ -323,9 +349,27 @@ export function metaAction(run: RunState, owner: string, a: MetaAction): string 
       const slot = run.shop?.[a.idx];
       if (run.phase !== 'shop' || !slot || slot.sold) return 'Ya no está a la venta';
       if (h.gold < slot.price) return 'No tienes oro suficiente';
-      if (!receive(h, slot.item)) return 'Mochila llena';
+      if (slot.rune) h.runes.push(slot.rune);
+      else if (!slot.item || !receive(h, slot.item)) return 'Mochila llena';
       h.gold -= slot.price;
       slot.sold = true;
+      break;
+    }
+    case 'socket': {
+      const rune = h.runes[a.idx];
+      if (!rune || !RUNES[rune]) return 'Runa no encontrada';
+      if (!heroSpec({ ...h, level: MAX_LEVEL }).spells.some((sp) => sp.id === a.spell)) return 'No tienes ese hechizo';
+      h.runes.splice(a.idx, 1);
+      const old = h.sockets[a.spell];
+      if (old) h.runes.push(old);
+      h.sockets[a.spell] = rune;
+      break;
+    }
+    case 'unsocket': {
+      const old = h.sockets[a.spell];
+      if (!old) return 'Ese hechizo no tiene runa';
+      delete h.sockets[a.spell];
+      h.runes.push(old);
       break;
     }
     case 'potion':

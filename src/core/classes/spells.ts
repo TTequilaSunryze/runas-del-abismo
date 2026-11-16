@@ -1,5 +1,5 @@
 // Definición de hechizos (datos). El motor los interpreta en combat/engine.ts.
-import type { StatusKind } from '../state';
+import type { Element, StatusKind } from '../state';
 
 export interface SpellDef {
   id: string;
@@ -19,6 +19,14 @@ export interface SpellDef {
   heal?: number;
   shield?: number;
   status?: { kind: StatusKind; turns: number; stacks?: number };
+  /** segundo estado (lo añaden las runas) */
+  extraStatus?: { kind: StatusKind; turns: number; stacks?: number };
+  /** elemento del daño: lo reducen las resistencias */
+  element?: Element;
+  /** % de crítico extra */
+  crit?: number;
+  /** escudo que gana el lanzador */
+  selfShield?: number;
   /** casillas que empuja al objetivo */
   push?: number;
   /** PA que da al objetivo aliado */
@@ -101,8 +109,14 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
     S({ id: 'e_tajo', name: 'Tajo sepulcral', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [8, 10], text: '' }),
     S({ id: 'e_maldicion', name: 'Maldición del Prior', route: 'enemy', ap: 3, cd: 0, range: [2, 7], los: true, target: 'enemy', dmg: [6, 8], status: { kind: 'mark', turns: 2 }, text: '' }),
     S({ id: 'e_barrido', name: 'Barrido del coloso', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', area: 1, dmg: [9, 12], text: '' }),
+    S({ id: 'e_llama', name: 'Llama hereje', route: 'enemy', ap: 3, cd: 0, range: [2, 5], los: true, target: 'enemy', dmg: [4, 6], status: { kind: 'burn', turns: 2 }, text: '' }),
     S({ id: 'e_mordisco', name: 'Mordisco', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [3, 5], lifesteal: 0.5, text: '' }),
     S({ id: 'e_flecha', name: 'Flecha de hueso', route: 'enemy', ap: 3, cd: 0, range: [2, 5], los: true, target: 'enemy', dmg: [5, 7], text: '' }),
     S({ id: 'e_zarpazo', name: 'Zarpazo pútrido', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [6, 8], status: { kind: 'poison', turns: 3, stacks: 1 }, text: '' }),
   ].map((d) => [d.id, d]),
 );
+
+// Elemento del daño según la ruta (o el hechizo, en los enemigos).
+const ROUTE_ELEMENT: Record<string, Element> = { fuego: 'fire', hielo: 'ice', veneno: 'poison', luz: 'holy', penitencia: 'holy', juicio: 'holy' };
+const SPELL_ELEMENT: Record<string, Element> = { e_maldicion: 'shadow', e_zarpazo: 'poison', e_llama: 'fire', e_mordisco: 'shadow' };
+for (const d of Object.values(SPELLS)) d.element = SPELL_ELEMENT[d.id] ?? ROUTE_ELEMENT[d.route];

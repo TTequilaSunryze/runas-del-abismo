@@ -44,3 +44,7 @@ button.mini { padding: 3px 8px; font-size: 13px; margin: 4px 4px 0 0; }
 .step.on { border-color: var(--gold); opacity: 1; background: #3a2c1a; }
 .step.done { opacity: 0.35; }
 .step small { color: var(--dim); }
+
+.rune { border-color: var(--blu); }
+.rune.rare { border-color: #c77dff; }
+.rune.on { background: #4a3a1a; border-color: var(--gold); }

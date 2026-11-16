@@ -5,9 +5,9 @@ export const SLOTS = ['casco', 'capa', 'arma', 'peto', 'anillo', 'amuleto', 'bot
 export type Slot = (typeof SLOTS)[number];
 export const SLOT_NAME: Record<Slot, string> = { casco: 'Casco', capa: 'Capa', arma: 'Arma', peto: 'Peto', anillo: 'Anillo', amuleto: 'Amuleto', botas: 'Botas', guantes: 'Guantes' };
 
-export type StatKey = 'hp' | 'armor' | 'power' | 'crit' | 'ap' | 'mp' | 'initiative';
+export type StatKey = 'hp' | 'armor' | 'power' | 'crit' | 'ap' | 'mp' | 'initiative' | 'resFire' | 'resIce' | 'resPoison' | 'resShadow' | 'status';
 export type Stats = Partial<Record<StatKey, number>>;
-export const STAT_NAME: Record<StatKey, string> = { hp: 'Vida', armor: 'Armadura', power: '% Daño', crit: '% Crítico', ap: 'PA', mp: 'PM', initiative: 'Iniciativa' };
+export const STAT_NAME: Record<StatKey, string> = { hp: 'Vida', armor: 'Armadura', power: '% Daño', crit: '% Crítico', ap: 'PA', mp: 'PM', initiative: 'Iniciativa', resFire: '% Res. fuego', resIce: '% Res. hielo', resPoison: '% Res. veneno', resShadow: '% Res. sombra', status: 'turno(s) a tus estados' };
 
 /** 0 Común, 1 Raro, 2 Épico, 3 Legendario */
 export type Rarity = 0 | 1 | 2 | 3;
@@ -29,20 +29,21 @@ export interface ItemTheme {
 }
 
 const POOL: Record<Slot, StatKey[]> = {
-  casco: ['hp', 'armor', 'initiative'],
-  capa: ['hp', 'crit', 'initiative'],
-  arma: ['power', 'crit', 'power'],
-  peto: ['hp', 'armor', 'hp'],
-  anillo: ['power', 'crit', 'ap'],
-  amuleto: ['power', 'hp', 'ap'],
-  botas: ['initiative', 'hp', 'mp'],
-  guantes: ['crit', 'power', 'armor'],
+  casco: ['hp', 'armor', 'initiative', 'resShadow'],
+  capa: ['hp', 'crit', 'initiative', 'resIce', 'resShadow'],
+  arma: ['power', 'crit', 'status'],
+  peto: ['hp', 'armor', 'resFire'],
+  anillo: ['power', 'crit', 'ap', 'resPoison'],
+  amuleto: ['power', 'hp', 'ap', 'status', 'resFire'],
+  botas: ['initiative', 'hp', 'mp', 'resIce'],
+  guantes: ['crit', 'power', 'armor', 'resPoison'],
 };
 const MULT = [1, 1.35, 1.75, 2.2];
 
 function roll(box: RngBox, k: StatKey, rarity: Rarity, depth: number): number {
   const m = MULT[rarity]!;
-  if (k === 'ap' || k === 'mp') return 1;
+  if (k === 'ap' || k === 'mp' || k === 'status') return 1;
+  if (k.startsWith('res')) return Math.round(randInt(box, 8, 13) * m);
   if (k === 'armor') return Math.max(1, Math.round((1 + depth / 4) * (rarity >= 2 ? 2 : 1)));
   if (k === 'hp') return Math.round((randInt(box, 5, 8) + depth * 2) * m);
   if (k === 'power') return Math.round((randInt(box, 4, 7) + depth) * m);
@@ -64,7 +65,7 @@ export function genItem(box: RngBox, theme: ItemTheme, depth: number, min: Rarit
   }
   const s = slot ?? pick(box, SLOTS);
   // PA y PM solo en épicos o mejores
-  const keys = [...new Set(shuffle(box, POOL[s]))].filter((k) => rarity >= 2 || (k !== 'ap' && k !== 'mp'));
+  const keys = [...new Set(shuffle(box, POOL[s]))].filter((k) => rarity >= 2 || (k !== 'ap' && k !== 'mp' && k !== 'status'));
   const stats: Stats = {};
   for (const k of keys.slice(0, Math.min(3, rarity + 1))) stats[k] = roll(box, k, rarity, depth);
   const name = pick(box, theme.names[s]) + (rarity > 0 ? ' ' + pick(box, theme.suffixes) : '');
@@ -86,7 +87,7 @@ export function statDiff(next: Stats, old: Stats | undefined): Stats {
 }
 
 export function sumStats(list: Array<Stats | undefined>): Record<StatKey, number> {
-  const total: Record<StatKey, number> = { hp: 0, armor: 0, power: 0, crit: 0, ap: 0, mp: 0, initiative: 0 };
+  const total: Record<StatKey, number> = { hp: 0, armor: 0, power: 0, crit: 0, ap: 0, mp: 0, initiative: 0, resFire: 0, resIce: 0, resPoison: 0, resShadow: 0, status: 0 };
   for (const s of list) if (s) for (const k of Object.keys(s) as StatKey[]) total[k] += s[k] ?? 0;
   return total;
 }

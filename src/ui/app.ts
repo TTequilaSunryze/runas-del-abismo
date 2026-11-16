@@ -1,12 +1,13 @@
 // Pantallas: inicio, sala, combate, entre combates y final.
 import { ZONA1_EVENTS } from '../content/zona1/events';
-import { CLASSES, blockedRoutes, canPickRoute, findRoute, MAX_ROUTES } from '../core/classes/classes';
+import { CLASSES, blockedRoutes, canPickRoute, findRoute, MAX_LEVEL, MAX_ROUTES } from '../core/classes/classes';
+import { RUNES } from '../core/runes';
 import { isMuted, playEvents, sfx, toggleMute } from '../audio/sfx';
 import { BAG_SIZE, PRICE, RARITY_NAME, SLOTS, SLOT_NAME, STAT_NAME, statDiff, statsText, type Item, type Slot, type StatKey } from '../core/items/items';
 import { SPELLS } from '../core/classes/spells';
-import { current, getUnit } from '../core/combat/engine';
+import { current, getUnit, spellOf } from '../core/combat/engine';
 import type { ClassId, GameEvent } from '../core/state';
-import { NODE_HINT, NODE_NAME, POTION_HEAL, POTION_PRICE, heroMaxHp, type HeroSave, type RunState } from '../game/run';
+import { NODE_HINT, NODE_NAME, POTION_HEAL, POTION_PRICE, heroMaxHp, heroSpec, type HeroSave, type RunState } from '../game/run';
 import { Session, TURN_SECONDS } from '../game/session';
 import { joinRoom, loadRun } from '../net/transport';
 import { Board, STATUS_NAME } from '../render/board';
@@ -75,7 +76,7 @@ async function enter(code: string, isHost: boolean, local: boolean, resume = fal
   saved = null;
   if (resume) {
     const run = (await loadRun(code)) as RunState | null;
-    if (run && run.version === 3 && run.phase === 'map') saved = run;
+    if (run && run.version === 4 && run.phase === 'map') saved = run;
     else notice = 'No se encontró una partida guardada que se pueda continuar.';
   }
   let wasMyTurn = false;
@@ -161,8 +162,8 @@ function combat(events: GameEvent[]): void {
     .map((u) => `<span class="ini ${cur?.id === u.id ? 'on' : ''} ${u.team === 'hero' ? `p${heroIdx.get(u.id)! % 4}` : 'en'}">${esc(u.name)}<br><small>${u.hp}/${u.maxHp}</small></span>`).join('<span class="dim">›</span>');
   document.getElementById('bar')!.innerHTML = mine
     ? `<div class="card res"><span class="pill">PA ${mine.ap}/${mine.maxAp}</span><br><span class="blu">PM ${mine.mp}/${mine.maxMp}</span><br>PV ${mine.hp}/${mine.maxHp}</div>` +
-      mine.spells.map((sp, i) => { const d = SPELLS[sp.id]!; const off = !myTurn || mine.ap < d.ap || sp.cd > 0 || mine.hp <= 0;
-        return `<button class="spell ${board!.sel === d.id ? 'on' : ''}" data-act="spell" data-id="${d.id}" ${off ? 'disabled' : ''} title="${esc(d.text)}"><b>${i + 1}. ${esc(d.name)}</b><small>${d.ap} PA · ${d.range[1] === 0 ? 'propio' : `alcance ${d.range[0] === d.range[1] ? d.range[1] : `${d.range[0]}-${d.range[1]}`}`}${d.dmg ? ` · daño ${d.dmg[0]}-${d.dmg[1]}` : ''}${sp.cd > 0 ? ` · espera ${sp.cd}` : ''}</small><small class="dim">${esc(d.text)}</small></button>`; }).join('') +
+      mine.spells.map((sp, i) => { const d = spellOf(mine, sp.id)!; const rn = sp.rune ? RUNES[sp.rune] : undefined; const off = !myTurn || mine.ap < d.ap || sp.cd > 0 || mine.hp <= 0;
+        return `<button class="spell ${board!.sel === d.id ? 'on' : ''}" data-act="spell" data-id="${d.id}" ${off ? 'disabled' : ''} title="${esc(d.text)}"><b>${i + 1}. ${esc(d.name)}${rn ? ` ${rn.icon}` : ''}</b><small>${d.ap} PA · ${d.range[1] === 0 ? 'propio' : `alcance ${d.range[0] === d.range[1] ? d.range[1] : `${d.range[0]}-${d.range[1]}`}`}${d.dmg ? ` · daño ${d.dmg[0]}-${d.dmg[1]}` : ''}${sp.cd > 0 ? ` · espera ${sp.cd}` : ''}</small><small class="dim">${esc(d.text)}${rn ? ` <span class="pill">${esc(rn.name)}: ${esc(rn.text)}</span>` : ''}</small></button>`; }).join('') +
       `<button class="pri" data-act="end" ${myTurn ? '' : 'disabled'}>Terminar turno</button>`
     : '<span class="dim">Estás como espectador en este combate.</span>';
   const lg = document.getElementById('log')!;
@@ -224,6 +225,22 @@ function gearPanel(run: RunState, mine: HeroSave | undefined, selling: boolean):
     <button class="mini pri" data-act="equip" data-id="${i}">Equipar</button>${others.map((o) => `<button class="mini" data-act="give" data-id="${i}" data-to="${esc(o.owner)}">Dar a ${esc(o.name)}</button>`).join('')}${selling ? `<button class="mini" data-act="sell" data-id="${i}">Vender (+${Math.floor(PRICE[it.rarity] / 3)} oro)</button>` : ''}</div>`).join('')}</div>` : '<p class="dim">Vacía. Los objetos que no equipes al momento se guardan aquí; puedes dárselos a un compañero o venderlos en la tienda.</p>'}`;
 }
 
+let selRune = -1;
+
+/** Runas: una por hechizo. Se elige una runa y después el hechizo donde engarzarla. */
+function runePanel(mine: HeroSave | undefined): string {
+  if (!mine) return '';
+  const all = heroSpec({ ...mine, level: MAX_LEVEL }).spells;
+  const known = new Set(heroSpec(mine).spells.map((sp) => sp.id));
+  if (selRune >= mine.runes.length) selRune = -1;
+  const sel = selRune >= 0 ? RUNES[mine.runes[selRune]!] : undefined;
+  return `<h3>Runas <span class="dim">(una por hechizo; ${mine.runes.length} sin engarzar)</span></h3>
+  <div class="row">${mine.runes.length ? mine.runes.map((r, i) => { const d = RUNES[r]!; return `<button class="rune ${d.rare ? 'rare' : ''} ${selRune === i ? 'on' : ''}" data-act="selrune" data-id="${i}" title="${esc(d.text)}">${d.icon} ${esc(d.name)}</button>`; }).join('') : '<span class="dim">No tienes runas sueltas. Se consiguen en combates, élites, tesoros y tiendas.</span>'}</div>
+  ${sel ? `<p class="pill">${sel.icon} ${esc(sel.name)}: ${esc(sel.text)} Ahora elige el hechizo.</p>` : mine.runes.length ? '<p class="dim">Pulsa una runa y después «Engarzar» en un hechizo.</p>' : ''}
+  <div class="grid g4">${all.map((sp) => { const d = SPELLS[sp.id]!; const cur = mine.sockets[sp.id] ? RUNES[mine.sockets[sp.id]!] : undefined; const bad = !!sel && sel.needsDamage && !d.dmg;
+    return `<div class="card slot ${known.has(sp.id) ? '' : 'off'}"><b>${esc(d.name)}</b>${known.has(sp.id) ? '' : ' <span class="dim sp">(aún bloqueado)</span>'}<br><span class="sp dim">${esc(d.text)}</span><br>${cur ? `<span class="sp ${cur.rare ? 'r2' : 'r1'}">${cur.icon} ${esc(cur.name)}: ${esc(cur.text)}</span><br><button class="mini" data-act="unsocket" data-id="${sp.id}">Quitar runa</button>` : '<span class="sp dim">Sin runa</span>'}${sel ? `<br><button class="mini pri" data-act="socket" data-id="${sp.id}" ${bad ? 'disabled' : ''}>${bad ? 'Solo hechizos de daño' : 'Engarzar aquí'}</button>` : ''}</div>`; }).join('')}</div>`;
+}
+
 function mapScreen(): void {
   const s = session!, run = s.run!;
   const mine = run.heroes.find((h) => h.owner === myId);
@@ -234,7 +251,7 @@ function mapScreen(): void {
   <h3>Sala ${run.step + 1}: ${s.isHost ? 'elige el camino' : 'el anfitrión elige el camino'}</h3>
   <div class="grid">${(run.map[run.step] ?? []).map((n, i) => `<button class="card pickc" data-act="node" data-id="${i}" ${s.isHost ? '' : 'disabled'}><b>${NODE_NAME[n]}</b><br><span class="dim">${NODE_HINT[n]}</span></button>`).join('')}</div>
   ${s.isHost && pending ? `<p class="dim">${pending} jugador${pending > 1 ? 'es' : ''} aún eligiendo botín; si avanzas lo pierden.</p>` : ''}
-  ${lootPanel(run, mine)}${gearPanel(run, mine, false)}
+  ${lootPanel(run, mine)}${gearPanel(run, mine, false)}${runePanel(mine)}
   <h3>El grupo</h3>${heroCards(run)}`;
 }
 
@@ -243,11 +260,12 @@ function shopScreen(): void {
   const mine = run.heroes.find((h) => h.owner === myId);
   root.innerHTML = `${topBar(run)}
   <div class="c"><h1>Mercader de reliquias</h1><p class="dim">Cada objeto solo puede comprarlo un jugador. Vende lo que te sobre de la mochila por un tercio de su precio.</p></div>
-  <div class="grid">${(run.shop ?? []).map((sl, i) => `<div class="card ${sl.sold ? 'off' : ''}"><span class="dim">${SLOT_NAME[sl.item.slot]}</span><br>${itemHtml(sl.item)}<hr>${mine ? diffHtml(sl.item, mine) : ''}<br>
-    <button class="pri" data-act="buy" data-id="${i}" ${sl.sold || !mine || mine.gold < sl.price ? 'disabled' : ''}>${sl.sold ? 'Vendido' : `Comprar · ${sl.price} oro`}</button></div>`).join('')}
+  <div class="grid">${(run.shop ?? []).map((sl, i) => { const rn = sl.rune ? RUNES[sl.rune] : undefined;
+    return `<div class="card ${sl.sold ? 'off' : ''}">${rn ? `<span class="dim">Runa ${rn.rare ? 'rara' : 'común'}</span><br><b class="${rn.rare ? 'r2' : 'r1'}">${rn.icon} ${esc(rn.name)}</b><br><span class="sp">${esc(rn.text)}</span><hr>` : sl.item ? `<span class="dim">${SLOT_NAME[sl.item.slot]}</span><br>${itemHtml(sl.item)}<hr>${mine ? diffHtml(sl.item, mine) : ''}<br>` : ''}
+    <button class="pri" data-act="buy" data-id="${i}" ${sl.sold || !mine || mine.gold < sl.price ? 'disabled' : ''}>${sl.sold ? 'Vendido' : `Comprar · ${sl.price} oro`}</button></div>`; }).join('')}
     <div class="card"><b>Poción de vida</b><br><span class="sp">Recupera el ${POTION_HEAL * 100}% de tu vida máxima.</span><br><button class="pri" data-act="potion" ${!mine || mine.gold < POTION_PRICE || mine.hp >= heroMaxHp(mine) ? 'disabled' : ''}>Beber · ${POTION_PRICE} oro</button></div></div>
   <p class="c">${s.isHost ? '<button class="pri" data-act="leavenode">Salir de la tienda →</button>' : '<span class="dim">El anfitrión decide cuándo seguir.</span>'}</p>
-  ${gearPanel(run, mine, true)}
+  ${gearPanel(run, mine, true)}${runePanel(mine)}
   <h3>El grupo</h3>${heroCards(run)}`;
 }
 
@@ -275,7 +293,7 @@ function render(events: GameEvent[]): void {
   const run = session.run;
   const want = !run ? 'lobby' : run.phase === 'combat' && run.combat ? 'combat' : run.phase === 'event' && run.event ? 'event' : run.phase === 'shop' ? 'shop' : run.phase === 'map' ? 'map' : 'end';
   // sin cambios reales no se redibuja: así un latido de red no interrumpe un clic
-  const key = want + JSON.stringify([run, run ? null : session.lobby(), me, notice, session.hostPresent(), board?.sel ?? null, session.isMyTurn(), saved?.step, leaveArmed, isMuted()]);
+  const key = want + JSON.stringify([run, run ? null : session.lobby(), me, notice, session.hostPresent(), board?.sel ?? null, session.isMyTurn(), saved?.step, leaveArmed, isMuted(), selRune]);
   if (key === lastKey && want === screen && !events.length) return;
   lastKey = key;
   if (want === 'combat') combat(events);
@@ -314,6 +332,9 @@ document.addEventListener('click', (e) => {
     case 'sell': session?.act({ a: 'sell', idx: Number(id) }); sfx.coin(); break;
     case 'buy': session?.act({ a: 'buy', idx: Number(id) }); sfx.coin(); break;
     case 'potion': session?.act({ a: 'potion' }); break;
+    case 'selrune': selRune = selRune === Number(id) ? -1 : Number(id); render([]); break;
+    case 'socket': session?.act({ a: 'socket', spell: id, idx: selRune }); selRune = -1; break;
+    case 'unsocket': session?.act({ a: 'unsocket', spell: id }); break;
     case 'mute': toggleMute(); render([]); break;
     case 'leave':
       if (leaveArmed) { leaveArmed = false; home(); }
@@ -341,7 +362,7 @@ document.addEventListener('keydown', (e) => {
   const n = Number(e.key);
   if (u && n >= 1 && n <= u.spells.length) {
     const sp = u.spells[n - 1]!;
-    if (sp.cd === 0 && u.ap >= SPELLS[sp.id]!.ap) pickSpell(sp.id);
+    if (sp.cd === 0 && u.ap >= spellOf(u, sp.id)!.ap) pickSpell(sp.id);
   } else if (e.key === 'e' || e.key === 'E' || e.key === ' ') { e.preventDefault(); session.act({ a: 'end' }); }
   else if (e.key === 'Escape') board?.select(null);
 });
