@@ -39,6 +39,8 @@ const THORNS = 0.3;
 const ENRAGE_POWER = 40;
 const BOMB_DMG = 8;
 const BOMB_PCT = 0.15;
+/** Cosecha de almas: armadura fija por enemigo muerto con el Carcelero vivo, hasta este tope por combate. */
+export const SOUL_ARMOR_CAP = 6;
 /** Élites y jefes: cada punto de PA/PM (o casilla de empuje) se tira dos veces y solo entra si salen las dos. */
 export const RANK_ROLL = 0.7;
 /** Placaje: proporción de PM que conservas al salir de casillas pegadas a enemigos. */
@@ -99,6 +101,16 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
   if (!alive(u)) {
     ev.push({ t: 'death', unit: u.id });
     clearMarksOf(s, u.id, ev);
+    // Cosecha de almas: cada enemigo de verdad (no invocaciones ni pilares) que muere con el Carcelero vivo
+    if (u.summoner === undefined && u.ai !== 'pillar') {
+      for (const k of s.units) {
+        if (k.souls === undefined || !alive(k) || k.team === u.team) continue;
+        k.souls++;
+        const gain = k.souls <= SOUL_ARMOR_CAP ? 1 : 0;
+        k.armor += gain;
+        ev.push({ t: 'soul', unit: k.id, armor: gain });
+      }
+    }
     if (hasTrait(u, 'puddle') && !s.puddles.includes(key(u.pos))) s.puddles.push(key(u.pos));
     if (hasTrait(u, 'split') && u.maxHp >= 16) splitUnit(s, u, ev);
     if (hasTrait(u, 'bomb')) {
@@ -156,6 +168,9 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     if (!alive(u)) continue;
     ev.push({ t: 'turn', unit: u.id, round: s.round });
     tickMarks(s, u.id, ev);
+    // acciones temporales: la cadena dura un turno; la linterna, mientras siga en el suelo
+    delete u.hooked;
+    if (u.spells.some((sp) => sp.temp)) u.spells = u.spells.filter((sp) => !sp.temp || (sp.id === 'k_farol' && marksOf(s, 'lantern').some((m) => m.team === u.team)));
     u.shield = 0;
     // a partir de la ronda 20 se acaban los escudos y curas automáticos: ningún combate dura para siempre
     const late = s.round >= LATE_ROUND;
@@ -307,6 +322,13 @@ export function castProblem(s: CombatState, u: Unit, base: SpellDef, at: Pos): s
   if (slot.cd > 0) return 'Hechizo en enfriamiento';
   if (slot.charges !== undefined && slot.charges <= 0) return 'No te quedan';
   if (u.ap < def.ap) return 'No tienes PA suficientes';
+  if (def.lanternJump) {
+    const l = lanternNear(s, u);
+    if (!l) return 'Necesitas una linterna aliada a tu lado';
+    const o = l.owner === undefined ? undefined : getUnit(s, l.owner);
+    if (!o || !alive(o)) return 'Su dueño ha caído';
+    return dashCell(s, u, o.pos) ? null : 'No hay hueco junto al Carcelero';
+  }
   const d = dist(u.pos, at);
   const extra = def.range[1] > 1 ? u.statuses.reach?.stacks ?? 0 : 0;
   if (d < def.range[0] || d > def.range[1] + extra) return 'Fuera de alcance';
@@ -330,8 +352,14 @@ export function castProblem(s: CombatState, u: Unit, base: SpellDef, at: Pos): s
   }
   if (def.target === 'enemy' && (!t || t.team === u.team)) return 'Necesitas un enemigo como objetivo';
   if (def.target === 'ally' && (!t || t.team !== u.team)) return 'Necesitas un aliado como objetivo';
+  if (def.hookOnly && t?.id !== u.hooked) return 'Solo sobre el enemigo enganchado';
   if (def.dash && !dashCell(s, u, at)) return 'No hay hueco junto al objetivo';
   return null;
+}
+
+/** Linterna de tu bando pegada a ti (también en diagonal). */
+function lanternNear(s: CombatState, u: Unit) {
+  return marksOf(s, 'lantern').find((m) => m.team === u.team && Math.max(Math.abs(m.pos.x - u.pos.x), Math.abs(m.pos.y - u.pos.y)) <= 1);
 }
 
 function dashCell(s: CombatState, u: Unit, target: Pos): Pos | null {
@@ -404,6 +432,16 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
   if (def.buff) addStatus(u, def.buff.kind, def.buff.turns, def.buff.stacks ?? 1, ev);
   if (def.selfBuff2) addStatus(u, def.selfBuff2.kind, def.selfBuff2.turns, def.selfBuff2.stacks ?? 1, ev);
   if (def.selfMp) { u.mp += def.selfMp; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: def.selfMp }); }
+  if (def.hookOnly) { delete u.hooked; u.spells = u.spells.filter((sp) => sp.id !== def.id); }
+  if (def.soulShield) { const sh = def.soulShield * (u.souls ?? 0); if (sh > 0) { u.shield += sh; ev.push({ t: 'shield', unit: u.id, amount: sh }); } }
+  if (def.lanternJump) {
+    const o = getUnit(s, lanternNear(s, u)!.owner!)!;
+    const cell = dashCell(s, u, o.pos)!;
+    u.pos = { ...cell };
+    ev.push({ t: 'blink', unit: u.id, to: { ...cell } });
+    u.spells = u.spells.filter((sp) => sp.id !== def.id);
+    return { ok: true, events: ev };
+  }
   if (def.revive) {
     const dead = s.units.find((x) => !alive(x) && same(x.pos, at) && x.team === u.team && x.summoner === undefined)!;
     dead.hp = Math.max(1, Math.round(dead.maxHp * def.revive));
@@ -426,6 +464,21 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
         if (u.essence !== undefined && !essenceSpent) u.essence = Math.min(3, u.essence + 1);
       }
     }
+    if (def.lantern) {
+      const ln = def.lantern;
+      addMark(s, { kind: 'lantern', pos: at, team: u.team, turns: ln.turns, owner: u.id, max: 1 }, ev);
+      const mend = hasTrait(u, 'mender') ? MENDER_MULT : 1;
+      for (const a of s.units.filter((x) => alive(x) && x.team === u.team && Math.max(Math.abs(x.pos.x - at.x), Math.abs(x.pos.y - at.y)) <= 1)) {
+        const sh = Math.round(ln.shield * mend);
+        a.shield += sh;
+        ev.push({ t: 'shield', unit: a.id, amount: sh });
+        if (ln.heal) heal(a, ln.heal * mend, ev);
+      }
+      // los aliados (no invocaciones) ganan la acción Tomar la linterna mientras siga en el suelo
+      for (const a of s.units.filter((x) => alive(x) && x.team === u.team && x !== u && x.summoner === undefined && x.ai !== 'pillar')) {
+        if (!a.spells.some((sp) => sp.id === 'k_farol')) a.spells.push({ id: 'k_farol', cd: 0, temp: true });
+      }
+    }
     if (def.snare) (s.snares ??= []).push({ k: key(at), team: u.team, dmg: Math.round(def.snare.dmg * (1 + u.power / 100)) });
     if (def.summon) {
       const m = def.summon, hp = Math.round(u.maxHp * m.hpPct);
@@ -436,9 +489,11 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
     return { ok: true, events: ev };
   }
   const wantTeam = def.target === 'enemy' || def.target === 'ground' ? (u.team === 'hero' ? 'enemy' : 'hero') : u.team;
-  const main = def.cone ? undefined : unitAt(s, at);
+  // gancho: se lleva al primer enemigo que encuentre la cadena
+  const main = def.cone ? undefined : def.hook ? firstFoeTo(s, u, at) : unitAt(s, at);
   const lane = def.line ? lineCells(u.pos, at) : def.cone ? coneCells(u.pos, at, def.cone) : [];
-  const targets = s.units.filter((t) => alive(t) && t.team === wantTeam && (t === main || (def.area ? dist(t.pos, at) <= def.area : false) || lane.some((p) => same(p, t.pos))));
+  const inArea = (p: Pos): boolean => !!def.area && (def.square ? Math.max(Math.abs(p.x - at.x), Math.abs(p.y - at.y)) : dist(p, at)) <= def.area;
+  const targets = s.units.filter((t) => alive(t) && t.team === wantTeam && (t === main || inArea(t.pos) || lane.some((p) => same(p, t.pos))));
   // Descarga desatada: consume todas tus esferas, +daño por cada una
   let flat = 0;
   if (def.consume) {
@@ -507,6 +562,11 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
     }
     if (def.giveAp) t.apMod += def.giveAp;
     if (def.giveMp) t.mpMod += def.giveMp;
+    if (def.push && def.pushAll && t !== main && alive(t)) {
+      const n = landed(s, t, def.push);
+      if (n < def.push) ev.push({ t: 'resist', unit: t.id, what: n ? 'Resiste parte del empujón' : 'Resiste el empujón' });
+      if (n) push(s, u.pos, t, n, ev);
+    }
     if (def.push && t === main) {
       const n = landed(s, t, def.push);
       if (n < def.push) ev.push({ t: 'resist', unit: t.id, what: n ? 'Resiste parte del empujón' : 'Resiste el empujón' });
@@ -514,6 +574,21 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
     }
   }
   if (def.cone && def.push) coneBlast(s, u, def, at, targets, ev);
+  if (def.hook && main && alive(main) && alive(u)) {
+    // arrastra al enganchado hacia ti (élites y jefes: dos tiradas por casilla)
+    const n = landed(s, main, def.hook.pull);
+    if (n < def.hook.pull) ev.push({ t: 'resist', unit: main.id, what: n ? 'Resiste parte del arrastre' : 'Resiste el arrastre' });
+    const [dx, dy] = dirOf(main.pos, u.pos);
+    for (let i = 0; i < n && dist(main.pos, u.pos) > 1; i++) {
+      const p = { x: main.pos.x + dx, y: main.pos.y + dy };
+      if (!isFree(s, p)) break;
+      main.pos = p;
+      ev.push({ t: 'push', unit: main.id, to: { ...p } });
+      springSnare(s, main, ev);
+    }
+    u.hooked = main.id;
+    if (!u.spells.some((sp) => sp.id === 'k_viaje')) u.spells.push({ id: 'k_viaje', cd: 0, temp: true });
+  }
   if (def.sphere && alive(u)) {
     // el máximo sale de la mejor versión que tengas de un hechizo de esferas (las bendiciones lo suben)
     const max = Math.max(def.sphere.max, ...u.spells.map((sp) => spellOf(u, sp.id)?.sphere?.max ?? 0));
@@ -577,6 +652,16 @@ function coneBlast(s: CombatState, u: Unit, def: SpellDef, at: Pos, targets: Uni
     if (n < def.push!) ev.push({ t: 'resist', unit: t.id, what: n ? 'Resiste parte del empujón' : 'Resiste el empujón' });
     if (n) pushDir(s, t, dx, dy, n, ev);
   }
+}
+
+/** Primer enemigo visible en la línea recta de `u` hacia `at`. */
+function firstFoeTo(s: CombatState, u: Unit, at: Pos): Unit | undefined {
+  const [dx, dy] = dirOf(u.pos, at);
+  for (let i = 1; i <= dist(u.pos, at); i++) {
+    const t = unitAt(s, { x: u.pos.x + dx * i, y: u.pos.y + dy * i });
+    if (t && alive(t) && t.team !== u.team && !t.statuses.invis) return t;
+  }
+  return unitAt(s, at);
 }
 
 export function endTurn(s: CombatState, unitId: number): ActionResult {

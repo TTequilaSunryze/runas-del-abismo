@@ -77,3 +77,15 @@ Sincronizar ecos en la nube con cuenta, más zonas y clases, sprites animados, b
 - **Volumen de la música** con barra (arriba a la derecha) y arreglado silenciar/activar.
 - **Ojo de halcón**: el alcance extra se ve y se puede usar en el mismo turno.
 - **Listo**: el anfitrión ve a quién espera y por qué, y puede seguir sin esperar si a nadie le queda nada por elegir.
+
+## v7 · Clases nuevas
+
+Tres clases con mecánica propia (nombres y diseños originales). Cada una tiene un kit inicial de 3 habilidades y 2 estilos de bendición.
+
+- **Hechicera Zorro** (44 PV, 7 PA, 5 PM, huida 11). Orbe del engaño (en línea, golpea al ir y al volver), Encanto (el enemigo no ataca y se acerca en línea recta gastando sus PM) e Impulso espiritual (salto de 3 en línea recta que ignora el placaje y dispara al enemigo más cercano). *Robo de esencia*: cada habilidad que acierta da 1 carga; con 3, la siguiente de daño cura el 15%.
+- **Tejedora de Esferas** (40 PV, 8 PA, 4 PM). Pulso oscuro (daña y deja una esfera, máx. 3), Dispersión (cono de 3: las esferas salen disparadas, atraviesan a los enemigos dañándolos y aturdiéndolos, y luego la onda los empuja 3) y Descarga desatada (+5 de daño por esfera consumida).
+- **Carcelero de Almas** (68 PV, 2 armadura, placaje 12). Sentencia de muerte (gancho al primer enemigo de la línea: −2 PA y lo arrastra 2; ese turno, Recorrer la cadena por 1 PA), Linterna espectral (escudo a los aliados pegados; un aliado junto a ella puede Tomar la linterna por 1 PA y aparecer al lado del Carcelero ignorando el placaje) y Despellejar (3×3: daño, −2 PM y empuje 1). *Cosecha de almas*: cada enemigo que muere con él vivo da +1 de armadura fija ese combate (tope +6); las almas se acumulan durante la partida y cada 3 dan una mejora de hechizo.
+
+**Marcadores en el suelo** (`src/core/combat/marks.ts`): objetos vinculados a una unidad que no bloquean ni tienen turno (esferas, linterna). Caducan al empezar los turnos de su dueño (o por rondas si no tienen dueño) y desaparecen si el dueño muere.
+
+**Equilibrio**: `SIMN=60 npx vitest run tests/sim.test.ts` juega partidas completas de 3 y 4 jugadores con la IA de campeón y compara clases. Sirve para comparar, no para medir la dificultad para personas.

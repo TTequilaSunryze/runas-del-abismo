@@ -3,6 +3,7 @@
 import type { SpellDef } from '../core/classes/spells';
 
 export const GLYPHS: Record<string, string[]> = {
+  lantern: ['.....cc.....', '....c..c....', '...cccccc...', '...abbbba...', '..abbwwbba..', '..abwwwwba..', '..abwwwwba..', '..abbwwbba..', '...abbbba...', '...cccccc...', '....cccc....', '............'],
   orbs: ['............', '....aaa.....', '...abbba....', '...abwba....', '...abbba....', '....aaa.....', '.aaa...aaa..', 'abbba.abbba.', 'abwba.abwba.', 'abbba.abbba.', '.aaa...aaa..', '............'],
   sword: ['..........ww', '.........wbw', '........wbw.', '.......wbw..', '......wbw...', '.....wbw....', '..c.wbw.....', '..ccbw......', '...cc.......', '..aa.cc.....', '.aa.........', '............'],
   axe: ['....cc......', '...cbbc.....', '..cbbbbc....', '..cbbbbcc...', '...cbbcac...', '....cc.ac...', '.......a....', '......a.....', '.....a......', '....a.......', '...a........', '............'],
@@ -103,6 +104,7 @@ const LOOK: Record<string, [string, string]> = {
   c_milagro: ['heart', 'holy'], c_martillo: ['hammer', 'gold'], c_santuario: ['dome', 'holy'], c_sacrificio: ['chalice', 'blood'],
   a_letal: ['crosshair', 'steel'], a_abanico: ['multi', 'fire'], a_campo: ['trap', 'poison'], a_halcon: ['paw', 'nature'],
   p_frasco: ['vial', 'poison'], p_degollar: ['skull', 'blood'], p_debilidad: ['eye', 'shadow'], p_danza: ['twin', 'storm'],
+  k_sentencia: ['link', 'shadow'], k_viaje: ['dash', 'shadow'], k_linterna: ['lantern', 'poison'], k_farol: ['lantern', 'holy'], k_despellejar: ['whirl', 'steel'], k_cosecha: ['skull', 'arcane'],
   t_pulso: ['orbs', 'shadow'], t_dispersion: ['wind', 'shadow'], t_descarga: ['storm', 'shadow'], t_semilla: ['orbs', 'arcane'], t_implosion: ['whirl', 'shadow'],
   z_orbe: ['fireball', 'shadow'], z_encanto: ['eye', 'shadow'], z_impulso: ['dash', 'arcane'], z_drenaje: ['heart', 'shadow'], z_velo: ['cloud', 'shadow'],
 };
@@ -168,6 +170,8 @@ const EL: Record<string, string> = { fire: 'de fuego', ice: 'de hielo', poison: 
 export function spellShape(d: SpellDef): string {
   if (d.target === 'cell') return d.summon ? 'en casilla libre' : d.teleport ? 'te desplazas' : 'trampa en casilla';
   if (d.cone) return `cono de ${d.cone}`;
+  if (d.square && d.range[1] === 0) return `a tu alrededor (${d.area! * 2 + 1}×${d.area! * 2 + 1})`;
+  if (d.lantern) return 'en casilla libre';
   if (d.target === 'ground') return 'en cualquier casilla';
   if (d.line) return 'en línea';
   if (d.range[1] === 0) return d.area ? `a tu alrededor (radio ${d.area})` : 'sobre ti';
@@ -194,6 +198,10 @@ export function spellSummary(d: SpellDef): string {
   if (d.crit) parts.push(`+${d.crit}% crítico`);
   if (d.snare) parts.push(`Cepo oculto: ${d.snare.dmg} de daño y detiene`);
   if (d.summon) parts.push(`Invoca: ${d.summon.name}`);
+  if (d.hook) parts.push(`arrastra ${d.hook.pull} hacia ti`);
+  if (d.lantern) parts.push(`Linterna: escudo ${d.lantern.shield}${d.lantern.heal ? ` y cura ${d.lantern.heal}` : ''} a los aliados pegados; te los trae a tu lado`);
+  if (d.lanternJump) parts.push('Apareces junto al Carcelero');
+  if (d.soulShield) parts.push(`Escudo ${d.soulShield} por alma`);
   if (d.sphere) parts.push(`${parts.length ? 'deja' : 'Deja'} una esfera ${d.sphere.turns} t. (máx. ${d.sphere.max})`);
   if (d.consume) parts.push(`+${d.consume.per} por cada esfera que consume`);
   if (d.sphereHit) parts.push(`la esfera que choca daña ${d.sphereHit.dmg[0]}-${d.sphereHit.dmg[1]} y aturde`);

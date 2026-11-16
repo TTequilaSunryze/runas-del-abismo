@@ -93,6 +93,12 @@ export const CLASSES: Record<ClassId, ClassDef> = {
       R('base', 'Clásico', '', ['t_pulso', 't_dispersion', 't_descarga'], 'El kit inicial: siembra esferas, dispérsalas contra el enemigo y descárgalas todas de golpe.'),
     ],
   },
+  carcelero: {
+    id: 'carcelero', name: 'Carcelero de Almas', hp: 68, armor: 2, power: 0, crit: 5, ap: 6, mp: 3, initiative: 9, base: ['k_sentencia', 'k_linterna', 'k_despellejar'], tackle: 12, dodge: 2,
+    routes: [
+      R('base', 'Clásico', '', ['k_sentencia', 'k_linterna', 'k_despellejar'], 'El kit inicial: un gancho, una linterna salvavidas y un barrido a tu alrededor.'),
+    ],
+  },
 };
 
 /** Se elige un solo kit inicial. */

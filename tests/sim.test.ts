@@ -41,11 +41,13 @@ function play(classes: ClassId[], seed: number): { run: RunState; stalls: number
 it.skipIf(!(globalThis as unknown as { process?: { env: Record<string, string | undefined> } }).process?.env.SIMN)('simulación de equilibrio (3 y 4 jugadores)', () => {
   const comps: Record<string, ClassId[][]> = {
     '3 base': [['guerrero', 'mago', 'clerigo']],
+    '3 +carc': [['carcelero', 'mago', 'clerigo']],
     '3 +tej': [['guerrero', 'tejedora', 'clerigo']],
-    '4 base': [['guerrero', 'mago', 'clerigo', 'arquero']],
-    '4 +tej': [['guerrero', 'tejedora', 'clerigo', 'arquero']],
-    '3 mixto': [['tejedora', 'picaro', 'arquero']],
     '3 mixto base': [['mago', 'picaro', 'arquero']],
+    '3 mixto +carc': [['carcelero', 'picaro', 'arquero']],
+    '4 base': [['guerrero', 'mago', 'clerigo', 'arquero']],
+    '4 +carc': [['carcelero', 'mago', 'clerigo', 'arquero']],
+    '4 nuevas': [['carcelero', 'tejedora', 'zorro', 'clerigo']],
   };
   const N = Number((globalThis as unknown as { process?: { env: Record<string, string | undefined> } }).process?.env.SIMN ?? 30);
   for (const [name, list] of Object.entries(comps)) {
@@ -59,8 +61,8 @@ it.skipIf(!(globalThis as unknown as { process?: { env: Record<string, string | 
   }
 }, 600000);
 
-it('partidas con la Tejedora y la Zorro terminan sin atascos (3 y 4 jugadores)', () => {
-  for (const [list, seed] of [[['tejedora', 'zorro', 'clerigo'], 101], [['guerrero', 'tejedora', 'zorro', 'arquero'], 202]] as const) {
+it('partidas con las clases nuevas terminan sin atascos (3 y 4 jugadores)', () => {
+  for (const [list, seed] of [[['tejedora', 'zorro', 'clerigo'], 101], [['carcelero', 'tejedora', 'zorro', 'arquero'], 202]] as const) {
     const { run, stalls } = play([...list] as ClassId[], seed);
     expect(['won', 'lost']).toContain(run.phase);
     expect(stalls).toBe(0);

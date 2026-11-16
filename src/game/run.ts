@@ -44,6 +44,8 @@ export interface HeroSave {
   ups: Record<string, string[]>;
   /** elecciones de mejora que le quedan por hacer */
   upPending: number;
+  /** Carcelero: almas acumuladas en la partida (cada 3, una mejora de hechizo) */
+  souls?: number;
   /** mejoras entre las que elegir ahora */
   upOffer: Array<{ spell: string; up: string }> | null;
   /** nivel de maestría de la clase al empezar */
@@ -722,6 +724,11 @@ export function finishFight(run: RunState): void {
       if ((h.bag2[id] ?? 0) < MAX_CONSUMABLE) { h.bag2[id] = (h.bag2[id] ?? 0) + 1; extra.push(`${h.name}: ${CONSUMABLES[id]!.icon} ${CONSUMABLES[id]!.name}`); }
     }
     // sin niveles: cada sala superada da una recompensa a elegir (bendición de clase o mejora de hechizo)
+    // Cosecha de almas del Carcelero: se acumulan entre salas; cada 3, una mejora de hechizo
+    if (u?.souls) {
+      h.souls = (h.souls ?? 0) + u.souls;
+      for (; h.souls >= 3; h.souls -= 3) { h.upPending++; extra.push(`${h.name}: 3 almas, una mejora de hechizo`); }
+    }
     if (run.kind === 'combat') { if (run.fight % 2 === 0) offerBoon(run, h); else h.upPending++; }
     else if (run.kind === 'elite') offerBoon(run, h);
     else h.upPending++;
@@ -745,7 +752,7 @@ export function finishFight(run: RunState): void {
   offerAll(run, run.ambush ? 4 : 3, run.ambush ? 2 : run.kind === 'elite' ? 1 : 0);
   if (run.cage) { addAlly(run, run.cage); extra.push(`Liberáis al prisionero: ${makeEnemy(run.cage, { x: 0, y: 0 }).name} os acompaña hasta el final de la zona`); run.cage = null; }
   run.stamp++;
-  run.note = `Victoria: cada uno gana ${gold} de oro y sube un nivel.${run.kind !== 'combat' ? ' Además, una runa rara para cada uno.' : ' Puede que alguno haya encontrado una runa.'}${run.omen === 'tormenta' ? ' La tormenta rúnica os deja una runa extra.' : ''}${extra.length ? ` También: ${extra.join(' · ')}.` : ''}`;
+  run.note = `Victoria: cada uno gana ${gold} de oro y elige su recompensa.${run.kind !== 'combat' ? ' Además, una runa rara para cada uno.' : ' Puede que alguno haya encontrado una runa.'}${run.omen === 'tormenta' ? ' La tormenta rúnica os deja una runa extra.' : ''}${extra.length ? ` También: ${extra.join(' · ')}.` : ''}`;
   run.omen = null;
   run.ambush = false;
   run.fight++;

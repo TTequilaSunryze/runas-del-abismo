@@ -205,7 +205,14 @@ function champCast(s: CombatState, u: Unit, ev: GameEvent[]): boolean {
     const around = d.range[1] === 0;
     const near = (list: Unit[], at: Pos): Unit[] => list.filter((x) => dist(x.pos, at) <= (d.area ?? 0));
     const spheres = marksOf(s, 'sphere', u.id);
-    if (d.cone) {
+    if (d.lanternJump) {
+      // malherido junto a una linterna: escapa al lado del Carcelero
+      if (u.hp < u.maxHp * 0.4) consider(d, u.pos, 20);
+    } else if (d.lantern) {
+      // linterna junto a un aliado malherido
+      for (const a of allies.filter((x) => x !== u && x.summoner === undefined && x.hp < x.maxHp * 0.5))
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) consider(d, { x: a.pos.x + dx, y: a.pos.y + dy }, 12);
+    } else if (d.cone) {
       // onda en cono: cuenta enemigos dentro y esferas que pueden chocar
       const avg = d.dmg ? (d.dmg[0] + d.dmg[1]) / 2 : 0;
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {

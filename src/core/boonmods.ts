@@ -59,6 +59,12 @@ export const BOON_MODS: Record<string, BoonMod> = Object.fromEntries(([
   M('tm_pulso', 't_pulso', 'Pulso profundo', '+30% de daño.', (d) => { more(d, 1.3); }),
   M('tm_descarga', 't_descarga', 'Descarga total', '+8 de daño por esfera (en vez de +5).', (d) => { d.consume = { per: 8 }; }),
   M('tm_dispersion', 't_dispersion', 'Dispersión rápida', 'Cuesta 1 PA menos y se recarga antes.', (d) => { d.ap = Math.max(1, d.ap - 1); d.cd = Math.max(0, d.cd - 1); }),
+  // Carcelero de Almas
+  M('km_gancho_largo', 'k_sentencia', 'Cadena larga', 'Alcance 2-6 y arrastra 3 casillas.', (d) => { d.range = [2, 6]; d.hook = { pull: 3 }; }),
+  M('km_gancho_pesado', 'k_sentencia', 'Cadena de plomo', 'Quita 3 PA en vez de 2.', (d) => { d.drainAp = 3; }),
+  M('km_desollar', 'k_despellejar', 'Desollar', '+30% de daño y deja Expuesto: −2 de armadura 2 turnos.', (d) => { more(d, 1.3); d.extraStatus = { kind: 'exposed', turns: 2, stacks: 2 }; }),
+  M('km_farol_cura', 'k_linterna', 'Linterna de vida', 'Además cura 12 a los aliados pegados a ella.', (d) => { if (d.lantern) d.lantern = { ...d.lantern, heal: 12 }; }),
+  M('km_farol_largo', 'k_linterna', 'Linterna eterna', 'Dura un turno más y alcance 1-6.', (d) => { if (d.lantern) d.lantern = { ...d.lantern, turns: d.lantern.turns + 1 }; d.range = [1, 6]; }),
   // Pícaro
   M('pm_untada', 'punalada', 'Hoja untada', 'Envenena x2 durante 2 turnos.', (d) => { d.status = { kind: 'poison', turns: 2, stacks: 2 }; }),
   M('pm_cuchillo_ven', 'cuchillo', 'Cuchillo envenenado', 'Envenena 3 turnos.', (d) => { d.status = { kind: 'poison', turns: 3, stacks: 1 }; }),

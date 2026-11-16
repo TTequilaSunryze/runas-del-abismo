@@ -33,5 +33,7 @@ export function makeHero(opts: HeroBuild): UnitSpec {
     statuses: {}, spells: spellsFor(opts.cls, chosen, level).map((id) => ({ id, cd: 0 })), ai: null,
     // la Hechicera Zorro empieza sin esencia acumulada
     ...(opts.cls === 'zorro' ? { essence: 0 } : {}),
+    // el Carcelero cosecha almas: armadura fija por cada enemigo que cae con él vivo
+    ...(opts.cls === 'carcelero' ? { souls: 0 } : {}),
   };
 }

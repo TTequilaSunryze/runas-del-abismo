@@ -19,7 +19,7 @@ const ELEMENT_COLOR: Record<string, string> = { fire: '#ff8a30', ice: '#8ae0ff',
 const ELEMENT_NAME: Record<string, string> = { fire: 'fuego', ice: 'hielo', poison: 'veneno', shadow: 'sombra', holy: 'sagrado' };
 const LUNGE_MS = 240;
 
-const CLASS_KINDS = ['guerrero', 'mago', 'clerigo', 'picaro', 'arquero', 'zorro', 'tejedora'];
+const CLASS_KINDS = ['guerrero', 'mago', 'clerigo', 'picaro', 'arquero', 'zorro', 'tejedora', 'carcelero'];
 /** Índice de color y etiqueta: héroes de jugadores, y héroes rivales (némesis, duelos) dentro de su bando. */
 function teamIdx(c: CombatState): Map<number, number> {
   const m = new Map<number, number>();
@@ -118,6 +118,7 @@ export class Board {
       else if (e.t === 'shield') float(e.unit, `escudo +${e.amount}`, '#58a6ff');
       else if (e.t === 'status') float(e.unit, STATUS_NAME[e.kind] ?? e.kind, STATUS_COLOR[e.kind] ?? '#fff');
       else if (e.t === 'skip') float(e.unit, 'Pierde el turno', '#ffe84a');
+      else if (e.t === 'soul') float(e.unit, e.armor ? 'Alma +1 armadura' : 'Alma', '#9ad0e8');
       else if (e.t === 'trap') float(e.unit, '¡Púas!', '#ff8a30');
       else if (e.t === 'stuck') float(e.unit, '¡Atrapado!', '#7fe05a');
       else if (e.t === 'snare') float(e.unit, '¡Cepo!', '#d8b060');
@@ -182,6 +183,12 @@ export class Board {
         g.fillStyle = '#3a1a5a'; g.beginPath(); g.arc(cx, cy, TILE * 0.2 * pulse, 0, 6.3); g.fill();
         g.fillStyle = '#7a3fc0'; g.beginPath(); g.arc(cx - 2, cy - 2, TILE * 0.13, 0, 6.3); g.fill();
         g.fillStyle = '#f0d8ff'; g.fillRect(cx - TILE * 0.09, cy - TILE * 0.1, 4, 4);
+      } else if (m.kind === 'lantern') {
+        g.fillStyle = 'rgba(127,224,90,.18)'; g.beginPath(); g.arc(cx, cy + 4, TILE * 0.45 * pulse, 0, 6.3); g.fill();
+        g.fillStyle = '#6a6a78'; g.fillRect(cx - 1, cy - TILE * 0.3, 2, TILE * 0.12);
+        g.fillStyle = '#3a3a2a'; g.fillRect(cx - TILE * 0.14, cy - TILE * 0.18, TILE * 0.28, TILE * 0.36);
+        g.fillStyle = '#7fe05a'; g.fillRect(cx - TILE * 0.08, cy - TILE * 0.1, TILE * 0.16, TILE * 0.2 * pulse);
+        g.fillStyle = '#e0ffb0'; g.fillRect(cx - 2, cy - 2, 4, 4);
       } else {
         g.strokeStyle = '#c8c8ff'; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, TILE * 0.2, 0, 6.3); g.stroke();
       }
@@ -218,7 +225,7 @@ export class Board {
           }
         if (this.hover && def.cone && !castProblem(c, me, SPELLS[def.id]!, this.hover)) for (const p of coneCells(me.pos, this.hover, def.cone)) if (!c.obstacles.includes(`${p.x},${p.y}`)) fill(p, 'rgba(255,60,60,.25)');
         if (this.hover && def.area) {
-          for (let y = 0; y < c.h; y++) for (let x = 0; x < c.w; x++) if (dist({ x, y }, this.hover) <= def.area) fill({ x, y }, 'rgba(255,60,60,.2)');
+          for (let y = 0; y < c.h; y++) for (let x = 0; x < c.w; x++) if ((def.square ? Math.max(Math.abs(x - this.hover.x), Math.abs(y - this.hover.y)) : dist({ x, y }, this.hover)) <= def.area) fill({ x, y }, 'rgba(255,60,60,.2)');
         }
       } else {
         for (const [k, cost] of reachable(c, me.pos, usableMp(c, me)).cost) {
@@ -309,7 +316,7 @@ export class Board {
     const u = c.units.find((x) => alive(x) && x.pos.x === h.x && x.pos.y === h.y);
     if (!u) return;
     const g = this.g;
-    const st = [...Object.entries(u.statuses).map(([k, v]) => `${STATUS_NAME[k]} ${v!.turns}`), ...(u.essence !== undefined ? [`Esencia ${u.essence}/3`] : [])].join(', ');
+    const st = [...Object.entries(u.statuses).map(([k, v]) => `${STATUS_NAME[k]} ${v!.turns}`), ...(u.essence !== undefined ? [`Esencia ${u.essence}/3`] : []), ...(u.souls !== undefined ? [`Almas ${u.souls}`] : [])].join(', ');
     const res = Object.entries(u.resist ?? {}).filter(([, v]) => v).map(([k, v]) => (v! > 0 ? `Resiste ${ELEMENT_NAME[k]} ${v}%` : `Débil a ${ELEMENT_NAME[k]} ${-v!}%`)).join(' · ');
     // daño estimado del hechizo elegido sobre esta unidad
     let est = '';

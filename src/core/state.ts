@@ -9,7 +9,7 @@ export interface Pos {
 export type Team = 'hero' | 'enemy';
 /** empower: +daño (stacks = %); reach: +alcance; invis: no se le puede apuntar; exposed: -armadura (stacks). */
 export type StatusKind = 'burn' | 'poison' | 'slow' | 'stun' | 'mark' | 'empower' | 'reach' | 'invis' | 'exposed' | 'charm';
-export type ClassId = 'guerrero' | 'mago' | 'clerigo' | 'picaro' | 'arquero' | 'zorro' | 'tejedora';
+export type ClassId = 'guerrero' | 'mago' | 'clerigo' | 'picaro' | 'arquero' | 'zorro' | 'tejedora' | 'carcelero';
 
 export interface StatusState {
   turns: number;
@@ -29,6 +29,8 @@ export interface SpellSlot {
   ups?: string[];
   /** consumibles: usos que quedan (sin definir = hechizo normal) */
   charges?: number;
+  /** acción temporal (Recorrer la cadena, Tomar la linterna): desaparece cuando deja de servir */
+  temp?: boolean;
 }
 
 export interface Unit {
@@ -82,6 +84,10 @@ export interface Unit {
   summoner?: number;
   /** Robo de esencia (Hechicera Zorro): 0 a 3 cargas */
   essence?: number;
+  /** Cosecha de almas (Carcelero): enemigos muertos en este combate con él vivo */
+  souls?: number;
+  /** enemigo enganchado este turno por Sentencia de muerte */
+  hooked?: number;
   /** élites y jefes: inmunes a aturdir y resisten la pérdida de PA/PM y los empujones */
   rank?: 'elite' | 'boss';
   /** placaje (retiene a quien se aleja) y huida (escapa del placaje) */
@@ -160,6 +166,7 @@ export type GameEvent =
   | { t: 'blink'; unit: number; to: Pos }
   | { t: 'devour'; unit: number; corpse: number }
   | { t: 'raise'; unit: number; corpse: number }
+  | { t: 'soul'; unit: number; armor: number }
   | { t: 'markAdd'; kind: string; at: Pos }
   | { t: 'markGone'; kind: string; at: Pos }
   | { t: 'markMove'; kind: string; from: Pos; to: Pos }

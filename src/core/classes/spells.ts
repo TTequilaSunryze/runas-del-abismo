@@ -80,6 +80,20 @@ export interface SpellDef {
   sphereHit?: { dmg: [number, number]; stun: number };
   /** detona todas tus esferas: daño en área alrededor de cada una */
   detonate?: { dmg: [number, number]; area: number };
+  /** el área es un cuadrado (3×3 con radio 1) en vez de un rombo */
+  square?: boolean;
+  /** empuja a todos los alcanzados, no solo al objetivo principal */
+  pushAll?: boolean;
+  /** gancho: engancha al primer enemigo de la línea y lo arrastra estas casillas hacia ti */
+  hook?: { pull: number };
+  /** solo sobre el enemigo enganchado este turno (Recorrer la cadena) */
+  hookOnly?: boolean;
+  /** linterna en una casilla libre: escudo (y cura) a los aliados pegados; permite Tomar la linterna */
+  lantern?: { turns: number; shield: number; heal?: number };
+  /** te lleva junto al dueño de la linterna que tienes al lado */
+  lanternJump?: boolean;
+  /** escudo por cada alma cosechada en este combate */
+  soulShield?: number;
   /** invoca un aliado controlado por la IA (uno a la vez) */
   summon?: { kind: string; name: string; hpPct: number; armor: number; ap: number; mp: number; initiative: number; spell: string };
   text: string;
@@ -101,6 +115,13 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
     S({ id: 't_descarga', name: 'Descarga desatada', route: 'base', ap: 4, cd: 2, range: [2, 6], los: true, target: 'enemy', dmg: [7, 9], element: 'shadow', consume: { per: 5 }, text: 'Consume todas tus esferas: +5 de daño por cada una.' }),
     S({ id: 't_semilla', name: 'Semilla oscura', route: 'boon', ap: 1, cd: 1, range: [1, 4], los: true, target: 'ground', sphere: { turns: 3, max: 3 }, text: 'Deja una Esfera oscura sin hacer daño.' }),
     S({ id: 't_implosion', name: 'Implosión', route: 'boon', ap: 3, cd: 2, range: [0, 0], los: false, target: 'self', detonate: { dmg: [6, 8], area: 1 }, element: 'shadow', text: 'Detona todas tus esferas: cada una daña a los enemigos pegados a ella.' }),
+    // ---------- Carcelero de Almas ----------
+    S({ id: 'k_sentencia', name: 'Sentencia de muerte', route: 'base', ap: 3, cd: 2, range: [2, 5], los: true, straight: true, target: 'enemy', dmg: [5, 7], element: 'shadow', drainAp: 2, hook: { pull: 2 }, text: 'Cadena en línea recta: engancha al primer enemigo, le quita 2 PA y lo arrastra 2 casillas hacia ti. Este turno puedes usar Recorrer la cadena (1 PA) para saltar junto a él.' }),
+    S({ id: 'k_viaje', name: 'Recorrer la cadena', route: 'temp', ap: 1, cd: 0, range: [1, 14], los: false, target: 'enemy', dash: true, hookOnly: true, text: 'Saltas junto al enemigo enganchado, ignorando el placaje.' }),
+    S({ id: 'k_linterna', name: 'Linterna espectral', route: 'base', ap: 2, cd: 3, range: [1, 4], los: true, target: 'cell', lantern: { turns: 1, shield: 8 }, text: 'Linterna en una casilla libre hasta tu próximo turno: da 8 de escudo a los aliados pegados. Un aliado junto a ella puede Tomar la linterna (1 PA) para aparecer a tu lado, ignorando el placaje.' }),
+    S({ id: 'k_farol', name: 'Tomar la linterna', route: 'temp', ap: 1, cd: 0, range: [0, 0], los: false, target: 'self', lanternJump: true, text: 'Apareces junto al Carcelero, ignorando el placaje. Necesitas tener su linterna al lado.' }),
+    S({ id: 'k_despellejar', name: 'Despellejar', route: 'base', ap: 4, cd: 1, range: [0, 0], los: false, target: 'enemy', area: 1, square: true, pushAll: true, dmg: [7, 9], status: { kind: 'slow', turns: 1, stacks: 2 }, push: 1, text: 'Barrido 3×3 a tu alrededor: daña, quita 2 PM y empuja 1 casilla a todos los enemigos.' }),
+    S({ id: 'k_cosecha', name: 'Cosecha', route: 'boon', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', soulShield: 5, text: 'Ganas 5 de escudo por cada alma cosechada en este combate.' }),
     // ---------- Guerrero ----------
     S({ id: 'tajo', name: 'Tajo', route: 'base', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [8, 11], text: 'Golpe cuerpo a cuerpo.' }),
     S({ id: 'muro', name: 'Muro de escudos', route: 'baluarte', ap: 2, cd: 2, range: [0, 0], los: false, target: 'self', shield: 12, text: 'Ganas 12 de escudo.' }),
