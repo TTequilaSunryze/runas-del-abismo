@@ -94,6 +94,12 @@ export interface SpellDef {
   lanternJump?: boolean;
   /** escudo por cada alma cosechada en este combate */
   soulShield?: number;
+  /** golpea al primer enemigo de la línea recta */
+  firstHit?: boolean;
+  /** coloca tu Sombra (una a la vez) `turns` turnos tuyos; replica tus hechizos de daño al `echo` del daño */
+  shadow?: { turns: number; echo: number };
+  /** intercambias tu posición con la de tu Sombra */
+  swapShadow?: boolean;
   /** invoca un aliado controlado por la IA (uno a la vez) */
   summon?: { kind: string; name: string; hpPct: number; armor: number; ap: number; mp: number; initiative: number; spell: string };
   text: string;
@@ -115,6 +121,13 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
     S({ id: 't_descarga', name: 'Descarga desatada', route: 'base', ap: 4, cd: 2, range: [2, 6], los: true, target: 'enemy', dmg: [7, 9], element: 'shadow', consume: { per: 5 }, text: 'Consume todas tus esferas: +5 de daño por cada una.' }),
     S({ id: 't_semilla', name: 'Semilla oscura', route: 'boon', ap: 1, cd: 1, range: [1, 4], los: true, target: 'ground', sphere: { turns: 3, max: 3 }, text: 'Deja una Esfera oscura sin hacer daño.' }),
     S({ id: 't_implosion', name: 'Implosión', route: 'boon', ap: 3, cd: 2, range: [0, 0], los: false, target: 'self', detonate: { dmg: [6, 8], area: 1 }, element: 'shadow', text: 'Detona todas tus esferas: cada una daña a los enemigos pegados a ella.' }),
+    // ---------- Acechador de Sombras ----------
+    S({ id: 's_shuriken', name: 'Shuriken sombrío', route: 'base', ap: 3, cd: 0, range: [1, 5], los: true, straight: true, firstHit: true, target: 'enemy', dmg: [8, 10], text: 'Proyectil en línea recta al primer enemigo. Tu Sombra lanza otro al mismo enemigo si lo ve.' }),
+    S({ id: 's_tajo', name: 'Tajo de sombra', route: 'base', ap: 3, cd: 1, range: [0, 0], los: false, target: 'enemy', area: 1, dmg: [8, 10], status: { kind: 'slow', turns: 1, stacks: 1 }, text: 'Daña a los enemigos pegados a ti y a tu Sombra y les quita 1 PM (una sola vez aunque les alcancen los dos).' }),
+    S({ id: 's_sombra', name: 'Sombra viviente', route: 'base', ap: 2, cd: 2, range: [1, 4], los: false, target: 'cell', shadow: { turns: 2, echo: 0.5 }, text: 'Pones tu Sombra en una casilla libre durante 2 turnos. Replica tus hechizos de daño al 50%. Mientras exista, Intercambiar (1 PA) te cambia de sitio con ella ignorando el placaje.' }),
+    S({ id: 's_cambio', name: 'Intercambiar', route: 'temp', ap: 1, cd: 0, range: [0, 0], los: false, target: 'self', swapShadow: true, text: 'Te cambias de sitio con tu Sombra, ignorando el placaje.' }),
+    S({ id: 's_marca', name: 'Marca mortal', route: 'boon', ap: 3, cd: 3, range: [1, 4], los: true, target: 'enemy', dmg: [5, 7], status: { kind: 'mark', turns: 2 }, text: 'Daña y Marca al enemigo: recibe más daño 2 turnos.' }),
+    S({ id: 's_ocaso', name: 'Ocaso', route: 'boon', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', buff: { kind: 'invis', turns: 1 }, selfMp: 2, text: 'Te fundes en la sombra: invisible 1 turno y +2 PM.' }),
     // ---------- Carcelero de Almas ----------
     S({ id: 'k_sentencia', name: 'Sentencia de muerte', route: 'base', ap: 3, cd: 2, range: [2, 5], los: true, straight: true, target: 'enemy', dmg: [5, 7], element: 'shadow', drainAp: 2, hook: { pull: 2 }, text: 'Cadena en línea recta: engancha al primer enemigo, le quita 2 PA y lo arrastra 2 casillas hacia ti. Este turno puedes usar Recorrer la cadena (1 PA) para saltar junto a él.' }),
     S({ id: 'k_viaje', name: 'Recorrer la cadena', route: 'temp', ap: 1, cd: 0, range: [1, 14], los: false, target: 'enemy', dash: true, hookOnly: true, text: 'Saltas junto al enemigo enganchado, ignorando el placaje.' }),

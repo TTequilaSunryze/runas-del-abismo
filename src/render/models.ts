@@ -1,0 +1,378 @@
+// Modelos animados de 32×32 para las clases nuevas (Hechicera Zorro, Tejedora de Esferas,
+// Carcelero de Almas y Acechador de Sombras). Las clases antiguas siguen usando sus sprites de 16×16.
+//
+// Cada fotograma se pinta por código en una cuadrícula de colores (sin DOM, así se puede probar)
+// y después se le pone un contorno oscuro automático, como en el resto del pixel art del juego.
+// Los colores que empiezan por '~' son brillos: no generan contorno.
+
+export type Anim = 'idle' | 'walk' | 'attack' | 'cast' | 'special' | 'death';
+export type Grid = (string | null)[][];
+
+export const MODEL_SIZE = 32;
+export const MODEL_CLASSES = ['zorro', 'esferas', 'carcelero', 'acechador'];
+export const ANIM_FRAMES: Record<Anim, number> = { idle: 4, walk: 4, attack: 4, cast: 4, special: 4, death: 5 };
+
+/** Qué animación usa cada hechizo (por defecto: ataque si daña, lanzamiento si no). */
+const SPELL_ANIM: Record<string, Anim> = {
+  z_orbe: 'attack', z_encanto: 'special', z_impulso: 'cast', z_drenaje: 'attack', z_velo: 'cast',
+  t_pulso: 'cast', t_dispersion: 'special', t_descarga: 'attack', t_semilla: 'cast', t_implosion: 'special',
+  k_sentencia: 'attack', k_viaje: 'walk', k_linterna: 'cast', k_despellejar: 'attack', k_cosecha: 'cast',
+  s_shuriken: 'cast', s_tajo: 'attack', s_sombra: 'special', s_cambio: 'special', s_marca: 'cast', s_ocaso: 'special',
+};
+
+export function animFor(spell: string, dealsDamage: boolean): Anim {
+  return SPELL_ANIM[spell] ?? (dealsDamage ? 'attack' : 'cast');
+}
+
+// ---------------------------------------------------------------------------
+// Pincel sobre la cuadrícula
+// ---------------------------------------------------------------------------
+
+class Pen {
+  g: Grid = Array.from({ length: MODEL_SIZE }, () => Array<string | null>(MODEL_SIZE).fill(null));
+  px(x: number, y: number, c: string): void {
+    x = Math.round(x); y = Math.round(y);
+    if (x >= 0 && y >= 0 && x < MODEL_SIZE && y < MODEL_SIZE) this.g[y]![x] = c;
+  }
+  rect(x: number, y: number, w: number, h: number, c: string): void {
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) this.px(x + i, y + j, c);
+  }
+  disc(cx: number, cy: number, r: number, c: string): void {
+    for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++)
+      for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) if ((x - cx) ** 2 + (y - cy) ** 2 <= r * r + r * 0.6) this.px(x, y, c);
+  }
+  line(x0: number, y0: number, x1: number, y1: number, c: string): void {
+    const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
+    for (let i = 0; i <= n; i++) this.px(x0 + ((x1 - x0) * i) / n, y0 + ((y1 - y0) * i) / n, c);
+  }
+  /** Trapecio vertical: de ancho w0 arriba a w1 abajo, centrado en cx. */
+  trap(cx: number, y0: number, y1: number, w0: number, w1: number, c: string): void {
+    for (let y = y0; y <= y1; y++) {
+      const w = w0 + ((w1 - w0) * (y - y0)) / Math.max(1, y1 - y0);
+      this.rect(Math.round(cx - w / 2), y, Math.round(w), 1, c);
+    }
+  }
+  /** Contorno oscuro alrededor de todo lo opaco (los brillos '~' no cuentan). */
+  outline(c: string): void {
+    const solid = (x: number, y: number): boolean => { const v = this.g[y]?.[x]; return !!v && v[0] !== '~' && v !== c; };
+    const add: [number, number][] = [];
+    for (let y = 0; y < MODEL_SIZE; y++) for (let x = 0; x < MODEL_SIZE; x++) {
+      const v = this.g[y]![x];
+      if (v && v[0] !== '~') continue;
+      if (solid(x + 1, y) || solid(x - 1, y) || solid(x, y + 1) || solid(x, y - 1)) add.push([x, y]);
+    }
+    for (const [x, y] of add) this.g[y]![x] = c;
+  }
+  /** Brillo suave alrededor de un punto (debajo de lo que ya hay). */
+  glow(cx: number, cy: number, r: number, rgba: string): void {
+    for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++)
+      for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++)
+        if ((x - cx) ** 2 + (y - cy) ** 2 <= r * r && x >= 0 && y >= 0 && x < MODEL_SIZE && y < MODEL_SIZE && !this.g[y]![x]) this.g[y]![x] = '~' + rgba;
+  }
+}
+
+const TAU = Math.PI * 2;
+const wave = (p: number, ph = 0): number => Math.sin(TAU * p + ph);
+
+// ---------------------------------------------------------------------------
+// Hechicera Zorro: zorra de nueve colas, cuerpo cuadrado y orbe azul
+// ---------------------------------------------------------------------------
+
+const ZC = { body: '#e2503a', dark: '#a8321f', light: '#f27a52', tip: '#f8b878', cream: '#fbe0c0', eye: '#2a1210', ear: '#f8a070', out: '#2a1210', orb: '#58c8ff', orbL: '#e0f6ff', heart: '#ff6ab0' };
+
+function zorro(p: Pen, a: Anim, f: number): void {
+  const n = ANIM_FRAMES[a], t = f / n;
+  const death = a === 'death' ? f / (n - 1) : 0;
+  const bob = a === 'idle' ? (f % 2) : a === 'walk' ? (f % 2 ? -1 : 0) : 0;
+  const lean = a === 'cast' ? 2 : a === 'attack' && f === 1 ? 1 : 0;
+  const by = 26 + bob + Math.round(death * 3);
+  const bh = Math.round(12 - death * 5);
+  const bx = 11 + lean;
+  // nueve colas en abanico detrás del cuerpo, cada una con su borde para que se distingan
+  const angles = [-172, -150, -130, -110, -90, -70, -50, -30, -8];
+  const lens = [13, 15, 16, 17, 17, 17, 16, 15, 13];
+  const order = angles.map((_, i) => i).sort((i, j) => Math.abs(angles[j]! + 90) - Math.abs(angles[i]! + 90));
+  for (const i of order) {
+    let ang = angles[i]!;
+    let len = lens[i]!;
+    if (a === 'idle') ang += wave(t, i * 0.7) * 4;
+    if (a === 'walk') ang += wave(t, i) * 6 - 5;
+    if (a === 'cast') ang = ang * 0.75 - 45;
+    if (a === 'special') ang += wave(t, i * 0.4) * 8;
+    if (a === 'death') { ang = ang + (ang < -90 ? -1 : 1) * death * 55; len *= 1 - death * 0.4; }
+    const rad = (ang * Math.PI) / 180;
+    const ox = bx + 5, oy = by - 4;
+    const pts: [number, number, number, number][] = [];
+    for (let k = 0.15; k <= 1.0001; k += 0.05) {
+      const curl = Math.sin(k * Math.PI) * 1.8;
+      const x = ox + Math.cos(rad) * len * k - Math.sin(rad) * curl;
+      const y = oy + Math.sin(rad) * len * k + Math.cos(rad) * curl;
+      const r = 0.5 + 2.9 * Math.sin(Math.PI * Math.min(1, k * 1.05)) * (1 - k * 0.25);
+      pts.push([x, y, r, k]);
+    }
+    for (const [x, y, r] of pts) p.disc(x, y, r + 0.9, ZC.out);
+    for (const [x, y, r, k] of pts) p.disc(x, y, r, k > 0.78 ? ZC.tip : k > 0.55 ? ZC.light : ZC.body);
+    for (const [x, y, r, k] of pts) if (k > 0.25 && k < 0.6) p.disc(x + 0.7, y + 0.7, Math.max(0, r - 1.5), ZC.dark);
+  }
+  // cuerpo cuadrado
+  const top = by - bh;
+  p.rect(bx, top, 10, bh, ZC.body);
+  p.rect(bx, top, 10, 1, ZC.light);
+  p.rect(bx + 9, top + 1, 1, bh - 1, ZC.dark);
+  p.rect(bx, by - 1, 10, 1, ZC.dark);
+  // orejas
+  if (death < 0.7) {
+    for (const ex of [bx, bx + 7]) { p.rect(ex, top - 3, 3, 3, ZC.body); p.px(ex + 1, top - 4, ZC.body); p.px(ex + 1, top - 2, ZC.ear); }
+  }
+  // cara (mira a la derecha)
+  const fy = top + 4;
+  if (a === 'special') { p.rect(bx + 4, fy, 2, 1, ZC.eye); p.rect(bx + 7, fy, 2, 1, ZC.eye); }
+  else if (a === 'death' && death > 0.4) { p.px(bx + 4, fy, ZC.eye); p.px(bx + 5, fy + 1, ZC.eye); p.px(bx + 7, fy, ZC.eye); p.px(bx + 8, fy + 1, ZC.eye); }
+  else { p.rect(bx + 4, fy, 1, 2, ZC.eye); p.rect(bx + 7, fy, 1, 2, ZC.eye); }
+  p.rect(bx + 5, fy + 3, 4, 2, ZC.cream);
+  p.px(bx + 8, fy + 3, ZC.eye);
+  // patitas
+  if (death < 0.6) {
+    const up = a === 'walk' ? f % 2 : 0;
+    p.rect(bx + 1, by, 2, 3 - up, ZC.dark);
+    p.rect(bx + 6, by, 2, 2 + up, ZC.dark);
+  }
+  // orbe del engaño
+  if (a === 'attack') {
+    const ox = [bx + 11, bx + 15, bx + 19, bx + 13][f]!, oy = by - 6;
+    p.disc(ox, oy, 2.2, ZC.orb); p.px(ox - 1, oy - 1, ZC.orbL);
+  } else if (a !== 'death') {
+    const oy = by - 9 + Math.round(wave(t) * 1);
+    p.disc(bx + 12, oy, 1.6, ZC.orb); p.px(bx + 12, oy - 1, ZC.orbL);
+  }
+  // encanto: corazón que crece
+  if (a === 'special') {
+    const s = 1 + (f >= 2 ? 1 : 0), hx = bx + 5, hy = top - 6 - f;
+    p.disc(hx - s, hy, s, ZC.heart); p.disc(hx + s, hy, s, ZC.heart); p.trap(hx, hy, hy + 2 + s, 4 * s + 1, 1, ZC.heart);
+  }
+  p.outline(ZC.out);
+  if (a === 'attack') p.glow([bx + 11, bx + 15, bx + 19, bx + 13][f]!, by - 6, 4, 'rgba(88,200,255,.35)');
+  else if (a !== 'death') p.glow(bx + 12, by - 9, 3, 'rgba(88,200,255,.3)');
+}
+
+// ---------------------------------------------------------------------------
+// Tejedora de Esferas: encapuchada morada, ojos cian y cuatro orbes
+// ---------------------------------------------------------------------------
+
+const TC = { hood: '#6a3fa8', hoodL: '#9a6ad8', hoodD: '#40246a', face: '#120a1e', eye: '#7ef4ff', robe: '#5a3494', robeD: '#3a2064', trim: '#e0904a', inner: '#3a5ab8', gem: '#7ef4ff', hand: '#58d8ff', out: '#140a24', cyan: '#58d8ff', violet: '#c060ff', core: '#ffffff' };
+
+function tejedora(p: Pen, a: Anim, f: number): void {
+  const n = ANIM_FRAMES[a], t = f / n;
+  const death = a === 'death' ? f / (n - 1) : 0;
+  const bob = a === 'idle' ? Math.round(wave(t)) : a === 'walk' ? (f % 2 ? -1 : 0) : 0;
+  const sink = Math.round(death * 8);
+  const cx = 16;
+  // órbita de las esferas
+  let rx = 13, ry = 8, spin = t * 0.25;
+  if (a === 'cast') { rx = 9 + f; ry = 6; }
+  if (a === 'special') { rx = 10 + f * 2; ry = 7 + f; }
+  if (a === 'attack') { rx = 12 - f * 3; ry = 8 - f * 2; }
+  if (a === 'death') { rx = 13 + death * 3; ry = 8; }
+  const orbs = [0, 1, 2, 3].map((k) => {
+    const ang = TAU * (k / 4 + spin) + Math.PI / 4;
+    let x = cx + Math.cos(ang) * rx, y = 15 + bob + Math.sin(ang) * ry;
+    if (a === 'attack' && f >= 2) { x = cx + 8 + Math.cos(ang) * rx; y = 15 + Math.sin(ang) * ry; }
+    if (a === 'idle' || a === 'walk') {
+      // como en la ficha: dos cian arriba y dos violetas a los lados, flotando
+      const fixed = [[6, 8], [26, 8], [3, 17], [29, 17]][k]!;
+      x = fixed[0]!; y = fixed[1]! + Math.round(wave(t, k * 1.6) * 1);
+      return { x, y, behind: false, col: k < 2 ? TC.cyan : TC.violet };
+    }
+    if (a === 'death') y += death * 12;
+    return { x, y, behind: Math.sin(ang) < -0.2, col: k % 2 ? TC.violet : TC.cyan };
+  });
+  const orb = (o: { x: number; y: number; col: string }): void => { p.disc(o.x, o.y, 1.8, o.col); p.px(o.x, o.y, TC.core); };
+  for (const o of orbs) if (o.behind) orb(o);
+  // túnica
+  const top = 17 + bob + sink;
+  if (death < 1) {
+    p.trap(cx, top, 30, 9, 16 + Math.round(death * 4), TC.robe);
+    p.trap(cx - 4, top + 1, 30, 1, 2, TC.robeD);
+    for (let y = top + 1; y <= 30; y++) { const w = 9 + ((16 - 9) * (y - top)) / Math.max(1, 30 - top); p.px(Math.round(cx - w / 2), y, TC.trim); p.px(Math.round(cx + w / 2) - 1, y, TC.trim); }
+    p.rect(cx - 1, top + 2, 3, 30 - top - 1, TC.inner);
+    const hem = a === 'walk' ? f % 2 : 0;
+    p.rect(cx - 8, 30, 16, 1, TC.trim); if (hem) p.px(cx + 7, 29, TC.trim);
+    // mangas y manos
+    const handUp = a === 'cast' ? 6 : a === 'special' ? 2 : 0;
+    p.rect(cx - 7, top + 2 - handUp, 3, 5, TC.robe); p.rect(cx + 4, top + 2 - handUp, 3, 5, TC.robe);
+    p.px(cx - 7, top + 2 - handUp, TC.trim); p.px(cx + 6, top + 2 - handUp, TC.trim);
+    if (death < 0.5) { p.rect(cx - 8, top + 6 - handUp, 2, 2, TC.hand); p.rect(cx + 6, top + 6 - handUp, 2, 2, TC.hand); }
+    p.disc(cx, top + 1, 1.2, TC.gem);
+  }
+  // capucha
+  const hy = 11 + bob + sink;
+  p.disc(cx, hy, 5.6, TC.hood);
+  p.rect(cx - 1, hy - 7, 2, 2, TC.hood);
+  p.disc(cx - 1, hy - 1, 3.5, TC.hoodL);
+  p.disc(cx, hy, 3.6, TC.hood);
+  p.disc(cx + 1, hy + 1, 3.2, TC.face);
+  p.rect(cx - 5, hy + 4, 11, 2, TC.hoodD);
+  if (death < 0.8) { p.rect(cx - 1, hy + 1, 2, 1, TC.eye); p.rect(cx + 2, hy + 1, 2, 1, TC.eye); }
+  for (const o of orbs) if (!o.behind) orb(o);
+  p.outline(TC.out);
+  for (const o of orbs) p.glow(o.x, o.y, 3.4, o.col === TC.cyan ? 'rgba(88,216,255,.3)' : 'rgba(192,96,255,.3)');
+  if (death < 0.8) p.glow(cx + 1, hy + 1, 4, 'rgba(126,244,255,.12)');
+}
+
+// ---------------------------------------------------------------------------
+// Carcelero de Almas: armadura espectral verde azulada, cadena y linterna
+// ---------------------------------------------------------------------------
+
+const KC = { arm: '#5fc8b0', armL: '#a8f0e0', armD: '#2a7a70', armDD: '#1a4a48', hole: '#0a1416', cloth: '#3a3a48', clothD: '#24242e', chain: '#9aa0b0', chainD: '#5a6070', lamp: '#2a2a30', light: '#e8fff8', wisp: '#5fc8b0', out: '#0c1a1c' };
+
+function carcelero(p: Pen, a: Anim, f: number): void {
+  const n = ANIM_FRAMES[a], t = f / n;
+  const death = a === 'death' ? f / (n - 1) : 0;
+  const bob = a === 'idle' || a === 'walk' ? Math.round(wave(t) * 1) : 0;
+  const sink = Math.round(death * 9);
+  const y0 = 4 + bob + sink;
+  // estela espectral (sin pies)
+  if (death < 1) for (let i = 0; i < 4; i++) { const wx = 13 + i * 2 + Math.round(wave(t, i) * 1), wy = 26 + (i % 2); p.rect(wx, wy, 2, 4 - (i % 2) - Math.round(death * 2), i % 2 ? KC.armD : KC.wisp); }
+  // tela raída
+  p.trap(16, y0 + 17, y0 + 23, 9, 11, KC.cloth);
+  for (let x = 11; x <= 21; x += 2) p.px(x, y0 + 24, KC.clothD);
+  // torso
+  p.rect(11, y0 + 8, 11, 9, KC.arm);
+  p.rect(11, y0 + 8, 11, 1, KC.armL);
+  p.rect(20, y0 + 9, 2, 8, KC.armD);
+  for (let y = y0 + 10; y <= y0 + 15; y += 2) p.rect(13, y, 6, 1, KC.armD);
+  p.rect(11, y0 + 16, 11, 2, KC.cloth);
+  // hombreras grandes con tres pinchos
+  for (const sx of [6, 20]) {
+    p.rect(sx, y0 + 7, 6, 5, KC.arm); p.rect(sx, y0 + 7, 6, 1, KC.armL); p.rect(sx, y0 + 11, 6, 1, KC.armD);
+    for (const k of [0, 2, 4]) { p.px(sx + k, y0 + 6, KC.armL); if (k !== 2) p.px(sx + k, y0 + 5, KC.armL); }
+    p.px(sx + 2, y0 + 4, KC.armL);
+  }
+  // casco-calavera: cuencas negras grandes con un destello cian
+  p.rect(12, y0, 9, 8, KC.arm);
+  p.rect(13, y0 - 1, 7, 1, KC.armL);
+  p.rect(12, y0, 9, 1, KC.armL);
+  p.px(11, y0 + 1, KC.armL); p.px(21, y0 + 1, KC.armL);
+  p.rect(13, y0 + 2, 3, 3, KC.hole); p.rect(17, y0 + 2, 3, 3, KC.hole);
+  p.px(16, y0 + 4, KC.hole);
+  p.rect(14, y0 + 6, 5, 1, KC.hole); p.px(15, y0 + 7, KC.hole); p.px(17, y0 + 7, KC.hole);
+  const lit = a === 'attack' || a === 'cast' ? '#ffffff' : '#7ef4ff';
+  p.px(14, y0 + 3, lit); p.px(18, y0 + 3, lit);
+  // brazo de la cadena (detrás) o lanzando el gancho hacia delante
+  const throwing = a === 'attack' && f >= 1 && f <= 2;
+  if (throwing) {
+    p.rect(21, y0 + 11, 5, 2, KC.arm);
+    const reach = f === 1 ? 29 : 31;
+    for (let x = 26; x <= reach; x++) p.px(x, y0 + 12, x % 2 ? KC.chain : KC.chainD);
+    p.rect(reach - 1, y0 + 10, 2, 2, KC.chain); p.px(reach - 2, y0 + 9, KC.chain);
+  } else {
+    p.rect(8, y0 + 11, 2, 6, KC.arm);
+    const sw = Math.round(wave(t) * (a === 'walk' ? 2 : 1));
+    for (let i = 0; i < 6; i++) p.px(8 - Math.round(i * 0.5) + (i > 3 ? sw : 0), y0 + 17 + i, i % 2 ? KC.chain : KC.chainD);
+    p.rect(3 + sw, y0 + 22, 3, 1, KC.chain); p.px(3 + sw, y0 + 21, KC.chain); p.px(6 + sw, y0 + 21, KC.chainD);
+  }
+  // brazo de la linterna
+  const raise = a === 'cast' ? 7 : 0;
+  if (!throwing) p.rect(22, y0 + 11 - raise, 2, 6, KC.arm);
+  const lx = 22 + (throwing ? 3 : 0), ly = y0 + 17 - raise + (a === 'idle' ? (f % 2) : 0);
+  p.rect(lx + 1, ly, 1, 1, KC.lamp);
+  p.rect(lx - 1, ly + 1, 5, 1, KC.lamp);
+  p.rect(lx - 1, ly + 2, 5, 4, KC.lamp);
+  p.rect(lx, ly + 2, 3, 4, KC.light);
+  p.rect(lx - 1, ly + 6, 5, 1, KC.lamp);
+  p.outline(KC.out);
+  if (death < 0.9) p.glow(lx + 1, ly + 4, a === 'cast' ? 5.5 : 4.5, a === 'cast' ? 'rgba(170,255,225,.45)' : 'rgba(170,255,225,.3)');
+  for (let i = 0; i < 4; i++) p.glow(14 + i * 2, 29, 2, 'rgba(140,240,210,.3)');
+}
+
+// ---------------------------------------------------------------------------
+// Acechador de Sombras: ninja oscuro, máscara, ojos rojos, bufanda roja y cuchillas
+// ---------------------------------------------------------------------------
+
+const AC = { suit: '#2e2e48', suitL: '#4a4a6e', suitD: '#1a1a2c', mask: '#c8ccd8', maskD: '#8a8ea0', eye: '#ff3a4a', scarf: '#c8303a', scarfD: '#8a1a24', blade: '#dce4f4', bladeD: '#8a94aa', wrap: '#5a5a7a', out: '#0a0a14' };
+
+function acechador(p: Pen, a: Anim, f: number): void {
+  const n = ANIM_FRAMES[a], t = f / n;
+  const death = a === 'death' ? f / (n - 1) : 0;
+  const crouch = a === 'special' ? 3 : a === 'death' ? Math.round(death * 7) : 0;
+  const bob = a === 'idle' ? (f % 2) : a === 'walk' ? (f % 2 ? -1 : 0) : 0;
+  const y0 = 5 + bob + crouch;
+  // bufanda ondeando detrás
+  for (let i = 0; i < 7; i++) {
+    const sx = 12 - i, sy = y0 + 8 + Math.round(wave(t + i * 0.12) * (a === 'walk' ? 2 : 1)) + Math.floor(i / 3);
+    p.rect(sx, sy, 1, 2, i % 3 === 2 ? AC.scarfD : AC.scarf);
+  }
+  // piernas
+  if (a === 'walk') {
+    const s = f % 2 ? 2 : -2;
+    p.rect(14 + s, y0 + 16, 2, 8, AC.suit); p.rect(18 - s, y0 + 16, 2, 8, AC.suitD);
+    p.rect(14 + s, y0 + 21, 3, 3, AC.wrap); p.rect(18 - s, y0 + 21, 3, 3, AC.wrap);
+  } else if (death < 0.6) {
+    const spread = a === 'special' ? 2 : 0;
+    p.rect(13 - spread, y0 + 16, 3, 8 - crouch, AC.suit); p.rect(18 + spread, y0 + 16, 3, 8 - crouch, AC.suitD);
+    p.rect(13 - spread, y0 + 22 - crouch, 3, 2, AC.wrap); p.rect(18 + spread, y0 + 22 - crouch, 3, 2, AC.wrap);
+  }
+  // torso
+  p.rect(12, y0 + 8, 9, 9, AC.suit);
+  p.rect(12, y0 + 8, 9, 1, AC.suitL);
+  p.rect(19, y0 + 9, 2, 8, AC.suitD);
+  p.rect(12, y0 + 14, 9, 1, AC.scarfD);
+  // brazo de atrás con cuchilla
+  p.rect(10, y0 + 10, 2, 5, AC.suitD);
+  p.line(9, y0 + 15, 7, y0 + 19, AC.bladeD);
+  // cabeza con capucha y máscara
+  p.rect(13, y0, 7, 8, AC.suit);
+  p.rect(14, y0 - 1, 5, 1, AC.suitL);
+  p.rect(13, y0 + 3, 7, 2, AC.mask);
+  p.rect(13, y0 + 5, 7, 1, AC.maskD);
+  if (death < 0.7) { p.px(17, y0 + 3, AC.eye); p.px(18, y0 + 3, AC.eye); }
+  // bufanda al cuello
+  p.rect(12, y0 + 7, 9, 2, AC.scarf);
+  // brazo de delante y su cuchilla según la animación
+  if (a === 'attack') {
+    // tajo: de arriba a abajo en arco
+    const pts = [[22, y0 + 6, 27, y0 + 1], [23, y0 + 10, 30, y0 + 8], [22, y0 + 13, 28, y0 + 18], [21, y0 + 11, 25, y0 + 14]][f]!;
+    p.rect(20, y0 + 9, 3, 2, AC.suit);
+    p.line(pts[0]!, pts[1]!, pts[2]!, pts[3]!, AC.blade);
+    if (f === 1) { p.line(26, y0 + 4, 30, y0 + 12, '~rgba(255,80,100,.5)'); }
+  } else if (a === 'cast') {
+    // lanzar shuriken
+    p.rect(20, y0 + 9, 5, 2, AC.suit);
+    const sx = [24, 27, 30, 25][f]!, sy = y0 + 9;
+    p.px(sx, sy - 1, AC.blade); p.px(sx, sy + 1, AC.blade); p.px(sx - 1, sy, AC.blade); p.px(sx + 1, sy, AC.blade); p.px(sx, sy, AC.bladeD);
+  } else {
+    p.rect(20, y0 + 10, 2, 5, AC.suit);
+    p.line(22, y0 + 15, 25, y0 + 11, AC.blade);
+  }
+  p.outline(AC.out);
+  if (death < 0.7) p.glow(17.5, y0 + 3, 2.5, 'rgba(255,58,74,.35)');
+  if (a === 'special') for (let i = 0; i < 5; i++) p.glow(10 + i * 3, 29, 2.5, 'rgba(60,20,90,.45)');
+}
+
+const DRAW: Record<string, (p: Pen, a: Anim, f: number) => void> = { zorro, esferas: tejedora, carcelero, acechador };
+
+/** Paleta de la Sombra del Acechador: todo morado oscuro, solo los ojos siguen rojos. */
+function shadowTint(c: string): string {
+  if (c[0] === '~') return c.includes('255,58,74') ? c : '~rgba(40,10,60,.35)';
+  if (c === AC.eye) return c;
+  const n = parseInt(c.slice(1), 16);
+  const l = (((n >> 16) & 255) * 0.3 + ((n >> 8) & 255) * 0.59 + (n & 255) * 0.11) / 255;
+  const v = (k: number): string => Math.round(k).toString(16).padStart(2, '0');
+  return `#${v(20 + l * 60)}${v(8 + l * 25)}${v(40 + l * 80)}`;
+}
+
+const cache = new Map<string, Grid>();
+
+/** Fotograma de un modelo como cuadrícula de colores (32×32). */
+export function modelFrame(cls: string, anim: Anim, frame: number, tint?: 'shadow'): Grid {
+  const f = Math.max(0, Math.min(ANIM_FRAMES[anim] - 1, Math.floor(frame)));
+  const key = `${cls}:${anim}:${f}:${tint ?? ''}`;
+  let g = cache.get(key);
+  if (!g) {
+    const p = new Pen();
+    DRAW[cls]!(p, anim, f);
+    g = tint === 'shadow' ? p.g.map((row) => row.map((c) => (c ? shadowTint(c) : c))) : p.g;
+    cache.set(key, g);
+  }
+  return g;
+}

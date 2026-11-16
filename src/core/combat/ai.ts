@@ -205,7 +205,15 @@ function champCast(s: CombatState, u: Unit, ev: GameEvent[]): boolean {
     const around = d.range[1] === 0;
     const near = (list: Unit[], at: Pos): Unit[] => list.filter((x) => dist(x.pos, at) <= (d.area ?? 0));
     const spheres = marksOf(s, 'sphere', u.id);
-    if (d.lanternJump) {
+    if (d.shadow) {
+      // la Sombra junto a un enemigo (para que replique el tajo), si aún no hay
+      if (!marksOf(s, 'shadow', u.id).length) for (const f of foes) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) consider(d, { x: f.pos.x + dx, y: f.pos.y + dy }, 14);
+    } else if (d.swapShadow) {
+      // malherido: cámbiate por la Sombra si está más lejos de los enemigos
+      const sh = marksOf(s, 'shadow', u.id)[0];
+      const near = (p: { x: number; y: number }): number => Math.min(99, ...foes.map((f) => dist(f.pos, p)));
+      if (sh && u.hp < u.maxHp * 0.4 && near(sh.pos) > near(u.pos) + 1) consider(d, u.pos, 18);
+    } else if (d.lanternJump) {
       // malherido junto a una linterna: escapa al lado del Carcelero
       if (u.hp < u.maxHp * 0.4) consider(d, u.pos, 20);
     } else if (d.lantern) {

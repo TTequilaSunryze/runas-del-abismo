@@ -6,7 +6,8 @@ import { coneCells } from '../core/combat/marks';
 import { alive, dist, hasLineOfSight, reachable } from '../core/combat/grid';
 import type { CombatState, GameEvent, Pos, Unit } from '../core/state';
 import type { Session } from '../game/session';
-import { PLAYER_COLORS, drawUnit } from './sprites';
+import { PLAYER_COLORS, drawUnit, isModel } from './sprites';
+import { ANIM_FRAMES, animFor, type Anim } from './models';
 
 const TILE = 56;
 const STATUS_COLOR: Record<string, string> = { burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0', charm: '#ff9ad8' };
@@ -18,8 +19,12 @@ interface Ghost { kind: string; team: string; idx: number; x: number; y: number;
 const ELEMENT_COLOR: Record<string, string> = { fire: '#ff8a30', ice: '#8ae0ff', poison: '#7fe05a', shadow: '#b07cff', holy: '#ffe9a0' };
 const ELEMENT_NAME: Record<string, string> = { fire: 'fuego', ice: 'hielo', poison: 'veneno', shadow: 'sombra', holy: 'sagrado' };
 const LUNGE_MS = 240;
+/** duración de las animaciones de hechizo de los modelos animados */
+const ACT_MS = 480;
+/** duración de la animación de muerte de los modelos animados */
+const DEATH_MS = 900;
 
-const CLASS_KINDS = ['guerrero', 'mago', 'clerigo', 'picaro', 'arquero', 'zorro', 'tejedora', 'carcelero'];
+const CLASS_KINDS = ['guerrero', 'mago', 'clerigo', 'picaro', 'arquero', 'zorro', 'esferas', 'carcelero', 'acechador'];
 /** Índice de color y etiqueta: héroes de jugadores, y héroes rivales (némesis, duelos) dentro de su bando. */
 function teamIdx(c: CombatState): Map<number, number> {
   const m = new Map<number, number>();
@@ -39,6 +44,8 @@ export class Board {
   private shots: Shot[] = [];
   private ghosts: Ghost[] = [];
   private lunge = new Map<number, { t0: number; dx: number; dy: number }>();
+  /** animación de hechizo en curso (modelos animados) */
+  private acts = new Map<number, { t0: number; anim: Anim }>();
   private faceLeft = new Map<number, boolean>();
   private raf = 0;
 
@@ -98,6 +105,12 @@ export class Board {
     for (const e of events) {
       const u = 'unit' in e ? c.units.find((x) => x.id === e.unit) : undefined;
       const from = u ? this.shown.get(u.id) ?? u.pos : undefined;
+      if (e.t === 'cast' && u) this.acts.set(u.id, { t0: now, anim: animFor(e.spell, !!SPELLS[e.spell]?.dmg) });
+      if (e.t === 'echo') {
+        // la Sombra replica el golpe: un proyectil sale de su casilla
+        const dx = e.at.x - e.from.x, dy = e.at.y - e.from.y, len = Math.hypot(dx, dy);
+        this.shots.push({ x0: (e.from.x + 0.5) * TILE, y0: (e.from.y + 0.4) * TILE, x1: (e.at.x + 0.5) * TILE, y1: (e.at.y + 0.4) * TILE, color: '#7a3fc0', t0: now + 120, dur: Math.min(320, 90 + len * 35) });
+      }
       if (e.t === 'cast' && u && from) {
         const dx = e.at.x - from.x, dy = e.at.y - from.y, len = Math.hypot(dx, dy);
         if (len > 0) {
@@ -183,6 +196,10 @@ export class Board {
         g.fillStyle = '#3a1a5a'; g.beginPath(); g.arc(cx, cy, TILE * 0.2 * pulse, 0, 6.3); g.fill();
         g.fillStyle = '#7a3fc0'; g.beginPath(); g.arc(cx - 2, cy - 2, TILE * 0.13, 0, 6.3); g.fill();
         g.fillStyle = '#f0d8ff'; g.fillRect(cx - TILE * 0.09, cy - TILE * 0.1, 4, 4);
+      } else if (m.kind === 'shadow') {
+        // la Sombra: un clon oscuro del Acechador, quieto en su casilla
+        const o = c.units.find((x) => x.id === m.owner);
+        if (o) drawUnit(g, o.kind, o.team, 0, cx, (m.pos.y + 1) * TILE - 6, TILE, { anim: 'idle', frame: Math.floor(now / 260) % ANIM_FRAMES.idle, tint: 'shadow', alpha: 0.85, flip: this.faceLeft.get(o.id) ?? false });
       } else if (m.kind === 'lantern') {
         g.fillStyle = 'rgba(127,224,90,.18)'; g.beginPath(); g.arc(cx, cy + 4, TILE * 0.45 * pulse, 0, 6.3); g.fill();
         g.fillStyle = '#6a6a78'; g.fillRect(cx - 1, cy - TILE * 0.3, 2, TILE * 0.12);
@@ -249,19 +266,35 @@ export class Board {
       if (cur?.id === u.id) { g.strokeStyle = u.team === 'hero' ? '#f2c14e' : '#e0475b'; g.lineWidth = 3; g.beginPath(); g.ellipse(cx, by - 2, TILE * 0.36, 8, 0, 0, 6.3); g.stroke(); }
       g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(cx, by - 2, TILE * 0.3, 6, 0, 0, 6.3); g.fill();
       const moving = s.x !== u.pos.x || s.y !== u.pos.y;
-      const bob = moving ? -Math.abs(Math.sin(now / 70)) * 5 : Math.sin(now / 260 + u.id) * 1.5;
+      const model = isModel(u.kind);
+      // modelos animados: hechizo en curso, andar o reposo (sin el balanceo de los sprites antiguos)
+      let anim: Anim = 'idle', frame = Math.floor(now / 220 + u.id) % ANIM_FRAMES.idle;
+      if (model) {
+        const ac = this.acts.get(u.id), ak = ac ? (now - ac.t0) / ACT_MS : 1;
+        if (ac && ak < 1) { anim = ac.anim; frame = Math.floor(ak * ANIM_FRAMES[anim]); }
+        else if (moving) { anim = 'walk'; frame = Math.floor(now / 110) % ANIM_FRAMES.walk; }
+        // anillo con el color del jugador (los modelos tienen colores propios)
+        if (u.team === 'hero' && u.summoner === undefined) { const pc = PLAYER_COLORS[(heroIdx.get(u.id) ?? 0) % 4]!; g.strokeStyle = pc.b; g.lineWidth = 2; g.beginPath(); g.ellipse(cx, by - 2, TILE * 0.33, 7, 0, 0, 6.3); g.stroke(); }
+      }
+      const bob = model ? 0 : moving ? -Math.abs(Math.sin(now / 70)) * 5 : Math.sin(now / 260 + u.id) * 1.5;
       const lg = this.lunge.get(u.id);
       const lk = lg ? (now - lg.t0) / LUNGE_MS : 1;
       const swing = lk < 1 ? Math.sin(lk * Math.PI) : 0;
       const def0 = u.team === 'hero';
       const left = this.faceLeft.get(u.id) ?? !def0;
       drawUnit(g, u.kind, u.team, heroIdx.get(u.id) ?? 0, cx + (lg ? lg.dx * swing * TILE * 0.3 : 0), by + bob + (lg ? lg.dy * swing * TILE * 0.3 : 0), TILE,
-        { flash: (this.flash.get(u.id) ?? 0) > now, swing, flip: def0 ? left : !left, alpha: u.statuses.invis ? 0.4 : 1 });
+        { flash: (this.flash.get(u.id) ?? 0) > now, swing, flip: def0 ? left : !left, alpha: u.statuses.invis ? 0.4 : 1, anim, frame });
       this.bars(u, cx, s.y * TILE + 2, heroIdx.get(u.id));
     }
     // caídos: se desvanecen hacia arriba
-    this.ghosts = this.ghosts.filter((d) => now - d.t0 < 600);
+    this.ghosts = this.ghosts.filter((d) => now - d.t0 < (isModel(d.kind) ? DEATH_MS : 600));
     for (const d of this.ghosts) {
+      if (isModel(d.kind)) {
+        // modelos animados: animación de muerte y luego se desvanecen
+        const k = (now - d.t0) / DEATH_MS;
+        drawUnit(g, d.kind, d.team, d.idx, (d.x + 0.5) * TILE, (d.y + 1) * TILE - 6, TILE, { anim: 'death', frame: Math.min(ANIM_FRAMES.death - 1, Math.floor(k * 1.4 * ANIM_FRAMES.death)), alpha: k < 0.7 ? 1 : (1 - k) / 0.3 });
+        continue;
+      }
       const k = (now - d.t0) / 600;
       drawUnit(g, d.kind, d.team, d.idx, (d.x + 0.5) * TILE, (d.y + 1) * TILE - 6 - k * 14, TILE, { alpha: 1 - k, flash: k < 0.3 });
     }

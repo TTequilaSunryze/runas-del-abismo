@@ -6,7 +6,7 @@ import type { Slot } from '../core/items/items';
 import type { ClassId, GameEvent } from '../core/state';
 import type { RunState } from '../game/run';
 import { Session } from '../game/session';
-import { dailyScore } from '../game/run';
+import { dailyScore, loadable } from '../game/run';
 import { joinRoom, loadRun, submitDaily, topDaily } from '../net/transport';
 import { addLog, combatScreen } from './combat';
 import { esc, params, randomText, store, today, ui } from './ctx';
@@ -65,7 +65,7 @@ async function enter(code: string, isHost: boolean, local: boolean, resume = fal
   ui.notice = '';
   if (resume) {
     const run = (await loadRun(code)) as RunState | null;
-    if (run && run.version === 9 && run.phase === 'map') ui.saved = run;
+    if (loadable(run) && run.phase === 'map') ui.saved = run;
     else ui.notice = 'No se encontró una partida guardada que se pueda continuar.';
   }
   let wasMyTurn = false;

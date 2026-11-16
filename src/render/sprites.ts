@@ -1,3 +1,4 @@
+import { MODEL_CLASSES, MODEL_SIZE, modelFrame, type Anim } from './models';
 // Sprites dibujados por código. Cada letra es un color de la paleta.
 // Héroes: 16×16, uno por clase. Enemigos: 12×12.
 const SPR: Record<string, string[]> = {
@@ -41,25 +42,6 @@ const SPR: Record<string, string[]> = {
   cult: ['....oooo....', '...oaaaao...', '..oaaaaaao..', '..oaooooao..', '..oaoeeoao..', '..oaaooaao..', '..oaaaaaao..', '.oaaaaaaaao.', '.oaabaabaao.', '.oaaaaaaaao.', '..oaaaaaao..', '..oooooooo..'],
 };
 
-// Hechicera Zorro: se dibuja la mitad izquierda y se refleja para que sea simétrica.
-const ZORRO_LEFT = [
-  '....oo..', '...obbo.', '..oobbbo', '.oabbbbo', '.obsssss', '.obsesss', '..obssso', '.oaaaaao',
-  'oabbgbbo', 'oabbbbba', 'oabbbbba', 'owbbbbba', 'oaaaaaao', 'okaaaako', '..okkk..', '..oo....',
-];
-SPR.zorro = ZORRO_LEFT.map((r) => r + [...r].reverse().join(''));
-// Tejedora de Esferas: corona dorada, melena oscura y túnica larga.
-const TEJEDORA_LEFT = [
-  '...o.o.o', '...ogggg', '..oaaaaa', '.oaassss', '.oasesss', '.oassssk', '.oaasssk', '..oaaaaa',
-  '..obbabb', '.obbbabb', 'obbbbabb', 'okbbbabb', 'okbbbbbb', '.okbbbbb', '..okkkkk', '..oooooo',
-];
-SPR.tejedora = TEJEDORA_LEFT.map((r) => r + [...r].reverse().join(''));
-// Carcelero de Almas: capucha, ojos brillantes, hombreras de hierro y cuerpo ancho.
-const CARCELERO_LEFT = [
-  '....oooo', '...okkkk', '..okkkkk', '..okkkkk', '..okkkgk', '..okkkkk', '.oommmmm', 'ommmaaaa',
-  'omaaabbb', 'omaabbbb', '.oaabbbb', '.oaabbbb', '..oaaaaa', '..okko..', '..okko..', '..ooo...',
-];
-SPR.carcelero = CARCELERO_LEFT.map((r) => r + [...r].reverse().join(''));
-
 const BASE: Record<string, string> = { o: '#15101f', w: '#f1ead8', s: '#f0c9a0', e: '#15101f', m: '#b9bfd0', g: '#f2c14e', k: '#2a2438' };
 
 interface Look {
@@ -82,7 +64,7 @@ const RIVAL_COLORS = [
   { a: '#6a2a1a', b: '#e07a3a' },
   { a: '#1f5a5a', b: '#4ad0c0' },
 ];
-const HERO_SPRITES = ['guerrero', 'mago', 'clerigo', 'picaro', 'arquero', 'zorro', 'tejedora', 'carcelero'];
+const HERO_SPRITES = ['guerrero', 'mago', 'clerigo', 'picaro', 'arquero'];
 
 const ENEMY_LOOK: Record<string, Look> = {
   limo: { sprite: 'slime', pal: { a: '#8fbf6a', b: '#c4e8a0', e: '#102010' } },
@@ -178,9 +160,6 @@ function weapon(g: CanvasRenderingContext2D, cls: string, x: number, y: number, 
   else if (cls === 'mago') { r(14, 4 - up, 1, 12, '#7a4a1a'); r(13, 2 - up, 3, 3, '#58a6ff'); r(14, 3 - up, 1, 1, '#d6ecff'); }
   else if (cls === 'clerigo') { r(14, 5 - up, 1, 10, '#7a4a1a'); r(13, 3 - up, 3, 3, '#f2c14e'); r(14, 2 - up, 1, 1, '#fff2c0'); }
   else if (cls === 'arquero') { r(14, 5, 1, 8, '#8a5a2a'); r(13, 4, 1, 1, '#8a5a2a'); r(13, 13, 1, 1, '#8a5a2a'); r(12 - up, 5, 1, 8, '#d8d0c0'); if (up) r(9, 8, 6, 1, '#e4e8f4'); }
-  else if (cls === 'carcelero') { r(14, 5 - up, 1, 5, '#6a6a78'); r(13, 10 - up, 3, 3, '#3a3a2a'); r(14, 11 - up, 1, 1, '#7fe05a'); r(13, 9 - up, 3, 1, '#6a6a78'); r(1, 9, 1, 4, '#6a6a78'); }
-  else if (cls === 'tejedora') { r(13, 6 - up, 2, 2, '#7a3fc0'); r(11, 3 - up, 2, 2, '#c77dff'); r(14, 2 - up, 2, 2, '#3a1a5a'); r(11, 3 - up, 1, 1, '#f0d8ff'); }
-  else if (cls === 'zorro') { r(13, 7 - up, 3, 3, '#c77dff'); r(14, 8 - up, 1, 1, '#f0d8ff'); r(13, 10 - up, 3, 1, '#3a1a5a'); }
   else { r(14, 8 - up, 1, 4, '#e4e8f4'); r(1, 8 + up, 1, 4, '#e4e8f4'); r(14, 12 - up, 1, 1, '#5a4520'); r(1, 12 + up, 1, 1, '#5a4520'); }
 }
 
@@ -190,10 +169,50 @@ export interface DrawOpts {
   /** 0..1: arma levantada al atacar */
   swing?: number;
   flip?: boolean;
+  /** modelos animados (clases nuevas): animación y fotograma */
+  anim?: Anim;
+  frame?: number;
+  /** la Sombra del Acechador */
+  tint?: 'shadow';
 }
+
+const modelCache = new Map<string, HTMLCanvasElement>();
+
+/** Fotograma de un modelo de 32×32 convertido en imagen (con caché). */
+function bakeModel(kind: string, anim: Anim, frame: number, tint?: 'shadow'): HTMLCanvasElement {
+  const k = `${kind}:${anim}:${frame}:${tint ?? ''}`;
+  let c = modelCache.get(k);
+  if (c) return c;
+  const grid = modelFrame(kind, anim, frame, tint);
+  c = document.createElement('canvas');
+  c.width = c.height = MODEL_SIZE;
+  const g = c.getContext('2d')!;
+  grid.forEach((row, y) => row.forEach((col, x) => { if (col) { g.fillStyle = col[0] === '~' ? col.slice(1) : col; g.fillRect(x, y, 1, 1); } }));
+  modelCache.set(k, c);
+  return c;
+}
+
+/** Dibuja un modelo animado (a escala entera) con los pies en la base de la casilla. */
+function drawModel(g: CanvasRenderingContext2D, kind: string, team: string, cx: number, baseY: number, tile: number, o: DrawOpts): void {
+  const img = bakeModel(kind, o.anim ?? 'idle', o.frame ?? 0, o.tint);
+  const s = Math.max(1, Math.round(tile / 28));
+  const w = MODEL_SIZE * s;
+  const x = Math.round(cx - w / 2), y = Math.round(baseY - w + s * 2);
+  g.save();
+  g.imageSmoothingEnabled = false;
+  g.globalAlpha = o.alpha ?? 1;
+  if (team === 'hero' ? o.flip : !o.flip) { g.translate(x + w, y); g.scale(-1, 1); } else g.translate(x, y);
+  g.drawImage(img, 0, 0, w, w);
+  if (o.flash) { g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.6; g.drawImage(img, 0, 0, w, w); }
+  g.restore();
+}
+
+/** ¿Esta clase usa modelo animado? */
+export const isModel = (kind: string): boolean => MODEL_CLASSES.includes(kind);
 
 /** Dibuja una unidad centrada en la base de una casilla de tamaño `tile`. */
 export function drawUnit(g: CanvasRenderingContext2D, kind: string, team: string, colorIdx: number, cx: number, baseY: number, tile: number, o: DrawOpts = {}): void {
+  if (MODEL_CLASSES.includes(kind)) { drawModel(g, kind, team, cx, baseY, tile, o); return; }
   const hero = team === 'hero';
   // un héroe puede estar en el bando rival (némesis) y un monstruo en el nuestro (invocaciones)
   const cls = HERO_SPRITES.includes(kind);

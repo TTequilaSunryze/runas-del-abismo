@@ -16,7 +16,7 @@ describe('kit inicial', () => {
     for (const c of Object.values(CLASSES)) {
       expect(c.base).toHaveLength(3);
       // las clases nuevas tienen su propio kit: ver tests/zorro.test.ts, tejedora.test.ts y carcelero.test.ts
-      if (c.id === 'zorro' || c.id === 'tejedora' || c.id === 'carcelero') continue;
+      if (['zorro', 'esferas', 'carcelero', 'acechador'].includes(c.id)) continue;
       const kinds = c.base.map((id) => SPELLS[id]!);
       expect(kinds.filter((d) => d.dmg && d.target === 'enemy').length, c.id).toBeGreaterThanOrEqual(2);
       expect(kinds.filter((d) => d.target === 'self').length, c.id).toBe(1);

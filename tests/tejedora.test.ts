@@ -7,7 +7,7 @@ import { cast, castProblem, createCombat, current, endTurn, move, type UnitSpec 
 import { addMark, coneCells, marksOf, tickMarks } from '../src/core/combat/marks';
 import { runAiTurn } from '../src/core/combat/ai';
 
-const tej = (pos = { x: 1, y: 3 }): UnitSpec => makeHero({ cls: 'tejedora', name: 'T', owner: 'p0', routes: [], pos, level: 1 });
+const tej = (pos = { x: 1, y: 3 }): UnitSpec => makeHero({ cls: 'esferas', name: 'T', owner: 'p0', routes: [], pos, level: 1 });
 const foe = (pos: { x: number; y: number }, hp = 999, kind = 'esqueleto') => ({ ...makeEnemy(kind, pos), hp, maxHp: hp });
 const board = (units: UnitSpec[], obstacles: { x: number; y: number }[] = []) => createCombat({ seed: 5, w: 14, h: 7, obstacles, units }).state;
 const turnOf = (s: ReturnType<typeof board>, id: number) => { for (let i = 0; i < 40 && current(s)!.id !== id; i++) endTurn(s, current(s)!.id); };

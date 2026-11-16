@@ -11,8 +11,9 @@ export const CLASS_STORY: Record<string, string> = {
   clerigo: 'La luz sostiene al grupo; la sombra se cobra lo que la luz perdona.',
   arquero: 'Nunca dejes que se acerquen. Un buen disparo vale más que diez golpes.',
   zorro: 'Nueve colas y ninguna prisa. Lo que te alcanza, ya te pertenece.',
+  acechador: 'Dos filos, una sola sombra. Cuando me veas venir, ya habrás caído dos veces.',
   carcelero: 'Ninguna alma se escapa de mi linterna. Ni las de ellos, ni las vuestras.',
-  tejedora: 'Cada esfera es una promesa. Cuando las cumpla todas a la vez, no quedará nada en pie.',
+  esferas: 'Cada esfera es una promesa. Cuando las cumpla todas a la vez, no quedará nada en pie.',
   picaro: 'Veneno, trampas y un cuchillo a la espalda. Si no te ven, no te tocan.',
 };
 export const ENDING_WON = 'La última runa se enciende. El Abismo calla… por ahora. Quedan ascensiones más profundas, y siempre otra partida.';

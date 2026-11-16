@@ -170,7 +170,7 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     tickMarks(s, u.id, ev);
     // acciones temporales: la cadena dura un turno; la linterna, mientras siga en el suelo
     delete u.hooked;
-    if (u.spells.some((sp) => sp.temp)) u.spells = u.spells.filter((sp) => !sp.temp || (sp.id === 'k_farol' && marksOf(s, 'lantern').some((m) => m.team === u.team)));
+    if (u.spells.some((sp) => sp.temp)) u.spells = u.spells.filter((sp) => !sp.temp || (sp.id === 'k_farol' && marksOf(s, 'lantern').some((m) => m.team === u.team)) || (sp.id === 's_cambio' && marksOf(s, 'shadow', u.id).length > 0));
     u.shield = 0;
     // a partir de la ronda 20 se acaban los escudos y curas automáticos: ningún combate dura para siempre
     const late = s.round >= LATE_ROUND;
@@ -322,6 +322,11 @@ export function castProblem(s: CombatState, u: Unit, base: SpellDef, at: Pos): s
   if (slot.cd > 0) return 'Hechizo en enfriamiento';
   if (slot.charges !== undefined && slot.charges <= 0) return 'No te quedan';
   if (u.ap < def.ap) return 'No tienes PA suficientes';
+  if (def.swapShadow) {
+    const sh = marksOf(s, 'shadow', u.id)[0];
+    if (!sh) return 'No tienes Sombra';
+    return isFree(s, sh.pos) ? null : 'Hay alguien sobre tu Sombra';
+  }
   if (def.lanternJump) {
     const l = lanternNear(s, u);
     if (!l) return 'Necesitas una linterna aliada a tu lado';
@@ -434,6 +439,16 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
   if (def.selfMp) { u.mp += def.selfMp; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: def.selfMp }); }
   if (def.hookOnly) { delete u.hooked; u.spells = u.spells.filter((sp) => sp.id !== def.id); }
   if (def.soulShield) { const sh = def.soulShield * (u.souls ?? 0); if (sh > 0) { u.shield += sh; ev.push({ t: 'shield', unit: u.id, amount: sh }); } }
+  if (def.swapShadow) {
+    // intercambio con la Sombra: ignora el placaje
+    const sh = marksOf(s, 'shadow', u.id)[0]!;
+    const from = { ...u.pos };
+    u.pos = { ...sh.pos };
+    sh.pos = from;
+    ev.push({ t: 'blink', unit: u.id, to: { ...u.pos } }, { t: 'markMove', kind: 'shadow', from: { ...u.pos }, to: { ...from } });
+    springSnare(s, u, ev);
+    return { ok: true, events: ev };
+  }
   if (def.lanternJump) {
     const o = getUnit(s, lanternNear(s, u)!.owner!)!;
     const cell = dashCell(s, u, o.pos)!;
@@ -464,6 +479,10 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
         if (u.essence !== undefined && !essenceSpent) u.essence = Math.min(3, u.essence + 1);
       }
     }
+    if (def.shadow) {
+      addMark(s, { kind: 'shadow', pos: at, team: u.team, turns: def.shadow.turns, owner: u.id, max: 1 }, ev);
+      if (!u.spells.some((sp) => sp.id === 's_cambio')) u.spells.push({ id: 's_cambio', cd: 0, temp: true });
+    }
     if (def.lantern) {
       const ln = def.lantern;
       addMark(s, { kind: 'lantern', pos: at, team: u.team, turns: ln.turns, owner: u.id, max: 1 }, ev);
@@ -490,7 +509,7 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
   }
   const wantTeam = def.target === 'enemy' || def.target === 'ground' ? (u.team === 'hero' ? 'enemy' : 'hero') : u.team;
   // gancho: se lleva al primer enemigo que encuentre la cadena
-  const main = def.cone ? undefined : def.hook ? firstFoeTo(s, u, at) : unitAt(s, at);
+  const main = def.cone ? undefined : def.hook || def.firstHit ? firstFoeTo(s, u, at) : unitAt(s, at);
   const lane = def.line ? lineCells(u.pos, at) : def.cone ? coneCells(u.pos, at, def.cone) : [];
   const inArea = (p: Pos): boolean => !!def.area && (def.square ? Math.max(Math.abs(p.x - at.x), Math.abs(p.y - at.y)) : dist(p, at)) <= def.area;
   const targets = s.units.filter((t) => alive(t) && t.team === wantTeam && (t === main || inArea(t.pos) || lane.some((p) => same(p, t.pos))));
@@ -538,23 +557,7 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
       t.shield += sh;
       ev.push({ t: 'shield', unit: t.id, amount: sh });
     }
-    for (const st of [def.status, def.extraStatus]) {
-      if (!st || !alive(t)) continue;
-      // el encanto de élites y jefes exige las dos tiradas
-      if (st.kind === 'charm' && t.rank && !landed(s, t, 1)) { ev.push({ t: 'resist', unit: t.id, what: 'Resiste el encanto' }); continue; }
-      // élites y jefes: inmunes a aturdir y resisten la ralentización punto a punto
-      if (st.kind === 'stun' && t.rank) { ev.push({ t: 'resist', unit: t.id, what: 'Inmune a aturdir' }); continue; }
-      let stacks = (st.stacks ?? 1) + (st.kind === 'poison' && hasTrait(u, 'venom') ? 1 : 0);
-      if (st.kind === 'slow' && t.team !== u.team) {
-        const want = stacks;
-        stacks = landed(s, t, want);
-        if (stacks < want) ev.push({ t: 'resist', unit: t.id, what: `Resiste ${want - stacks} PM` });
-        if (!stacks) continue;
-        ev.push({ t: 'drain', unit: t.id, ap: 0, mp: -stacks });
-      }
-      addStatus(t, st.kind, st.turns + (st.kind === 'stun' ? 0 : u.statusBonus), stacks, ev);
-      if (st.kind === 'charm' && t.statuses.charm) t.statuses.charm.from = u.id;
-    }
+    applyStatuses(s, u, t, def, ev);
     if (def.drainAp && alive(t)) {
       const n = t.team !== u.team ? landed(s, t, def.drainAp) : def.drainAp;
       if (n < def.drainAp) ev.push({ t: 'resist', unit: t.id, what: `Resiste ${def.drainAp - n} PA` });
@@ -573,6 +576,7 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
       if (n) push(s, u.pos, t, n, ev);
     }
   }
+  if (def.dmg && slotUsed.charges === undefined && alive(u)) shadowEcho(s, u, def, main, targets, ev);
   if (def.cone && def.push) coneBlast(s, u, def, at, targets, ev);
   if (def.hook && main && alive(main) && alive(u)) {
     // arrastra al enganchado hacia ti (élites y jefes: dos tiradas por casilla)
@@ -651,6 +655,48 @@ function coneBlast(s: CombatState, u: Unit, def: SpellDef, at: Pos, targets: Uni
     const n = landed(s, t, def.push!);
     if (n < def.push!) ev.push({ t: 'resist', unit: t.id, what: n ? 'Resiste parte del empujón' : 'Resiste el empujón' });
     if (n) pushDir(s, t, dx, dy, n, ev);
+  }
+}
+
+/** Aplica los estados de un hechizo a `t` (resistencias de élites y jefes incluidas). */
+function applyStatuses(s: CombatState, u: Unit, t: Unit, def: SpellDef, ev: GameEvent[]): void {
+  for (const st of [def.status, def.extraStatus]) {
+    if (!st || !alive(t)) continue;
+    // el encanto de élites y jefes exige las dos tiradas
+    if (st.kind === 'charm' && t.rank && !landed(s, t, 1)) { ev.push({ t: 'resist', unit: t.id, what: 'Resiste el encanto' }); continue; }
+    // élites y jefes: inmunes a aturdir y resisten la ralentización punto a punto
+    if (st.kind === 'stun' && t.rank) { ev.push({ t: 'resist', unit: t.id, what: 'Inmune a aturdir' }); continue; }
+    let stacks = (st.stacks ?? 1) + (st.kind === 'poison' && hasTrait(u, 'venom') ? 1 : 0);
+    if (st.kind === 'slow' && t.team !== u.team) {
+      const want = stacks;
+      stacks = landed(s, t, want);
+      if (stacks < want) ev.push({ t: 'resist', unit: t.id, what: `Resiste ${want - stacks} PM` });
+      if (!stacks) continue;
+      ev.push({ t: 'drain', unit: t.id, ap: 0, mp: -stacks });
+    }
+    addStatus(t, st.kind, st.turns + (st.kind === 'stun' ? 0 : u.statusBonus), stacks, ev);
+    if (st.kind === 'charm' && t.statuses.charm) t.statuses.charm.from = u.id;
+  }
+}
+
+/**
+ * La Sombra replica un hechizo de daño desde su casilla, al porcentaje de daño de Sombra viviente (50%).
+ * Hechizos a tu alrededor: golpea a los pegados a la Sombra. El resto: al mismo objetivo, si lo ve y le llega.
+ * Los estados solo se aplican a quien no los recibió ya del golpe principal (sin control doble).
+ */
+function shadowEcho(s: CombatState, u: Unit, def: SpellDef, main: Unit | undefined, already: Unit[], ev: GameEvent[]): void {
+  const sh = marksOf(s, 'shadow', u.id)[0];
+  if (!sh) return;
+  const pct = spellOf(u, 's_sombra')?.shadow?.echo ?? 0.5;
+  let foes: Unit[] = [];
+  if (def.range[1] === 0 && def.area) foes = s.units.filter((t) => alive(t) && t.team !== u.team && !t.statuses.invis && dist(t.pos, sh.pos) <= def.area!);
+  else if (main && alive(main) && main.team !== u.team && dist(sh.pos, main.pos) <= def.range[1] + 1 && hasLineOfSight(s, sh.pos, main.pos)) foes = [main];
+  for (const t of foes) {
+    if (s.over || !alive(t)) continue;
+    ev.push({ t: 'echo', unit: u.id, from: { ...sh.pos }, at: { ...t.pos }, element: def.element });
+    const raw = randInt(s, def.dmg![0], def.dmg![1]) * (1 + (u.power + (u.statuses.empower?.stacks ?? 0)) / 100) * (t.statuses.mark ? MARK_MULT : 1) * pct;
+    hurt(s, t, raw, ev, 'sombra', { element: def.element });
+    if (!already.includes(t)) applyStatuses(s, u, t, def, ev);
   }
 }
 

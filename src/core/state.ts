@@ -9,7 +9,7 @@ export interface Pos {
 export type Team = 'hero' | 'enemy';
 /** empower: +daño (stacks = %); reach: +alcance; invis: no se le puede apuntar; exposed: -armadura (stacks). */
 export type StatusKind = 'burn' | 'poison' | 'slow' | 'stun' | 'mark' | 'empower' | 'reach' | 'invis' | 'exposed' | 'charm';
-export type ClassId = 'guerrero' | 'mago' | 'clerigo' | 'picaro' | 'arquero' | 'zorro' | 'tejedora' | 'carcelero';
+export type ClassId = 'guerrero' | 'mago' | 'clerigo' | 'picaro' | 'arquero' | 'zorro' | 'esferas' | 'carcelero' | 'acechador';
 
 export interface StatusState {
   turns: number;
@@ -167,6 +167,8 @@ export type GameEvent =
   | { t: 'devour'; unit: number; corpse: number }
   | { t: 'raise'; unit: number; corpse: number }
   | { t: 'soul'; unit: number; armor: number }
+  /** la Sombra replica un hechizo desde su casilla */
+  | { t: 'echo'; unit: number; from: Pos; at: Pos; element?: Element }
   | { t: 'markAdd'; kind: string; at: Pos }
   | { t: 'markGone'; kind: string; at: Pos }
   | { t: 'markMove'; kind: string; from: Pos; to: Pos }

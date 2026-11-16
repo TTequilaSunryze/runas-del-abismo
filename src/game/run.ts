@@ -702,6 +702,11 @@ export function resolveEvent(run: RunState, hostId: string): void {
 }
 
 /** Cierra el combate terminado: vida, nivel, oro y botín. */
+/** ¿Se puede continuar esta partida guardada? (versión actual y clases que existen) */
+export function loadable(run: RunState | null): run is RunState {
+  return !!run && run.version === 9 && run.heroes.every((h) => h.cls in CLASSES);
+}
+
 export function finishFight(run: RunState): void {
   const c = run.combat;
   if (!c?.over) return;

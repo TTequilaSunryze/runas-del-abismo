@@ -87,10 +87,16 @@ export const CLASSES: Record<ClassId, ClassDef> = {
       R('base', 'Clásico', '', ['z_orbe', 'z_encanto', 'z_impulso'], 'El kit inicial: un orbe que rebota, un encanto y un salto espiritual.'),
     ],
   },
-  tejedora: {
-    id: 'tejedora', name: 'Tejedora de Esferas', hp: 40, armor: 0, power: 4, crit: 5, ap: 8, mp: 4, initiative: 12, base: ['t_pulso', 't_dispersion', 't_descarga'], tackle: 1, dodge: 5,
+  esferas: {
+    id: 'esferas', name: 'Tejedora de Esferas', hp: 40, armor: 0, power: 4, crit: 5, ap: 8, mp: 4, initiative: 12, base: ['t_pulso', 't_dispersion', 't_descarga'], tackle: 1, dodge: 5,
     routes: [
       R('base', 'Clásico', '', ['t_pulso', 't_dispersion', 't_descarga'], 'El kit inicial: siembra esferas, dispérsalas contra el enemigo y descárgalas todas de golpe.'),
+    ],
+  },
+  acechador: {
+    id: 'acechador', name: 'Acechador de Sombras', hp: 60, armor: 1, power: 10, crit: 12, ap: 7, mp: 5, initiative: 16, base: ['s_shuriken', 's_tajo', 's_sombra'], tackle: 3, dodge: 9,
+    routes: [
+      R('base', 'Clásico', '', ['s_shuriken', 's_tajo', 's_sombra'], 'El kit inicial: un shuriken, un tajo a tu alrededor y una Sombra que repite tus golpes.'),
     ],
   },
   carcelero: {

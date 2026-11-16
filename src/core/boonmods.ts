@@ -59,6 +59,11 @@ export const BOON_MODS: Record<string, BoonMod> = Object.fromEntries(([
   M('tm_pulso', 't_pulso', 'Pulso profundo', '+30% de daño.', (d) => { more(d, 1.3); }),
   M('tm_descarga', 't_descarga', 'Descarga total', '+8 de daño por esfera (en vez de +5).', (d) => { d.consume = { per: 8 }; }),
   M('tm_dispersion', 't_dispersion', 'Dispersión rápida', 'Cuesta 1 PA menos y se recarga antes.', (d) => { d.ap = Math.max(1, d.ap - 1); d.cd = Math.max(0, d.cd - 1); }),
+  // Acechador de Sombras
+  M('sm_shuriken', 's_shuriken', 'Shuriken afilado', '+30% de daño y +10% de crítico.', (d) => { more(d, 1.3); d.crit = (d.crit ?? 0) + 10; }),
+  M('sm_tajo', 's_tajo', 'Tajo lisiador', 'Quita 2 PM en vez de 1.', (d) => { d.status = { kind: 'slow', turns: 1, stacks: 2 }; }),
+  M('sm_sombra_larga', 's_sombra', 'Sombra persistente', 'La Sombra dura 3 turnos y alcance 1-6.', (d) => { if (d.shadow) d.shadow = { ...d.shadow, turns: 3 }; d.range = [1, 6]; }),
+  M('sm_eco', 's_sombra', 'Eco perfecto', 'La Sombra replica al 75% en vez del 50%.', (d) => { if (d.shadow) d.shadow = { ...d.shadow, echo: 0.75 }; }),
   // Carcelero de Almas
   M('km_gancho_largo', 'k_sentencia', 'Cadena larga', 'Alcance 2-6 y arrastra 3 casillas.', (d) => { d.range = [2, 6]; d.hook = { pull: 3 }; }),
   M('km_gancho_pesado', 'k_sentencia', 'Cadena de plomo', 'Quita 3 PA en vez de 2.', (d) => { d.drainAp = 3; }),

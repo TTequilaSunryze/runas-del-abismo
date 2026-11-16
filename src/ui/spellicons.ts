@@ -3,6 +3,7 @@
 import type { SpellDef } from '../core/classes/spells';
 
 export const GLYPHS: Record<string, string[]> = {
+  star: ['............', '.....aa.....', '.....ab.....', '....abba....', '....abba....', '.aabbwwbbaa.', '.aabbwwbbaa.', '....abba....', '....abba....', '.....ba.....', '.....aa.....', '............'],
   lantern: ['.....cc.....', '....c..c....', '...cccccc...', '...abbbba...', '..abbwwbba..', '..abwwwwba..', '..abwwwwba..', '..abbwwbba..', '...abbbba...', '...cccccc...', '....cccc....', '............'],
   orbs: ['............', '....aaa.....', '...abbba....', '...abwba....', '...abbba....', '....aaa.....', '.aaa...aaa..', 'abbba.abbba.', 'abwba.abwba.', 'abbba.abbba.', '.aaa...aaa..', '............'],
   sword: ['..........ww', '.........wbw', '........wbw.', '.......wbw..', '......wbw...', '.....wbw....', '..c.wbw.....', '..ccbw......', '...cc.......', '..aa.cc.....', '.aa.........', '............'],
@@ -104,6 +105,7 @@ const LOOK: Record<string, [string, string]> = {
   c_milagro: ['heart', 'holy'], c_martillo: ['hammer', 'gold'], c_santuario: ['dome', 'holy'], c_sacrificio: ['chalice', 'blood'],
   a_letal: ['crosshair', 'steel'], a_abanico: ['multi', 'fire'], a_campo: ['trap', 'poison'], a_halcon: ['paw', 'nature'],
   p_frasco: ['vial', 'poison'], p_degollar: ['skull', 'blood'], p_debilidad: ['eye', 'shadow'], p_danza: ['twin', 'storm'],
+  s_shuriken: ['star', 'steel'], s_tajo: ['whirl', 'shadow'], s_sombra: ['twin', 'shadow'], s_cambio: ['twin', 'arcane'], s_marca: ['eye', 'blood'], s_ocaso: ['cloud', 'shadow'],
   k_sentencia: ['link', 'shadow'], k_viaje: ['dash', 'shadow'], k_linterna: ['lantern', 'poison'], k_farol: ['lantern', 'holy'], k_despellejar: ['whirl', 'steel'], k_cosecha: ['skull', 'arcane'],
   t_pulso: ['orbs', 'shadow'], t_dispersion: ['wind', 'shadow'], t_descarga: ['storm', 'shadow'], t_semilla: ['orbs', 'arcane'], t_implosion: ['whirl', 'shadow'],
   z_orbe: ['fireball', 'shadow'], z_encanto: ['eye', 'shadow'], z_impulso: ['dash', 'arcane'], z_drenaje: ['heart', 'shadow'], z_velo: ['cloud', 'shadow'],
@@ -198,6 +200,8 @@ export function spellSummary(d: SpellDef): string {
   if (d.crit) parts.push(`+${d.crit}% crítico`);
   if (d.snare) parts.push(`Cepo oculto: ${d.snare.dmg} de daño y detiene`);
   if (d.summon) parts.push(`Invoca: ${d.summon.name}`);
+  if (d.shadow) parts.push(`Sombra ${d.shadow.turns} t.: replica tu daño al ${Math.round(d.shadow.echo * 100)}%`);
+  if (d.swapShadow) parts.push('Te cambias con tu Sombra');
   if (d.hook) parts.push(`arrastra ${d.hook.pull} hacia ti`);
   if (d.lantern) parts.push(`Linterna: escudo ${d.lantern.shield}${d.lantern.heal ? ` y cura ${d.lantern.heal}` : ''} a los aliados pegados; te los trae a tu lado`);
   if (d.lanternJump) parts.push('Apareces junto al Carcelero');
