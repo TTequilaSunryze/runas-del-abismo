@@ -1,8 +1,8 @@
 // Estado de una partida (run) de la Zona 1: mapa, combates, botín, tienda y eventos de grupo.
 // Es lo que se sincroniza entre jugadores y lo que se guarda.
-import { makeEnemy } from '../content/zona1/enemies';
-import { ZONA1_EVENTS } from '../content/zona1/events';
-import { ZONA1_ITEMS } from '../content/zona1/items';
+import { makeEnemy } from '../content/enemies';
+import { ZONES, type ZoneDef } from '../content/zones';
+import type { BossInfo } from '../core/combat/ai';
 import { MAX_LEVEL } from '../core/classes/classes';
 import { makeHero } from '../core/classes/factory';
 import { createCombat, type CombatSetup } from '../core/combat/engine';
@@ -53,9 +53,13 @@ export interface ShopSlot {
 }
 
 export interface RunState extends RngBox {
-  version: 4;
+  version: 5;
   code: string;
-  /** combates ganados: marca la dificultad y el nivel */
+  /** zona actual (0 a 2) */
+  zone: number;
+  /** combates ganados en esta zona: marca la dificultad de sus enemigos */
+  zoneFight: number;
+  /** combates ganados en total: marca la calidad del botín */
   fight: number;
   /** sala actual del mapa */
   step: number;
@@ -81,16 +85,14 @@ export const POTION_HEAL = 0.3;
 
 function makeMap(box: RngBox): NodeKind[][] {
   const two = (list: NodeKind[]): NodeKind[] => shuffle(box, list).slice(0, 2);
-  return [
-    ['combat'], ['combat', 'event'], two(['combat', 'treasure', 'shop']), ['elite', 'combat'], ['rest', 'shop'],
-    ['combat', 'event'], two(['elite', 'combat', 'treasure']), ['rest', 'shop'], ['boss'],
-  ];
+  // 7 salas por zona
+  return [['combat'], ['combat', 'event'], two(['combat', 'treasure', 'shop']), ['elite', 'combat'], two(['combat', 'event', 'treasure']), ['rest', 'shop'], ['boss']];
 }
 
 export function newRun(code: string, seed: number, players: Array<Pick<HeroSave, 'owner' | 'name' | 'cls' | 'routes'>>): RunState {
   const run: RunState = {
-    version: 4, code, rng: seed >>> 0, fight: 0, step: 0, map: [], phase: 'map', kind: 'combat', combat: null,
-    offers: {}, event: null, eventsSeen: [], shop: null, ambush: false, note: 'Las Catacumbas Olvidadas se abren ante vosotros.',
+    version: 5, code, zone: 0, zoneFight: 0, rng: seed >>> 0, fight: 0, step: 0, map: [], phase: 'map', kind: 'combat', combat: null,
+    offers: {}, event: null, eventsSeen: [], shop: null, ambush: false, note: ZONES[0]!.intro,
     heroes: players.map((p) => ({ ...p, hp: 0, level: 1, gold: 0, equip: {}, bag: [], runes: [], sockets: {}, boon: {} })),
   };
   run.map = makeMap(run);
@@ -100,6 +102,8 @@ export function newRun(code: string, seed: number, players: Array<Pick<HeroSave,
   }
   return run;
 }
+
+export const zoneOf = (run: RunState): ZoneDef => ZONES[run.zone] ?? ZONES[0]!;
 
 export const RUNE_PRICE = [45, 90] as const;
 
@@ -125,15 +129,16 @@ export function boardSize(players: number): { w: number; h: number } {
 
 function enemyList(run: RunState): string[] {
   const n = run.heroes.length;
-  const d = run.fight;
-  if (run.kind === 'boss') return ['prior', ...Array.from({ length: n }, () => pick(run, ['esqueleto', 'arquero']))];
-  const pool = d < 1 ? ['limo', 'murcielago', 'esqueleto'] : d < 3 ? ['limo', 'murcielago', 'esqueleto', 'arquero'] : ['murcielago', 'esqueleto', 'arquero', 'necrofago', 'acolito'];
+  const d = run.zoneFight;
+  const z = zoneOf(run);
+  if (run.kind === 'boss') return [z.boss, ...Array.from({ length: n }, () => pick(run, z.bossGuard))];
+  const pool = z.pools[d < 1 ? 0 : d < 3 ? 1 : 2];
   const elite = run.kind === 'elite';
   const count = n + (d >= 1 ? 1 : 0) + (d >= 4 ? 1 : 0) - (elite ? 1 : 0) + (run.ambush ? 2 : 0);
   const list = Array.from({ length: Math.max(1, count) }, () => pick(run, pool));
-  if (elite) list.unshift('caballero');
+  if (elite) list.unshift(z.elite);
   // en grupo, desde el segundo combate siempre hay un tirador que obliga a moverse
-  if (n >= 2 && d >= 1 && !list.includes('arquero')) list[list.length - 1] = 'arquero';
+  if (n >= 2 && d >= 1 && !list.includes(z.shooter)) list[list.length - 1] = z.shooter;
   return list;
 }
 
@@ -159,7 +164,7 @@ export function buildFight(run: RunState): CombatSetup {
     // las púas solo aparecen en grupo: 2 por jugador extra
     const traps = Array.from({ length: (n - 1) * 2 }, () => free(3, w - 4));
     // el jefe no crece indefinidamente con los combates previos
-    const enemies = ids.map((id) => makeEnemy(id, free(w - 4, w - 1), id === 'prior' ? Math.min(3, run.fight) : run.fight, n));
+    const enemies = ids.map((id) => makeEnemy(id, free(w - 4, w - 1), Math.min(run.kind === 'boss' ? 2 : 5, run.zoneFight), n));
     const setup: CombatSetup = { seed: randInt(run, 1, 2 ** 31 - 1), w, h, obstacles, traps, units: [...heroes, ...enemies] };
     // todo el mundo debe poder llegar a todo el mundo
     const probe = createCombat(setup).state;
@@ -168,11 +173,11 @@ export function buildFight(run: RunState): CombatSetup {
   }
 }
 
-/** Esqueletos que invoca el jefe. */
-export const bossMinion = (run: RunState) => (pos: Pos) => makeEnemy('esqueleto', pos, Math.max(0, run.fight - 2));
+/** Lo que invoca el jefe de la zona y su nombre en la segunda fase. */
+export const bossInfo = (run: RunState): BossInfo => ({ minion: (pos: Pos) => makeEnemy(zoneOf(run).bossMinion, pos, 1), phase2Name: zoneOf(run).bossPhase2 });
 
 function offerAll(run: RunState, count: number, min: Rarity): void {
-  for (const h of run.heroes) run.offers[h.owner] = Array.from({ length: count }, () => genItem(run, ZONA1_ITEMS, run.fight, min));
+  for (const h of run.heroes) run.offers[h.owner] = Array.from({ length: count }, () => genItem(run, zoneOf(run).items, run.fight, min));
 }
 
 /** El anfitrión elige uno de los nodos de la sala actual. */
@@ -189,14 +194,15 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
     return events;
   }
   if (node === 'event') {
-    const options = ZONA1_EVENTS.filter((e) => !run.eventsSeen.includes(e.id));
-    const e = pick(run, options.length ? options : ZONA1_EVENTS);
+    const all = zoneOf(run).events;
+    const options = all.filter((e) => !run.eventsSeen.includes(e.id));
+    const e = pick(run, options.length ? options : all);
     run.eventsSeen.push(e.id);
     run.event = { id: e.id, votes: {} };
     run.phase = 'event';
   } else if (node === 'shop') {
     run.shop = Array.from({ length: 6 }, (_, i): ShopSlot => {
-      const item = genItem(run, ZONA1_ITEMS, run.fight + 1, i < 2 ? 2 : i < 4 ? 1 : 0);
+      const item = genItem(run, zoneOf(run).items, run.fight + 1, i < 2 ? 2 : i < 4 ? 1 : 0);
       return { item, price: PRICE[item.rarity], sold: false };
     });
     for (const rare of [false, true]) run.shop.push({ rune: randomRune(run, rare), price: RUNE_PRICE[rare ? 1 : 0], sold: false });
@@ -225,8 +231,10 @@ export function leaveNode(run: RunState): void {
   }
 }
 
+export const eventDef = (run: RunState) => ZONES.flatMap((z) => z.events).find((e) => e.id === run.event?.id);
+
 export function vote(run: RunState, owner: string, idx: number): void {
-  const def = ZONA1_EVENTS.find((e) => e.id === run.event?.id);
+  const def = eventDef(run);
   if (!def || !run.event || run.event.result || !run.heroes.some((h) => h.owner === owner)) return;
   if (idx >= 0 && idx < def.options.length) run.event.votes[owner] = idx;
 }
@@ -234,7 +242,7 @@ export function vote(run: RunState, owner: string, idx: number): void {
 /** Decide por mayoría; en empate manda el voto del anfitrión (o la primera opción empatada). */
 export function resolveEvent(run: RunState, hostId: string): void {
   const ev = run.event;
-  const def = ZONA1_EVENTS.find((e) => e.id === ev?.id);
+  const def = eventDef(run);
   if (!ev || !def || ev.result) return;
   const count = def.options.map((_, i) => Object.values(ev.votes).filter((v) => v === i).length);
   const max = Math.max(...count);
@@ -251,7 +259,7 @@ export function finishFight(run: RunState): void {
   const c = run.combat;
   if (!c?.over) return;
   if (c.over === 'lose') { run.phase = 'lost'; return; }
-  const gold = 15 + run.fight * 5 + (run.kind === 'elite' ? 20 : 0);
+  const gold = 25 + run.fight * 8 + (run.kind === 'elite' ? 20 : run.kind === 'boss' ? 40 : 0);
   for (const h of run.heroes) {
     const u = c.units.find((x) => x.owner === h.owner);
     const left = u ? u.hp : h.hp;
@@ -269,9 +277,21 @@ export function finishFight(run: RunState): void {
   run.note = `Victoria: cada uno gana ${gold} de oro y sube un nivel.${run.kind !== 'combat' ? ' Además, una runa rara para cada uno.' : ' Puede que alguno haya encontrado una runa.'}`;
   run.ambush = false;
   run.fight++;
+  run.zoneFight++;
   run.step++;
   run.combat = null;
-  run.phase = run.kind === 'boss' ? 'won' : 'map';
+  run.phase = 'map';
+  if (run.kind === 'boss') {
+    const won = zoneOf(run).bossWin;
+    if (run.zone >= ZONES.length - 1) { run.phase = 'won'; run.note = won; return; }
+    // siguiente zona: mapa nuevo y un respiro
+    run.zone++;
+    run.zoneFight = 0;
+    run.step = 0;
+    run.map = makeMap(run);
+    for (const h of run.heroes) h.hp = Math.min(heroMaxHp(h), h.hp + Math.ceil(heroMaxHp(h) * 0.5));
+    run.note = `${won} ${zoneOf(run).intro} Recuperáis el 50% de la vida.`;
+  }
 }
 
 /** Mete un objeto en el equipo si la ranura está libre; si no, en la mochila. Devuelve false si no cabe. */
@@ -289,6 +309,7 @@ export type MetaAction =
   | { a: 'unequip'; slot: Slot }
   | { a: 'give'; idx: number; to: string }
   | { a: 'sell'; idx: number }
+  | { a: 'drop'; idx: number }
   | { a: 'buy'; idx: number }
   | { a: 'socket'; spell: string; idx: number }
   | { a: 'unsocket'; spell: string }
@@ -304,7 +325,7 @@ export function metaAction(run: RunState, owner: string, a: MetaAction): string 
       const list = run.offers[owner];
       if (!list) return 'No tienes botín pendiente';
       const item = list[a.idx];
-      if (item && !receive(h, item)) return 'Mochila llena: vende o da algo antes';
+      if (item && !receive(h, item)) return 'Mochila llena: tira, da o vende algo antes';
       delete run.offers[owner];
       break;
     }
@@ -338,6 +359,10 @@ export function metaAction(run: RunState, owner: string, a: MetaAction): string 
       clampHp(to);
       break;
     }
+    case 'drop':
+      if (!h.bag[a.idx]) return 'Objeto no encontrado';
+      h.bag.splice(a.idx, 1);
+      break;
     case 'sell': {
       const item = h.bag[a.idx];
       if (run.phase !== 'shop' || !item) return 'Solo se vende en la tienda';

@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { makeEnemy } from '../src/content/zona1/enemies';
+import { makeEnemy } from '../src/content/enemies';
 import { makeHero } from '../src/core/classes/factory';
 import { cast, createCombat, current, spellOf } from '../src/core/combat/engine';
 import { metaAction, newRun, heroSpec } from '../src/game/run';
+import { ENEMIES } from '../src/content/enemies';
+import { ZONES } from '../src/content/zones';
+import { SPELLS } from '../src/core/classes/spells';
 import { spriteErrors } from '../src/render/sprites';
 
 const duel = (rune: string | undefined, enemy = 'arquero', bonus = {}) => {
@@ -64,6 +67,17 @@ describe('resistencias', () => {
     const s = duel(undefined, 'arquero', { status: 1 });
     cast(s, current(s)!.id, 'ignicion', { x: 5, y: 2 });
     expect(s.units[1]!.statuses.burn!.turns).toBe(4);
+  });
+});
+
+describe('zonas', () => {
+  it('todos los enemigos y hechizos que nombran las zonas existen', () => {
+    for (const z of ZONES)
+      for (const id of [...z.pools.flat(), z.shooter, z.elite, z.boss, z.bossMinion, ...z.bossGuard]) {
+        expect(ENEMIES[id], id).toBeDefined();
+        for (const sp of [ENEMIES[id]!.spell, ...(ENEMIES[id]!.more ?? [])]) expect(SPELLS[sp], sp).toBeDefined();
+      }
+    expect(ZONES.every((z) => ENEMIES[z.boss]!.more?.length === 1)).toBe(true);
   });
 });
 

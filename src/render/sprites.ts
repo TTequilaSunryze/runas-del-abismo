@@ -25,6 +25,9 @@ const SPR: Record<string, string[]> = {
   bat: ['............', 'o..........o', 'oo...oo...oo', 'oao.oaao.oao', 'oaaooaaooaao', '.oaaoeeoaao.', '..ooaaaaoo..', '....oaao....', '....oooo....', '............', '............', '............'],
   skel: ['....oooo....', '...owwwwo...', '...owwwwo...', '...oewweo...', '...owwwwo...', '....owwo....', '...owwwwo...', '..owowwowo..', '...owwwwo...', '....owwo....', '...ow..wo...', '..oo....oo..'],
   ghoul: ['....oooo....', '...oaaaao...', '..oaaaaaao..', '..oaeaaeao..', '..oaaooaao..', '...oaaaao...', '..oabbbbao..', '.oaobbbboao.', '.oa.obbo.ao.', '....obbo....', '...oa..ao...', '..ooo..ooo..'],
+  hound: ['............', '............', '.........oo.', '........oaao', 'o......oaaeo', 'oo..oooaaaao', '.oaaaaaaaao.', '.oaaaaaaao..', '.oaaoooaao..', '.oao...oao..', '.oo....oo...', '............'],
+  spider: ['............', '............', 'o..o....o..o', '.o..oooo..o.', '..ooaaaaoo..', 'ooaaeaaeaaoo', '..oaaaaaao..', 'ooaaaaaaaaoo', '..ooaaaaoo..', '.o..oooo..o.', 'o..........o', '............'],
+  golem: ['...oooooo...', '..oaaaaaao..', '..oaeaaeao..', '..oaaaaaao..', '.oooaaaaooo.', 'oaaoabbaoaao', 'oaaoabbaoaao', 'oaaoaaaaoaao', '.ooooaaoooo.', '...oaaaao...', '..oaa..aao..', '..ooo..ooo..'],
   cult: ['....oooo....', '...oaaaao...', '..oaaaaaao..', '..oaooooao..', '..oaoeeoao..', '..oaaooaao..', '..oaaaaaao..', '.oaaaaaaaao.', '.oaabaabaao.', '.oaaaaaaaao.', '..oaaaaaao..', '..oooooooo..'],
 };
 
@@ -53,6 +56,19 @@ const ENEMY_LOOK: Record<string, Look> = {
   acolito: { sprite: 'cult', pal: { a: '#8a2a2a', b: '#f2c14e', e: '#ffb030' } },
   prior: { sprite: 'cult', pal: { a: '#4a2a7a', b: '#b9a8d8', e: '#ff3060' }, scale: 1.6 },
   caballero: { sprite: 'skel', pal: { w: '#c8c8d8', e: '#ff2040' }, scale: 1.25 },
+  lobo: { sprite: 'hound', pal: { a: '#5a6a58', e: '#c8ff60' } },
+  arana: { sprite: 'spider', pal: { a: '#4a3a5a', e: '#7fe05a' } },
+  tejedora: { sprite: 'spider', pal: { a: '#8a8a70', e: '#ffffff' } },
+  chaman: { sprite: 'cult', pal: { a: '#3f6a3a', b: '#c8ff60', e: '#c8ff60' } },
+  ent: { sprite: 'golem', pal: { a: '#5a4a30', b: '#3f6a3a', e: '#c8ff60' }, scale: 1.2 },
+  alfa: { sprite: 'hound', pal: { a: '#2f3a30', e: '#ff4040' }, scale: 1.4 },
+  madre: { sprite: 'golem', pal: { a: '#3f5a2a', b: '#8a2a5a', e: '#ff60c0' }, scale: 1.7 },
+  sabueso: { sprite: 'hound', pal: { a: '#6a3a2a', e: '#ffb030' } },
+  ceniciento: { sprite: 'skel', pal: { w: '#6a6058', e: '#ff8a30' } },
+  piromante: { sprite: 'cult', pal: { a: '#5a2a1a', b: '#ff8a30', e: '#ffe060' } },
+  escoria: { sprite: 'golem', pal: { a: '#4a4040', b: '#ff6a20', e: '#ffb030' }, scale: 1.25 },
+  verdugo: { sprite: 'skel', pal: { w: '#4a4040', e: '#ff3020' }, scale: 1.35 },
+  rey: { sprite: 'cult', pal: { a: '#3a2020', b: '#f2c14e', e: '#ff5020' }, scale: 1.7 },
 };
 
 const cache = new Map<string, HTMLCanvasElement>();

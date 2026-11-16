@@ -1,0 +1,40 @@
+// Estado compartido de la interfaz y utilidades pequeñas.
+import type { ClassId } from '../core/state';
+import type { HeroSave, RunState } from '../game/run';
+import type { Session } from '../game/session';
+import type { Board } from '../render/board';
+
+export const esc = (s: unknown): string => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+export const params = new URLSearchParams(location.search);
+export const store = {
+  get: (k: string): string | null => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k: string, v: string): void => { try { localStorage.setItem(k, v); } catch { /* sin almacenamiento */ } },
+};
+export const randomText = (n: number, chars: string): string => Array.from(crypto.getRandomValues(new Uint8Array(n)), (b) => chars[b % chars.length]).join('');
+
+const id = params.get('p') ?? store.get('rda_id') ?? randomText(12, 'abcdefghijklmnopqrstuvwxyz0123456789');
+if (!params.get('p')) store.set('rda_id', id);
+
+export const ui = {
+  root: document.getElementById('app')!,
+  myId: id,
+  me: { name: store.get('rda_name') ?? 'Héroe', cls: 'guerrero' as ClassId, routes: [] as string[] },
+  session: null as Session | null,
+  board: null as Board | null,
+  screen: '',
+  saved: null as RunState | null,
+  notice: '',
+  log: [] as string[],
+  /** pestaña del panel lateral */
+  tab: 'equipo' as 'equipo' | 'runas' | 'grupo',
+  /** objeto seleccionado: "bag:3" o "slot:arma" */
+  selItem: '',
+  selRune: -1,
+  leaveArmed: false,
+  logOpen: false,
+  rerender: (): void => {},
+};
+
+export const mine = (run: RunState): HeroSave | undefined => run.heroes.find((h) => h.owner === ui.myId);
+/** Atributo data-tip con HTML para la ayuda flotante. */
+export const tip = (html: string): string => `data-tip="${esc(html)}"`;

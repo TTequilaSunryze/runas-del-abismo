@@ -1,4 +1,5 @@
 // Tablero de combate: dibuja el estado y convierte clics en acciones.
+import { ZONES } from '../content/zones';
 import { castProblem, current, spellOf } from '../core/combat/engine';
 import { alive, dist, hasLineOfSight, reachable } from '../core/combat/grid';
 import type { CombatState, GameEvent, Pos, Unit } from '../core/state';
@@ -123,27 +124,28 @@ export class Board {
       this.shown.clear();
     }
     const now = performance.now();
+    const zone = ZONES[this.session.run?.zone ?? 0] ?? ZONES[0]!;
     for (let y = 0; y < c.h; y++)
       for (let x = 0; x < c.w; x++) {
-        g.fillStyle = (x + y) % 2 ? '#2b2339' : '#251e33';
+        g.fillStyle = zone.floor[(x + y) % 2]!;
         g.fillRect(x * TILE, y * TILE, TILE, TILE);
         g.fillStyle = 'rgba(0,0,0,.28)';
         g.fillRect(x * TILE, y * TILE, TILE, 2);
         g.fillRect(x * TILE, y * TILE, 2, TILE);
         // losas agrietadas y algún hueso, siempre en el mismo sitio
         const h = (x * 73856093) ^ (y * 19349663);
-        g.fillStyle = '#1c1727';
+        g.fillStyle = 'rgba(0,0,0,.3)';
         g.fillRect(x * TILE + 6 + (h & 31), y * TILE + 8 + ((h >> 5) & 31), 8, 3);
         g.fillRect(x * TILE + 10 + ((h >> 10) & 31), y * TILE + 12 + ((h >> 15) & 31), 3, 3);
-        if ((h & 7) === 3) { g.fillStyle = '#4a4560'; g.fillRect(x * TILE + 14 + ((h >> 8) & 15), y * TILE + 34, 10, 3); g.fillRect(x * TILE + 13 + ((h >> 8) & 15), y * TILE + 33, 2, 5); }
+        if ((h & 7) === 3) { g.fillStyle = zone.rock[2]; g.fillRect(x * TILE + 14 + ((h >> 8) & 15), y * TILE + 34, 10, 3); g.fillRect(x * TILE + 13 + ((h >> 8) & 15), y * TILE + 33, 2, 5); }
       }
     for (const k of c.obstacles) {
       const [x, y] = k.split(',').map(Number) as [number, number];
       const X = x * TILE, Y = y * TILE;
       g.fillStyle = '#120e1a'; g.fillRect(X + 5, Y + TILE - 14, TILE - 10, 10);
-      g.fillStyle = '#5a5473'; g.fillRect(X + 8, Y + 8, TILE - 16, TILE - 20);
-      g.fillStyle = '#7a7498'; g.fillRect(X + 8, Y + 8, TILE - 16, 7);
-      g.fillStyle = '#3e3a52'; g.fillRect(X + TILE - 17, Y + 15, 9, TILE - 27);
+      g.fillStyle = zone.rock[0]; g.fillRect(X + 8, Y + 8, TILE - 16, TILE - 20);
+      g.fillStyle = zone.rock[1]; g.fillRect(X + 8, Y + 8, TILE - 16, 7);
+      g.fillStyle = zone.rock[2]; g.fillRect(X + TILE - 17, Y + 15, 9, TILE - 27);
     }
     for (const k of c.traps ?? []) {
       const [x, y] = k.split(',').map(Number) as [number, number];
@@ -221,7 +223,7 @@ export class Board {
     const W = c.w * TILE, H = c.h * TILE, fl = 0.1 + 0.03 * Math.sin(now / 130);
     for (const [lx, ly] of [[0, 0], [W, 0], [0, H], [W, H]] as const) {
       const gr = g.createRadialGradient(lx, ly, 0, lx, ly, 280);
-      gr.addColorStop(0, `rgba(255,150,60,${fl})`); gr.addColorStop(1, 'rgba(255,150,60,0)');
+      gr.addColorStop(0, `rgba(${zone.light},${fl})`); gr.addColorStop(1, `rgba(${zone.light},0)`);
       g.fillStyle = gr; g.fillRect(0, 0, W, H);
     }
     const vg = g.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, W * 0.65);

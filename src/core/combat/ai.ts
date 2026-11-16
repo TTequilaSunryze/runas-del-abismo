@@ -47,9 +47,14 @@ function fight(s: CombatState, u: Unit, def: SpellDef, keepAway: boolean, ev: Ga
   if (alive(u) && current(s)?.id === u.id) attackAll(s, u, def, ev);
 }
 
-export type MinionFactory = (pos: Pos) => UnitSpec;
+/** Datos del jefe de la zona: qué invoca y cómo se llama en su segunda fase. */
+export interface BossInfo {
+  minion: (pos: Pos) => UnitSpec;
+  phase2Name: string;
+}
 
-function bossTurn(s: CombatState, u: Unit, minion: MinionFactory | undefined, ev: GameEvent[]): void {
+function bossTurn(s: CombatState, u: Unit, info: BossInfo | undefined, ev: GameEvent[]): void {
+  const minion = info?.minion;
   const heroes = s.units.filter((h) => h.team === 'hero').length;
   const minions = s.units.filter((m) => m.team === 'enemy' && alive(m) && m.id !== u.id).length;
   if ((u.phase ?? 1) === 1 && u.hp <= u.maxHp / 2) {
@@ -58,7 +63,7 @@ function bossTurn(s: CombatState, u: Unit, minion: MinionFactory | undefined, ev
     u.armor += 2;
     u.maxMp = 3;
     u.mp = 3;
-    u.name = 'Coloso del Osario';
+    u.name = info?.phase2Name ?? u.name;
     ev.push({ t: 'phase', unit: u.id, phase: 2 });
     if (minion) for (let i = 0; i < Math.max(1, heroes - 1); i++) summon(s, minion(u.pos), u.pos, ev);
   } else if ((u.phase ?? 1) === 1 && minion && s.round % 2 === 0 && minions < heroes) {
@@ -66,15 +71,16 @@ function bossTurn(s: CombatState, u: Unit, minion: MinionFactory | undefined, ev
     u.ap = Math.max(0, u.ap - 3);
   }
   const phase2 = u.phase === 2;
-  fight(s, u, SPELLS[phase2 ? 'e_barrido' : 'e_maldicion']!, !phase2, ev);
+  // primer hechizo: a distancia (fase 1); segundo: cuerpo a cuerpo en área (fase 2)
+  fight(s, u, SPELLS[u.spells[phase2 ? 1 : 0]!.id]!, !phase2, ev);
 }
 
 /** Juega el turno completo de la unidad actual si la controla la IA. */
-export function runAiTurn(s: CombatState, minion?: MinionFactory): GameEvent[] {
+export function runAiTurn(s: CombatState, boss?: BossInfo): GameEvent[] {
   const u = current(s);
   const ev: GameEvent[] = [];
   if (!u || !u.ai) return ev;
-  if (u.ai === 'boss') bossTurn(s, u, minion, ev);
+  if (u.ai === 'boss') bossTurn(s, u, boss, ev);
   else fight(s, u, SPELLS[u.spells[0]!.id]!, u.ai === 'ranged', ev);
   if (!s.over && current(s)?.id === u.id) {
     const r = endTurn(s, u.id);

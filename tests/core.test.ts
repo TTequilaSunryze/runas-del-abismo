@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { autoplay } from './helpers';
-import { makeEnemy } from '../src/content/zona1/enemies';
+import { makeEnemy } from '../src/content/enemies';
 import { blockedRoutes, canPickRoute, spellsFor } from '../src/core/classes/classes';
 import { makeHero } from '../src/core/classes/factory';
 import { SPELLS } from '../src/core/classes/spells';

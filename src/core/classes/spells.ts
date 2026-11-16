@@ -110,6 +110,18 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
     S({ id: 'e_maldicion', name: 'Maldición del Prior', route: 'enemy', ap: 3, cd: 0, range: [2, 7], los: true, target: 'enemy', dmg: [6, 8], status: { kind: 'mark', turns: 2 }, text: '' }),
     S({ id: 'e_barrido', name: 'Barrido del coloso', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', area: 1, dmg: [9, 12], text: '' }),
     S({ id: 'e_llama', name: 'Llama hereje', route: 'enemy', ap: 3, cd: 0, range: [2, 5], los: true, target: 'enemy', dmg: [4, 6], status: { kind: 'burn', turns: 2 }, text: '' }),
+    S({ id: 'e_mordida', name: 'Mordida', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [7, 9], text: '' }),
+    S({ id: 'e_telarana', name: 'Telaraña', route: 'enemy', ap: 3, cd: 0, range: [2, 5], los: true, target: 'enemy', dmg: [4, 6], status: { kind: 'slow', turns: 2, stacks: 2 }, text: '' }),
+    S({ id: 'e_espora', name: 'Esporas', route: 'enemy', ap: 3, cd: 0, range: [2, 5], los: true, target: 'enemy', dmg: [3, 5], status: { kind: 'poison', turns: 3, stacks: 2 }, text: '' }),
+    S({ id: 'e_raiz', name: 'Golpe de raíz', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [10, 13], text: '' }),
+    S({ id: 'e_latigo', name: 'Látigo de zarzas', route: 'enemy', ap: 3, cd: 0, range: [2, 6], los: true, target: 'enemy', dmg: [8, 10], status: { kind: 'slow', turns: 2, stacks: 1 }, text: '' }),
+    S({ id: 'e_aplastar', name: 'Aplastar', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', area: 1, dmg: [12, 15], text: '' }),
+    S({ id: 'e_dentellada', name: 'Dentellada ardiente', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [8, 10], status: { kind: 'burn', turns: 2 }, text: '' }),
+    S({ id: 'e_espadazo', name: 'Espadazo', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [11, 14], text: '' }),
+    S({ id: 'e_bola', name: 'Bola de ceniza', route: 'enemy', ap: 3, cd: 0, range: [2, 6], los: true, target: 'enemy', area: 1, dmg: [8, 10], status: { kind: 'burn', turns: 2 }, text: '' }),
+    S({ id: 'e_escoria', name: 'Puño de escoria', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [13, 16], text: '' }),
+    S({ id: 'e_pira', name: 'Pira real', route: 'enemy', ap: 3, cd: 0, range: [2, 7], los: true, target: 'enemy', dmg: [10, 12], status: { kind: 'burn', turns: 3 }, text: '' }),
+    S({ id: 'e_cataclismo', name: 'Cataclismo', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', area: 1, dmg: [15, 18], text: '' }),
     S({ id: 'e_mordisco', name: 'Mordisco', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [3, 5], lifesteal: 0.5, text: '' }),
     S({ id: 'e_flecha', name: 'Flecha de hueso', route: 'enemy', ap: 3, cd: 0, range: [2, 5], los: true, target: 'enemy', dmg: [5, 7], text: '' }),
     S({ id: 'e_zarpazo', name: 'Zarpazo pútrido', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [6, 8], status: { kind: 'poison', turns: 3, stacks: 1 }, text: '' }),
@@ -118,5 +130,8 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
 
 // Elemento del daño según la ruta (o el hechizo, en los enemigos).
 const ROUTE_ELEMENT: Record<string, Element> = { fuego: 'fire', hielo: 'ice', veneno: 'poison', luz: 'holy', penitencia: 'holy', juicio: 'holy' };
-const SPELL_ELEMENT: Record<string, Element> = { e_maldicion: 'shadow', e_zarpazo: 'poison', e_llama: 'fire', e_mordisco: 'shadow' };
+const SPELL_ELEMENT: Record<string, Element> = {
+  e_maldicion: 'shadow', e_zarpazo: 'poison', e_llama: 'fire', e_mordisco: 'shadow', e_espora: 'poison', e_latigo: 'poison',
+  e_dentellada: 'fire', e_bola: 'fire', e_pira: 'fire', e_cataclismo: 'fire',
+};
 for (const d of Object.values(SPELLS)) d.element = SPELL_ELEMENT[d.id] ?? ROUTE_ELEMENT[d.route];

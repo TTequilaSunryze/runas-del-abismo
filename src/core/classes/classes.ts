@@ -82,7 +82,7 @@ export function canPickRoute(cls: ClassId, chosen: readonly string[], routeId: s
   return !!findRoute(cls, routeId) && !chosen.includes(routeId) && !blockedRoutes(cls, chosen).includes(routeId);
 }
 
-export const MAX_LEVEL = 6;
+export const MAX_LEVEL = 12;
 
 /** Hechizos disponibles: el básico siempre; de cada ruta elegida, 1 a nivel 1, 2 a nivel 2 y 3 desde nivel 3. */
 export function spellsFor(cls: ClassId, chosen: readonly string[], level = 3): string[] {

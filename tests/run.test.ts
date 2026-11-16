@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ZONA1_ITEMS } from '../src/content/zona1/items';
 import { SLOTS, genItem, statDiff } from '../src/core/items/items';
-import { bossMinion, chooseNode, finishFight, heroMaxHp, leaveNode, metaAction, newRun, resolveEvent, type RunState } from '../src/game/run';
+import { bossInfo, chooseNode, finishFight, heroMaxHp, leaveNode, metaAction, newRun, resolveEvent, type RunState } from '../src/game/run';
 import { autoplay } from './helpers';
 
 const CLS = [
@@ -15,10 +15,13 @@ const make = (n: number, seed: number): RunState =>
 /** Juega una partida entera eligiendo siempre el nodo `prefer` si existe (o el primero). */
 function playRun(n: number, seed: number, prefer: string): RunState {
   const run = make(n, seed);
-  for (let step = 0; step < 60 && run.phase !== 'won' && run.phase !== 'lost'; step++) {
+  for (let step = 0; step < 150 && run.phase !== 'won' && run.phase !== 'lost'; step++) {
     if (run.phase === 'map') {
       for (const h of run.heroes) {
-        if (run.offers[h.owner]) expect(metaAction(run, h.owner, { a: 'pick', idx: 0 })).toBeNull();
+        if (run.offers[h.owner] && metaAction(run, h.owner, { a: 'pick', idx: 0 })) {
+          expect(metaAction(run, h.owner, { a: 'drop', idx: 0 })).toBeNull();
+          expect(metaAction(run, h.owner, { a: 'pick', idx: 0 })).toBeNull();
+        }
         if (h.bag.length) metaAction(run, h.owner, { a: 'equip', idx: 0 });
       }
       const nodes = run.map[run.step]!;
@@ -32,7 +35,7 @@ function playRun(n: number, seed: number, prefer: string): RunState {
       for (const h of run.heroes) { metaAction(run, h.owner, { a: 'buy', idx: 5 }); metaAction(run, h.owner, { a: 'potion' }); }
       leaveNode(run);
     } else {
-      autoplay(run.combat!, 800, bossMinion(run));
+      autoplay(run.combat!, 800, bossInfo(run));
       expect(run.combat!.over).not.toBeNull();
       finishFight(run);
     }
@@ -96,7 +99,7 @@ describe('partida completa', () => {
         const run = playRun(n, seed * n, prefer);
         expect(['won', 'lost']).toContain(run.phase);
         if (run.phase === 'won') expect(run.step).toBe(run.map.length);
-        results.push(`${n}j:${run.phase}@${run.step}`);
+        results.push(`${n}j:${run.phase}@z${run.zone + 1}s${run.step}`);
       }
     console.log(results.join(' '));
   });

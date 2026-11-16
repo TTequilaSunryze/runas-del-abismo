@@ -17,7 +17,8 @@ Zona 1: **Las Catacumbas Olvidadas**.
 | Sonido sintetizado (efectos y música) | Hecho |
 | Runas (12, una por hechizo), elementos y resistencias, estados más largos por equipo | Hecho |
 | Sprites por clase, animaciones de ataque, proyectiles, muerte e iluminación | Hecho (dibujados por código) |
-| Zonas 2 y 3, más enemigos y jefes, equilibrio fino | Pendiente |
+| Tres zonas (Catacumbas, Bosque Corrompido, Ruinas de Ceniza) con enemigos, élite, jefe, equipo y eventos propios | Hecho; falta equilibrar |
+| Interfaz en columnas: ficha con iconos de equipo y mochila, runas, grupo, ayudas flotantes y barra de hechizos compacta | Hecho |
 
 ## Desarrollo
 

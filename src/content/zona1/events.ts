@@ -17,9 +17,9 @@ export interface EventDef {
   options: EventOption[];
 }
 
-const boon = (h: HeroSave, k: StatKey, v: number): void => { h.boon[k] = (h.boon[k] ?? 0) + v; };
-const healPct = (h: HeroSave, pct: number): void => { h.hp = Math.min(heroMaxHp(h), h.hp + Math.ceil(heroMaxHp(h) * pct)); };
-const losePct = (h: HeroSave, pct: number): void => { h.hp = Math.max(1, h.hp - Math.ceil(h.hp * pct)); };
+export const boon = (h: HeroSave, k: StatKey, v: number): void => { h.boon[k] = (h.boon[k] ?? 0) + v; };
+export const healPct = (h: HeroSave, pct: number): void => { h.hp = Math.min(heroMaxHp(h), h.hp + Math.ceil(heroMaxHp(h) * pct)); };
+export const losePct = (h: HeroSave, pct: number): void => { h.hp = Math.max(1, h.hp - Math.ceil(h.hp * pct)); };
 
 export const ZONA1_EVENTS: EventDef[] = [
   {

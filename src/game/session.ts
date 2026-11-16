@@ -4,7 +4,7 @@ import { runAiTurn } from '../core/combat/ai';
 import { cast, current, endTurn, move, type ActionResult } from '../core/combat/engine';
 import type { ClassId, GameEvent, Pos } from '../core/state';
 import { saveRun, type Peer, type Transport } from '../net/transport';
-import { bossMinion, chooseNode, finishFight, leaveNode, metaAction, newRun, resolveEvent, type MetaAction, type RunState } from './run';
+import { bossInfo, chooseNode, finishFight, leaveNode, metaAction, newRun, resolveEvent, type MetaAction, type RunState } from './run';
 
 export type Action = { a: 'move'; to: Pos } | { a: 'cast'; spell: string; at: Pos } | { a: 'end' } | MetaAction;
 
@@ -50,7 +50,7 @@ export class Session {
     t.on('sync', (p) => {
       if (this.isHost) return;
       const m = p as { run: RunState; ev: GameEvent[] };
-      if (!m?.run || m.run.version !== 4) return;
+      if (!m?.run || m.run.version !== 5) return;
       this.run = m.run;
       this.noteTurn();
       this.onChange(Array.isArray(m.ev) ? m.ev : []);
@@ -216,7 +216,7 @@ export class Session {
         this.afterChange([]);
       }, 1600);
     } else if (current(c)?.ai) {
-      this.aiTimer = setTimeout(() => this.afterChange(runAiTurn(c, bossMinion(run))), AI_DELAY);
+      this.aiTimer = setTimeout(() => this.afterChange(runAiTurn(c, bossInfo(run))), AI_DELAY);
     }
   }
 
