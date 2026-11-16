@@ -14,7 +14,7 @@ const setup = (over: Partial<CombatSetup> = {}): CombatSetup => ({
   seed: 42, w: 12, h: 7, obstacles: [],
   units: [
     makeHero({ cls: 'guerrero', name: 'Ana', owner: 'p1', routes: ['baluarte', 'duelista'], pos: { x: 1, y: 3 } }),
-    makeHero({ cls: 'mago', name: 'Leo', owner: 'p2', routes: ['hielo', 'tormenta'], pos: { x: 1, y: 2 } }),
+    makeHero({ cls: 'mago', name: 'Leo', owner: 'p2', routes: ['tormenta'], pos: { x: 1, y: 2 } }),
     makeEnemy('esqueleto', { x: 8, y: 3 }),
     makeEnemy('arquero', { x: 9, y: 2 }),
   ],
@@ -28,25 +28,23 @@ describe('azar por semilla', () => {
   });
 });
 
-describe('rutas de clase', () => {
-  it('elegir una ruta bloquea su opuesta', () => {
-    expect(blockedRoutes('mago', ['fuego'])).toEqual(['hielo']);
+describe('kits iniciales', () => {
+  it('se elige un solo kit de 3 habilidades (sin rutas opuestas)', () => {
+    expect(blockedRoutes('mago', ['fuego'])).toEqual([]);
+    expect(canPickRoute('mago', [], 'hielo')).toBe(true);
     expect(canPickRoute('mago', ['fuego'], 'hielo')).toBe(false);
-    expect(canPickRoute('mago', ['fuego'], 'tormenta')).toBe(true);
+    expect(spellsFor('clerigo', [])).toEqual(['maza', 'castigo', 'fervor']);
+    expect(spellsFor('clerigo', ['luz'])).toEqual(['maza', 'sanar', 'aura']);
+    // si llegan dos, solo cuenta el primero
+    expect(makeHero({ cls: 'mago', name: 'x', owner: 'p', routes: ['fuego', 'hielo'], pos: { x: 0, y: 0 } }).spells.map((s) => s.id)).toEqual(['ignicion', 'bola', 'lluvia']);
   });
-  it('con dos rutas elegidas, las otras dos quedan bloqueadas', () => {
-    expect(blockedRoutes('mago', ['fuego', 'tormenta']).sort()).toEqual(['arcano', 'hielo']);
-    expect(() => makeHero({ cls: 'mago', name: 'x', owner: 'p', routes: ['fuego', 'hielo'], pos: { x: 0, y: 0 } })).toThrow();
-  });
-  it('los hechizos salen de las rutas elegidas', () => {
-    expect(spellsFor('clerigo', ['luz'], 1)).toEqual(['maza', 'castigo', 'fervor', 'sanar']);
-    expect(spellsFor('clerigo', ['luz'], 2)).toEqual(['maza', 'castigo', 'fervor', 'sanar', 'aura']);
-    expect(spellsFor('clerigo', ['luz'], 6)).toEqual(['maza', 'castigo', 'fervor', 'sanar', 'aura', 'plegaria']);
-  });
-  it('todos los hechizos de ruta existen', () => {
-    for (const cls of ['guerrero', 'mago', 'clerigo'] as const)
-      for (const id of spellsFor(cls, ['baluarte', 'berserker', 'caudillo', 'duelista', 'fuego', 'hielo', 'tormenta', 'arcano', 'luz', 'penitencia', 'egida', 'juicio']))
-        expect(SPELLS[id], id).toBeDefined();
+  it('todos los kits tienen 3 hechizos que existen', () => {
+    for (const cls of ['guerrero', 'mago', 'clerigo', 'picaro', 'arquero'] as const)
+      for (const r of ['base', 'baluarte', 'berserker', 'caudillo', 'duelista', 'fuego', 'hielo', 'tormenta', 'arcano', 'luz', 'penitencia', 'egida', 'juicio']) {
+        const list = spellsFor(cls, [r]);
+        expect(list).toHaveLength(3);
+        for (const id of list) expect(SPELLS[id], id).toBeDefined();
+      }
   });
 });
 
@@ -78,6 +76,7 @@ describe('combate por iniciativa', () => {
     const { state: s } = createCombat(setup());
     const leo = current(s)!;
     const esq = s.units.find((u) => u.kind === 'esqueleto')!;
+    leo.spells.push({ id: 'congelar', cd: 0 });
     leo.pos = { x: 5, y: 3 };
     esq.shield = 3;
     const before = esq.hp;

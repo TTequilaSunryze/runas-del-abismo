@@ -69,3 +69,11 @@ Tutorial de 5 pasos la primera vez, textos de zona y clase, pantalla final con r
 
 ## Pendiente / ideas
 Sincronizar ecos en la nube con cuenta, más zonas y clases, sprites animados, balance con datos de partidas reales.
+
+## v6: kits iniciales y recompensas por sala
+- **Sin rutas ni niveles**: cada clase empieza con un kit de 3 habilidades. El Clásico siempre; con maestría 1-4 se desbloquean 4 kits más (los antiguos estilos: p. ej. Guerrero Baluarte, Berserker, Caudillo, Duelista). Maestría 5: empiezas con una bendición.
+- **Recompensa por sala (estilo Hades)**: tras cada combate normal, alternando, una bendición de clase o una mejora de hechizo; tras un élite, una bendición; tras un jefe, una mejora de hechizo. Los hechizos nuevos solo llegan si se eligen.
+- **Curva**: los enemigos empiezan un 35% más débiles en la zona 1 y suben un 55% por zona (+40% más en el Abismo).
+- **Volumen de la música** con barra (arriba a la derecha) y arreglado silenciar/activar.
+- **Ojo de halcón**: el alcance extra se ve y se puede usar en el mismo turno.
+- **Listo**: el anfitrión ve a quién espera y por qué, y puede seguir sin esperar si a nadie le queda nada por elegir.

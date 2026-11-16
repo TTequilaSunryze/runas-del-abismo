@@ -88,16 +88,15 @@ export function mergeMeta(a: Meta, b: Partial<Meta>): Meta {
 // ---------- maestría de clase ----------
 /** Experiencia necesaria para cada nivel de maestría (1 a 5). */
 export const MASTERY_XP = [40, 110, 220, 380, 600];
-export const MASTERY_TEXT = ['Desbloquea la segunda ruta', 'Desbloquea la cuarta ruta', 'Talento: empiezas con una mejora de hechizo', '4 opciones al elegir mejoras de hechizo', 'Maestro: empiezas con dos mejoras de hechizo'];
+export const MASTERY_TEXT = ['Desbloquea un 2.º kit inicial', 'Desbloquea un 3.er kit inicial', 'Desbloquea un 4.º kit inicial', 'Desbloquea un 5.º kit inicial', 'Maestro: empiezas cada partida con una bendición de clase'];
 export const masteryLevel = (xp: number): number => MASTERY_XP.filter((n) => xp >= n).length;
 export const masteryOf = (cls: string): number => masteryLevel(meta().mastery[cls] ?? 0);
 /** Rutas que se pueden elegir con ese nivel de maestría: al principio la 1.ª y la 3.ª (no opuestas). */
+/** Kits iniciales que se pueden elegir: el Clásico siempre; uno más por cada nivel de maestría (hasta el 4). */
 export function openRoutes(cls: ClassId, level = masteryOf(cls)): string[] {
-  const r = CLASSES[cls].routes;
-  return [r[0]!.id, r[2]!.id, ...(level >= 1 ? [r[1]!.id] : []), ...(level >= 2 ? [r[3]!.id] : [])];
+  return CLASSES[cls].routes.filter((_r, i) => i <= level).map((r) => r.id);
 }
-/** A qué nivel de maestría se abre cada ruta. */
-export const routeNeeds = (cls: ClassId, route: string): number => [0, 1, 0, 2][CLASSES[cls].routes.findIndex((r) => r.id === route)] ?? 0;
+export const routeNeeds = (cls: ClassId, route: string): number => Math.max(0, CLASSES[cls].routes.findIndex((r) => r.id === route));
 export function masteryXpFor(run: RunState): number {
   const rooms = run.zone * 7 + run.step, bosses = run.flags.filter((f) => f.startsWith('boss_')).length;
   return Math.round((rooms * 5 + bosses * 25 + (run.phase === 'won' ? 50 : 0)) * (1 + 0.2 * run.asc));

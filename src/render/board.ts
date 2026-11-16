@@ -195,7 +195,9 @@ export class Board {
         for (let y = 0; y < c.h; y++)
           for (let x = 0; x < c.w; x++) {
             const p = { x, y }, d = dist(me.pos, p);
-            if (d < def.range[0] || d > def.range[1] || c.obstacles.includes(`${x},${y}`)) continue;
+            // el alcance extra (Ojo de halcón y similares) cuenta en cuanto se aplica
+            const reach = def.range[1] + (def.range[1] > 1 ? me.statuses.reach?.stacks ?? 0 : 0);
+            if (d < def.range[0] || d > reach || c.obstacles.includes(`${x},${y}`)) continue;
             const seen = !def.los || d <= 1 || hasLineOfSight(c, me.pos, p);
             fill(p, seen ? 'rgba(255,150,60,.16)' : 'rgba(120,120,140,.10)');
             if (!castProblem(c, me, SPELLS[def.id]!, p)) { g.strokeStyle = '#f2c14e'; g.lineWidth = 3; g.strokeRect(x * TILE + 4, y * TILE + 4, TILE - 8, TILE - 8); }

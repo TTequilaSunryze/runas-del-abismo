@@ -204,3 +204,8 @@ span.cell { display: inline-flex; align-items: center; justify-content: center; 
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 4px; background: #555; margin-right: 4px; }
 .dot.on { background: #4cb85a; }
 .sbtn .cdn.qty { inset: auto; left: 3px; top: 3px; bottom: auto; right: auto; width: auto; height: auto; padding: 0 5px; border-radius: 8px; font-size: 11px; background: #4cb85a; color: #000; display: block; }
+.vol { display: inline-flex; align-items: center; gap: 4px; }
+.vol input[type=range] { width: 80px; accent-color: var(--gold); }
+@media (max-width: 760px) { .vol input[type=range] { width: 56px; } }
+.advance.callout { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 10px 1px rgba(242,193,78,.35) inset; } }

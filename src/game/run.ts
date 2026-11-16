@@ -200,7 +200,8 @@ export interface RunOpts {
 export type NewHero = Pick<HeroSave, 'owner' | 'name' | 'cls' | 'routes'> & { perks?: Perks; mastery?: number };
 
 /** Niveles en los que se elige una mejora de hechizo. */
-export const UP_LEVELS = [4, 6, 8, 10, 12];
+/** Kit inicial válido de la clase (uno solo; el Clásico por defecto). */
+export const kitOf = (cls: ClassId, routes: readonly string[]): string[] => { const r = routes.find((x) => CLASSES[cls].routes.some((k) => k.id === x)); return [r ?? 'base']; };
 
 /** Semilla y modificadores del reto diario de una fecha: iguales para todo el mundo. */
 export function dailyOf(date: string): { seed: number; mods: string[] } {
@@ -218,7 +219,7 @@ export function newRun(code: string, seed: number, players: NewHero[], opts: Run
     offers: {}, event: null, eventsSeen: [], shop: null, ambush: false, note: ZONES[0]!.intro,
     nemesis: (opts.nemesis ?? []).map(cleanChampion).filter((c): c is Champion => !!c).slice(0, 8), nemesisUsed: [],
     heroes: players.map((p) => ({
-      owner: p.owner, name: p.name, cls: p.cls, routes: p.routes, hp: 0, level: 1, gold: 0, equip: {}, bag: [], runes: [], sockets: {}, boon: {},
+      owner: p.owner, name: p.name, cls: p.cls, routes: kitOf(p.cls, p.routes), hp: 0, level: 1, gold: 0, equip: {}, bag: [], runes: [], sockets: {}, boon: {},
       perks: Object.fromEntries(['vit', 'gold', 'rune', 'loot', 'reroll', 'aid'].map((k) => [k, perkLevel(p.perks, k)])),
       rerolls: 0, stats: { dmg: 0, kills: 0, falls: 0, heal: 0, maxGold: 0 },
       relics: [], boons: [], boonOffer: null, bag2: { c_vida: 1 }, ups: {}, upOffer: null, mastery: Math.max(0, Math.min(5, Math.floor(Number(p.mastery) || 0))), upPending: 0,
@@ -234,9 +235,9 @@ export function newRun(code: string, seed: number, players: NewHero[], opts: Run
     h.rerolls = perkLevel(h.perks, 'reroll');
     h.hp = Math.round(heroMaxHp(h) * (run.asc >= 8 ? 0.75 : 1));
     for (let i = 0; i <= perkLevel(h.perks, 'rune'); i++) h.runes.push(randomRune(run, false));
-    // talento de maestría: una mejora de hechizo desde el principio (dos con maestría 5)
-    h.upPending = h.mastery >= 5 ? 2 : h.mastery >= 3 ? 1 : 0;
-    ensureUpOffer(run, h);
+    // maestro de clase: empieza con una bendición
+    h.upPending = 0;
+    if (h.mastery >= 5) offerBoon(run, h);
   }
   return run;
 }
@@ -425,7 +426,7 @@ export function championOf(run: RunState, h: HeroSave): Champion {
 
 /** Un héroe guardado como unidad de combate. `owner` null = lo lleva la IA. */
 export function championUnit(c: Champion, pos: Pos, team: 'hero' | 'enemy', owner: string | null, o: { hpMul?: number; powerMul?: number; level?: number; name?: string } = {}): UnitSpec {
-  const u = heroSpec({ ...c, owner: owner ?? '', level: Math.min(c.level, o.level ?? MAX_LEVEL), name: o.name ?? c.name }, pos);
+  const u = heroSpec({ ...c, owner: owner ?? '', level: 1, name: o.name ?? c.name }, pos);
   u.team = team;
   u.owner = owner;
   u.ai = owner ? null : 'champ';
@@ -521,7 +522,7 @@ export function buildFight(run: RunState): CombatSetup {
 function nemesisUnit(run: RunState, id: string, pos: Pos): UnitSpec {
   const c = run.nemesis.find((x) => x.id === id)!;
   const n = run.heroes.length;
-  const level = Math.max(...run.heroes.map((h) => h.level));
+  const level = 1;
   return championUnit(c, pos, 'enemy', null, { hpMul: 1.9 + 0.7 * (n - 1) + (run.asc >= 1 ? 0.2 : 0), powerMul: 0.5, level, name: `Némesis: ${c.name}` });
 }
 
@@ -530,7 +531,7 @@ function enemyOpts(run: RunState, id: string, first: boolean) {
   const n = run.heroes.length;
   const z = zoneOf(run);
   // el Abismo es más duro que todo lo anterior
-  const boost = (run.asc >= 1 ? 0.1 : 0) + (run.asc >= 9 ? 0.1 : 0) + (run.zone >= 3 ? 0.3 : 0) + run.zone * 0.2 + 0.12;
+  const boost = (run.asc >= 1 ? 0.1 : 0) + (run.asc >= 9 ? 0.1 : 0) + (run.zone >= 3 ? 0.4 : 0) + run.zone * 0.55 - 0.35;
   const affixes: string[] = [];
   const all = Object.keys(AFFIXES);
   if (run.kind === 'elite' && first && z.elites.includes(id)) {
@@ -720,9 +721,10 @@ export function finishFight(run: RunState): void {
       const r = rand(run), id = r < 0.4 ? 'c_vida' : r < 0.65 ? 'c_fuego' : r < 0.9 ? 'c_humo' : 'c_resu';
       if ((h.bag2[id] ?? 0) < MAX_CONSUMABLE) { h.bag2[id] = (h.bag2[id] ?? 0) + 1; extra.push(`${h.name}: ${CONSUMABLES[id]!.icon} ${CONSUMABLES[id]!.name}`); }
     }
-    // los élites dejan una bendición
-    if (run.kind === 'elite') offerBoon(run, h);
-    if (h.level < MAX_LEVEL) { h.level++; if (UP_LEVELS.includes(h.level)) h.upPending++; }
+    // sin niveles: cada sala superada da una recompensa a elegir (bendición de clase o mejora de hechizo)
+    if (run.kind === 'combat') { if (run.fight % 2 === 0) offerBoon(run, h); else h.upPending++; }
+    else if (run.kind === 'elite') offerBoon(run, h);
+    else h.upPending++;
     const max = heroMaxHp(h);
     // los caídos vuelven con el 30%; los demás recuperan un 35% entre combates
     const healPct = (0.35 + perkLevel(h.perks, 'aid') * 0.08) * (run.asc >= 3 ? 0.7 : 1);
@@ -997,7 +999,7 @@ export function newArena(code: string, seed: number, a: { owner: string; name: s
   run.arena = { a: a.owner, b: b.owner, nameA: a.name.slice(0, 14), nameB: b.name.slice(0, 14) };
   const w = 14, h = 8, ys = [3, 5, 1];
   // igualados al nivel máximo y con más vida, para que el duelo dure
-  const opts = { hpMul: 1.6, level: MAX_LEVEL };
+  const opts = { hpMul: 2.2, level: 1 };
   const units = [...ta.map((c, i) => championUnit(c, { x: 1, y: ys[i]! }, 'hero', a.owner, opts)), ...tb.map((c, i) => championUnit(c, { x: w - 2, y: ys[i]! + 1 }, 'enemy', b.owner, opts))];
   for (let attempt = 0; ; attempt++) {
     const taken = new Set(units.map((u) => `${u.pos.x},${u.pos.y}`));

@@ -140,7 +140,7 @@ describe('consumibles, bendiciones y botín', () => {
         if (BOON_MODS[o]) expect(CLASSES[cls].base).toContain(BOON_MODS[o]!.target);
       }
     }
-    const run = newRun('T', 3, [{ owner: 'a', name: 'A', cls: 'mago', routes: ['fuego'] }]);
+    const run = newRun('T', 3, [{ owner: 'a', name: 'A', cls: 'mago', routes: [] }]);
     const h = run.heroes[0]!;
     offerBoon(run, h);
     expect(h.boonOffer!.spells).toHaveLength(3);

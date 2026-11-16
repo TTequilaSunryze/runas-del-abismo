@@ -6,7 +6,7 @@ import { cast, createCombat, current, endTurn, move, type UnitSpec } from '../sr
 import type { CombatState } from '../src/core/state';
 import { bossInfo, newRun } from '../src/game/run';
 
-const hero = (x = 1, y = 3): UnitSpec => makeHero({ cls: 'mago', name: 'Leo', owner: 'p', routes: ['fuego', 'tormenta'], pos: { x, y } });
+const hero = (x = 1, y = 3): UnitSpec => makeHero({ cls: 'mago', name: 'Leo', owner: 'p', routes: [], pos: { x, y } });
 const fight = (units: UnitSpec[], obstacles = [] as { x: number; y: number }[]): CombatState => createCombat({ seed: 3, w: 12, h: 7, obstacles, units }).state;
 /** Pasa turnos (héroes pasan, IA juega) hasta que le toque a `id`. */
 function until(s: CombatState, id: number, info = bossInfo(newRun('T', 1, [{ owner: 'p', name: 'L', cls: 'mago', routes: ['fuego'] }]))): void {

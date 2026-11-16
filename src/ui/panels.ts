@@ -1,6 +1,6 @@
 // Piezas comunes: barra superior, celdas de objeto con icono, ficha lateral (equipo, runas, grupo) y botín.
-import { isMuted } from '../audio/sfx';
-import { CLASSES, MAX_LEVEL, findRoute } from '../core/classes/classes';
+import { isMuted, musicVolume } from '../audio/sfx';
+import { CLASSES, findRoute } from '../core/classes/classes';
 import { SPELLS } from '../core/classes/spells';
 import { BAG_SIZE, PRICE, RARITY_NAME, SLOTS, SLOT_NAME, STAT_NAME, statDiff, statsText, type Item, type Slot, type StatKey } from '../core/items/items';
 import { SETS, setCounts } from '../core/items/sets';
@@ -16,10 +16,15 @@ import { rangeText, spellSummary } from './spellicons';
 
 const RAR = ['r0', 'r1', 'r2', 'r3'];
 
+/** Botón de silencio y barra de volumen de la música. */
+export function volumeControl(): string {
+  return `<span class="vol"><button class="sq" data-act="mute" ${tip('Silenciar o activar el sonido')}>${isMuted() ? '🔇' : '🔊'}</button><input type="range" id="vol" min="0" max="100" value="${Math.round(musicVolume() * 100)}" ${tip('Volumen de la música')} ${isMuted() ? 'disabled' : ''}></span>`;
+}
+
 export function sysButtons(): string {
   const s = ui.session;
   const warn = s?.isHost && s.t.kind === 'online' ? '¿Seguro? Termina para todos' : '¿Seguro? Pulsa otra vez';
-  return `${ui.session?.run && !ui.session.run.arena ? `<button class="sq" data-act="stats" ${tip('Ficha del personaje: estadísticas totales (S)')}>📊</button>` : ''}<button class="sq" data-act="mute" ${tip('Sonido y música')}>${isMuted() ? '🔇' : '🔊'}</button><button data-act="leave" class="${ui.leaveArmed ? 'danger' : ''}">${ui.leaveArmed ? warn : 'Abandonar'}</button>`;
+  return `${ui.session?.run && !ui.session.run.arena ? `<button class="sq" data-act="stats" ${tip('Ficha del personaje: estadísticas totales (S)')}>📊</button>` : ''}${volumeControl()}<button data-act="leave" class="${ui.leaveArmed ? 'danger' : ''}">${ui.leaveArmed ? warn : 'Abandonar'}</button>`;
 }
 
 export function hpBar(hp: number, max: number, shield = 0): string {
@@ -30,7 +35,7 @@ export function topBar(run: RunState): string {
   const h = mine(run);
   if (run.arena) return `<div class="bar"><span class="zone">🏟️ Duelo: ${esc(run.arena.nameA)} contra ${esc(run.arena.nameB)}</span><span class="grow"></span>${sysButtons()}</div>`;
   return `<div class="bar"><b class="code-s">${esc(run.code)}</b><span class="zone">Zona ${run.zone + 1} · ${esc(zoneOf(run).name)}</span>
-  ${h ? `<span class="pill">💰 ${h.gold}</span>${hpBar(h.hp, heroMaxHp(h))}<span>Nv ${h.level}</span>` : '<span class="dim">Espectador</span>'}
+  ${h ? `<span class="pill">💰 ${h.gold}</span>${hpBar(h.hp, heroMaxHp(h))}` : '<span class="dim">Espectador</span>'}
   ${ui.notice ? `<span class="bad">${esc(ui.notice)}</span>` : ''}${!ui.session!.t.connected() ? '<span class="bad">⚠ Conexión perdida: reconectando…</span>' : !ui.session!.hostPresent() ? '<span class="bad">Anfitrión desconectado</span>' : ''}<span class="grow"></span>${sysButtons()}</div>`;
 }
 
@@ -94,7 +99,7 @@ function gearTab(run: RunState, h: HeroSave, selling: boolean): string {
 }
 
 function runeTab(h: HeroSave): string {
-  const all = heroSpec({ ...h, level: MAX_LEVEL }).spells;
+  const all = heroSpec(h).spells.filter((sp) => sp.charges === undefined);
   const known = new Set(heroSpec(h).spells.map((sp) => sp.id));
   if (ui.selRune >= h.runes.length) ui.selRune = -1;
   const sel = ui.selRune >= 0 ? RUNES[h.runes[ui.selRune]!] : undefined;
@@ -109,7 +114,7 @@ function runeTab(h: HeroSave): string {
 }
 
 function groupTab(run: RunState): string {
-  return run.heroes.map((h, i) => `<div class="member"><div class="row"><b class="p${i % 4}">${esc(h.name)}</b><span class="dim sm">${CLASSES[h.cls].name} Nv ${h.level}</span><span class="grow"></span><span class="pill sm">💰 ${h.gold}</span></div>
+  return run.heroes.map((h, i) => `<div class="member"><div class="row"><b class="p${i % 4}">${esc(h.name)}</b><span class="dim sm">${CLASSES[h.cls].name}</span><span class="grow"></span><span class="pill sm">💰 ${h.gold}</span></div>
     <div class="dim sm">${h.routes.map((r) => findRoute(h.cls, r)?.name).join(' + ')}${h.relics.length ? ` · ${h.relics.map((r) => RELICS[r]?.icon ?? '').join('')}` : ''}</div>${hpBar(h.hp, heroMaxHp(h))}
     <div class="cells tiny">${SLOTS.map((sl) => cell(h.equip[sl], 'disabled', undefined, sl)).join('')}</div></div>`).join('');
 }
@@ -166,10 +171,15 @@ export function advanceBar(run: RunState, label: string, act = 'leavenode'): str
   const wait = s.waiting();
   const others = run.heroes.filter((x) => x.owner !== s.myId);
   const status = others.length ? `<span class="sm">${others.map((x) => { const p = pendingOf(run, x); const ok = !p.length && run.ready[x.owner] === run.stamp; return `<span class="${ok ? 'good' : 'dim'}" ${tip(p.length ? `Le falta elegir: ${p.join(', ')}` : ok ? 'Listo' : 'Aún no ha pulsado Listo')}>${ok ? '✔' : '⏳'} ${esc(x.name)}</span>`; }).join(' ')}</span>` : '';
-  if (s.isHost) return `<div class="row advance">${status}<span class="grow"></span>${act ? `<button class="pri" data-act="${act}" ${wait.length ? 'disabled' : ''} ${wait.length ? tip(`Esperando a: ${wait.map((x) => esc(x.name)).join(', ')}`) : ''}>${wait.length ? `⏳ Esperando (${wait.length})` : label}</button>` : ''}</div>`;
+  if (s.isHost) {
+    // si a nadie le queda nada por elegir (solo falta que pulsen «Listo»), el anfitrión puede seguir igualmente
+    const onlyReady = wait.length > 0 && wait.every((x) => !pendingOf(run, x).length);
+    const who = wait.map((x) => `${esc(x.name)}${pendingOf(run, x).length ? ` (eligiendo ${pendingOf(run, x).join(', ')})` : ' (debe pulsar «Estoy listo»)'}`).join(', ');
+    return `<div class="row advance">${status}<span class="grow"></span>${wait.length ? `<span class="sm">⏳ Esperando a ${who}</span>` : ''}${onlyReady ? '<button data-act="forceready">Seguir sin esperar</button>' : ''}${act ? `<button class="pri" data-act="${act}" ${wait.length ? 'disabled' : ''}>${label}</button>` : ''}</div>`;
+  }
   const pend = h ? pendingOf(run, h) : [];
   const ready = !!h && run.ready[h.owner] === run.stamp;
-  return `<div class="row advance">${status}<span class="grow"></span>${h ? `<button class="${ready ? '' : 'pri'}" data-act="ready" ${pend.length ? 'disabled' : ''} ${pend.length ? tip(`Antes elige: ${pend.join(', ')}`) : ''}>${ready ? '✔ Listo (deshacer)' : pend.length ? `Elige tu ${pend[0]}` : 'Estoy listo'}</button>` : ''}<span class="dim sm">El anfitrión avanza cuando todos estén listos</span></div>`;
+  return `<div class="row advance ${ready || pend.length ? '' : 'callout'}">${status}<span class="grow"></span>${h ? `<button class="${ready ? '' : 'pri'}" data-act="ready" ${pend.length ? 'disabled' : ''} ${pend.length ? tip(`Antes elige: ${pend.join(', ')}`) : ''}>${ready ? '✔ Listo (deshacer)' : pend.length ? `Elige tu ${pend[0]}` : 'Estoy listo'}</button>` : ''}<span class="dim sm">${ready ? 'Esperando al anfitrión…' : 'Pulsa «Estoy listo» para que el anfitrión pueda seguir'}</span></div>`;
 }
 
 /** Botín pendiente: tarjetas grandes con icono, datos y comparación. */
@@ -190,7 +200,7 @@ export function statsModal(run: RunState): string {
   const spec = heroSpec(h);
   const pat = patronBonus(h.boons);
   return `<div class="modal" id="statsmodal" data-act="stats"><div class="panel wide" onclick="event.stopPropagation()">
-  <div class="row"><h2>📊 ${esc(h.name)}</h2><span class="dim">${esc(findRoute(h.cls, h.routes[0] ?? '')?.name ?? '')}${h.routes[1] ? ` + ${esc(findRoute(h.cls, h.routes[1])?.name ?? '')}` : ''} · Nv ${h.level}</span><span class="grow"></span><button class="mini" data-act="stats">Cerrar ✕</button></div>
+  <div class="row"><h2>📊 ${esc(h.name)}</h2><span class="dim">${esc(findRoute(h.cls, h.routes[0] ?? '')?.name ?? '')}</span><span class="grow"></span><button class="mini" data-act="stats">Cerrar ✕</button></div>
   <table class="stattab"><tr><th>Estadística</th><th>Base</th><th>Modificadores</th><th>Total</th></tr>
   ${rows.map((r) => `<tr><td>${esc(r.name)}</td><td class="dim">${r.base}</td><td class="sm">${r.parts.map(([n, v]) => `<span class="${v > 0 ? 'good' : 'bad'}">${v > 0 ? '+' : ''}${v} ${esc(n)}</span>`).join(' · ') || '<span class="dim">—</span>'}</td><td><b>${r.key === 'hp' ? `${h.hp}/${r.total}` : r.total}</b></td></tr>`).join('')}
   </table>

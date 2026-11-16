@@ -1,5 +1,5 @@
 // Pantallas fuera del combate: inicio, sala, mapa, tienda, evento y final.
-import { CLASSES, MAX_ROUTES, blockedRoutes, findRoute } from '../core/classes/classes';
+import { CLASSES, findRoute } from '../core/classes/classes';
 import { SPELLS } from '../core/classes/spells';
 import { RUNES } from '../core/runes';
 import type { ClassId } from '../core/state';
@@ -18,7 +18,7 @@ import { championOf, dailyOf, dailyScore, lastZone } from '../game/run';
 import { CLASS_STORY, ENDING_LOST, ENDING_WON, TUTORIAL, ZONE_STORY } from '../content/story';
 import { esc, mine, store, tip, today, ui } from './ctx';
 import { NODE_ICON, itemIcon, spellIcon, spellTip } from './icons';
-import { advanceBar, diffHtml, itemHtml, pendingRows, sidePanel, topBar } from './panels';
+import { advanceBar, diffHtml, itemHtml, pendingRows, sidePanel, topBar, volumeControl } from './panels';
 import { CONSUMABLES, MAX_CONSUMABLE } from '../content/boons';
 import { FORGE_MAX, forgeCost, forged } from '../game/run';
 import { STAT_NAME, type Item, type StatKey } from '../core/items/items';
@@ -54,7 +54,7 @@ function metaPanel(): string {
     <div class="dim sm">Al terminar una partida puedes guardar aquí a tu héroe, con su equipo, runas y mejoras. Elige 3 para tu equipo de duelo. Tu mejor héroe puede aparecer como <b>Némesis</b> (un élite) en las partidas que juegues con otros.</div>
     ${ui.hallMsg ? `<div class="pill sm">${esc(ui.hallMsg)}</div>` : ''}
     ${m.hall.length ? `<div class="cards c2">${m.hall.map((c) => champCard(c, team.includes(c.id))).join('')}</div>` : '<div class="dim">Aún no has guardado ningún héroe. Termina una partida y pulsa “Guardar en el Salón”.</div>'}</div>
-    <div class="panel"><h3>🏟️ Duelos 3 contra 3</h3><div class="dim sm">Los duelos igualan el nivel al máximo: lo que cuenta es la clase, las rutas, el equipo, las runas y las mejoras. No dan ecos.</div>
+    <div class="panel"><h3>🏟️ Duelos 3 contra 3</h3><div class="dim sm">En los duelos todos tienen más vida para que duren: cuenta la clase, el kit, el equipo, las runas y las mejoras. No dan ecos.</div>
       <div class="cards c3">
         <div class="lootcard"><b>Contra el equipo de un amigo</b><div class="sm dim">Su equipo lo lleva la IA: no hace falta que esté conectado. Necesita tener cuenta y equipo guardado.</div><input id="foe" maxlength="14" placeholder="Nombre de su cuenta"><button class="pri" data-act="duelai" ${team.length && !ui.busy ? '' : 'disabled'}>Buscar y combatir</button></div>
         <div class="lootcard"><b>Entrenamiento</b><div class="sm dim">Contra una copia de tu propio equipo, llevada por la IA.</div><button data-act="duelmirror" ${team.length ? '' : 'disabled'}>Entrenar</button></div>
@@ -92,7 +92,7 @@ function metaPanel(): string {
 export function champCard(c: Champion, inTeam: boolean, actions = true): string {
   const sets = Object.entries(setCounts(c.equip)).filter(([, n]) => n >= 2).map(([id, n]) => `${SETS[id]!.icon}${n}`).join(' ');
   const ups = Object.values(c.ups).reduce((a, l) => a + l.length, 0);
-  return `<div class="lootcard ${c.won ? 'r3' : 'r1'}"><div class="row"><b>${esc(c.name)}</b><span class="dim sm">${CLASSES[c.cls].name} Nv ${c.level}</span><span class="grow"></span>${c.won ? '<span>🏆</span>' : ''}${c.asc ? `<span class="pill sm">A${c.asc}</span>` : ''}</div>
+  return `<div class="lootcard ${c.won ? 'r3' : 'r1'}"><div class="row"><b>${esc(c.name)}</b><span class="dim sm">${CLASSES[c.cls].name}</span><span class="grow"></span>${c.won ? '<span>🏆</span>' : ''}${c.asc ? `<span class="pill sm">A${c.asc}</span>` : ''}</div>
   <div class="sm dim">${c.routes.map((r) => esc(findRoute(c.cls, r)?.name ?? r)).join(' + ')}</div>
   <div class="cells tiny">${Object.values(c.equip).map((it) => `<span class="cell ${RAR[it.rarity]} ${it.set ? 'inset' : ''}" ${tip(itemHtml(it, c.equip))}>${itemIcon(it)}</span>`).join('')}</div>
   <div class="sm dim">🔮 ${Object.keys(c.sockets).length} runas · ✨ ${ups} mejoras${sets ? ` · sets ${sets}` : ''}</div>
@@ -103,7 +103,7 @@ export function homeScreen(msg: string): void {
   const host = JSON.parse(store.get('rda_host') ?? 'null') as { code: string } | null;
   const m = meta();
   const tabs: Array<[typeof ui.homeTab, string]> = [['jugar', '⚔️ Jugar'], ['mejoras', `✨ Mejoras (${m.ecos})`], ['clases', '🎓 Maestría'], ['logros', `🏆 Logros ${m.achievements.length}/${ACHIEVEMENTS.length}`], ['salon', `🏟️ Salón y duelos`], ['diario', '📅 Reto diario'], ['amigos', `👥 Amigos${currentAccount() ? ` (${friendsStatus().filter((f) => f.online).length}/${m.friends.length})` : ''}`], ['cuenta', currentAccount() ? `👤 ${esc(currentAccount()!.name)}` : '👤 Cuenta']];
-  ui.root.innerHTML = `<div class="home"><h1>RUNAS DEL ABISMO</h1><p class="dim">RPG táctico por turnos · cooperativo de 1 a 4 jugadores · 3 zonas</p>
+  ui.root.innerHTML = `<div class="home"><div class="row"><span class="grow"></span>${volumeControl()}</div><h1>RUNAS DEL ABISMO</h1><p class="dim">RPG táctico por turnos · cooperativo de 1 a 4 jugadores · 3 zonas</p>
   ${msg ? `<p class="bad">${esc(msg)}</p>` : ''}
   <div class="tabs htabs">${tabs.map(([id, n]) => `<button class="${ui.homeTab === id ? 'on' : ''}" data-act="htab" data-id="${id}">${n}</button>`).join('')}</div>
   ${ui.homeTab === 'jugar' ? `<div class="panel"><label>Tu nombre <input id="name" maxlength="14" value="${esc(ui.me.name)}"></label></div>
@@ -128,13 +128,12 @@ export function lobbyScreen(): void {
   const s = ui.session!, me = ui.me;
   const players = s.lobby();
   const cls = CLASSES[me.cls];
-  const blocked = blockedRoutes(me.cls, me.routes);
   const open = openRoutes(me.cls), mlv = masteryOf(me.cls);
   const canDuel = s.isHost && myTeam().length > 0;
   const ready = players.slice(0, 4).filter((p) => p.routes.length > 0);
   const total = Math.min(4, players.length);
   ui.root.innerHTML = `<div class="bar"><span>Sala</span><b class="code">${esc(s.code)}</b>${s.t.kind === 'local' ? '<span class="dim">(local)</span>' : ''}
-    <span class="dim sm">${!s.t.connected() ? '<b class="bad">⚠ Conexión perdida: reconectando…</b> ' : ''}${s.isHost ? 'Comparte el código. Cuando todos tengan ruta, pulsa Comenzar.' : s.hostPresent() ? 'Elige clase y rutas. El anfitrión comienza.' : 'Buscando al anfitrión… (puede tardar unos segundos)'}</span>
+    <span class="dim sm">${!s.t.connected() ? '<b class="bad">⚠ Conexión perdida: reconectando…</b> ' : ''}${s.isHost ? 'Comparte el código. Cuando todos estén listos, pulsa Comenzar.' : s.hostPresent() ? 'Elige clase y kit inicial. El anfitrión comienza.' : 'Buscando al anfitrión… (puede tardar unos segundos)'}</span>
     ${ui.notice ? `<span class="bad">${esc(ui.notice)}</span>` : ''}<span class="grow"></span>
     ${s.isHost ? `${ui.saved ? `<button data-act="doresume">Reanudar guardada (zona ${ui.saved.zone + 1}, sala ${ui.saved.step + 1})</button>` : ''}<button class="pri" data-act="start" ${ready.length && ready.length === total ? '' : 'disabled'}>⚔️ Comenzar (${ready.length}/${total})</button>` : ''}<button data-act="home">Salir</button></div>
   <div class="cols"><section class="main">
@@ -146,19 +145,18 @@ export function lobbyScreen(): void {
     ${currentAccount() && s.t.kind === 'online' ? (() => { const fr = friendsStatus().filter((f) => f.online && f.room !== s.code); return fr.length ? `<div class="panel sm"><b>👥 Invitar:</b> ${fr.map((f) => `<button class="mini" data-act="invite" data-id="${esc(f.name)}">✉ ${esc(f.name)}</button>`).join(' ')}</div>` : ''; })() : ''}
     <div class="lbl">Tu clase <span class="dim">· maestría ${mlv}/5 con ${cls.name}</span></div>
     <div class="cards c5">${(Object.keys(CLASSES) as ClassId[]).map((id) => { const c = CLASSES[id]; return `<button class="pick ${id === me.cls ? 'on' : ''}" data-act="cls" data-id="${id}"><b>${c.name}</b><span class="dim sm">❤️ ${c.hp} · PA ${c.ap} · PM ${c.mp} · ⏱️ ${c.initiative}</span><span class="dim sm"><i>${esc(CLASS_STORY[id] ?? '')}</i></span><span class="pill sm">Maestría ${masteryOf(id)}</span></button>`; }).join('')}</div>
-    <div class="lbl">Tus rutas <span class="dim">· elige 1 o ${MAX_ROUTES}; cada ruta bloquea a su opuesta</span></div>
+    <div class="lbl">Tu kit inicial <span class="dim">· 3 habilidades; durante la partida las mejoras con bendiciones. Más kits con maestría.</span></div>
     <div class="cards c2">${cls.routes.map((r) => {
       const locked = !open.includes(r.id);
-      const on = me.routes.includes(r.id), off = locked || (!on && blocked.includes(r.id));
-      const why = locked ? `🔒 Se desbloquea con maestría ${routeNeeds(me.cls, r.id)} de ${cls.name}: juega partidas con esta clase` : off ? (me.routes.includes(r.opposite) ? `🔒 Bloqueada por ${findRoute(me.cls, r.opposite)!.name}` : '🔒 Ya tienes 2 rutas') : `Opuesta: ${findRoute(me.cls, r.opposite)!.name}`;
-      return `<button class="pick ${on ? 'on' : ''}" data-act="route" data-id="${r.id}" ${off ? 'disabled' : ''}><b>${on ? '✔ ' : ''}${r.name}</b><span class="dim sm">${r.text}</span>
-        <span class="row">${r.spells.map((id, i) => { const d = SPELLS[id]!; return `<span class="schip" ${tip(spellTip(d, `<div class="dim sm">Se aprende a nivel ${i + 1}</div>`))}>${spellIcon(d)} ${esc(d.name)}</span>`; }).join('')}</span>
-        <i class="sm ${off ? 'bad' : 'dim'}">${why}</i></button>`;
+      const on = me.routes.includes(r.id);
+      return `<button class="pick ${on ? 'on' : ''}" data-act="route" data-id="${r.id}" ${locked ? 'disabled' : ''}><b>${on ? '✔ ' : ''}${r.name}</b><span class="dim sm">${r.text}</span>
+        <span class="row">${r.spells.map((id) => { const d = SPELLS[id]!; return `<span class="schip" ${tip(spellTip(d))}>${spellIcon(d)} ${esc(d.name)}</span>`; }).join('')}</span>
+        ${locked ? `<i class="sm bad">🔒 Se desbloquea con maestría ${routeNeeds(me.cls, r.id)} de ${cls.name}: juega partidas con esta clase</i>` : ''}</button>`;
     }).join('')}</div>
   </section>
   <aside class="side"><div class="tabs"><button class="on">👥 Jugadores (${players.length}/4)</button></div><div class="tabbody">
     ${players.map((p, i) => `<div class="member ${i > 3 ? 'off' : ''}"><div class="row"><b class="p${i % 4}">${esc(p.name)}</b>${p.host ? '<span>👑</span>' : ''}${p.id === ui.myId ? '<span class="dim sm">(tú)</span>' : ''}<span class="grow"></span><span class="sm ${p.routes.length ? 'good' : 'dim'}">${p.routes.length ? 'Listo' : 'Eligiendo'}</span></div>
-      <div class="sm">${esc(CLASSES[p.cls]?.name ?? '?')} <span class="dim">${p.routes.map((r) => esc(findRoute(p.cls, r)?.name ?? r)).join(' + ') || 'sin ruta'}</span></div>${i > 3 ? '<div class="bad sm">Sala llena</div>' : ''}${canDuel && p.id !== ui.myId && p.hasTeam ? `<button class="mini" data-act="duel" data-id="${esc(p.id)}">🏟️ Retar a duelo 3 contra 3</button>` : p.hasTeam ? '<div class="dim sm">🏟️ Tiene equipo de duelo</div>' : ''}</div>`).join('')}
+      <div class="sm">${esc(CLASSES[p.cls]?.name ?? '?')} <span class="dim">${p.routes.map((r) => esc(findRoute(p.cls, r)?.name ?? r)).join(' + ') || 'eligiendo kit'}</span></div>${i > 3 ? '<div class="bad sm">Sala llena</div>' : ''}${canDuel && p.id !== ui.myId && p.hasTeam ? `<button class="mini" data-act="duel" data-id="${esc(p.id)}">🏟️ Retar a duelo 3 contra 3</button>` : p.hasTeam ? '<div class="dim sm">🏟️ Tiene equipo de duelo</div>' : ''}</div>`).join('')}
   </div></aside></div>`;
 }
 
@@ -266,7 +264,7 @@ export function endScreen(): void {
     ${res?.achievements.length ? res.achievements.map((a) => `<div class="lootcard r3"><b>🏆 ${esc(a.name)}</b> <span class="sm">${esc(a.text)}</span><div class="sm good">${[a.ecos ? `+${a.ecos} ✨` : '', a.rune && RUNES[a.rune] ? `Runa desbloqueada: ${RUNES[a.rune]!.icon} ${esc(RUNES[a.rune]!.name)}` : ''].filter(Boolean).join(' · ')}</div></div>`).join('') : ''}
     ${res ? `<div class="row sm"><b>🎓 Maestría de ${CLASSES[res.mastery.cls].name}</b><span class="good">+${res.mastery.xp} exp</span><span class="grow"></span><span class="pill">Nivel ${res.mastery.after}/5</span></div>${res.mastery.after > res.mastery.before ? MASTERY_TEXT.slice(res.mastery.before, res.mastery.after).map((t) => `<div class="good">🔓 ${esc(t)}</div>`).join('') : `<div class="dim sm">${MASTERY_XP[res.mastery.after] ? `Faltan ${MASTERY_XP[res.mastery.after]! - res.mastery.total} de experiencia para el nivel ${res.mastery.after + 1}: ${esc(MASTERY_TEXT[res.mastery.after]!)}` : 'Maestría máxima.'}</div>`}` : ''}
     <div class="dim sm">Gasta tus ecos en <b>Mejoras</b> (pantalla de inicio): vida, oro, runas y re-tiradas permanentes.</div></div>
-  <div class="panel"><h3>Resumen del grupo</h3>${run.heroes.map((h, i) => `<div class="row sm"><b class="p${i % 4}">${esc(h.name)}</b><span class="dim">${CLASSES[h.cls].name} Nv ${h.level}</span><span class="grow"></span><span>⚔️ ${h.stats.dmg} (${Math.round((h.stats.dmg / total) * 100)}%)</span><span>☠️ ${h.stats.kills}</span><span>✚ ${h.stats.heal}</span><span class="${h.stats.falls ? 'bad' : 'good'}">💀 ${h.stats.falls}</span></div>`).join('')}</div>
+  <div class="panel"><h3>Resumen del grupo</h3>${run.heroes.map((h, i) => `<div class="row sm"><b class="p${i % 4}">${esc(h.name)}</b><span class="dim">${CLASSES[h.cls].name}</span><span class="grow"></span><span>⚔️ ${h.stats.dmg} (${Math.round((h.stats.dmg / total) * 100)}%)</span><span>☠️ ${h.stats.kills}</span><span>✚ ${h.stats.heal}</span><span class="${h.stats.falls ? 'bad' : 'good'}">💀 ${h.stats.falls}</span></div>`).join('')}</div>
   ${myHero ? `<div class="panel"><div class="row"><div><b>🏟️ Salón de héroes</b><div class="dim sm">Guarda a ${esc(myHero.name)} tal como está para tus duelos 3 contra 3 y para que vuelva como Némesis.</div></div><span class="grow"></span><button data-act="champsave" ${saved ? 'disabled' : ''}>${saved ? '✔ Guardado' : 'Guardar en el Salón'}</button></div></div>` : ''}
   <div class="row">${s.isHost ? '<button class="pri" data-act="again">⚔️ Jugar otra partida</button>' : '<span class="dim sm">Esperando al anfitrión para otra partida…</span>'}<button data-act="home">Volver al inicio</button></div></div>`);
 }

@@ -87,24 +87,25 @@ describe('sets', () => {
 });
 
 describe('mejoras de hechizo', () => {
-  it('se ofrecen al llegar a nivel 4 y cambian el hechizo', () => {
-    const run = newRun('T', 3, [{ owner: 'a', name: 'A', cls: 'guerrero', routes: ['baluarte'] }]);
+  it('sin niveles: cada combate ganado da una bendición o una mejora de hechizo', () => {
+    const run = newRun('T', 3, [{ owner: 'a', name: 'A', cls: 'guerrero', routes: [] }]);
     const h = run.heroes[0]!;
-    expect(h.upOffer).toBeNull();
-    h.level = 3;
-    run.combat = createCombat({ seed: 1, w: 8, h: 5, obstacles: [], units: [heroSpec(h, { x: 1, y: 1 })] }).state;
-    run.combat.over = 'win'; run.phase = 'combat';
-    finishFight(run);
-    expect(h.level).toBe(4);
-    expect(h.upOffer!.length).toBeGreaterThanOrEqual(3);
-    const o = h.upOffer![0]!;
-    expect(metaAction(run, 'a', { a: 'upgrade', idx: 0 })).toBeNull();
-    expect(h.ups[o.spell]).toEqual([o.up]);
-    expect(heroSpec(h).spells.find((s) => s.id === o.spell)!.ups).toEqual([o.up]);
+    const before = heroSpec(h).spells.length;
+    for (let f = 0; f < 2; f++) {
+      run.combat = createCombat({ seed: 1, w: 8, h: 5, obstacles: [], units: [heroSpec(h, { x: 1, y: 1 })] }).state;
+      run.combat.over = 'win'; run.phase = 'combat'; run.kind = 'combat';
+      finishFight(run);
+      expect(h.level).toBe(1);
+      expect(!!h.boonOffer || !!h.upOffer).toBe(true);
+      if (h.boonOffer) metaAction(run, 'a', { a: 'boon', idx: 0 });
+      if (h.upOffer) { const o = h.upOffer.find((x) => x.spell) ?? h.upOffer[0]!; expect(metaAction(run, 'a', { a: 'upgrade', idx: h.upOffer.indexOf(o) })).toBeNull(); expect(h.ups[o.spell]).toContain(o.up); }
+    }
+    // los hechizos nuevos solo llegan si se eligen
+    expect(heroSpec(h).spells.length).toBeLessThanOrEqual(before + 1);
   });
-  it('la maestría 3 da una mejora inicial', () => {
-    const run = newRun('T', 3, [{ owner: 'a', name: 'A', cls: 'guerrero', routes: ['baluarte'], mastery: 3 }]);
-    expect(run.heroes[0]!.upOffer).toBeTruthy();
+  it('la maestría 5 empieza con una bendición de clase', () => {
+    const run = newRun('T', 3, [{ owner: 'a', name: 'A', cls: 'guerrero', routes: [], mastery: 5 }]);
+    expect(run.heroes[0]!.boonOffer).toBeTruthy();
   });
   it('potenciado sube el daño un 25%', () => {
     const d = tuned(SPELLS.tajo!, { ups: ['pot'] });
@@ -114,7 +115,7 @@ describe('mejoras de hechizo', () => {
 });
 
 describe('salón y duelos', () => {
-  const run = newRun('T', 3, [{ owner: 'a', name: 'Ana', cls: 'guerrero', routes: ['baluarte', 'duelista'] }, { owner: 'b', name: 'Leo', cls: 'mago', routes: ['fuego'] }, { owner: 'c', name: 'Sara', cls: 'arquero', routes: ['francotirador', 'trampero'] }]);
+  const run = newRun('T', 3, [{ owner: 'a', name: 'Ana', cls: 'guerrero', routes: ['baluarte'] }, { owner: 'b', name: 'Leo', cls: 'mago', routes: ['fuego'] }, { owner: 'c', name: 'Sara', cls: 'arquero', routes: ['francotirador'] }]);
   for (const h of run.heroes) h.level = 8;
   const team = run.heroes.map((h) => championOf(run, h));
   it('limpia los héroes que llegan de fuera', () => {

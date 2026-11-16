@@ -70,16 +70,28 @@ export const TRACK_TITLE: Record<string, string> = {
   menu: 'Aventura nocturna', aldea: 'La aldea', ruta_nocturna: 'Ruta nocturna', bosque_nocturno: 'Bosque de noche', isla_volcanica: 'Isla volcánica',
   bosque_acido: 'Bosque ácido', combate: 'Combate', jefe: 'El campeón', descanso: 'Descanso', torre: 'La torre', final: 'Final del camino',
 };
-const VOL = 0.4;
+let VOL = 0.4;
+try { const v = Number(localStorage.getItem('rda_vol')); if (localStorage.getItem('rda_vol') !== null && v >= 0 && v <= 1) VOL = v; } catch { /* sin almacenamiento */ }
+/** Volumen de la música (0 a 1). */
+export const musicVolume = (): number => VOL;
+export function setMusicVolume(v: number): void {
+  VOL = Math.max(0, Math.min(1, v));
+  try { localStorage.setItem('rda_vol', String(VOL)); } catch { /* sin almacenamiento */ }
+  if (playing && !muted) playing.volume = VOL;
+}
 const FADE_MS = 1200;
 const players = new Map<string, HTMLAudioElement>();
 let wanted = 'menu';
 let playing: HTMLAudioElement | null = null;
 let unlocked = false;
 
+const fading = new WeakMap<HTMLAudioElement, number>();
 function fade(a: HTMLAudioElement, to: number, then?: () => void): void {
   const from = a.volume, t0 = performance.now();
+  const token = (fading.get(a) ?? 0) + 1;
+  fading.set(a, token);
   const step = (): void => {
+    if (fading.get(a) !== token) return; // otro fundido más reciente manda
     const k = Math.min(1, (performance.now() - t0) / FADE_MS);
     a.volume = Math.max(0, Math.min(1, from + (to - from) * k));
     if (k < 1) requestAnimationFrame(step); else then?.();
@@ -91,7 +103,8 @@ function playWanted(): void {
   if (!unlocked || muted) return;
   const file = TRACKS[wanted] ?? 'menu';
   let a = players.get(file);
-  if (a && a === playing) { if (a.paused) void a.play().catch(() => {}); return; }
+  // la misma pista: si estaba en pausa (silenciada), vuelve a sonar con su volumen
+  if (a && a === playing) { if (a.paused || a.volume < VOL) { void a.play().then(() => fade(a!, VOL)).catch(() => {}); } return; }
   if (!a) {
     a = new Audio(`${import.meta.env.BASE_URL}music/${file}.mp3`);
     a.loop = true;
@@ -123,7 +136,7 @@ export function isMuted(): boolean {
 export function toggleMute(): void {
   muted = !muted;
   try { localStorage.setItem('rda_mute', muted ? '1' : '0'); } catch { /* sin almacenamiento */ }
-  if (muted) { if (playing) fade(playing, 0, () => playing?.pause()); } else playWanted();
+  if (muted) { const p = playing; if (p) fade(p, 0, () => { if (muted) p.pause(); }); } else playWanted();
 }
 
 // los navegadores solo dejan sonar tras una interacción del usuario

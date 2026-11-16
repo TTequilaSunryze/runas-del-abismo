@@ -5,7 +5,7 @@ import { cast, current, endTurn, move, type ActionResult } from '../core/combat/
 import type { ClassId, GameEvent, Pos } from '../core/state';
 import { saveRun, type Peer, type Transport } from '../net/transport';
 import type { Perks } from '../content/modes';
-import { waitingFor, type HeroSave } from './run';
+import { pendingOf, waitingFor, type HeroSave } from './run';
 import { bossInfo, chooseNode, recordEvents, finishFight, leaveNode, metaAction, newArena, newRun, resolveEvent, type MetaAction, type RunState } from './run';
 
 export type Action = { a: 'move'; to: Pos } | { a: 'cast'; spell: string; at: Pos } | { a: 'end' } | MetaAction;
@@ -229,6 +229,14 @@ export class Session {
     if (!this.run) return [];
     const present = [this.myId, ...this.lobby().map((p) => p.id)];
     return waitingFor(this.run, present, this.myId);
+  }
+
+  /** El anfitrión da por listos a los que solo faltaba que pulsaran «Listo» (sin nada pendiente que elegir). */
+  forceReady(): void {
+    const run = this.run;
+    if (!this.isHost || !run) return;
+    for (const h of this.waiting()) if (!pendingOf(run, h).length) run.ready[h.owner] = run.stamp;
+    this.afterChange([]);
   }
 
   private blocked(): boolean {

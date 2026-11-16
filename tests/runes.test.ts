@@ -9,8 +9,9 @@ import { SPELLS } from '../src/core/classes/spells';
 import { spriteErrors } from '../src/render/sprites';
 
 const duel = (rune: string | undefined, enemy = 'arquero', bonus = {}) => {
-  const hero = makeHero({ cls: 'mago', name: 'Leo', owner: 'p', routes: ['fuego'], pos: { x: 2, y: 2 }, bonus: [bonus] });
+  const hero = makeHero({ cls: 'mago', name: 'Leo', owner: 'p', routes: [], pos: { x: 2, y: 2 }, bonus: [bonus] });
   hero.crit = 0;
+  hero.spells.push({ id: 'ignicion', cd: 0 });
   if (rune) hero.spells.find((s) => s.id === 'dardo')!.rune = rune;
   return createCombat({ seed: 9, w: 12, h: 7, obstacles: [], units: [hero, makeEnemy(enemy, { x: 5, y: 2 })] }).state;
 };
@@ -38,7 +39,7 @@ describe('runas', () => {
     expect(spellOf({ ...hero, id: 1 }, 'muro')!.extraStatus).toBeUndefined();
   });
   it('se engarzan y se quitan desde la partida, y llegan al combate', () => {
-    const run = newRun('TEST', 4, [{ owner: 'p0', name: 'A', cls: 'mago', routes: ['fuego'] }]);
+    const run = newRun('TEST', 4, [{ owner: 'p0', name: 'A', cls: 'mago', routes: [] }]);
     const h = run.heroes[0]!;
     h.runes = ['veloz'];
     expect(metaAction(run, 'p0', { a: 'socket', spell: 'dardo', idx: 0 })).toBeNull();

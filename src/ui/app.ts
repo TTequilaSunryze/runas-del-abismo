@@ -15,7 +15,7 @@ import { currentAccount, fetchTeam, restoreAccount, signIn, signOut, signUp } fr
 import { addFriend, invite, removeFriend, setRoom, socialHandlers } from '../net/social';
 import { championOf } from '../game/run';
 import { MAX_ASC } from '../content/modes';
-import { setZoneMusic } from '../audio/sfx';
+import { setMusicVolume, setZoneMusic } from '../audio/sfx';
 import { statsModal } from './panels';
 import { campScreen, endScreen, eventScreen, homeScreen, lobbyScreen, mapScreen, shopScreen } from './screens';
 
@@ -145,10 +145,10 @@ document.addEventListener('click', (e) => {
     case 'resume': { const h = JSON.parse(store.get('rda_host') ?? 'null') as { code: string } | null; if (h) void enter(h.code, true, false, true); break; }
     case 'doresume': if (ui.saved) { ui.log.length = 0; s?.resume(ui.saved); } break;
     case 'home': home(); break;
-    case 'cls': ui.me.cls = id as ClassId; ui.me.routes = []; publish(); render([]); break;
+    case 'cls': ui.me.cls = id as ClassId; ui.me.routes = ['base']; publish(); render([]); break;
     case 'route':
-      if (ui.me.routes.includes(id)) ui.me.routes = ui.me.routes.filter((r) => r !== id);
-      else if (canPickRoute(ui.me.cls, ui.me.routes, id) && openRoutes(ui.me.cls).includes(id)) ui.me.routes = [...ui.me.routes, id];
+      // un solo kit: elegir otro lo sustituye
+      if (canPickRoute(ui.me.cls, [], id) && openRoutes(ui.me.cls).includes(id)) ui.me.routes = [id];
       publish(); render([]); break;
     case 'start': ui.log.length = 0; ui.tab = 'equipo'; s?.startRun(); break;
     case 'node': ui.log.length = 0; s?.choose(Number(id)); break;
@@ -186,6 +186,7 @@ document.addEventListener('click', (e) => {
     case 'forgetab': ui.forgeTab = id as typeof ui.forgeTab; lastKey = ''; render([]); break;
     case 'boon': s?.act({ a: 'boon', idx: Number(id) }); break;
     case 'ready': s?.act({ a: 'ready' }); break;
+    case 'forceready': s?.forceReady(); break;
     case 'addfriend': {
       const name = (document.getElementById('friend') as HTMLInputElement).value;
       ui.friendMsg = 'Buscando…'; homeScreen('');
@@ -236,13 +237,18 @@ document.addEventListener('click', (e) => {
     case 'end': s?.act({ a: 'end' }); break;
     case 'spell': pickSpell(id); break;
     case 'togglelog': ui.logOpen = !ui.logOpen; render([]); break;
-    case 'mute': toggleMute(); render([]); break;
+    case 'mute': toggleMute(); if (ui.screen === 'home') homeScreen(''); else { lastKey = ''; render([]); } break;
     case 'leave':
       if (ui.leaveArmed) { ui.leaveArmed = false; home(); }
       else { ui.leaveArmed = true; render([]); setTimeout(() => { ui.leaveArmed = false; render([]); }, 4000); }
       break;
   }
   hideTip();
+});
+
+document.addEventListener('input', (e) => {
+  const el = e.target as HTMLInputElement;
+  if (el.id === 'vol') setMusicVolume(Number(el.value) / 100);
 });
 
 document.addEventListener('change', (e) => {

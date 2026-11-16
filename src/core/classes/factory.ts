@@ -19,12 +19,9 @@ export interface HeroBuild {
 /** Cada nivel por encima del 1 da +8% de vida base y +6% de daño. */
 export function makeHero(opts: HeroBuild): UnitSpec {
   const c = CLASSES[opts.cls];
-  const chosen: string[] = [];
-  for (const r of opts.routes) {
-    if (!canPickRoute(opts.cls, chosen, r)) throw new Error(`Ruta no permitida: ${r}`);
-    chosen.push(r);
-  }
-  const level = opts.level ?? 3;
+  // un solo kit: el primero válido (o el Clásico)
+  const chosen = opts.routes.filter((r) => canPickRoute(opts.cls, [], r)).slice(0, 1);
+  const level = opts.level ?? 1;
   const b = sumStats(opts.bonus ?? []);
   const hp = Math.max(10, Math.round(c.hp * (1 + 0.08 * (level - 1))) + b.hp);
   const ap = Math.max(2, c.ap + b.ap), mp = Math.max(1, c.mp + b.mp);
