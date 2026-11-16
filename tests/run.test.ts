@@ -45,6 +45,7 @@ function playRun(n: number, seed: number, prefer: string): RunState {
       leaveNode(run);
     } else {
       autoplay(run.combat!, 800, bossInfo(run));
+      if (!run.combat!.over) console.log('STALL', n, seed, JSON.stringify({ omen: run.omen, kind: run.kind, zone: run.zone, units: run.combat!.units.filter((u) => u.hp > 0).map((u) => [u.team, u.kind, u.hp, u.maxHp, u.pos.x, u.pos.y, u.traits, u.summoner]) }));
       expect(run.combat!.over).not.toBeNull();
       finishFight(run);
     }

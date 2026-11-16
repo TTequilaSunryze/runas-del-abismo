@@ -2,7 +2,7 @@
 // El jefe tiene dos fases, invoca refuerzos y pilares que lo curan.
 import { SPELLS, type SpellDef } from '../classes/spells';
 import type { CombatState, GameEvent, Pos, Unit } from '../state';
-import { cast, castProblem, current, endTurn, hasTrait, heal, move, spellOf, summon, type UnitSpec } from './engine';
+import { LATE_ROUND, cast, castProblem, current, endTurn, hasTrait, heal, move, spellOf, summon, type UnitSpec } from './engine';
 import { alive, dist, hasLineOfSight, isFree, reachable } from './grid';
 
 /** Lo que la zona aporta a la IA: invocaciones del jefe y de los nigromantes. */
@@ -188,7 +188,7 @@ function bossTurn(s: CombatState, u: Unit, info: BossInfo | undefined, ev: GameE
 /** Los pilares no se mueven: curan al jefe en cada uno de sus turnos. */
 function pillarTurn(s: CombatState, ev: GameEvent[]): void {
   const boss = s.units.find((b) => b.ai === 'boss' && alive(b));
-  if (boss) heal(boss, boss.maxHp * PILLAR_HEAL, ev);
+  if (boss && s.round < LATE_ROUND) heal(boss, boss.maxHp * PILLAR_HEAL, ev);
 }
 
 /** Lanza lo mejor que tenga a mano: primero ayuda a un aliado malherido, luego el hechizo que más daño haga. */

@@ -27,6 +27,8 @@ const CRIT_MULT = 1.5;
 const PUSH_CRASH_DMG = 4;
 const TRAP_DMG = 6;
 const GUARD_SHIELD = 0.15;
+const GUARD_CAP = 24;
+export const LATE_ROUND = 20;
 const PACK_BONUS = 15;
 const EXECUTE_MULT = 2;
 const MENDER_MULT = 1.3;
@@ -143,12 +145,14 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     if (!alive(u)) continue;
     ev.push({ t: 'turn', unit: u.id, round: s.round });
     u.shield = 0;
-    if (hasTrait(u, 'guard')) {
-      u.shield = Math.round(u.maxHp * GUARD_SHIELD);
+    // a partir de la ronda 20 se acaban los escudos y curas automáticos: ningún combate dura para siempre
+    const late = s.round >= LATE_ROUND;
+    if (hasTrait(u, 'guard') && !late) {
+      u.shield = Math.min(GUARD_CAP, Math.round(u.maxHp * GUARD_SHIELD));
       ev.push({ t: 'shield', unit: u.id, amount: u.shield });
     }
     for (const sp of u.spells) if (sp.cd > 0) sp.cd--;
-    if (hasTrait(u, 'regen')) heal(u, u.maxHp * REGEN, ev);
+    if (hasTrait(u, 'regen') && !late) heal(u, u.maxHp * REGEN, ev);
     if (u.statuses.burn) hurt(s, u, BURN_DMG, ev, 'burn', { pierce: true, element: 'fire' });
     if (alive(u) && u.statuses.poison) hurt(s, u, POISON_DMG * u.statuses.poison.stacks, ev, 'poison', { pierce: true, element: 'poison' });
     tick(u, 'burn');
