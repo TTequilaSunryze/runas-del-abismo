@@ -128,18 +128,45 @@ describe('consumibles, bendiciones y botín', () => {
     expect(r.ok).toBe(true);
     expect(B.hp).toBe(Math.round(B.maxHp * 0.4));
   });
-  it('bendición: 3 habilidades de un patrón, se añaden al héroe', () => {
+  it('bendiciones de clase: mejoran sus hechizos o dan hechizos nuevos de su clase', async () => {
+    const { PATRONS, patronsOf } = await import('../src/content/boons');
+    const { BOON_MODS } = await import('../src/core/boonmods');
+    const { spellOf } = await import('../src/core/combat/engine');
+    for (const cls of ['guerrero', 'mago', 'clerigo', 'arquero', 'picaro'] as const) {
+      expect(patronsOf(cls)).toHaveLength(4);
+      for (const p of patronsOf(cls)) for (const o of p.spells) {
+        expect(!!BOON_MODS[o] || !!SPELLS[o], o).toBe(true);
+        // las mejoras apuntan a hechizos que la clase tiene siempre
+        if (BOON_MODS[o]) expect(CLASSES[cls].base).toContain(BOON_MODS[o]!.target);
+      }
+    }
     const run = newRun('T', 3, [{ owner: 'a', name: 'A', cls: 'mago', routes: ['fuego'] }]);
     const h = run.heroes[0]!;
     offerBoon(run, h);
     expect(h.boonOffer!.spells).toHaveLength(3);
-    const sp = h.boonOffer!.spells[0]!;
-    expect(metaAction(run, 'a', { a: 'boon', idx: 0 })).toBeNull();
-    expect(heroSpec(h).spells.some((x) => x.id === sp)).toBe(true);
-    h.boons = ['b_llamarada', 'b_infierno'];
-    expect(heroSpec(h).power).toBe(heroSpec({ ...h, boons: [] }).power + 10);
-    h.boons.push('b_fenix');
+    expect(PATRONS[h.boonOffer!.patron]!.cls).toBe('mago');
+    // mejora: Chispa voraz da área 1 y quema 3 turnos
+    h.boonOffer = null;
+    h.boons = ['mm_voraz'];
+    const u = heroSpec(h);
+    const d = spellOf({ ...u, id: 1 }, 'chispa')!;
+    expect(d.area).toBe(1);
+    expect(d.status).toEqual({ kind: 'burn', turns: 3 });
+    // hechizo nuevo de clase
+    h.boons.push('m_meteoro');
+    expect(heroSpec(h).spells.some((x) => x.id === 'm_meteoro')).toBe(true);
+    // 3 del mismo estilo: rasgo
+    h.boons.push('mm_igneo');
     expect(heroSpec(h).traits).toContain('ignite');
+  });
+  it('Parpadeo teletransporta al mago', () => {
+    const m = makeHero({ cls: 'mago', name: 'M', owner: 'a', routes: [], pos: { x: 1, y: 3 } });
+    m.spells.push({ id: 'm_parpadeo', cd: 0 });
+    const s = board([m, makeEnemy('limo', { x: 9, y: 0 })]);
+    const me = s.units[0]!;
+    turnOf(s, me.id);
+    expect(cast(s, me.id, 'm_parpadeo', { x: 4, y: 3 }).ok).toBe(true);
+    expect(me.pos).toEqual({ x: 4, y: 3 });
   });
   it('equiparse algo con vida suma esa vida a la actual', () => {
     const run = newRun('T', 3, [{ owner: 'a', name: 'A', cls: 'guerrero', routes: ['baluarte'] }]);

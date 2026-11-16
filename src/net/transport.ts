@@ -18,6 +18,8 @@ export interface Transport {
   peers(): Peer[];
   onPeers(cb: () => void): void;
   leave(): void;
+  /** false mientras la conexión con la sala está caída (se reintenta sola) */
+  connected(): boolean;
 }
 
 let client: SupabaseClient | null = null;
@@ -43,10 +45,17 @@ abstract class Base {
   }
 }
 
+/** Supabase corta a quien actualiza la presencia demasiado a menudo: como mucho una vez cada PRESENCE_MS. */
+const PRESENCE_MS = 4000;
+
 class SupabaseTransport extends Base implements Transport {
   readonly kind = 'online';
   private presence: Record<string, unknown> = {};
   private joined = false;
+  private ok = true;
+  private tracked = '';
+  private lastTrack = 0;
+  private trackTimer: ReturnType<typeof setTimeout> | null = null;
   constructor(private channel: RealtimeChannel, private myId: string) {
     super();
     channel.on('broadcast', { event: 'm' }, ({ payload }) => {
@@ -57,6 +66,31 @@ class SupabaseTransport extends Base implements Transport {
   }
   markJoined(): void {
     this.joined = true;
+    this.ok = true;
+    this.tracked = '';
+    this.track();
+  }
+  /** Estado del canal tras unirse: si se cae, Supabase lo reintenta; al volver se republica la presencia. */
+  status(st: string): void {
+    const was = this.ok;
+    if (st === 'SUBSCRIBED') this.markJoined();
+    else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT' || st === 'CLOSED') this.ok = false;
+    if (was !== this.ok) this.peersChanged();
+  }
+  connected(): boolean {
+    return this.ok;
+  }
+  private track(): void {
+    if (!this.joined) return;
+    const json = JSON.stringify(this.presence);
+    if (json === this.tracked) return;
+    const wait = this.lastTrack + PRESENCE_MS - Date.now();
+    if (wait > 0) {
+      this.trackTimer ??= setTimeout(() => { this.trackTimer = null; this.track(); }, wait);
+      return;
+    }
+    this.tracked = json;
+    this.lastTrack = Date.now();
     void this.channel.track(this.presence);
   }
   send(event: string, payload: unknown): void {
@@ -64,13 +98,14 @@ class SupabaseTransport extends Base implements Transport {
   }
   setPresence(data: Record<string, unknown>): void {
     this.presence = data;
-    if (this.joined) void this.channel.track(data);
+    this.track();
   }
   peers(): Peer[] {
     const state = this.channel.presenceState() as Record<string, Array<Record<string, unknown>>>;
     return Object.entries(state).map(([id, metas]) => ({ id, data: metas[metas.length - 1] ?? {} }));
   }
   leave(): void {
+    if (this.trackTimer) clearTimeout(this.trackTimer);
     void supabase().removeChannel(this.channel);
   }
 }
@@ -105,6 +140,9 @@ class LocalTransport extends Base implements Transport {
   peers(): Peer[] {
     return [{ id: this.myId, data: this.presence }, ...[...this.others].map(([id, data]) => ({ id, data }))];
   }
+  connected(): boolean {
+    return true;
+  }
   leave(): void {
     this.bc.postMessage({ k: 'bye', f: this.myId });
     this.bc.close();
@@ -118,8 +156,11 @@ export function joinRoom(code: string, myId: string, local: boolean): Promise<Tr
     const channel = supabase().channel('rda-' + code, { config: { broadcast: { self: false }, presence: { key: myId } } });
     const t = new SupabaseTransport(channel, myId);
     const timer = setTimeout(() => reject(new Error('Sin respuesta del servidor')), 12000);
+    let done = false;
     channel.subscribe((status) => {
+      if (done) { t.status(status); return; }
       if (status === 'SUBSCRIBED') {
+        done = true;
         clearTimeout(timer);
         t.markJoined();
         resolve(t);

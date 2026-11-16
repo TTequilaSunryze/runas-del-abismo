@@ -54,7 +54,7 @@ Tutorial de 5 pasos la primera vez, textos de zona y clase, pantalla final con r
 - **Élites y jefes**: inmunes a aturdir. Cada PM/PA que se les intenta quitar (y cada casilla de empuje) se tira dos veces (70% cada una) y solo entra si salen las dos (~49%).
 - **Placaje y huida**: al salir de una casilla pegada a enemigos se conserva solo una parte de los PM: (huida + 2) / (2 × (placaje total + 2)). Clases: guerrero placa mucho, pícaro y arquero huyen bien. Espectros e invisibles lo ignoran. Objetos con Placaje/Huida.
 - **Kit inicial**: 3 habilidades desde el nivel 1 (2 de daño + 1 de potenciación): Guerrero *Sed de sangre* (15% de vida → +35% daño), Mago *Escudo arcano*, Clérigo *Fervor*, Arquero *Ojo de halcón* (+2 alcance) y *Tiro rasante* (sí alcanza a pegados), Pícaro *Desvanecerse* (invisible).
-- **Bendiciones (estilo Hades)**: 5 patrones (Tormenta, Llama, Escarcha, Sombra, Vida) con 3 habilidades cada uno. El Santuario y los élites ofrecen 3 a elegir, a menudo del patrón que ya llevas; 2 y 3 del mismo patrón dan bonus. Hasta 4 habilidades extra.
+- **Bendiciones de clase (estilo Hades)**: cada clase tiene 4 estilos (p. ej. Guerrero: Acero, Sangre, Muralla, Caudillo) con 3 opciones cada uno: mejoras de sus hechizos de clase (Chispa voraz, Tajo vampírico, Flecha de acero…) o hechizos nuevos de la clase (Meteoro, Carga, Degollar, Halcón…). El Santuario y los élites ofrecen 3 de un estilo, a menudo el que ya llevas; 2 y 3 del mismo estilo dan bonus. Hasta 6 bendiciones.
 - **Consumibles**: poción de curación, poción de resurrección, bomba de fuego, bomba de humo (máx. 3 de cada). Salen tras los combates (siempre tras élite y jefe) y en la tienda.
 - **Botín por profundidad**: más probabilidad de raro, épico y legendario cuanto más avanzada la partida (con techo).
 - **Vida al equipar**: la vida máxima que da un objeto se suma también a la actual.
@@ -63,6 +63,7 @@ Tutorial de 5 pasos la primera vez, textos de zona y clase, pantalla final con r
 - **Listo**: el anfitrión no puede cambiar de sala hasta que todos los conectados hayan elegido botín, mejoras y bendiciones y pulsado «Listo».
 - **Ficha del personaje** (botón 📊 o tecla S): estadísticas base + equipo, sets, reliquias, bendiciones y eventos.
 - **Estadísticas en vivo de los enemigos**: −PM en azul y −PA en amarillo al aplicarse; la ayuda muestra PA/PM de su próximo turno, armadura, placaje y huida.
+- **Online**: la presencia en Supabase se publica como mucho cada 4 s y solo con datos mínimos (antes se superaba el límite y el servidor desconectaba al jugador); aviso en pantalla y reconexión si el canal se cae.
 - **Amigos e invitaciones** (con cuenta): lista de amigos por nombre de cuenta, ver quién está en línea y en qué sala, invitar desde la sala con un clic.
 - **Música**: 11 pistas propias (menú, sala, mapa de cada zona, combate, jefe, descanso, elecciones, final) con fundido.
 

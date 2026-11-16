@@ -134,7 +134,7 @@ export function lobbyScreen(): void {
   const ready = players.slice(0, 4).filter((p) => p.routes.length > 0);
   const total = Math.min(4, players.length);
   ui.root.innerHTML = `<div class="bar"><span>Sala</span><b class="code">${esc(s.code)}</b>${s.t.kind === 'local' ? '<span class="dim">(local)</span>' : ''}
-    <span class="dim sm">${s.isHost ? 'Comparte el código. Cuando todos tengan ruta, pulsa Comenzar.' : s.hostPresent() ? 'Elige clase y rutas. El anfitrión comienza.' : 'Buscando al anfitrión… (puede tardar unos segundos)'}</span>
+    <span class="dim sm">${!s.t.connected() ? '<b class="bad">⚠ Conexión perdida: reconectando…</b> ' : ''}${s.isHost ? 'Comparte el código. Cuando todos tengan ruta, pulsa Comenzar.' : s.hostPresent() ? 'Elige clase y rutas. El anfitrión comienza.' : 'Buscando al anfitrión… (puede tardar unos segundos)'}</span>
     ${ui.notice ? `<span class="bad">${esc(ui.notice)}</span>` : ''}<span class="grow"></span>
     ${s.isHost ? `${ui.saved ? `<button data-act="doresume">Reanudar guardada (zona ${ui.saved.zone + 1}, sala ${ui.saved.step + 1})</button>` : ''}<button class="pri" data-act="start" ${ready.length && ready.length === total ? '' : 'disabled'}>⚔️ Comenzar (${ready.length}/${total})</button>` : ''}<button data-act="home">Salir</button></div>
   <div class="cols"><section class="main">

@@ -5,7 +5,8 @@ import { DAILY_ASC, DAILY_MODS, DAILY_POOL, MAX_MODS, OMENS, perkLevel, type Per
 import { BASE_ZONES, ZONES, type BossDef, type ZoneDef } from '../content/zones';
 import type { BossInfo } from '../core/combat/ai';
 import { RELIC_EVENTS, RELICS } from '../content/relics';
-import { CONSUMABLES, MAX_BOONS, MAX_CONSUMABLE, PATRONS, patronBonus, patronOf } from '../content/boons';
+import { CONSUMABLES, MAX_BOONS, MAX_CONSUMABLE, PATRONS, patronBonus, patronOf, patronsOf } from '../content/boons';
+import { BOON_MODS } from '../core/boonmods';
 import { CLASSES, MAX_LEVEL, canPickRoute } from '../core/classes/classes';
 import { SPELLS } from '../core/classes/spells';
 import { SETS, setBonus } from '../core/items/sets';
@@ -96,7 +97,7 @@ export const NODE_HINT: Record<NodeKind, string> = {
   shop: 'Gastad vuestro oro en objetos y pociones.', treasure: 'Cada uno elige un objeto raro o mejor, sin combatir.', boss: 'El guardián de la zona. Dos fases.',
   forge: 'Cada uno mejora una pieza equipada: sube de rareza y de estadísticas.', altar: 'Cada uno sacrifica vida u oro a cambio de runas, mejoras de hechizo o curación.',
   gamble: 'Apuesta oro por reliquias. Puede salir bien… o no.', cage: 'Un prisionero vigilado: venced a sus captores y luchará con vosotros hasta el final de la zona.',
-  shrine: 'Un patrón os ofrece su poder: cada uno elige 1 de 3 habilidades nuevas.',
+  shrine: 'Cada uno elige 1 de 3 bendiciones de su clase: mejoras de sus hechizos o hechizos nuevos.',
 };
 
 /** Salas de una sola parada en las que cada jugador hace algo por su cuenta. */
@@ -265,9 +266,11 @@ export function addAlly(run: RunState, id: string): void { if (run.allies.length
 export function offerBoon(run: RunState, h: HeroSave): void {
   if (h.boonOffer) return;
   if (h.boons.length >= MAX_BOONS) { h.upPending++; ensureUpOffer(run, h); return; }
+  // solo los estilos de su clase
+  const mineCls = patronsOf(h.cls).map((p) => p.id);
   const fresh = (p: string): string[] => PATRONS[p]!.spells.filter((sp) => !h.boons.includes(sp));
-  const mine = Object.keys(PATRONS).filter((p) => h.boons.some((b) => patronOf(b)?.id === p) && fresh(p).length);
-  const any = Object.keys(PATRONS).filter((p) => fresh(p).length);
+  const mine = mineCls.filter((p) => h.boons.some((b) => patronOf(b)?.id === p) && fresh(p).length);
+  const any = mineCls.filter((p) => fresh(p).length);
   if (!any.length) return;
   const patron = mine.length && rand(run) < 0.6 ? pick(run, mine) : pick(run, any);
   const spells = fresh(patron);
@@ -348,12 +351,16 @@ export function heroSpec(h: Build, pos: Pos = { x: 0, y: 0 }): UnitSpec {
   const u = makeHero({ cls: h.cls, name: h.name, owner: h.owner, routes: h.routes, pos, level: h.level, bonus: [...Object.values(h.equip).map((i) => i.stats), ...sets.stats, h.boon, ...relics.map((r) => r!.stats), ...pat.stats] });
   for (const t of pat.traits) if (!sets.traits.includes(t)) sets.traits.push(t);
   // habilidades de bendición y consumibles (con sus usos)
-  for (const b of h.boons ?? []) if (SPELLS[b] && !u.spells.some((x) => x.id === b)) u.spells.push({ id: b, cd: 0 });
+  for (const b of h.boons ?? []) {
+    const mod = BOON_MODS[b];
+    if (mod) { const sp = u.spells.find((x) => x.id === mod.target); if (sp) sp.ups = [b, ...(sp.ups ?? [])]; }
+    else if (SPELLS[b] && !u.spells.some((x) => x.id === b)) u.spells.push({ id: b, cd: 0 });
+  }
   for (const [id, n] of Object.entries(h.bag2 ?? {})) if (n > 0 && SPELLS[id]) u.spells.push({ id, cd: 0, charges: n });
   for (const r of relics) if (r!.trait && !sets.traits.includes(r!.trait)) sets.traits.push(r!.trait);
   for (const sp of u.spells) {
     if (h.sockets[sp.id]) sp.rune = h.sockets[sp.id];
-    if (h.ups?.[sp.id]?.length) sp.ups = [...h.ups[sp.id]!];
+    if (h.ups?.[sp.id]?.length) sp.ups = [...(sp.ups ?? []), ...h.ups[sp.id]!];
   }
   if (sets.traits.length) u.traits = sets.traits;
   return u;
@@ -362,7 +369,7 @@ export function heroSpec(h: Build, pos: Pos = { x: 0, y: 0 }): UnitSpec {
 /** Propone mejoras de hechizo si al héroe le queda alguna elección pendiente. */
 export function ensureUpOffer(run: RunState, h: HeroSave): void {
   if (h.upOffer || h.upPending <= 0) return;
-  const all = heroSpec(h).spells.flatMap((sp) => Object.keys(UPGRADES).filter((id) => canUpgrade(SPELLS[sp.id]!, h.ups[sp.id] ?? [], id)).map((up) => ({ spell: sp.id, up })));
+  const all = heroSpec(h).spells.filter((sp) => sp.charges === undefined).flatMap((sp) => Object.keys(UPGRADES).filter((id) => canUpgrade(SPELLS[sp.id]!, h.ups[sp.id] ?? [], id)).map((up) => ({ spell: sp.id, up })));
   if (!all.length) { h.upPending = 0; return; }
   const out: Array<{ spell: string; up: string }> = [];
   // primero una por hechizo, para que haya variedad
@@ -642,7 +649,7 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
     run.phase = 'camp';
   } else if (node === 'shrine') {
     for (const h of run.heroes) offerBoon(run, h);
-    run.note = 'Un patrón antiguo os ofrece su poder. Cada uno elige una habilidad nueva.';
+    run.note = 'El santuario despierta el poder de cada clase: elegid una bendición.';
     run.step++;
   } else {
     offerAll(run, 3, 1, true);

@@ -97,11 +97,11 @@ const LOOK: Record<string, [string, string]> = {
   castigo: ['bolt', 'holy'], fervor: ['sun', 'blood'], tiro_rasante: ['arrow', 'steel'], ojo_halcon: ['eye', 'nature'],
   cuchillo: ['dagger', 'storm'], desvanecer: ['cloud', 'shadow'],
   c_vida: ['vial', 'blood'], c_resu: ['chalice', 'holy'], c_fuego: ['fireball', 'fire'], c_humo: ['cloud', 'steel'],
-  b_relampago: ['bolt', 'arcane'], b_cadena: ['storm', 'arcane'], b_trueno: ['whirl', 'storm'],
-  b_llamarada: ['flame', 'blood'], b_infierno: ['rain', 'fire'], b_fenix: ['heart', 'fire'],
-  b_lanza: ['dart', 'ice'], b_prision: ['iceblock', 'arcane'], b_coraza: ['shield', 'ice'],
-  b_drenar: ['drop', 'shadow'], b_paso: ['leap', 'shadow'], b_maldicion: ['skull', 'poison'],
-  b_espinas: ['whip', 'poison'], b_brote: ['heart', 'nature'], b_corteza: ['shield', 'nature'],
+  g_remolino: ['whirl', 'steel'], g_carniceria: ['axe', 'blood'], g_muralla: ['dome', 'steel'], g_carga: ['dash', 'gold'], g_estandarte: ['banner', 'gold'],
+  m_meteoro: ['rain', 'fire'], m_glaciar: ['iceblock', 'ice'], m_rayo_cadena: ['storm', 'storm'], m_parpadeo: ['leap', 'arcane'],
+  c_milagro: ['heart', 'holy'], c_martillo: ['hammer', 'gold'], c_santuario: ['dome', 'holy'], c_sacrificio: ['chalice', 'blood'],
+  a_letal: ['crosshair', 'steel'], a_abanico: ['multi', 'fire'], a_campo: ['trap', 'poison'], a_halcon: ['paw', 'nature'],
+  p_frasco: ['vial', 'poison'], p_degollar: ['skull', 'blood'], p_debilidad: ['eye', 'shadow'], p_danza: ['twin', 'storm'],
 };
 
 const EL_PAL: Record<string, string> = { fire: 'fire', ice: 'ice', poison: 'poison', holy: 'holy', shadow: 'shadow' };

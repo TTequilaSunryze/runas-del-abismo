@@ -113,7 +113,8 @@ export class Session {
   /** Publica mis datos de sala (nombre, clase, rutas). */
   announce(data: Record<string, unknown>): void {
     this.mine = data;
-    this.t.setPresence(data);
+    // en la presencia solo lo mínimo (Supabase limita su frecuencia); el resto viaja en los avisos «here»
+    this.t.setPresence({ name: data.name, cls: data.cls, routes: data.routes, host: data.host });
     this.t.send('here', data);
     this.checkLobby();
   }

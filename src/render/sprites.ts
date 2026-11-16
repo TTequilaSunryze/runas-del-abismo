@@ -68,6 +68,7 @@ const HERO_SPRITES = ['guerrero', 'mago', 'clerigo', 'picaro', 'arquero'];
 const ENEMY_LOOK: Record<string, Look> = {
   limo: { sprite: 'slime', pal: { a: '#8fbf6a', b: '#c4e8a0', e: '#102010' } },
   murcielago: { sprite: 'bat', pal: { a: '#7a4a9a', e: '#ff4060' } },
+  halcon: { sprite: 'bat', pal: { a: '#a07040', e: '#ffd24a' } },
   esqueleto: { sprite: 'skel', pal: { e: '#c02030' } },
   arquero: { sprite: 'skel', pal: { w: '#c9d6a8', e: '#30a040' } },
   necrofago: { sprite: 'ghoul', pal: { a: '#7d9a78', b: '#4a3a4a', e: '#ffd24a' } },

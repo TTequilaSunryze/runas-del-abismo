@@ -2,6 +2,7 @@
 import type { SpellDef } from './classes/spells';
 import { withRune } from './runes';
 import type { SpellSlot } from './state';
+import { BOON_MODS } from './boonmods';
 
 export interface UpgradeDef {
   id: string;
@@ -34,7 +35,9 @@ export function tuned(def: SpellDef, slot: Pick<SpellSlot, 'rune' | 'ups'> | und
   let d = def;
   if (slot?.ups?.length) {
     d = { ...def, range: [...def.range] as [number, number] };
-    for (const id of slot.ups) { const up = UPGRADES[id]; if (up?.fits(def)) up.apply(d); }
+    // primero las mejoras de bendición (cambian el efecto), luego las de nivel (lo potencian)
+    for (const id of slot.ups) { const bm = BOON_MODS[id]; if (bm && bm.target === def.id) bm.apply(d); }
+    for (const id of slot.ups) { const up = UPGRADES[id]; if (up?.fits(d)) up.apply(d); }
   }
   return withRune(d, slot?.rune);
 }

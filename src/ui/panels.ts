@@ -5,7 +5,8 @@ import { SPELLS } from '../core/classes/spells';
 import { BAG_SIZE, PRICE, RARITY_NAME, SLOTS, SLOT_NAME, STAT_NAME, statDiff, statsText, type Item, type Slot, type StatKey } from '../core/items/items';
 import { SETS, setCounts } from '../core/items/sets';
 import { RELICS } from '../content/relics';
-import { PATRONS, patronBonus, patronOf } from '../content/boons';
+import { MAX_BOONS, PATRONS, patronBonus, patronOf } from '../content/boons';
+import { BOON_MODS } from '../core/boonmods';
 import { RUNES } from '../core/runes';
 import { UPGRADES, tuned } from '../core/upgrades';
 import { heroMaxHp, heroSpec, pendingOf, statBreakdown, zoneOf, type HeroSave, type RunState } from '../game/run';
@@ -30,7 +31,7 @@ export function topBar(run: RunState): string {
   if (run.arena) return `<div class="bar"><span class="zone">🏟️ Duelo: ${esc(run.arena.nameA)} contra ${esc(run.arena.nameB)}</span><span class="grow"></span>${sysButtons()}</div>`;
   return `<div class="bar"><b class="code-s">${esc(run.code)}</b><span class="zone">Zona ${run.zone + 1} · ${esc(zoneOf(run).name)}</span>
   ${h ? `<span class="pill">💰 ${h.gold}</span>${hpBar(h.hp, heroMaxHp(h))}<span>Nv ${h.level}</span>` : '<span class="dim">Espectador</span>'}
-  ${ui.notice ? `<span class="bad">${esc(ui.notice)}</span>` : ''}${!ui.session!.hostPresent() ? '<span class="bad">Anfitrión desconectado</span>' : ''}<span class="grow"></span>${sysButtons()}</div>`;
+  ${ui.notice ? `<span class="bad">${esc(ui.notice)}</span>` : ''}${!ui.session!.t.connected() ? '<span class="bad">⚠ Conexión perdida: reconectando…</span>' : !ui.session!.hostPresent() ? '<span class="bad">Anfitrión desconectado</span>' : ''}<span class="grow"></span>${sysButtons()}</div>`;
 }
 
 /** Qué cambia si me pongo `it` en lugar de lo que llevo en esa ranura. */
@@ -138,10 +139,20 @@ export function boonRow(run: RunState): string {
   if (!h?.boonOffer) return '';
   const p = PATRONS[h.boonOffer.patron]!;
   const counts = patronBonus(h.boons).counts;
-  return `<div class="panel loot boon"><div class="row"><h3>${p.icon} Bendición de ${esc(p.name)}: elige una habilidad</h3><span class="grow"></span><span class="dim sm">Habilidades extra: ${h.boons.length}/4</span></div>
-  <div class="dim sm">Con 2 del mismo patrón: ${esc(p.twoText)} · con 3: ${esc(p.threeText)}. ${counts[p.id] ? `Ya tienes ${counts[p.id]} de ${esc(p.name)}.` : ''}</div>
-  <div class="cards c3">${h.boonOffer.spells.map((id, i) => { const d = SPELLS[id]!; const pp = patronOf(id)!; const n = (counts[pp.id] ?? 0) + 1;
-    return `<div class="lootcard r2"><div class="row">${spellIcon(d)}<div><b>${esc(d.name)}</b><div class="pill sm">${pp.icon} ${esc(pp.name)}</div></div></div><div class="sm">${esc(spellSummary(d))}</div><div class="dim sm">${d.ap} PA · ${rangeText(d)}${d.cd ? ` · espera ${d.cd}` : ''}</div>${n >= 2 ? `<div class="good sm">Con esta: ${n} de ${esc(pp.name)} → ${esc(n >= 3 ? pp.threeText : pp.twoText)}</div>` : ''}<button class="pri" data-act="boon" data-id="${i}">Elegir</button></div>`; }).join('')}</div>
+  const card = (id: string, i: number): string => {
+    const pp = patronOf(id)!, n = (counts[pp.id] ?? 0) + 1;
+    const syn = n >= 2 ? `<div class="good sm">Con esta: ${n} de ${esc(pp.name)} → ${esc(n >= 3 ? pp.threeText : pp.twoText)}</div>` : '';
+    const mod = BOON_MODS[id];
+    if (mod) {
+      const base = SPELLS[mod.target]!, now = tuned(base, { ups: [...h.boons.filter((b) => BOON_MODS[b]?.target === mod.target), ...(h.ups[mod.target] ?? [])] }), next = tuned(base, { ups: [id, ...h.boons.filter((b) => BOON_MODS[b]?.target === mod.target), ...(h.ups[mod.target] ?? [])] });
+      return `<div class="lootcard r2"><div class="row">${spellIcon(next)}<div><b>${esc(mod.name)}</b><div class="pill sm">Mejora: ${esc(base.name)}</div></div></div><div class="sm">${esc(mod.text)}</div><div class="dim sm">Ahora: ${now.ap} PA · ${esc(spellSummary(now))}</div><div class="good sm">Después: ${next.ap} PA · ${esc(spellSummary(next))}</div>${syn}<button class="pri" data-act="boon" data-id="${i}">Elegir</button></div>`;
+    }
+    const d = SPELLS[id]!;
+    return `<div class="lootcard r2"><div class="row">${spellIcon(d)}<div><b>${esc(d.name)}</b><div class="pill sm">Hechizo nuevo</div></div></div><div class="sm">${esc(spellSummary(d))}</div><div class="dim sm">${d.ap} PA · ${rangeText(d)}${d.cd ? ` · espera ${d.cd}` : ''}</div><div class="sm dim"><i>${esc(d.text)}</i></div>${syn}<button class="pri" data-act="boon" data-id="${i}">Elegir</button></div>`;
+  };
+  return `<div class="panel loot boon"><div class="row"><h3>${p.icon} Bendición de ${esc(p.name)}: elige una</h3><span class="grow"></span><span class="dim sm">Bendiciones: ${h.boons.length}/${MAX_BOONS}</span></div>
+  <div class="dim sm">Mejoras de tus hechizos de ${esc(CLASSES[h.cls].name.toLowerCase())} o hechizos nuevos. Con 2 de ${esc(p.name)}: ${esc(p.twoText)} · con 3: ${esc(p.threeText)}.${counts[p.id] ? ` Ya tienes ${counts[p.id]}.` : ''}</div>
+  <div class="cards c3">${h.boonOffer.spells.map(card).join('')}</div>
   <button class="mini" data-act="boon" data-id="-1">Rechazar</button></div>`;
 }
 
@@ -188,6 +199,7 @@ export function statsModal(run: RunState): string {
     ${Object.values(h.bag2).some((n) => n > 0) ? `<div class="lbl">Consumibles</div><div class="chips">${Object.entries(h.bag2).filter(([, n]) => n > 0).map(([id, n]) => `<span class="chip" ${tip(spellTip(SPELLS[id]!))}>${spellIcon(SPELLS[id]!, false)} ${esc(SPELLS[id]!.name)} x${n}</span>`).join('')}</div>` : ''}</div>
     <div>${h.relics.length ? `<div class="lbl">Reliquias</div><div class="chips">${h.relics.map((r) => RELICS[r]).filter(Boolean).map((r) => `<span class="chip" ${tip(esc(r!.text))}>${r!.icon} ${esc(r!.name)}</span>`).join('')}</div>` : ''}
     ${Object.keys(pat.counts).length ? `<div class="lbl">Bendiciones</div>${Object.entries(pat.counts).map(([id, n]) => { const p = PATRONS[id]!; return `<div class="sm ${n >= 2 ? 'good' : 'dim'}">${p.icon} ${esc(p.name)} ${n}/3 · ${n >= 3 ? esc(p.threeText) : n >= 2 ? esc(p.twoText) : `con 2: ${esc(p.twoText)}`}</div>`; }).join('')}` : ''}
+    ${h.boons.some((b) => BOON_MODS[b]) ? `<div class="lbl">Hechizos mejorados</div>${h.boons.filter((b) => BOON_MODS[b]).map((b) => `<div class="sm" ${tip(esc(BOON_MODS[b]!.text))}>✨ ${esc(BOON_MODS[b]!.name)} <span class="dim">(${esc(SPELLS[BOON_MODS[b]!.target]!.name)})</span></div>`).join('')}` : ''}
     ${(spec.traits ?? []).length ? `<div class="lbl">Efectos especiales</div>${(spec.traits ?? []).map((t) => `<div class="sm">${esc(TRAIT_LABEL[t] ?? t)}</div>`).join('')}` : ''}</div>
   </div></div></div>`;
 }

@@ -356,6 +356,7 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
   if (def.selfDmg) u.hp = Math.max(1, u.hp - def.selfDmg);
   if (def.selfDmgPct) { const lost = Math.min(u.hp - 1, Math.round(u.hp * def.selfDmgPct)); u.hp -= lost; ev.push({ t: 'damage', unit: u.id, amount: lost, absorbed: 0, crit: false, source: def.id }); }
   if (def.buff) addStatus(u, def.buff.kind, def.buff.turns, def.buff.stacks ?? 1, ev);
+  if (def.selfBuff2) addStatus(u, def.selfBuff2.kind, def.selfBuff2.turns, def.selfBuff2.stacks ?? 1, ev);
   if (def.selfMp) { u.mp += def.selfMp; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: def.selfMp }); }
   if (def.revive) {
     const dead = s.units.find((x) => !alive(x) && same(x.pos, at) && x.team === u.team && x.summoner === undefined)!;
@@ -368,6 +369,7 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
   }
 
   if (def.target === 'cell') {
+    if (def.teleport) { u.pos = { ...at }; ev.push({ t: 'blink', unit: u.id, to: { ...at } }); }
     if (def.snare) (s.snares ??= []).push({ k: key(at), team: u.team, dmg: Math.round(def.snare.dmg * (1 + u.power / 100)) });
     if (def.summon) {
       const m = def.summon, hp = Math.round(u.maxHp * m.hpPct);
