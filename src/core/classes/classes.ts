@@ -81,6 +81,12 @@ export const CLASSES: Record<ClassId, ClassDef> = {
       R('bestias', 'Señor de bestias', '', ['flecha', 'lobo', 'orden'], 'Un lobo lucha a tu lado.'),
     ],
   },
+  zorro: {
+    id: 'zorro', name: 'Hechicera Zorro', hp: 44, armor: 0, power: 6, crit: 8, ap: 7, mp: 5, initiative: 15, base: ['z_orbe', 'z_encanto', 'z_impulso'], tackle: 1, dodge: 11,
+    routes: [
+      R('base', 'Clásico', '', ['z_orbe', 'z_encanto', 'z_impulso'], 'El kit inicial: un orbe que rebota, un encanto y un salto espiritual.'),
+    ],
+  },
 };
 
 /** Se elige un solo kit inicial. */

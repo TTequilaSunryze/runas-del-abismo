@@ -102,6 +102,7 @@ const LOOK: Record<string, [string, string]> = {
   c_milagro: ['heart', 'holy'], c_martillo: ['hammer', 'gold'], c_santuario: ['dome', 'holy'], c_sacrificio: ['chalice', 'blood'],
   a_letal: ['crosshair', 'steel'], a_abanico: ['multi', 'fire'], a_campo: ['trap', 'poison'], a_halcon: ['paw', 'nature'],
   p_frasco: ['vial', 'poison'], p_degollar: ['skull', 'blood'], p_debilidad: ['eye', 'shadow'], p_danza: ['twin', 'storm'],
+  z_orbe: ['fireball', 'shadow'], z_encanto: ['eye', 'shadow'], z_impulso: ['dash', 'arcane'], z_drenaje: ['heart', 'shadow'], z_velo: ['cloud', 'shadow'],
 };
 
 const EL_PAL: Record<string, string> = { fire: 'fire', ice: 'ice', poison: 'poison', holy: 'holy', shadow: 'shadow' };

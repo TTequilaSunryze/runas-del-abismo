@@ -10,6 +10,7 @@ export const CLASS_STORY: Record<string, string> = {
   mago: 'Poca vida, mucho fuego. Escoge bien tu escuela: no hay vuelta atrás.',
   clerigo: 'La luz sostiene al grupo; la sombra se cobra lo que la luz perdona.',
   arquero: 'Nunca dejes que se acerquen. Un buen disparo vale más que diez golpes.',
+  zorro: 'Nueve colas y ninguna prisa. Lo que te alcanza, ya te pertenece.',
   picaro: 'Veneno, trampas y un cuchillo a la espalda. Si no te ven, no te tocan.',
 };
 export const ENDING_WON = 'La última runa se enciende. El Abismo calla… por ahora. Quedan ascensiones más profundas, y siempre otra partida.';

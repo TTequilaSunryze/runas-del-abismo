@@ -64,6 +64,12 @@ export interface SpellDef {
   retreat?: number;
   /** coloca un cepo en la casilla */
   snare?: { dmg: number };
+  /** solo se puede apuntar en línea recta (misma fila o columna) */
+  straight?: boolean;
+  /** veces que golpea a los enemigos de la línea (el orbe rebota) */
+  bounce?: number;
+  /** tras teletransportarte, golpea al enemigo más cercano en `radius` casillas */
+  followUp?: { dmg: [number, number]; element?: Element; radius: number };
   /** invoca un aliado controlado por la IA (uno a la vez) */
   summon?: { kind: string; name: string; hpPct: number; armor: number; ap: number; mp: number; initiative: number; spell: string };
   text: string;
@@ -73,6 +79,12 @@ const S = (d: SpellDef): SpellDef => d;
 
 export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
   [
+    // ---------- Hechicera Zorro ----------
+    S({ id: 'z_orbe', name: 'Orbe del engaño', route: 'base', ap: 3, cd: 0, range: [1, 5], los: true, straight: true, line: true, bounce: 2, target: 'enemy', dmg: [6, 8], element: 'shadow', text: 'Un orbe en línea recta. Golpea a los enemigos del camino al ir y al volver.' }),
+    S({ id: 'z_encanto', name: 'Encanto', route: 'base', ap: 2, cd: 2, range: [1, 5], los: true, straight: true, target: 'enemy', status: { kind: 'charm', turns: 1 }, text: 'Encanta al primer enemigo de la línea: en su próximo turno no ataca y se acerca a ti en línea recta gastando todos sus PM.' }),
+    S({ id: 'z_impulso', name: 'Impulso espiritual', route: 'base', ap: 3, cd: 0, range: [1, 3], los: false, straight: true, target: 'cell', teleport: true, followUp: { dmg: [5, 7], element: 'shadow', radius: 4 }, text: 'Te desplazas hasta 3 casillas en línea recta ignorando el placaje y lanzas un proyectil al enemigo más cercano a 4 casillas.' }),
+    S({ id: 'z_drenaje', name: 'Drenaje de esencia', route: 'boon', ap: 2, cd: 1, range: [1, 3], los: true, target: 'enemy', dmg: [4, 6], element: 'shadow', lifesteal: 1, text: 'Te curas todo el daño que haces.' }),
+    S({ id: 'z_velo', name: 'Velo espectral', route: 'boon', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', buff: { kind: 'invis', turns: 1 }, selfMp: 2, text: 'Invisible durante 1 turno y ganas 2 PM.' }),
     // ---------- Guerrero ----------
     S({ id: 'tajo', name: 'Tajo', route: 'base', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [8, 11], text: 'Golpe cuerpo a cuerpo.' }),
     S({ id: 'muro', name: 'Muro de escudos', route: 'baluarte', ap: 2, cd: 2, range: [0, 0], los: false, target: 'self', shield: 12, text: 'Ganas 12 de escudo.' }),

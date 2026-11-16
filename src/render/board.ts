@@ -8,8 +8,8 @@ import type { Session } from '../game/session';
 import { PLAYER_COLORS, drawUnit } from './sprites';
 
 const TILE = 56;
-const STATUS_COLOR: Record<string, string> = { burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0' };
-export const STATUS_NAME: Record<string, string> = { burn: 'Quemadura', poison: 'Veneno', slow: 'Ralentizado', stun: 'Aturdido', mark: 'Marcado', empower: 'Potenciado', reach: 'Alcance+', invis: 'Invisible', exposed: 'Expuesto' };
+const STATUS_COLOR: Record<string, string> = { burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0', charm: '#ff9ad8' };
+export const STATUS_NAME: Record<string, string> = { burn: 'Quemadura', poison: 'Veneno', slow: 'Ralentizado', stun: 'Aturdido', mark: 'Marcado', empower: 'Potenciado', reach: 'Alcance+', invis: 'Invisible', exposed: 'Expuesto', charm: 'Encantado' };
 
 interface Float { x: number; y: number; text: string; color: string; t0: number }
 interface Shot { x0: number; y0: number; x1: number; y1: number; color: string; t0: number; dur: number }
@@ -18,7 +18,7 @@ const ELEMENT_COLOR: Record<string, string> = { fire: '#ff8a30', ice: '#8ae0ff',
 const ELEMENT_NAME: Record<string, string> = { fire: 'fuego', ice: 'hielo', poison: 'veneno', shadow: 'sombra', holy: 'sagrado' };
 const LUNGE_MS = 240;
 
-const CLASS_KINDS = ['guerrero', 'mago', 'clerigo', 'picaro', 'arquero'];
+const CLASS_KINDS = ['guerrero', 'mago', 'clerigo', 'picaro', 'arquero', 'zorro'];
 /** Índice de color y etiqueta: héroes de jugadores, y héroes rivales (némesis, duelos) dentro de su bando. */
 function teamIdx(c: CombatState): Map<number, number> {
   const m = new Map<number, number>();
@@ -294,7 +294,7 @@ export class Board {
     const u = c.units.find((x) => alive(x) && x.pos.x === h.x && x.pos.y === h.y);
     if (!u) return;
     const g = this.g;
-    const st = Object.entries(u.statuses).map(([k, v]) => `${STATUS_NAME[k]} ${v!.turns}`).join(', ');
+    const st = [...Object.entries(u.statuses).map(([k, v]) => `${STATUS_NAME[k]} ${v!.turns}`), ...(u.essence !== undefined ? [`Esencia ${u.essence}/3`] : [])].join(', ');
     const res = Object.entries(u.resist ?? {}).filter(([, v]) => v).map(([k, v]) => (v! > 0 ? `Resiste ${ELEMENT_NAME[k]} ${v}%` : `Débil a ${ELEMENT_NAME[k]} ${-v!}%`)).join(' · ');
     // daño estimado del hechizo elegido sobre esta unidad
     let est = '';

@@ -179,6 +179,13 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     tick(u, 'reach');
     tick(u, 'invis');
     tick(u, 'exposed');
+    // encantado: no ataca en ese turno y se acerca a quien lo encantó gastando todos sus PM
+    if (u.statuses.charm) {
+      u.ap = 0;
+      pullToward(s, u, u.statuses.charm.from, ev);
+      tick(u, 'charm');
+      if (!alive(u) || s.over) continue;
+    }
     if (u.statuses.stun) {
       tick(u, 'stun');
       ev.push({ t: 'skip', unit: u.id, reason: 'stun' });
@@ -252,6 +259,26 @@ function landed(s: CombatState, t: Unit, n: number): number {
   return ok;
 }
 
+/** Encantado: `u` se acerca en línea recta a la unidad `fromId` gastando todos sus PM. Ignora el placaje. */
+function pullToward(s: CombatState, u: Unit, fromId: number | undefined, ev: GameEvent[]): void {
+  const to = fromId === undefined ? undefined : getUnit(s, fromId);
+  while (to && alive(to) && alive(u) && u.mp > 0 && dist(u.pos, to.pos) > 1) {
+    const dx = Math.abs(to.pos.x - u.pos.x) >= Math.abs(to.pos.y - u.pos.y) ? Math.sign(to.pos.x - u.pos.x) : 0;
+    const dy = dx === 0 ? Math.sign(to.pos.y - u.pos.y) : 0;
+    const n = { x: u.pos.x + dx, y: u.pos.y + dy };
+    if (!isFree(s, n)) break;
+    u.pos = n;
+    u.mp--;
+    ev.push({ t: 'move', unit: u.id, path: [{ ...n }] });
+    if (springSnare(s, u, ev)) break;
+    if (s.traps.includes(key(n))) {
+      ev.push({ t: 'trap', unit: u.id });
+      hurt(s, u, TRAP_DMG, ev, 'trap', { pierce: true });
+    }
+  }
+  u.mp = 0;
+}
+
 /** Si `u` pisa un cepo rival, salta: daño y se queda sin moverse. Devuelve true si saltó. */
 function springSnare(s: CombatState, u: Unit, ev: GameEvent[]): boolean {
   const i = (s.snares ?? []).findIndex((t) => t.k === key(u.pos) && t.team !== u.team);
@@ -279,6 +306,7 @@ export function castProblem(s: CombatState, u: Unit, base: SpellDef, at: Pos): s
   const d = dist(u.pos, at);
   const extra = def.range[1] > 1 ? u.statuses.reach?.stacks ?? 0 : 0;
   if (d < def.range[0] || d > def.range[1] + extra) return 'Fuera de alcance';
+  if (def.straight && d > 0 && at.x !== u.pos.x && at.y !== u.pos.y) return 'Solo en línea recta';
   if (def.los && d > 1 && !hasLineOfSight(s, u.pos, at)) return 'Sin línea de visión';
   const t = unitAt(s, at);
   const around = def.range[1] === 0;
@@ -346,6 +374,14 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
   if (slotUsed.charges !== undefined) slotUsed.charges--;
   // atacar rompe la invisibilidad
   if (def.dmg && u.statuses.invis) delete u.statuses.invis;
+  // Robo de esencia: con 3 cargas, la siguiente habilidad de daño te cura el 15% y reinicia el contador
+  const dealsDmg = !!def.dmg || !!def.followUp;
+  let essenceSpent = false;
+  if (u.essence !== undefined && dealsDmg && u.essence >= 3) {
+    heal(u, u.maxHp * 0.15, ev);
+    u.essence = 0;
+    essenceSpent = true;
+  }
   if (def.dash) {
     const cell = dashCell(s, u, at)!;
     if (!same(cell, u.pos)) {
@@ -370,6 +406,16 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
 
   if (def.target === 'cell') {
     if (def.teleport) { u.pos = { ...at }; ev.push({ t: 'blink', unit: u.id, to: { ...at } }); }
+    if (def.followUp) {
+      // tras aterrizar, el proyectil busca al enemigo visible más cercano
+      const fu = def.followUp;
+      const foe = s.units.filter((t) => alive(t) && t.team !== u.team && !t.statuses.invis && dist(t.pos, u.pos) <= fu.radius).sort((a, b) => dist(a.pos, u.pos) - dist(b.pos, u.pos))[0];
+      if (foe) {
+        const raw = randInt(s, fu.dmg[0], fu.dmg[1]) * (1 + (u.power + (u.statuses.empower?.stacks ?? 0)) / 100) * (foe.statuses.mark ? MARK_MULT : 1);
+        hurt(s, foe, raw, ev, def.id, { element: fu.element });
+        if (u.essence !== undefined && !essenceSpent) u.essence = Math.min(3, u.essence + 1);
+      }
+    }
     if (def.snare) (s.snares ??= []).push({ k: key(at), team: u.team, dmg: Math.round(def.snare.dmg * (1 + u.power / 100)) });
     if (def.summon) {
       const m = def.summon, hp = Math.round(u.maxHp * m.hpPct);
@@ -385,8 +431,11 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
   const targets = s.units.filter((t) => alive(t) && t.team === wantTeam && (t === main || (def.area ? dist(t.pos, at) <= def.area : false) || lane.some((p) => same(p, t.pos))));
   const mend = hasTrait(u, 'mender') ? MENDER_MULT : 1;
   let dealt = 0;
+  let hits = 0;
+  // el orbe rebota: recorre la línea dos veces
+  for (let pass = 0; pass < (def.bounce ?? 1); pass++)
   for (const t of targets) {
-    if (s.over) break;
+    if (s.over || !alive(t)) continue;
     if (def.dmg) {
       const crit = rand(s) * 100 < u.crit + (def.crit ?? 0);
       const pack = hasTrait(u, 'pack') ? s.units.filter((o) => o !== u && o.team === u.team && alive(o) && hasTrait(o, 'pack')).length * PACK_BONUS : 0;
@@ -394,6 +443,7 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
       const raw = randInt(s, def.dmg[0], def.dmg[1]) * (1 + (u.power + pack + fury + (u.statuses.empower?.stacks ?? 0)) / 100) * (crit ? (hasTrait(u, 'execute') ? EXECUTE_MULT : CRIT_MULT) : 1) * (t.statuses.mark ? MARK_MULT : 1) * (t === main || def.range[1] === 0 || def.line ? 1 : 0.5);
       const got = hurt(s, t, raw, ev, def.id, { crit, element: def.element, pierce: def.pierce });
       dealt += got;
+      hits++;
       // espinas: devuelven parte del daño cuerpo a cuerpo
       if (got > 0 && hasTrait(t, 'thorns') && dist(t.pos, u.pos) <= 1 && alive(u)) hurt(s, u, got * THORNS, ev, 'thorns', { pierce: true });
       if (hasTrait(u, 'ignite') && alive(t)) addStatus(t, 'burn', 2, 1, ev);
@@ -407,6 +457,8 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
     }
     for (const st of [def.status, def.extraStatus]) {
       if (!st || !alive(t)) continue;
+      // el encanto de élites y jefes exige las dos tiradas
+      if (st.kind === 'charm' && t.rank && !landed(s, t, 1)) { ev.push({ t: 'resist', unit: t.id, what: 'Resiste el encanto' }); continue; }
       // élites y jefes: inmunes a aturdir y resisten la ralentización punto a punto
       if (st.kind === 'stun' && t.rank) { ev.push({ t: 'resist', unit: t.id, what: 'Inmune a aturdir' }); continue; }
       let stacks = (st.stacks ?? 1) + (st.kind === 'poison' && hasTrait(u, 'venom') ? 1 : 0);
@@ -418,6 +470,7 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
         ev.push({ t: 'drain', unit: t.id, ap: 0, mp: -stacks });
       }
       addStatus(t, st.kind, st.turns + (st.kind === 'stun' ? 0 : u.statusBonus), stacks, ev);
+      if (st.kind === 'charm' && t.statuses.charm) t.statuses.charm.from = u.id;
     }
     if (def.drainAp && alive(t)) {
       const n = t.team !== u.team ? landed(s, t, def.drainAp) : def.drainAp;
@@ -432,6 +485,7 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
       if (n) push(s, u.pos, t, n, ev);
     }
   }
+  if (u.essence !== undefined && hits > 0 && !essenceSpent) u.essence = Math.min(3, u.essence + 1);
   if (def.lifesteal && dealt > 0) heal(u, dealt * def.lifesteal, ev);
   if (def.retreat && main && alive(u)) {
     const dx = Math.abs(u.pos.x - main.pos.x) >= Math.abs(u.pos.y - main.pos.y) ? Math.sign(u.pos.x - main.pos.x) || 1 : 0;

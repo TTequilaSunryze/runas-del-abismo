@@ -49,6 +49,11 @@ export const BOON_MODS: Record<string, BoonMod> = Object.fromEntries(([
   M('am_veneno', 'flecha', 'Flecha venenosa', 'Envenena x2 durante 2 turnos.', (d) => { d.status = { kind: 'poison', turns: 2, stacks: 2 }; }),
   M('am_salvaje', 'ojo_halcon', 'Vínculo salvaje', 'Además te cura 10.', (d) => { d.heal = (d.heal ?? 0) + 10; }),
   M('am_marcadora', 'flecha', 'Flecha marcadora', 'Marca al objetivo 2 turnos.', (d) => { d.extraStatus = { kind: 'mark', turns: 2 }; }),
+  // Hechicera Zorro
+  M('zm_orbe_intenso', 'z_orbe', 'Orbe intenso', '+30% de daño.', (d) => { more(d, 1.3); }),
+  M('zm_encanto_largo', 'z_encanto', 'Encanto prolongado', 'El encanto dura 2 turnos: el enemigo lo sufre dos veces seguidas.', (d) => { d.status = { kind: 'charm', turns: 2 }; }),
+  M('zm_impulso_radio', 'z_impulso', 'Rastreo espiritual', 'El proyectil busca enemigos a 6 casillas en vez de 4.', (d) => { if (d.followUp) d.followUp = { ...d.followUp, radius: 6 }; }),
+  M('zm_impulso_veloz', 'z_impulso', 'Impulso amplio', 'Puedes desplazarte hasta 4 casillas.', (d) => { d.range = [1, 4]; }),
   // Pícaro
   M('pm_untada', 'punalada', 'Hoja untada', 'Envenena x2 durante 2 turnos.', (d) => { d.status = { kind: 'poison', turns: 2, stacks: 2 }; }),
   M('pm_cuchillo_ven', 'cuchillo', 'Cuchillo envenenado', 'Envenena 3 turnos.', (d) => { d.status = { kind: 'poison', turns: 3, stacks: 1 }; }),

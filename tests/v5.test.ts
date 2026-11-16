@@ -15,11 +15,19 @@ describe('kit inicial', () => {
   it('cada clase empieza con 3 habilidades: 2 de daño y 1 de potenciación propia', () => {
     for (const c of Object.values(CLASSES)) {
       expect(c.base).toHaveLength(3);
+      // la Hechicera Zorro tiene su propio kit (control y movilidad): ver el test de abajo
+      if (c.id === 'zorro') continue;
       const kinds = c.base.map((id) => SPELLS[id]!);
       expect(kinds.filter((d) => d.dmg && d.target === 'enemy').length, c.id).toBeGreaterThanOrEqual(2);
       expect(kinds.filter((d) => d.target === 'self').length, c.id).toBe(1);
       expect(spellKind(kinds[2]!)).not.toBe('dmg');
     }
+  });
+  it('la Hechicera Zorro: orbe y salto espiritual dañan, encanto controla', () => {
+    const k = CLASSES.zorro.base.map((id) => SPELLS[id]!);
+    expect(k[0]!.line && k[0]!.bounce).toBe(2);
+    expect(k[1]!.status?.kind).toBe('charm');
+    expect(k[2]!.followUp).toBeTruthy();
   });
   it('Sed de sangre cuesta vida y potencia el daño', () => {
     const s = board([hero('guerrero'), makeEnemy('gargola', { x: 2, y: 3 })]);

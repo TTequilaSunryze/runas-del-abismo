@@ -159,7 +159,7 @@ label input[type=checkbox] { width: auto; margin-right: 4px; }
 }
 
 /* sets, maestría, salón y cuenta */
-.cards.c5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.cards.c5 { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 .setbox { margin-top: 4px; padding: 4px 6px; border-left: 3px solid #4ad0a0; background: rgba(74, 208, 160, .08); border-radius: 0 4px 4px 0; }
 .setn { color: #4ad0a0; }
 .cell.inset { box-shadow: inset 0 0 0 2px #4ad0a0; }
@@ -170,7 +170,7 @@ span.cell { display: inline-flex; align-items: center; justify-content: center; 
 .form label { display: grid; gap: 3px; }
 .form input, #foe { width: 100%; }
 .htabs { display: flex; flex-wrap: wrap; gap: 4px; }
-@media (max-width: 1000px) { .cards.c5 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 1000px) { .cards.c5 { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } }
 @media (max-width: 760px) { .cards.c5 { grid-template-columns: 1fr 1fr !important; } }
 
 /* iconos de hechizo: dibujo + borde del color de su tipo + coste en PA */

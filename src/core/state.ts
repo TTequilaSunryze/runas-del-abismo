@@ -8,12 +8,14 @@ export interface Pos {
 
 export type Team = 'hero' | 'enemy';
 /** empower: +daño (stacks = %); reach: +alcance; invis: no se le puede apuntar; exposed: -armadura (stacks). */
-export type StatusKind = 'burn' | 'poison' | 'slow' | 'stun' | 'mark' | 'empower' | 'reach' | 'invis' | 'exposed';
-export type ClassId = 'guerrero' | 'mago' | 'clerigo' | 'picaro' | 'arquero';
+export type StatusKind = 'burn' | 'poison' | 'slow' | 'stun' | 'mark' | 'empower' | 'reach' | 'invis' | 'exposed' | 'charm';
+export type ClassId = 'guerrero' | 'mago' | 'clerigo' | 'picaro' | 'arquero' | 'zorro';
 
 export interface StatusState {
   turns: number;
   stacks: number;
+  /** unidad que aplicó el estado (Encantado: hacia quién se mueve) */
+  from?: number;
 }
 
 export type Element = 'fire' | 'ice' | 'poison' | 'shadow' | 'holy';
@@ -78,6 +80,8 @@ export interface Unit {
   phase?: number;
   /** unidad que lo invocó */
   summoner?: number;
+  /** Robo de esencia (Hechicera Zorro): 0 a 3 cargas */
+  essence?: number;
   /** élites y jefes: inmunes a aturdir y resisten la pérdida de PA/PM y los empujones */
   rank?: 'elite' | 'boss';
   /** placaje (retiene a quien se aleja) y huida (escapa del placaje) */
