@@ -13,7 +13,7 @@ export interface HeroBuild {
   /** 1 a MAX_LEVEL; por defecto 3 (todos los hechizos de ruta) */
   level?: number;
   /** estadísticas del equipo y de bendiciones o maldiciones */
-  bonus?: Stats[];
+  bonus?: Array<Stats | undefined>;
 }
 
 /** Cada nivel por encima del 1 da +8% de vida base y +6% de daño. */

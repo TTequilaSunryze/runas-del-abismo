@@ -12,7 +12,8 @@ export interface SpellDef {
   range: [number, number];
   /** necesita línea de visión */
   los: boolean;
-  target: 'enemy' | 'ally' | 'self';
+  /** 'cell' = una casilla libre (cepos e invocaciones) */
+  target: 'enemy' | 'ally' | 'self' | 'cell';
   /** radio del área alrededor del objetivo (0 = solo el objetivo) */
   area?: number;
   dmg?: [number, number];
@@ -41,6 +42,16 @@ export interface SpellDef {
   lifesteal?: number;
   /** el lanzador salta junto al objetivo antes de golpear */
   dash?: boolean;
+  /** ignora la armadura */
+  pierce?: boolean;
+  /** alcanza a todos los enemigos en la línea hasta el objetivo */
+  line?: boolean;
+  /** casillas que retrocede el lanzador, alejándose del objetivo */
+  retreat?: number;
+  /** coloca un cepo en la casilla */
+  snare?: { dmg: number };
+  /** invoca un aliado controlado por la IA (uno a la vez) */
+  summon?: { kind: string; name: string; hpPct: number; armor: number; ap: number; mp: number; initiative: number; spell: string };
   text: string;
 }
 
@@ -104,6 +115,20 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
     S({ id: 'voltereta', name: 'Voltereta', route: 'acrobata', ap: 2, cd: 1, range: [2, 4], los: true, target: 'enemy', dmg: [5, 7], dash: true, text: 'Saltas junto al enemigo y golpeas.' }),
     S({ id: 'evasion', name: 'Evasión', route: 'acrobata', ap: 2, cd: 2, range: [0, 0], los: false, target: 'self', shield: 10, text: 'Ganas 10 de escudo.' }),
     S({ id: 'senal', name: 'Señal de avance', route: 'acrobata', ap: 3, cd: 3, range: [1, 4], los: true, target: 'ally', giveMp: 2, giveAp: 1, text: 'Un aliado gana 2 PM y 1 PA.' }),
+    // ---------- Arquero ----------
+    S({ id: 'flecha', name: 'Flecha', route: 'base', ap: 3, cd: 0, range: [2, 5], los: true, target: 'enemy', dmg: [6, 9], text: 'Disparo básico. No alcanza a enemigos pegados a ti.' }),
+    S({ id: 'certero', name: 'Disparo certero', route: 'francotirador', ap: 4, cd: 1, range: [3, 7], los: true, target: 'enemy', dmg: [12, 16], crit: 10, text: 'Disparo lejano de mucho daño.' }),
+    S({ id: 'marca_caza', name: 'Marca del cazador', route: 'francotirador', ap: 2, cd: 2, range: [1, 7], los: true, target: 'enemy', dmg: [2, 3], status: { kind: 'mark', turns: 3 }, text: 'El objetivo recibe +30% de daño 3 turnos.' }),
+    S({ id: 'perforante', name: 'Tiro perforante', route: 'francotirador', ap: 5, cd: 3, range: [2, 7], los: true, target: 'enemy', dmg: [13, 17], pierce: true, line: true, text: 'Atraviesa a todos los enemigos en línea e ignora la armadura.' }),
+    S({ id: 'rapido', name: 'Disparo rápido', route: 'rafaga', ap: 2, cd: 0, range: [2, 5], los: true, target: 'enemy', dmg: [4, 6], text: 'Barato: se puede repetir varias veces por turno.' }),
+    S({ id: 'andanada', name: 'Lluvia de flechas', route: 'rafaga', ap: 4, cd: 2, range: [3, 6], los: true, target: 'enemy', area: 1, dmg: [7, 10], text: 'Área 1 alrededor del objetivo.' }),
+    S({ id: 'salto_atras', name: 'Salto atrás', route: 'rafaga', ap: 2, cd: 2, range: [1, 3], los: true, target: 'enemy', dmg: [5, 7], retreat: 2, text: 'Disparas y retrocedes 2 casillas.' }),
+    S({ id: 'cepo', name: 'Cepo', route: 'trampero', ap: 2, cd: 1, range: [1, 4], los: true, target: 'cell', snare: { dmg: 9 }, text: 'Trampa en una casilla libre: daña y detiene al primer enemigo que la pise.' }),
+    S({ id: 'flecha_hielo', name: 'Flecha de escarcha', route: 'trampero', ap: 3, cd: 0, range: [2, 6], los: true, target: 'enemy', dmg: [5, 7], status: { kind: 'slow', turns: 2, stacks: 2 }, text: 'Quita 2 PM durante 2 turnos.' }),
+    S({ id: 'red', name: 'Red', route: 'trampero', ap: 4, cd: 3, range: [1, 4], los: true, target: 'enemy', dmg: [3, 4], status: { kind: 'stun', turns: 1 }, text: 'Atrapa al objetivo: pierde su próximo turno.' }),
+    S({ id: 'lobo', name: 'Invocar lobo', route: 'bestias', ap: 4, cd: 4, range: [1, 2], los: true, target: 'cell', summon: { kind: 'lobo', name: 'Lobo', hpPct: 0.6, armor: 1, ap: 6, mp: 5, initiative: 12, spell: 'e_mordida' }, text: 'Un lobo lucha a tu lado (uno a la vez). Hereda tu % de daño.' }),
+    S({ id: 'orden', name: 'Orden de caza', route: 'bestias', ap: 2, cd: 2, range: [1, 6], los: false, target: 'ally', giveAp: 3, giveMp: 2, text: 'Tu lobo (o un aliado) gana 3 PA y 2 PM en su próximo turno.' }),
+    S({ id: 'vinculo', name: 'Vínculo', route: 'bestias', ap: 3, cd: 3, range: [0, 0], los: false, target: 'ally', area: 3, heal: 10, text: 'Cura 10 a ti y a los aliados en área 3.' }),
     // ---------- Enemigos (Zona 1) ----------
     S({ id: 'e_golpe', name: 'Golpe', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [5, 7], text: '' }),
     S({ id: 'e_tajo', name: 'Tajo sepulcral', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [8, 10], text: '' }),
@@ -138,3 +163,4 @@ const SPELL_ELEMENT: Record<string, Element> = {
   e_dentellada: 'fire', e_bola: 'fire', e_pira: 'fire', e_cataclismo: 'fire',
 };
 for (const d of Object.values(SPELLS)) d.element = SPELL_ELEMENT[d.id] ?? ROUTE_ELEMENT[d.route];
+SPELLS.flecha_hielo!.element = 'ice';

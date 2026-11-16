@@ -8,7 +8,7 @@ export interface Pos {
 
 export type Team = 'hero' | 'enemy';
 export type StatusKind = 'burn' | 'poison' | 'slow' | 'stun' | 'mark';
-export type ClassId = 'guerrero' | 'mago' | 'clerigo' | 'picaro';
+export type ClassId = 'guerrero' | 'mago' | 'clerigo' | 'picaro' | 'arquero';
 
 export interface StatusState {
   turns: number;
@@ -22,6 +22,8 @@ export interface SpellSlot {
   cd: number;
   /** runa engarzada */
   rune?: string;
+  /** mejoras elegidas al subir de nivel (ids de UPGRADES) */
+  ups?: string[];
 }
 
 export interface Unit {
@@ -55,17 +57,28 @@ export interface Unit {
   statusBonus: number;
   statuses: Partial<Record<StatusKind, StatusState>>;
   spells: SpellSlot[];
-  ai: 'melee' | 'ranged' | 'boss' | 'pillar' | null;
+  ai: 'melee' | 'ranged' | 'boss' | 'pillar' | 'champ' | null;
   /**
    * Rasgos especiales: puddle (al morir deja una casilla pegajosa), guard (empieza su turno con escudo),
    * devour (se cura comiendo cadáveres), raise (alza muertos), ghost (atraviesa obstáculos),
    * hunter (persigue al héroe más frágil), pack (más daño por cada compañero de manada vivo).
+   * De sets de equipo: venom (+1 carga a sus venenos), ignite (su daño quema), execute (críticos x2),
+   * mender (+30% a curas y escudos que da).
    */
   traits?: string[];
   /** cadáver ya usado (devorado o alzado) */
   used?: boolean;
   /** fase del jefe (1 o 2) */
   phase?: number;
+  /** unidad que lo invocó */
+  summoner?: number;
+}
+
+/** Cepo colocado por una unidad: daña y detiene al primer rival que lo pisa. */
+export interface Snare {
+  k: string;
+  team: Team;
+  dmg: number;
 }
 
 export interface CombatState extends RngBox {
@@ -78,6 +91,7 @@ export interface CombatState extends RngBox {
   traps: string[];
   /** casillas pegajosas: detienen al héroe que entra */
   puddles: string[];
+  snares?: Snare[];
   units: Unit[];
   /** ids de unidad en orden de iniciativa */
   order: number[];
@@ -103,6 +117,7 @@ export type GameEvent =
   | { t: 'phase'; unit: number; phase: number }
   | { t: 'trap'; unit: number }
   | { t: 'stuck'; unit: number }
+  | { t: 'snare'; unit: number }
   | { t: 'devour'; unit: number; corpse: number }
   | { t: 'raise'; unit: number; corpse: number }
   | { t: 'over'; result: 'win' | 'lose' };

@@ -5,7 +5,7 @@ import { cast, current, endTurn, move, type ActionResult } from '../core/combat/
 import type { ClassId, GameEvent, Pos } from '../core/state';
 import { saveRun, type Peer, type Transport } from '../net/transport';
 import type { Perks } from '../content/modes';
-import { bossInfo, chooseNode, recordEvents, finishFight, leaveNode, metaAction, newRun, resolveEvent, type MetaAction, type RunState } from './run';
+import { bossInfo, chooseNode, recordEvents, finishFight, leaveNode, metaAction, newArena, newRun, resolveEvent, type MetaAction, type RunState } from './run';
 
 export type Action = { a: 'move'; to: Pos } | { a: 'cast'; spell: string; at: Pos } | { a: 'end' } | MetaAction;
 
@@ -21,6 +21,12 @@ export interface LobbyPlayer {
   /** solo del anfitrión: ascensión elegida y si es el reto diario */
   asc: number;
   daily: string | null;
+  /** maestría con la clase elegida */
+  mastery: number;
+  /** su mejor héroe del Salón (puede volver como némesis) */
+  nem: unknown;
+  /** tiene equipo de duelo */
+  hasTeam: boolean;
 }
 
 export const TURN_SECONDS = 60;
@@ -47,6 +53,9 @@ export class Session {
   private lastTurnKey = '';
   private savedKey = '';
   private track = { caster: null as number | null };
+  /** mi equipo de duelo, cuando el anfitrión lo pide */
+  teamProvider: () => unknown[] = () => [];
+  private duelWith = '';
 
   constructor(
     readonly t: Transport,
@@ -58,13 +67,24 @@ export class Session {
     t.on('sync', (p) => {
       if (this.isHost) return;
       const m = p as { run: RunState; ev: GameEvent[] };
-      if (!m?.run || m.run.version !== 6) return;
+      if (!m?.run || m.run.version !== 7) return;
       this.run = m.run;
       this.noteTurn();
       this.onChange(Array.isArray(m.ev) ? m.ev : []);
     });
     t.on('act', (p, from) => {
       if (this.isHost) this.apply(from, p as Action);
+    });
+    t.on('teamreq', (p) => {
+      const m = p as { to: string };
+      if (!this.isHost && m?.to === this.myId) this.t.send('team', { team: this.teamProvider() });
+    });
+    t.on('team', (p, from) => {
+      const m = p as { team: unknown[] };
+      if (!this.isHost || from !== this.duelWith || this.run || !Array.isArray(m?.team)) return;
+      this.duelWith = '';
+      const me = this.lobby().find((x) => x.id === this.myId), foe = this.lobby().find((x) => x.id === from);
+      this.startArena(me?.name ?? 'Anfitrión', this.teamProvider(), { owner: from, name: foe?.name ?? 'Rival', team: m.team });
     });
     t.on('reset', () => {
       if (this.isHost) return;
@@ -119,6 +139,7 @@ export class Session {
         perks: (p.data.perks && typeof p.data.perks === 'object' ? p.data.perks : {}) as Perks,
         unlocked: Array.isArray(p.data.unlocked) ? (p.data.unlocked as string[]).slice(0, 20).map(String) : [],
         asc: Number(p.data.asc) || 0, daily: typeof p.data.daily === 'string' ? p.data.daily : null,
+        mastery: Number(p.data.mastery) || 0, nem: p.data.nem ?? null, hasTeam: !!p.data.hasTeam,
       }))
       .sort((a, b) => Number(b.host) - Number(a.host) || a.id.localeCompare(b.id));
   }
@@ -129,7 +150,12 @@ export class Session {
 
   /** Mi unidad en el combate actual. */
   myUnit() {
-    return this.run?.combat?.units.find((u) => u.owner === this.myId);
+    const c = this.run?.combat;
+    if (!c) return undefined;
+    // en los duelos llevo varias unidades: la que juega ahora, o la primera que siga en pie
+    const cur = current(c);
+    if (cur?.owner === this.myId) return cur;
+    return c.units.find((u) => u.owner === this.myId && u.hp > 0) ?? c.units.find((u) => u.owner === this.myId);
   }
 
   isMyTurn(): boolean {
@@ -148,9 +174,26 @@ export class Session {
     if (!players.length) return;
     const host = all.find((p) => p.id === this.myId);
     this.run = newRun(this.code, (Date.now() ^ (Math.random() * 2 ** 31)) >>> 0,
-      players.map((p) => ({ owner: p.id, name: p.name, cls: p.cls, routes: p.routes, perks: p.perks })),
-      { asc: host?.asc ?? 0, daily: host?.daily ?? null, unlocked: players.flatMap((p) => p.unlocked) });
+      players.map((p) => ({ owner: p.id, name: p.name, cls: p.cls, routes: p.routes, perks: p.perks, mastery: p.mastery })),
+      { asc: host?.asc ?? 0, daily: host?.daily ?? null, unlocked: players.flatMap((p) => p.unlocked), nemesis: all.map((p) => p.nem).filter(Boolean) });
     this.afterChange([]);
+  }
+
+  /** Duelo 3 contra 3. Si el rival no tiene dueño, lo lleva la IA. */
+  startArena(myName: string, mine: unknown[], foe: { owner: string | null; name: string; team: unknown[] }): boolean {
+    if (!this.isHost) return false;
+    const run = newArena(this.code, (Date.now() ^ (Math.random() * 2 ** 31)) >>> 0, { owner: this.myId, name: myName, team: mine }, foe);
+    if (!run) { this.onError('Hace falta al menos un héroe en cada equipo'); return false; }
+    this.run = run;
+    this.afterChange([]);
+    return true;
+  }
+
+  /** Reta a otro jugador de la sala: le pide su equipo y empieza el duelo en vivo. */
+  challenge(id: string): void {
+    if (!this.isHost || this.run) return;
+    this.duelWith = id;
+    this.t.send('teamreq', { to: id });
   }
 
   resume(run: RunState): void {
@@ -233,14 +276,14 @@ export class Session {
     this.onChange(events);
     // guardado: en cada sala nueva y, en combate, al empezar cada ronda
     const key = `${run.zone}:${run.step}:${run.phase}:${run.combat?.round ?? 0}`;
-    if (this.isHost && key !== this.savedKey && run.phase !== 'won' && run.phase !== 'lost' && !run.combat?.over) {
+    if (this.isHost && !run.arena && key !== this.savedKey && run.phase !== 'won' && run.phase !== 'lost' && !run.combat?.over) {
       this.savedKey = key;
       void saveRun(run.code, this.secret, run);
     }
     const c = run.combat;
     if (this.aiTimer) clearTimeout(this.aiTimer);
     this.aiTimer = null;
-    if (!c) return;
+    if (!c || run.phase !== 'combat') return;
     if (c.over) {
       this.aiTimer = setTimeout(() => {
         finishFight(run);

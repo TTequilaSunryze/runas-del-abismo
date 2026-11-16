@@ -10,7 +10,9 @@ import { dailyScore } from '../game/run';
 import { joinRoom, loadRun, submitDaily, topDaily } from '../net/transport';
 import { addLog, combatScreen } from './combat';
 import { params, randomText, store, today, ui } from './ctx';
-import { buyPerk, meta, saveMeta } from '../game/meta';
+import { buyPerk, masteryOf, meta, myNemesis, myTeam, openRoutes, removeChampion, saveChampion, saveMeta, toggleTeam } from '../game/meta';
+import { currentAccount, fetchTeam, restoreAccount, signIn, signOut, signUp } from '../net/account';
+import { championOf } from '../game/run';
 import { MAX_ASC } from '../content/modes';
 import { setZoneMusic } from '../audio/sfx';
 import { endScreen, eventScreen, homeScreen, lobbyScreen, mapScreen, shopScreen } from './screens';
@@ -19,7 +21,8 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 
 function publish(): void {
   const m = meta();
-  ui.session?.announce({ name: ui.me.name, cls: ui.me.cls, routes: ui.me.routes, host: ui.session.isHost, perks: m.perks, unlocked: m.unlocked, asc: Math.min(ui.asc, m.maxAsc, MAX_ASC), daily: ui.daily ? today() : null });
+  ui.session?.announce({ name: ui.me.name, cls: ui.me.cls, routes: ui.me.routes, host: ui.session.isHost, perks: m.perks, unlocked: m.unlocked, asc: Math.min(ui.asc, m.maxAsc, MAX_ASC), daily: ui.daily ? today() : null,
+    mastery: masteryOf(ui.me.cls), nem: myNemesis(), hasTeam: myTeam().length > 0 });
 }
 
 function home(msg = ''): void {
@@ -51,11 +54,12 @@ async function enter(code: string, isHost: boolean, local: boolean, resume = fal
     return;
   }
   ui.session = session;
+  session.teamProvider = () => myTeam();
   ui.saved = null;
   ui.notice = '';
   if (resume) {
     const run = (await loadRun(code)) as RunState | null;
-    if (run && run.version === 6 && run.phase === 'map') ui.saved = run;
+    if (run && run.version === 7 && run.phase === 'map') ui.saved = run;
     else ui.notice = 'No se encontró una partida guardada que se pueda continuar.';
   }
   let wasMyTurn = false;
@@ -102,6 +106,13 @@ function render(events: GameEvent[]): void {
 let submitted = '';
 ui.rerender = () => render([]);
 
+/** Duelo contra un equipo llevado por la IA, en una sala local. */
+async function duel(foe: { name: string; team: unknown[] }): Promise<void> {
+  await enter(randomText(4, CODE_CHARS), true, true);
+  ui.log.length = 0;
+  if (!ui.session?.startArena(currentAccount()?.name ?? ui.me.name, myTeam(), { owner: null, name: foe.name, team: foe.team })) home('No se pudo empezar el duelo: algún equipo no tiene héroes válidos.');
+}
+
 function pickSpell(id: string): void {
   const s = ui.session, u = s?.myUnit();
   const d = u && spellOf(u, id);
@@ -126,7 +137,7 @@ document.addEventListener('click', (e) => {
     case 'cls': ui.me.cls = id as ClassId; ui.me.routes = []; publish(); render([]); break;
     case 'route':
       if (ui.me.routes.includes(id)) ui.me.routes = ui.me.routes.filter((r) => r !== id);
-      else if (canPickRoute(ui.me.cls, ui.me.routes, id)) ui.me.routes = [...ui.me.routes, id];
+      else if (canPickRoute(ui.me.cls, ui.me.routes, id) && openRoutes(ui.me.cls).includes(id)) ui.me.routes = [...ui.me.routes, id];
       publish(); render([]); break;
     case 'start': ui.log.length = 0; ui.tab = 'equipo'; s?.startRun(); break;
     case 'node': ui.log.length = 0; s?.choose(Number(id)); break;
@@ -159,6 +170,35 @@ document.addEventListener('click', (e) => {
     case 'ascdown': ui.asc = Math.max(0, ui.asc - 1); publish(); render([]); break;
     case 'again': ui.log.length = 0; s?.backToLobby(); break;
     case 'reroll': s?.act({ a: 'reroll' }); break;
+    case 'upgrade': s?.act({ a: 'upgrade', idx: Number(id) }); break;
+    case 'champsave': { const h = s?.run?.heroes.find((x) => x.owner === ui.myId); if (s?.run && h) { saveChampion({ ...championOf(s.run, h), by: currentAccount()?.name ?? ui.me.name }); publish(); lastKey = ''; render([]); } break; }
+    case 'champdel': removeChampion(id); homeScreen(''); break;
+    case 'champteam': toggleTeam(id); homeScreen(''); break;
+    case 'duelmirror': void duel({ name: 'Tu reflejo', team: myTeam() }); break;
+    case 'duelai': {
+      const name = (document.getElementById('foe') as HTMLInputElement).value.trim();
+      if (!name) break;
+      ui.busy = true; ui.hallMsg = `Buscando el equipo de ${name}…`; homeScreen('');
+      void fetchTeam(name).then((t) => {
+        ui.busy = false;
+        if (!t) { ui.hallMsg = `No se encontró un equipo guardado para “${name}”. Tiene que tener cuenta, haber entrado y tener héroes en su equipo.`; if (ui.screen === 'home') homeScreen(''); return; }
+        ui.hallMsg = '';
+        void duel(t);
+      });
+      break;
+    }
+    case 'duel': s?.challenge(id); break;
+    case 'login': case 'signup': {
+      const v = (k: string): string => (document.getElementById(k) as HTMLInputElement | null)?.value ?? '';
+      const signup = el.dataset.act === 'signup';
+      ui.busy = true; ui.acctMsg = 'Conectando…'; homeScreen('');
+      void (signup ? signUp(v('acemail'), v('acpass'), v('acname')) : signIn(v('acemail'), v('acpass'))).then((err) => {
+        ui.busy = false; ui.acctMsg = err ?? 'Has entrado. Tu progreso ya se guarda en la cuenta.';
+        if (ui.screen === 'home') homeScreen('');
+      });
+      break;
+    }
+    case 'logout': ui.busy = true; void signOut().then(() => { ui.busy = false; ui.acctMsg = 'Sesión cerrada. Tu progreso sigue en este navegador.'; if (ui.screen === 'home') homeScreen(''); }); break;
     case 'end': s?.act({ a: 'end' }); break;
     case 'spell': pickSpell(id); break;
     case 'togglelog': ui.logOpen = !ui.logOpen; render([]); break;
@@ -220,4 +260,6 @@ setInterval(() => {
 
 export function boot(): void {
   home();
+  // si había sesión de cuenta, se recupera y se refresca la pantalla de inicio
+  void restoreAccount().then(() => { if (ui.screen === 'home' && currentAccount()) homeScreen(''); });
 }

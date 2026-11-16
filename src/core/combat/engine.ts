@@ -2,9 +2,9 @@
 // Todas las funciones modifican el estado y devuelven los eventos ocurridos.
 import { SPELLS, type SpellDef } from '../classes/spells';
 import { rand, randInt } from '../rng';
-import { withRune } from '../runes';
+import { tuned } from '../upgrades';
 import { key, type CombatState, type Element, type GameEvent, type Pos, type StatusKind, type Unit } from '../state';
-import { alive, dist, hasLineOfSight, isFree, pathTo, reachable, same, unitAt } from './grid';
+import { alive, dist, hasLineOfSight, isFree, lineCells, pathTo, reachable, same, unitAt } from './grid';
 
 export type UnitSpec = Omit<Unit, 'id'>;
 
@@ -27,6 +27,8 @@ const PUSH_CRASH_DMG = 4;
 const TRAP_DMG = 6;
 const GUARD_SHIELD = 0.15;
 const PACK_BONUS = 15;
+const EXECUTE_MULT = 2;
+const MENDER_MULT = 1.3;
 
 export const hasTrait = (u: Unit, t: string): boolean => !!u.traits?.includes(t);
 const fail = (reason: string): ActionResult => ({ ok: false, reason });
@@ -57,7 +59,8 @@ export function current(s: CombatState): Unit | undefined {
 
 function checkOver(s: CombatState, ev: GameEvent[]): void {
   if (s.over) return;
-  const heroes = s.units.some((u) => u.team === 'hero' && alive(u));
+  // los invocados no sostienen el combate por sí solos
+  const heroes = s.units.some((u) => u.team === 'hero' && alive(u) && u.summoner === undefined);
   // los pilares del jefe no cuentan: basta con vencer al resto
   const enemies = s.units.some((u) => u.team === 'enemy' && alive(u) && u.ai !== 'pillar');
   if (!heroes) s.over = 'lose';
@@ -168,6 +171,7 @@ export function move(s: CombatState, unitId: number, to: Pos): ActionResult {
       hurt(s, u, TRAP_DMG, ev, 'trap', { pierce: true });
       if (!alive(u)) break;
     }
+    if (springSnare(s, u, ev)) { u.mp = 0; break; }
     // los héroes se quedan pegados en los charcos: pierden el resto de PM
     if (u.team === 'hero' && s.puddles.includes(key(p)) && !s.obstacles.includes(key(p))) {
       u.mp = 0;
@@ -180,17 +184,27 @@ export function move(s: CombatState, unitId: number, to: Pos): ActionResult {
   return { ok: true, events: ev };
 }
 
-/** El hechizo tal como lo lanza `u`: con su runa aplicada. */
+/** Si `u` pisa un cepo rival, salta: daño y se queda sin moverse. Devuelve true si saltó. */
+function springSnare(s: CombatState, u: Unit, ev: GameEvent[]): boolean {
+  const i = (s.snares ?? []).findIndex((t) => t.k === key(u.pos) && t.team !== u.team);
+  if (i < 0 || !alive(u)) return false;
+  const t = s.snares!.splice(i, 1)[0]!;
+  ev.push({ t: 'snare', unit: u.id });
+  hurt(s, u, t.dmg, ev, 'snare', { pierce: true });
+  return true;
+}
+
+/** El hechizo tal como lo lanza `u`: con sus mejoras y su runa aplicadas. */
 export function spellOf(u: Unit, id: string): SpellDef | undefined {
   const def = SPELLS[id];
-  return def && withRune(def, u.spells.find((x) => x.id === id)?.rune);
+  return def && tuned(def, u.spells.find((x) => x.id === id));
 }
 
 /** Motivo por el que `u` no puede lanzar el hechizo sobre `at`, o null si puede. */
 export function castProblem(s: CombatState, u: Unit, base: SpellDef, at: Pos): string | null {
   const slot = u.spells.find((x) => x.id === base.id);
   if (!slot) return 'No conoces ese hechizo';
-  const def = withRune(base, slot.rune);
+  const def = tuned(SPELLS[base.id] ?? base, slot);
   if (slot.cd > 0) return 'Hechizo en enfriamiento';
   if (u.ap < def.ap) return 'No tienes PA suficientes';
   const d = dist(u.pos, at);
@@ -200,6 +214,11 @@ export function castProblem(s: CombatState, u: Unit, base: SpellDef, at: Pos): s
   const around = def.range[1] === 0;
   if ((def.target === 'self' || around) && !same(at, u.pos)) return 'Solo sobre ti';
   if (around) return null;
+  if (def.target === 'cell') {
+    if (!isFree(s, at)) return 'Necesitas una casilla libre';
+    if (def.summon && s.units.some((x) => alive(x) && x.summoner === u.id)) return 'Ya tienes un compañero invocado';
+    return null;
+  }
   if (def.target === 'enemy' && (!t || t.team === u.team)) return 'Necesitas un enemigo como objetivo';
   if (def.target === 'ally' && (!t || t.team !== u.team)) return 'Necesitas un aliado como objetivo';
   if (def.dash && !dashCell(s, u, at)) return 'No hay hueco junto al objetivo';
@@ -227,6 +246,7 @@ function push(s: CombatState, from: Pos, u: Unit, cells: number, ev: GameEvent[]
     }
     u.pos = n;
     ev.push({ t: 'push', unit: u.id, to: { ...n } });
+    springSnare(s, u, ev);
     if (s.traps.includes(key(n))) {
       ev.push({ t: 'trap', unit: u.id });
       hurt(s, u, TRAP_DMG, ev, 'trap', { pierce: true });
@@ -255,30 +275,54 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
   }
   if (def.selfDmg) u.hp = Math.max(1, u.hp - def.selfDmg);
 
+  if (def.target === 'cell') {
+    if (def.snare) (s.snares ??= []).push({ k: key(at), team: u.team, dmg: Math.round(def.snare.dmg * (1 + u.power / 100)) });
+    if (def.summon) {
+      const m = def.summon, hp = Math.round(u.maxHp * m.hpPct);
+      const pet = summon(s, { team: u.team, kind: m.kind, name: m.name, owner: null, pos: at, hp, maxHp: hp, shield: 0, armor: m.armor, power: u.power, crit: 5,
+        ap: m.ap, maxAp: m.ap, mp: m.mp, maxMp: m.mp, initiative: m.initiative, apMod: 0, mpMod: 0, resist: {}, statusBonus: 0, statuses: {}, spells: [{ id: m.spell, cd: 0 }], ai: 'melee', summoner: u.id }, at, ev);
+      if (pet) pet.summoner = u.id;
+    }
+    return { ok: true, events: ev };
+  }
   const wantTeam = def.target === 'enemy' ? (u.team === 'hero' ? 'enemy' : 'hero') : u.team;
   const main = unitAt(s, at);
-  const targets = s.units.filter((t) => alive(t) && t.team === wantTeam && (t === main || (def.area ? dist(t.pos, at) <= def.area : false)));
+  const lane = def.line ? lineCells(u.pos, at) : [];
+  const targets = s.units.filter((t) => alive(t) && t.team === wantTeam && (t === main || (def.area ? dist(t.pos, at) <= def.area : false) || lane.some((p) => same(p, t.pos))));
+  const mend = hasTrait(u, 'mender') ? MENDER_MULT : 1;
   let dealt = 0;
   for (const t of targets) {
     if (s.over) break;
     if (def.dmg) {
       const crit = rand(s) * 100 < u.crit + (def.crit ?? 0);
       const pack = hasTrait(u, 'pack') ? s.units.filter((o) => o !== u && o.team === u.team && alive(o) && hasTrait(o, 'pack')).length * PACK_BONUS : 0;
-      const raw = randInt(s, def.dmg[0], def.dmg[1]) * (1 + (u.power + pack) / 100) * (crit ? CRIT_MULT : 1) * (t.statuses.mark ? MARK_MULT : 1) * (t === main || def.range[1] === 0 ? 1 : 0.5);
-      dealt += hurt(s, t, raw, ev, def.id, { crit, element: def.element });
+      const raw = randInt(s, def.dmg[0], def.dmg[1]) * (1 + (u.power + pack) / 100) * (crit ? (hasTrait(u, 'execute') ? EXECUTE_MULT : CRIT_MULT) : 1) * (t.statuses.mark ? MARK_MULT : 1) * (t === main || def.range[1] === 0 || def.line ? 1 : 0.5);
+      dealt += hurt(s, t, raw, ev, def.id, { crit, element: def.element, pierce: def.pierce });
+      if (hasTrait(u, 'ignite') && alive(t)) addStatus(t, 'burn', 2, 1, ev);
     }
-    if (def.heal) heal(t, def.heal, ev);
+    if (def.heal) heal(t, def.heal * mend, ev);
     if (def.shield && alive(t)) {
-      t.shield += def.shield;
-      ev.push({ t: 'shield', unit: t.id, amount: def.shield });
+      const sh = Math.round(def.shield * mend);
+      t.shield += sh;
+      ev.push({ t: 'shield', unit: t.id, amount: sh });
     }
-    for (const st of [def.status, def.extraStatus]) if (st) addStatus(t, st.kind, st.turns + (st.kind === 'stun' ? 0 : u.statusBonus), st.stacks ?? 1, ev);
+    for (const st of [def.status, def.extraStatus]) if (st) addStatus(t, st.kind, st.turns + (st.kind === 'stun' ? 0 : u.statusBonus), (st.stacks ?? 1) + (st.kind === 'poison' && hasTrait(u, 'venom') ? 1 : 0), ev);
     if (def.drainAp) t.apMod -= def.drainAp;
     if (def.giveAp) t.apMod += def.giveAp;
     if (def.giveMp) t.mpMod += def.giveMp;
     if (def.push && t === main) push(s, u.pos, t, def.push, ev);
   }
   if (def.lifesteal && dealt > 0) heal(u, dealt * def.lifesteal, ev);
+  if (def.retreat && main && alive(u)) {
+    const dx = Math.abs(u.pos.x - main.pos.x) >= Math.abs(u.pos.y - main.pos.y) ? Math.sign(u.pos.x - main.pos.x) || 1 : 0;
+    const dy = dx === 0 ? Math.sign(u.pos.y - main.pos.y) || 1 : 0;
+    for (let i = 0; i < def.retreat; i++) {
+      const n = { x: u.pos.x + dx, y: u.pos.y + dy };
+      if (!isFree(s, n)) break;
+      u.pos = n;
+      ev.push({ t: 'push', unit: u.id, to: { ...n } });
+    }
+  }
   if (def.selfShield && alive(u)) {
     u.shield += def.selfShield;
     ev.push({ t: 'shield', unit: u.id, amount: def.selfShield });

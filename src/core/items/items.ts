@@ -19,6 +19,8 @@ export interface Item {
   rarity: Rarity;
   stats: Stats;
   lore?: string;
+  /** set al que pertenece (ver sets.ts) */
+  set?: string;
 }
 
 /** Temática de una zona: nombres por ranura y legendarios fijos. */
@@ -70,6 +72,15 @@ export function genItem(box: RngBox, theme: ItemTheme, depth: number, min: Rarit
   for (const k of keys.slice(0, Math.min(3, rarity + 1))) stats[k] = roll(box, k, rarity, depth);
   const name = pick(box, theme.names[s]) + (rarity > 0 ? ' ' + pick(box, theme.suffixes) : '');
   return { slot: s, name, rarity, stats };
+}
+
+/** Pieza de un set: estadísticas normales de su ranura, al menos rara, con el nombre del set. */
+export function genSetPiece(box: RngBox, theme: ItemTheme, depth: number, set: { id: string; pieces: Partial<Record<Slot, string>> }, slot: Slot): Item {
+  let it = genItem(box, theme, depth, 1, slot);
+  // los legendarios fijos no forman parte de sets
+  for (let i = 0; i < 6 && it.rarity === 3; i++) it = genItem(box, theme, depth, 1, slot);
+  if (it.rarity === 3) it.rarity = 2;
+  return { slot, name: set.pieces[slot] ?? it.name, rarity: it.rarity, stats: it.stats, set: set.id };
 }
 
 /** Precio de compra en la tienda. */

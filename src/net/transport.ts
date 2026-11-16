@@ -22,7 +22,7 @@ export interface Transport {
 
 let client: SupabaseClient | null = null;
 export function supabase(): SupabaseClient {
-  client ??= createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } });
+  client ??= createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'rda_auth' } });
   return client;
 }
 

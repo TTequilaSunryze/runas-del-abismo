@@ -83,3 +83,15 @@ export function hasLineOfSight(s: CombatState, a: Pos, b: Pos): boolean {
   }
   return true;
 }
+
+/** Casillas de la línea recta de a hacia b (sin a, con b). */
+export function lineCells(a: Pos, b: Pos): Pos[] {
+  const out: Pos[] = [];
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const steps = Math.max(Math.abs(dx), Math.abs(dy)) * 2;
+  for (let i = 1; i <= steps; i++) {
+    const p = { x: Math.round(a.x + (dx * i) / steps), y: Math.round(a.y + (dy * i) / steps) };
+    if (!same(p, a) && !out.some((o) => same(o, p))) out.push(p);
+  }
+  return out;
+}

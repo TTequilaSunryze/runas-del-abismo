@@ -63,6 +63,15 @@ export const CLASSES: Record<ClassId, ClassDef> = {
       R('juicio', 'Juicio', 'egida', ['marca', 'sentencia', 'veredicto'], 'Marca, debilita y aturde.'),
     ],
   },
+  arquero: {
+    id: 'arquero', name: 'Arquero', hp: 46, armor: 0, power: 4, crit: 10, ap: 6, mp: 4, initiative: 15, baseSpell: 'flecha',
+    routes: [
+      R('francotirador', 'Francotirador', 'rafaga', ['certero', 'marca_caza', 'perforante'], 'Un disparo lejano y devastador.'),
+      R('rafaga', 'Ráfaga', 'francotirador', ['rapido', 'andanada', 'salto_atras'], 'Muchos disparos baratos y movilidad.'),
+      R('trampero', 'Trampero', 'bestias', ['cepo', 'flecha_hielo', 'red'], 'Control: cepos, escarcha y redes.'),
+      R('bestias', 'Señor de bestias', 'trampero', ['lobo', 'orden', 'vinculo'], 'Un lobo lucha a tu lado.'),
+    ],
+  },
 };
 
 export const MAX_ROUTES = 2;

@@ -52,6 +52,7 @@ export function playEvents(events: GameEvent[]): void {
     else if (e.t === 'move') tone(100, 0.05, 'square', 0.025, -30, d);
     else if (e.t === 'summon' || e.t === 'phase') tone(110, 0.5, 'sawtooth', 0.07, 220, d);
     else if (e.t === 'stuck' || e.t === 'devour' || e.t === 'raise') tone(150, 0.25, 'sawtooth', 0.06, 120, d);
+    else if (e.t === 'snare') tone(700, 0.1, 'square', 0.06, -500, d);
     else if (e.t === 'trap') tone(900, 0.08, 'square', 0.05, -600, d);
     else if (e.t === 'over') (e.result === 'win' ? sfx.win : sfx.lose)();
     else continue;

@@ -23,6 +23,7 @@ export function addLog(events: GameEvent[]): void {
     else if (e.t === 'death') s = `✝ ${n(e.unit)} cae`;
     else if (e.t === 'summon') s = `<span class="bad">Aparece ${n(e.unit)}</span>`;
     else if (e.t === 'trap') s = `· ${n(e.unit)} pisa unas púas`;
+    else if (e.t === 'snare') s = `· ${n(e.unit)} cae en un cepo`;
     else if (e.t === 'stuck') s = `· ${n(e.unit)} queda atrapado en el charco`;
     else if (e.t === 'devour') s = `<span class="bad">${n(e.unit)} devora un cadáver</span>`;
     else if (e.t === 'raise') s = `<span class="bad">${n(e.unit)} alza a un muerto</span>`;
@@ -34,6 +35,7 @@ export function addLog(events: GameEvent[]): void {
 }
 
 const TRAIT_TEXT: Record<string, string> = {
+  venom: 'Sus venenos aplican una carga más.', ignite: 'Su daño quema.', execute: 'Sus críticos hacen el doble.', mender: 'Cura y protege un 30% más.',
   puddle: 'Al morir deja un charco que inmoviliza.', guard: 'Empieza su turno con escudo.', devour: 'Se cura devorando cadáveres.',
   raise: 'Alza a los muertos como aliados.', ghost: 'Atraviesa obstáculos.', hunter: 'Persigue al héroe más frágil.', pack: 'Más daño por cada compañero de manada.',
 };
@@ -53,14 +55,15 @@ export function combatScreen(events: GameEvent[]): void {
   const cur = current(c), me = s.myUnit(), myTurn = s.isMyTurn();
   if (!myTurn && board.sel) board.sel = null;
   const left = s.turnEndsAt ? Math.max(0, Math.ceil((s.turnEndsAt - Date.now()) / 1000)) : 0;
-  const kind = run.kind === 'boss' ? '👑 JEFE' : run.kind === 'elite' ? '☠️ Élite' : '⚔️ Combate';
-  document.getElementById('info')!.innerHTML = `<b>${kind}</b><span class="dim sm">Zona ${run.zone + 1} · sala ${run.step + 1}/${run.map.length} · ronda ${c.round}</span>
+  const kind = run.arena ? `🏟️ Duelo: ${esc(run.arena.nameA)} contra ${esc(run.arena.nameB)}` : run.kind === 'boss' ? '👑 JEFE' : run.kind === 'elite' ? '☠️ Élite' : '⚔️ Combate';
+  document.getElementById('info')!.innerHTML = `<b>${kind}</b><span class="dim sm">${run.arena ? '' : `Zona ${run.zone + 1} · sala ${run.step + 1}/${run.map.length} · `}ronda ${c.round}</span>
     <span class="turn ${myTurn ? 'mine' : ''}">${c.over ? (c.over === 'win' ? '¡Victoria!' : 'Derrota') : myTurn ? 'TU TURNO' : cur ? `Turno de ${esc(cur.name)}` : ''}</span><span id="clock" class="dim">${left && !c.over ? `${left}s` : ''}</span>
     ${ui.notice ? `<span class="bad">${esc(ui.notice)}</span>` : ''}${!s.hostPresent() ? '<span class="bad">Anfitrión desconectado: partida en pausa</span>' : ''}
     ${s.isHost && cur && !cur.ai && !myTurn && !c.over ? '<button class="mini" data-act="skip">Pasar su turno</button>' : ''}<span class="grow"></span>${sysButtons()}`;
   const heroIdx = new Map(c.units.filter((u) => u.team === 'hero').map((u, i) => [u.id, i]));
+  const mineTeam = me?.team ?? 'hero';
   document.getElementById('init')!.innerHTML = c.order.map((id) => getUnit(c, id)!).filter((u) => u.hp > 0)
-    .map((u) => `<span class="ini ${cur?.id === u.id ? 'on' : ''} ${u.team === 'hero' ? `p${heroIdx.get(u.id)! % 4}` : 'en'}" ${tip(`<b>${esc(u.name)}</b><div class="sm">${u.hp}/${u.maxHp} PV · iniciativa ${u.initiative}</div>${(u.traits ?? []).map((t) => `<div class="sm dim">${esc(TRAIT_TEXT[t] ?? t)}</div>`).join('')}`)}>${esc(u.name.split(' ')[0])}<i style="width:${(u.hp / u.maxHp) * 100}%"></i></span>`).join('');
+    .map((u) => `<span class="ini ${cur?.id === u.id ? 'on' : ''} ${u.team === mineTeam ? `p${(heroIdx.get(u.id) ?? 0) % 4}` : 'en'}" ${tip(`<b>${esc(u.name)}</b><div class="sm">${u.hp}/${u.maxHp} PV · iniciativa ${u.initiative}</div>${(u.traits ?? []).map((t) => `<div class="sm dim">${esc(TRAIT_TEXT[t] ?? t)}</div>`).join('')}`)}>${esc(u.name.split(' ')[0])}<i style="width:${(u.hp / u.maxHp) * 100}%"></i></span>`).join('');
   document.getElementById('hud')!.innerHTML = me
     ? `<div class="me"><b>${esc(me.name)}</b>${hpBar(me.hp, me.maxHp, me.shield)}<div class="row"><span class="sm pill">PA</span>${pips(me.ap, me.maxAp, 'ap')}</div><div class="row"><span class="sm blu">PM</span>${pips(me.mp, me.maxMp, 'mp')}</div></div>
       <div class="spellbar">${me.spells.map((sp, i) => { const d = spellOf(me, sp.id)!; const rn = sp.rune ? RUNES[sp.rune] : undefined; const off = !myTurn || me.ap < d.ap || sp.cd > 0 || me.hp <= 0;

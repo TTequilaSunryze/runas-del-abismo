@@ -26,8 +26,17 @@ export function autoplay(s: CombatState, maxTurns = 600, info?: Parameters<typeo
       const goal = foes.sort((a, b) => Number(b.ai === 'pillar') - Number(a.ai === 'pillar') || dist(a.pos, u.pos) - dist(b.pos, u.pos))[0];
       if (u.mp > 0 && goal) {
         const reach = reachable(s, u.pos, u.mp);
+        const atk = spells.filter((d) => d.target === 'enemy' && d.dmg && d.ap <= u.ap);
+        const home = { ...u.pos };
+        // mejor casilla: desde la que pueda atacar a alguien; si no, la más cercana al objetivo
+        const score = (x: number, y: number): number => {
+          u.pos = { x, y };
+          const hit = atk.some((d) => foes.some((f) => !castProblem(s, u, d, d.range[1] === 0 ? u.pos : f.pos)));
+          u.pos = home;
+          return (hit ? 0 : 100) + dist({ x, y }, goal.pos);
+        };
         const best = [...reach.cost.keys()].filter((k) => !s.obstacles.includes(k)).map((k) => k.split(',').map(Number) as [number, number])
-          .sort((a, b) => dist({ x: a[0], y: a[1] }, goal.pos) - dist({ x: b[0], y: b[1] }, goal.pos))[0]!;
+          .sort((a, b) => score(a[0], a[1]) - score(b[0], b[1]))[0]!;
         if (best[0] !== u.pos.x || best[1] !== u.pos.y) { move(s, u.id, { x: best[0], y: best[1] }); continue; }
       }
       break;

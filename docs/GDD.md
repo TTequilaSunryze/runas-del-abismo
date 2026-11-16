@@ -28,5 +28,15 @@ Guerrero, Mago, Clérigo, Pícaro. 4 rutas por clase (3 hechizos cada una); se e
 ## Presentación
 Tutorial de 5 pasos la primera vez, textos de zona y clase, pantalla final con resumen y recompensas, "Jugar otra partida" para toda la sala, música distinta por zona y jefe, diseño adaptado a móvil.
 
+## v3: cuenta, maestría, sets, arquero, Salón y duelos
+- **Cuenta opcional** (email y contraseña, Supabase Auth). El progreso se guarda en la tabla `profiles` (solo cada uno ve su fila). Al entrar la primera vez en un navegador se une con el progreso local.
+- **Maestría por clase (0–5)**: experiencia por salas, jefes, victoria y ascensión. Empiezas con 2 rutas no opuestas (1.ª y 3.ª); maestría 1 abre la 2.ª, maestría 2 la 4.ª; 3 da una mejora de hechizo inicial, 4 da 4 opciones al elegir mejoras, 5 da dos mejoras iniciales. Quien ya había jugado recibe maestría inicial.
+- **Mejoras de hechizo**: a nivel 4, 6, 8, 10 y 12 eliges 1 de 3 (Potenciado, Eficiente, Presto, Lejano, Amplio, Persistente, Certero).
+- **Sets de 3 piezas** (6): Víbora (veneno), Pira (fuego), Bastión (escudo cada turno), Verdugo (críticos x2), Peregrino (PA/PM), Santuario (curas +30%). Bonus a 2 y a 3 piezas. Tesoros y tiendas garantizan una pieza; el botín favorece el set empezado.
+- **Arquero**: Francotirador / Ráfaga, Trampero / Señor de bestias (cepos ocultos al rival, flecha perforante en línea, salto atrás, lobo invocado). No dispara a enemigos adyacentes.
+- **Reliquias de grupo**: tras cada jefe el grupo vota 1 de 3 pasivas.
+- **Salón de héroes** (12): guarda un héroe al acabar. Tu mejor héroe puede aparecer como **Némesis** (élite) en las partidas de tus amigos desde la zona 2.
+- **Duelos 3 contra 3**: contra el equipo de un amigo llevado por la IA (por nombre de cuenta), entrenamiento contra tu reflejo, o en vivo en una sala. Nivel igualado a 12, vida x1,6, terreno en espejo.
+
 ## Pendiente / ideas
 Sincronizar ecos en la nube con cuenta, más zonas y clases, sprites animados, balance con datos de partidas reales.

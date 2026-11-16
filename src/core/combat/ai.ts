@@ -2,7 +2,7 @@
 // El jefe tiene dos fases, invoca refuerzos y pilares que lo curan.
 import { SPELLS, type SpellDef } from '../classes/spells';
 import type { CombatState, GameEvent, Pos, Unit } from '../state';
-import { cast, castProblem, current, endTurn, hasTrait, heal, move, summon, type UnitSpec } from './engine';
+import { cast, castProblem, current, endTurn, hasTrait, heal, move, spellOf, summon, type UnitSpec } from './engine';
 import { alive, dist, hasLineOfSight, isFree, reachable } from './grid';
 
 /** Lo que la zona aporta a la IA: invocaciones del jefe y de los nigromantes. */
@@ -161,6 +161,54 @@ function pillarTurn(s: CombatState, ev: GameEvent[]): void {
   if (boss) heal(boss, boss.maxHp * PILLAR_HEAL, ev);
 }
 
+/** Lanza lo mejor que tenga a mano: primero ayuda a un aliado malherido, luego el hechizo que más daño haga. */
+function champCast(s: CombatState, u: Unit, ev: GameEvent[]): boolean {
+  const defs = u.spells.filter((sp) => sp.cd === 0).map((sp) => spellOf(u, sp.id)!).filter((d) => d && d.ap <= u.ap);
+  const allies = s.units.filter((a) => a.team === u.team && alive(a));
+  const foes = s.units.filter((f) => f.team !== u.team && alive(f));
+  let best: { d: SpellDef; at: Pos; score: number } | null = null;
+  const consider = (d: SpellDef, at: Pos, score: number): void => {
+    if (score > 0 && (!best || score > best.score) && !castProblem(s, u, SPELLS[d.id]!, at)) best = { d, at, score };
+  };
+  for (const d of defs) {
+    const around = d.range[1] === 0;
+    const near = (list: Unit[], at: Pos): Unit[] => list.filter((x) => dist(x.pos, at) <= (d.area ?? 0));
+    if (d.target === 'cell') {
+      if (d.summon) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) consider(d, { x: u.pos.x + dx, y: u.pos.y + dy }, 30);
+    } else if (d.target === 'enemy') {
+      const avg = d.dmg ? (d.dmg[0] + d.dmg[1]) / 2 : 0;
+      const value = (f: Unit): number => avg * (f.statuses.mark ? 1.3 : 1) + (d.status && !f.statuses[d.status.kind] ? (d.status.kind === 'stun' ? 14 : 6) : 0) + (d.drainAp ?? 0) * 3 + (avg >= f.hp ? 10 : 0);
+      if (around) consider(d, u.pos, near(foes, u.pos).reduce((a, f) => a + value(f), 0));
+      else for (const f of foes) consider(d, f.pos, value(f) + near(foes, f.pos).filter((x) => x !== f).length * avg * 0.5);
+    } else {
+      const value = (a: Unit): number => (d.heal ? Math.min(d.heal, a.maxHp - a.hp) * (a.hp < a.maxHp * 0.6 ? 1.6 : 0.4) : 0) + (d.shield && a.shield === 0 ? d.shield * 0.7 : 0) + ((d.giveAp ?? 0) * 3 + (d.giveMp ?? 0)) * (a === u ? 0 : 1);
+      if (d.target === 'self' || around) consider(d, u.pos, (around ? near(allies, u.pos) : [u]).reduce((a, x) => a + value(x), 0));
+      else for (const a of allies) consider(d, a.pos, value(a));
+    }
+  }
+  const pickd = best as { d: SpellDef; at: Pos } | null;
+  if (!pickd) return false;
+  const r = cast(s, u.id, pickd.d.id, pickd.at);
+  if (r.ok) ev.push(...r.events);
+  return r.ok;
+}
+
+/** Un héroe llevado por la IA (némesis y duelos): usa todos sus hechizos. */
+function champTurn(s: CombatState, u: Unit, ev: GameEvent[]): void {
+  const mine = (): boolean => !s.over && alive(u) && current(s)?.id === u.id;
+  for (let i = 0; i < 8 && mine() && champCast(s, u, ev); i++);
+  if (!mine()) return;
+  // se recoloca según su hechizo básico y vuelve a intentarlo
+  const base = spellOf(u, u.spells[0]!.id)!;
+  if (u.mp > 0) {
+    const ap = u.ap;
+    u.ap = 0;
+    fight(s, u, base, base.range[1] > 1, ev);
+    if (alive(u)) u.ap = ap;
+  }
+  for (let i = 0; i < 8 && mine() && champCast(s, u, ev); i++);
+}
+
 /** Juega el turno completo de la unidad actual si la controla la IA. */
 export function runAiTurn(s: CombatState, info?: BossInfo): GameEvent[] {
   const u = current(s);
@@ -168,6 +216,7 @@ export function runAiTurn(s: CombatState, info?: BossInfo): GameEvent[] {
   if (!u || !u.ai) return ev;
   if (u.ai === 'pillar') pillarTurn(s, ev);
   else if (u.ai === 'boss') bossTurn(s, u, info, ev);
+  else if (u.ai === 'champ') champTurn(s, u, ev);
   else {
     support(s, u, ev);
     if (hasTrait(u, 'devour')) devour(s, u, ev);

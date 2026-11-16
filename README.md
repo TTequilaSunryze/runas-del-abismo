@@ -48,3 +48,6 @@ Añade `?local=1&p=nombre` a la URL en varias pestañas del mismo navegador: las
 
 ## Progresión (v2)
 Ecos, mejoras permanentes, 17 logros, ascensión 0–10, reto diario con ranking, tutorial, música por zona y adaptación a móvil. Ver `docs/GDD.md`. Las partidas guardadas de versiones anteriores no son compatibles.
+
+## v3
+Cuenta con email y contraseña, maestría por clase que desbloquea rutas, mejoras de hechizo, sets de 3 piezas, clase Arquero, reliquias de grupo, Salón de héroes, Némesis y duelos 3 contra 3. Las partidas guardadas anteriores no son compatibles.

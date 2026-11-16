@@ -1,3 +1,4 @@
+import { SPELLS } from '../core/classes/spells';
 // Tablero de combate: dibuja el estado y convierte clics en acciones.
 import { ZONES } from '../content/zones';
 import { castProblem, current, spellOf } from '../core/combat/engine';
@@ -16,6 +17,14 @@ interface Ghost { kind: string; team: string; idx: number; x: number; y: number;
 const ELEMENT_COLOR: Record<string, string> = { fire: '#ff8a30', ice: '#8ae0ff', poison: '#7fe05a', shadow: '#b07cff', holy: '#ffe9a0' };
 const ELEMENT_NAME: Record<string, string> = { fire: 'fuego', ice: 'hielo', poison: 'veneno', shadow: 'sombra', holy: 'sagrado' };
 const LUNGE_MS = 240;
+
+const CLASS_KINDS = ['guerrero', 'mago', 'clerigo', 'picaro', 'arquero'];
+/** Índice de color y etiqueta: héroes de jugadores, y héroes rivales (némesis, duelos) dentro de su bando. */
+function teamIdx(c: CombatState): Map<number, number> {
+  const m = new Map<number, number>();
+  for (const team of ['hero', 'enemy'] as const) c.units.filter((u) => u.team === team && CLASS_KINDS.includes(u.kind)).forEach((u, i) => m.set(u.id, i));
+  return m;
+}
 
 export class Board {
   /** hechizo elegido, esperando objetivo */
@@ -84,7 +93,7 @@ export class Board {
       const p = this.shown.get(id) ?? u?.pos;
       if (p) this.floats.push({ x: (p.x + 0.5) * TILE + (Math.random() * 16 - 8), y: p.y * TILE + 8 - this.floats.filter((f) => now - f.t0 < 200).length * 14, text, color, t0: now });
     };
-    const heroIdx = new Map(c.units.filter((u) => u.team === 'hero').map((u, i) => [u.id, i]));
+    const heroIdx = teamIdx(c);
     for (const e of events) {
       const u = 'unit' in e ? c.units.find((x) => x.id === e.unit) : undefined;
       const from = u ? this.shown.get(u.id) ?? u.pos : undefined;
@@ -110,6 +119,7 @@ export class Board {
       else if (e.t === 'skip') float(e.unit, 'Pierde el turno', '#ffe84a');
       else if (e.t === 'trap') float(e.unit, '¡Púas!', '#ff8a30');
       else if (e.t === 'stuck') float(e.unit, '¡Atrapado!', '#7fe05a');
+      else if (e.t === 'snare') float(e.unit, '¡Cepo!', '#d8b060');
       else if (e.t === 'devour') float(e.unit, 'Devora', '#c9a0ff');
       else if (e.t === 'raise') float(e.unit, 'Alza muertos', '#c9a0ff');
       else if (e.t === 'summon') float(e.unit, 'Invocado', '#c77dff');
@@ -150,10 +160,18 @@ export class Board {
       g.fillStyle = zone.rock[1]; g.fillRect(X + 8, Y + 8, TILE - 16, 7);
       g.fillStyle = zone.rock[2]; g.fillRect(X + TILE - 17, Y + 15, 9, TILE - 27);
     }
+    const me0 = this.session.myUnit();
     for (const k of c.puddles ?? []) {
       const [x, y] = k.split(',').map(Number) as [number, number];
       g.fillStyle = 'rgba(70,200,90,.38)'; g.beginPath(); g.ellipse((x + 0.5) * TILE, (y + 0.6) * TILE, TILE * 0.42, TILE * 0.28, 0, 0, 6.3); g.fill();
       g.fillStyle = 'rgba(190,255,150,.35)'; g.beginPath(); g.ellipse((x + 0.42) * TILE, (y + 0.55) * TILE, TILE * 0.14, TILE * 0.07, 0, 0, 6.3); g.fill();
+    }
+    for (const t of c.snares ?? []) {
+      // los cepos rivales no se ven
+      if (me0 && t.team !== me0.team) continue;
+      const [x, y] = t.k.split(',').map(Number) as [number, number];
+      g.strokeStyle = '#d8b060'; g.lineWidth = 3; g.beginPath(); g.arc((x + 0.5) * TILE, (y + 0.6) * TILE, TILE * 0.26, 0, 6.3); g.stroke();
+      g.fillStyle = '#d8b060'; for (let i = 0; i < 6; i++) { const a = i * 1.047; g.fillRect((x + 0.5) * TILE + Math.cos(a) * TILE * 0.26 - 2, (y + 0.6) * TILE + Math.sin(a) * TILE * 0.26 - 2, 4, 4); }
     }
     for (const k of c.traps ?? []) {
       const [x, y] = k.split(',').map(Number) as [number, number];
@@ -173,7 +191,7 @@ export class Board {
             if (d < def.range[0] || d > def.range[1] || c.obstacles.includes(`${x},${y}`)) continue;
             const seen = !def.los || d <= 1 || hasLineOfSight(c, me.pos, p);
             fill(p, seen ? 'rgba(255,150,60,.16)' : 'rgba(120,120,140,.10)');
-            if (!castProblem(c, me, def, p)) { g.strokeStyle = '#f2c14e'; g.lineWidth = 3; g.strokeRect(x * TILE + 4, y * TILE + 4, TILE - 8, TILE - 8); }
+            if (!castProblem(c, me, SPELLS[def.id]!, p)) { g.strokeStyle = '#f2c14e'; g.lineWidth = 3; g.strokeRect(x * TILE + 4, y * TILE + 4, TILE - 8, TILE - 8); }
           }
         if (this.hover && def.area) {
           for (let y = 0; y < c.h; y++) for (let x = 0; x < c.w; x++) if (dist({ x, y }, this.hover) <= def.area) fill({ x, y }, 'rgba(255,60,60,.2)');
@@ -188,7 +206,7 @@ export class Board {
     }
     if (this.hover) { g.strokeStyle = 'rgba(255,255,255,.35)'; g.lineWidth = 2; g.strokeRect(this.hover.x * TILE + 2, this.hover.y * TILE + 2, TILE - 4, TILE - 4); }
 
-    const heroIdx = new Map(c.units.filter((u) => u.team === 'hero').map((u, i) => [u.id, i]));
+    const heroIdx = teamIdx(c);
     for (const u of c.units.filter(alive).sort((a, b) => a.pos.y - b.pos.y)) {
       // posición mostrada: se acerca suavemente a la real
       const s = this.shown.get(u.id) ?? { ...u.pos };
@@ -258,7 +276,7 @@ export class Board {
     if (heroIdx !== undefined) {
       g.font = '12px ui-monospace, monospace'; g.textAlign = 'center';
       g.lineWidth = 3; g.strokeStyle = '#000'; g.strokeText(u.name, cx, top + TILE - 2);
-      g.fillStyle = PLAYER_COLORS[heroIdx % 4]!.b; g.fillText(u.name, cx, top + TILE - 2);
+      g.fillStyle = u.team === 'hero' ? PLAYER_COLORS[heroIdx % 4]!.b : '#e8a0b0'; g.fillText(u.name.replace('Némesis: ', '☠ '), cx, top + TILE - 2);
     }
   }
 

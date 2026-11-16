@@ -8,6 +8,7 @@ export const CLASS_STORY: Record<string, string> = {
   guerrero: 'Aguanta el golpe, devuelve el golpe. Cada cicatriz es una runa que aún no ha brillado.',
   mago: 'Poca vida, mucho fuego. Escoge bien tu escuela: no hay vuelta atrás.',
   clerigo: 'La luz sostiene al grupo; la sombra se cobra lo que la luz perdona.',
+  arquero: 'Nunca dejes que se acerquen. Un buen disparo vale más que diez golpes.',
   picaro: 'Veneno, trampas y un cuchillo a la espalda. Si no te ven, no te tocan.',
 };
 export const ENDING_WON = 'La última runa se enciende. El Abismo calla… por ahora. Quedan ascensiones más profundas, y siempre otra partida.';
@@ -16,7 +17,7 @@ export const ENDING_LOST = 'El Abismo os recuerda. Lo que habéis aprendido os s
 export const TUTORIAL: Array<{ title: string; text: string }> = [
   { title: 'Bienvenido al Abismo', text: 'Sois un grupo de 1 a 4 héroes. Recorréis 3 zonas de 7 salas y al final de cada una os espera un jefe. Si todos caéis, la partida termina… pero lo que ganéis queda para la próxima.' },
   { title: 'Combate por turnos', text: 'Cada unidad juega en su turno, por iniciativa. Casillas azules: moverte (PM). Elige un hechizo de la barra y pulsa un objetivo con borde dorado (PA). Los obstáculos tapan la línea de visión. Termina con E.' },
-  { title: 'Tu build', text: 'Elige hasta 2 rutas de hechizos: cada una bloquea a su opuesta. Entre combates, equipa objetos (8 ranuras) y engarza runas en tus hechizos para cambiar cómo funcionan.' },
+  { title: 'Tu build', text: 'Elige hasta 2 rutas de hechizos: cada una bloquea a su opuesta. Jugar una clase sube su maestría y abre más rutas. Busca piezas del mismo set: 2 y 3 piezas dan bonus. Entre combates, equipa objetos (8 ranuras) y engarza runas en tus hechizos para cambiar cómo funcionan.' },
   { title: 'Cuidado con los enemigos', text: 'Algunos dejan charcos que te inmovilizan, se curan devorando cadáveres, levantan muertos o se protegen unos a otros. Los jefes se apoyan en pilares: rómpelos primero. Los élites traen modificadores.' },
-  { title: 'Otra partida, siempre', text: 'Al terminar ganas ecos, con los que compras mejoras permanentes. Los logros desbloquean runas nuevas, ganar sube la ascensión (más difícil, más ecos) y cada día hay un reto con ranking.' },
+  { title: 'Otra partida, siempre', text: 'Al terminar ganas ecos, con los que compras mejoras permanentes. Los logros desbloquean runas, ganar sube la ascensión y cada día hay un reto con ranking. Guarda tus mejores héroes en el Salón para duelos 3 contra 3. Crea una cuenta para no perder tu progreso.' },
 ];

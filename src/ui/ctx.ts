@@ -36,7 +36,11 @@ export const ui = {
   asc: 0,
   daily: false,
   /** pestaña de la pantalla de inicio */
-  homeTab: 'jugar' as 'jugar' | 'mejoras' | 'logros' | 'diario',
+  homeTab: 'jugar' as 'jugar' | 'mejoras' | 'clases' | 'logros' | 'salon' | 'diario' | 'cuenta',
+  /** mensajes de la pestaña de cuenta y del salón */
+  acctMsg: '',
+  hallMsg: '',
+  busy: false,
   board2: null as null | Array<{ names: string; players: number; score: number; won: boolean; zone: number }> | 'cargando' | 'error',
   tutorial: 0,
   rerender: (): void => {},
