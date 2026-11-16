@@ -28,6 +28,8 @@ const SPR: Record<string, string[]> = {
   hound: ['............', '............', '.........oo.', '........oaao', 'o......oaaeo', 'oo..oooaaaao', '.oaaaaaaaao.', '.oaaaaaaao..', '.oaaoooaao..', '.oao...oao..', '.oo....oo...', '............'],
   spider: ['............', '............', 'o..o....o..o', '.o..oooo..o.', '..ooaaaaoo..', 'ooaaeaaeaaoo', '..oaaaaaao..', 'ooaaaaaaaaoo', '..ooaaaaoo..', '.o..oooo..o.', 'o..........o', '............'],
   golem: ['...oooooo...', '..oaaaaaao..', '..oaeaaeao..', '..oaaaaaao..', '.oooaaaaooo.', 'oaaoabbaoaao', 'oaaoabbaoaao', 'oaaoaaaaoaao', '.ooooaaoooo.', '...oaaaao...', '..oaa..aao..', '..ooo..ooo..'],
+  pillar: ['....oooo....', '...oaaaao...', '..oabbbbao..', '..oaaaaaao..', '...oabbao...', '...oaaaao...', '...oabbao...', '...oaaaao...', '...oabbao...', '..oaaaaaao..', '.oaaaaaaaao.', '.oooooooooo.'],
+  ghost: ['....oooo....', '...owwwwo...', '..owwwwwwo..', '..owewwewo..', '..owwooowwo.', '..owwwwwwo..', '..owwwwwwo..', '.owwwwwwwwo.', '.owwowwowwo.', '.owo.ww.owo.', '..o..oo..o..', '............'],
   cult: ['....oooo....', '...oaaaao...', '..oaaaaaao..', '..oaooooao..', '..oaoeeoao..', '..oaaooaao..', '..oaaaaaao..', '.oaaaaaaaao.', '.oaabaabaao.', '.oaaaaaaaao.', '..oaaaaaao..', '..oooooooo..'],
 };
 
@@ -68,6 +70,10 @@ const ENEMY_LOOK: Record<string, Look> = {
   piromante: { sprite: 'cult', pal: { a: '#5a2a1a', b: '#ff8a30', e: '#ffe060' } },
   escoria: { sprite: 'golem', pal: { a: '#4a4040', b: '#ff6a20', e: '#ffb030' }, scale: 1.25 },
   verdugo: { sprite: 'skel', pal: { w: '#4a4040', e: '#ff3020' }, scale: 1.35 },
+  pilar: { sprite: 'pillar', pal: { a: '#8a8478', b: '#c9c0a8' } },
+  brote: { sprite: 'pillar', pal: { a: '#3f6a3a', b: '#8ae060' } },
+  brasero: { sprite: 'pillar', pal: { a: '#4a4040', b: '#ff8a30' } },
+  espectro: { sprite: 'ghost', pal: { w: '#9ad0e8', e: '#102040' } },
   rey: { sprite: 'cult', pal: { a: '#3a2020', b: '#f2c14e', e: '#ff5020' }, scale: 1.7 },
 };
 

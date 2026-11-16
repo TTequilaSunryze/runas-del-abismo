@@ -51,6 +51,7 @@ export function playEvents(events: GameEvent[]): void {
     else if (e.t === 'death') tone(220, 0.4, 'sawtooth', 0.06, -180, d);
     else if (e.t === 'move') tone(100, 0.05, 'square', 0.025, -30, d);
     else if (e.t === 'summon' || e.t === 'phase') tone(110, 0.5, 'sawtooth', 0.07, 220, d);
+    else if (e.t === 'stuck' || e.t === 'devour' || e.t === 'raise') tone(150, 0.25, 'sawtooth', 0.06, 120, d);
     else if (e.t === 'trap') tone(900, 0.08, 'square', 0.05, -600, d);
     else if (e.t === 'over') (e.result === 'win' ? sfx.win : sfx.lose)();
     else continue;
@@ -58,17 +59,31 @@ export function playEvents(events: GameEvent[]): void {
   }
 }
 
-const SCALE = [220, 261.6, 293.7, 329.6, 392, 440];
-const PATTERN = [0, 2, 4, 2, 0, 3, 5, 3, 1, 3, 5, 3, 0, 2, 4, 2];
+// Música sencilla distinta por zona y para jefes: cambia la escala, el ritmo y el pulso grave.
+const THEMES: Record<string, { scale: number[]; pat: number[]; ms: number; wave: OscillatorType; low: number }> = {
+  menu: { scale: [220, 261.6, 293.7, 329.6, 392, 440], pat: [0, 2, 4, 2, 0, 3, 5, 3, 1, 3, 5, 3, 0, 2, 4, 2], ms: 300, wave: 'triangle', low: 4 },
+  '0': { scale: [196, 220, 233.1, 293.7, 311.1, 392], pat: [0, 2, 3, 2, 0, 4, 3, 2, 1, 2, 5, 4, 0, 2, 3, 1], ms: 320, wave: 'triangle', low: 4 },
+  '1': { scale: [174.6, 196, 233.1, 261.6, 311.1, 349.2], pat: [0, 1, 3, 4, 3, 1, 0, 2, 5, 4, 3, 2, 1, 3, 4, 2], ms: 260, wave: 'sine', low: 4 },
+  '2': { scale: [164.8, 174.6, 207.7, 247, 261.6, 329.6], pat: [0, 0, 2, 1, 0, 3, 2, 1, 4, 3, 2, 1, 0, 5, 4, 3], ms: 230, wave: 'square', low: 2 },
+  boss: { scale: [146.8, 155.6, 185, 220, 233.1, 293.7], pat: [0, 0, 1, 0, 3, 0, 1, 4, 0, 0, 2, 0, 5, 4, 3, 1], ms: 175, wave: 'sawtooth', low: 2 },
+};
+let theme = 'menu';
+
+export function setZoneMusic(name: string): void {
+  if (!THEMES[name] || name === theme) return;
+  theme = name;
+  if (musicTimer) { clearInterval(musicTimer); musicTimer = null; startMusic(); }
+}
 
 function startMusic(): void {
   if (musicTimer || muted) return;
+  const t = THEMES[theme]!;
   musicTimer = setInterval(() => {
-    const f = SCALE[PATTERN[beat % PATTERN.length]!]!;
-    tone(f / 2, 0.28, 'triangle', 0.022);
-    if (beat % 4 === 0) tone(f / 4, 0.5, 'sine', 0.03);
+    const f = t.scale[t.pat[beat % t.pat.length]!]!;
+    tone(f / 2, 0.28, t.wave, t.wave === 'sine' || t.wave === 'triangle' ? 0.022 : 0.012);
+    if (beat % t.low === 0) tone(f / 4, 0.5, 'sine', 0.03);
     beat++;
-  }, 280);
+  }, t.ms);
 }
 
 export function isMuted(): boolean {

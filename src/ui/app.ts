@@ -6,15 +6,20 @@ import type { Slot } from '../core/items/items';
 import type { ClassId, GameEvent } from '../core/state';
 import type { RunState } from '../game/run';
 import { Session } from '../game/session';
-import { joinRoom, loadRun } from '../net/transport';
+import { dailyScore } from '../game/run';
+import { joinRoom, loadRun, submitDaily, topDaily } from '../net/transport';
 import { addLog, combatScreen } from './combat';
-import { params, randomText, store, ui } from './ctx';
+import { params, randomText, store, today, ui } from './ctx';
+import { buyPerk, meta, saveMeta } from '../game/meta';
+import { MAX_ASC } from '../content/modes';
+import { setZoneMusic } from '../audio/sfx';
 import { endScreen, eventScreen, homeScreen, lobbyScreen, mapScreen, shopScreen } from './screens';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 
 function publish(): void {
-  ui.session?.announce({ name: ui.me.name, cls: ui.me.cls, routes: ui.me.routes, host: ui.session.isHost });
+  const m = meta();
+  ui.session?.announce({ name: ui.me.name, cls: ui.me.cls, routes: ui.me.routes, host: ui.session.isHost, perks: m.perks, unlocked: m.unlocked, asc: Math.min(ui.asc, m.maxAsc, MAX_ASC), daily: ui.daily ? today() : null });
 }
 
 function home(msg = ''): void {
@@ -50,7 +55,7 @@ async function enter(code: string, isHost: boolean, local: boolean, resume = fal
   ui.notice = '';
   if (resume) {
     const run = (await loadRun(code)) as RunState | null;
-    if (run && run.version === 5 && run.phase === 'map') ui.saved = run;
+    if (run && run.version === 6 && run.phase === 'map') ui.saved = run;
     else ui.notice = 'No se encontró una partida guardada que se pueda continuar.';
   }
   let wasMyTurn = false;
@@ -77,10 +82,11 @@ function render(events: GameEvent[]): void {
   const run = s.run;
   const want = !run ? 'lobby' : run.phase === 'combat' && run.combat ? 'combat' : run.phase === 'event' && run.event ? 'event' : run.phase === 'shop' ? 'shop' : run.phase === 'map' ? 'map' : 'end';
   // sin cambios reales no se redibuja: así un latido de red no interrumpe un clic
-  const key = want + JSON.stringify([run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selRune, ui.selItem, ui.tab, ui.logOpen]);
+  const key = want + JSON.stringify([meta().ecos, ui.asc, ui.daily, run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selRune, ui.selItem, ui.tab, ui.logOpen]);
   if (key === lastKey && want === ui.screen && !events.length) return;
   lastKey = key;
   if (want !== ui.screen) hideTip();
+  setZoneMusic(want === 'combat' && run?.kind === 'boss' ? 'boss' : want === 'lobby' || !run ? 'menu' : String(run.zone));
   if (want === 'combat') combatScreen(events);
   else {
     ui.board?.destroy();
@@ -88,7 +94,12 @@ function render(events: GameEvent[]): void {
     ({ lobby: lobbyScreen, event: eventScreen, shop: shopScreen, map: mapScreen, end: endScreen })[want]();
   }
   ui.screen = want;
+  if (want === 'end' && run && run.daily && s.isHost && run.heroes.length) {
+    const k = `${run.code}:${run.daily}:${run.zone}:${run.step}:${run.phase}`;
+    if (k !== submitted) { submitted = k; void submitDaily({ day: run.daily, code: run.code, names: run.heroes.map((h) => h.name).join(', ').slice(0, 60), players: run.heroes.length, score: dailyScore(run), won: run.phase === 'won', zone: Math.min(2, run.zone) }); }
+  }
 }
+let submitted = '';
 ui.rerender = () => render([]);
 
 function pickSpell(id: string): void {
@@ -136,6 +147,18 @@ document.addEventListener('click', (e) => {
     case 'selrune': ui.selRune = ui.selRune === Number(id) ? -1 : Number(id); render([]); break;
     case 'socket': s?.act({ a: 'socket', spell: id, idx: ui.selRune }); ui.selRune = -1; break;
     case 'unsocket': s?.act({ a: 'unsocket', spell: id }); break;
+    case 'htab':
+      ui.homeTab = id as typeof ui.homeTab;
+      if (ui.homeTab === 'diario' && ui.board2 !== 'cargando') { ui.board2 = 'cargando'; void topDaily(today()).then((r) => { ui.board2 = r ?? 'error'; if (ui.screen === 'home') homeScreen(''); }); }
+      homeScreen(''); break;
+    case 'perk': buyPerk(id); homeScreen(''); break;
+    case 'tuto': ui.tutorial = 0; meta().seenTutorial = false; homeScreen(''); break;
+    case 'tutonext': ui.tutorial++; if (ui.tutorial >= 5) { meta().seenTutorial = true; saveMeta(); } homeScreen(''); break;
+    case 'tutoskip': meta().seenTutorial = true; saveMeta(); homeScreen(''); break;
+    case 'ascup': ui.asc = Math.min(meta().maxAsc, ui.asc + 1); publish(); render([]); break;
+    case 'ascdown': ui.asc = Math.max(0, ui.asc - 1); publish(); render([]); break;
+    case 'again': ui.log.length = 0; s?.backToLobby(); break;
+    case 'reroll': s?.act({ a: 'reroll' }); break;
     case 'end': s?.act({ a: 'end' }); break;
     case 'spell': pickSpell(id); break;
     case 'togglelog': ui.logOpen = !ui.logOpen; render([]); break;
@@ -146,6 +169,11 @@ document.addEventListener('click', (e) => {
       break;
   }
   hideTip();
+});
+
+document.addEventListener('change', (e) => {
+  const el = e.target as HTMLInputElement;
+  if (el.dataset?.act === 'dailytoggle') { ui.daily = el.checked; publish(); render([]); }
 });
 
 document.addEventListener('keydown', (e) => {

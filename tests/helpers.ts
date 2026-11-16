@@ -4,20 +4,30 @@ import { cast, castProblem, current, endTurn, move } from '../src/core/combat/en
 import { alive, dist, reachable } from '../src/core/combat/grid';
 import type { CombatState } from '../src/core/state';
 
-/** Juega un combate entero: IA para enemigos y un guion simple para héroes. */
-export function autoplay(s: CombatState, maxTurns = 600, minion?: Parameters<typeof runAiTurn>[1]): void {
+/**
+ * Juega un combate entero: IA para enemigos y un jugador sencillo para los héroes
+ * (cura a quien lo necesita, rompe pilares, usa primero los hechizos más fuertes y remata).
+ */
+export function autoplay(s: CombatState, maxTurns = 600, info?: Parameters<typeof runAiTurn>[1]): void {
   for (let i = 0; i < maxTurns && !s.over; i++) {
     const u = current(s)!;
-    if (u.ai) { runAiTurn(s, minion); continue; }
-    for (let n = 0; n < 8 && !s.over && current(s)?.id === u.id; n++) {
-      const foes = s.units.filter((e) => e.team === 'enemy' && alive(e)).sort((a, b) => dist(a.pos, u.pos) - dist(b.pos, u.pos));
-      const opt = u.spells.map((sp) => SPELLS[sp.id]!).filter((d) => d.target === 'enemy')
-        .flatMap((d) => foes.map((f) => ({ d, f }))).find(({ d, f }) => !castProblem(s, u, d, f.pos));
-      if (opt) { cast(s, u.id, opt.d.id, opt.f.pos); continue; }
-      if (u.mp > 0 && foes[0]) {
+    if (u.ai) { runAiTurn(s, info); continue; }
+    for (let n = 0; n < 10 && !s.over && current(s)?.id === u.id; n++) {
+      const spells = u.spells.map((sp) => SPELLS[sp.id]!).sort((a, b) => b.ap - a.ap);
+      const hurt = s.units.filter((h) => h.team === 'hero' && alive(h) && h.hp < h.maxHp * 0.55).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp);
+      const help = spells.filter((d) => d.heal || (d.shield && !d.dmg)).flatMap((d) => [...hurt, u].map((h) => ({ d, at: d.range[1] === 0 ? u.pos : h.pos })))
+        .find(({ d, at }) => hurt.length && !castProblem(s, u, d, at));
+      if (help) { cast(s, u.id, help.d.id, help.at); continue; }
+      const foes = s.units.filter((e) => e.team === 'enemy' && alive(e))
+        .sort((a, b) => Number(b.ai === 'pillar') - Number(a.ai === 'pillar') || a.hp - b.hp);
+      const opt = spells.filter((d) => d.target === 'enemy' && d.dmg)
+        .flatMap((d) => (d.range[1] === 0 ? [{ d, at: u.pos }] : foes.map((f) => ({ d, at: f.pos })))).find(({ d, at }) => !castProblem(s, u, d, at));
+      if (opt) { cast(s, u.id, opt.d.id, opt.at); continue; }
+      const goal = foes.sort((a, b) => Number(b.ai === 'pillar') - Number(a.ai === 'pillar') || dist(a.pos, u.pos) - dist(b.pos, u.pos))[0];
+      if (u.mp > 0 && goal) {
         const reach = reachable(s, u.pos, u.mp);
-        const best = [...reach.cost.keys()].map((k) => k.split(',').map(Number) as [number, number])
-          .sort((a, b) => dist({ x: a[0], y: a[1] }, foes[0]!.pos) - dist({ x: b[0], y: b[1] }, foes[0]!.pos))[0]!;
+        const best = [...reach.cost.keys()].filter((k) => !s.obstacles.includes(k)).map((k) => k.split(',').map(Number) as [number, number])
+          .sort((a, b) => dist({ x: a[0], y: a[1] }, goal.pos) - dist({ x: b[0], y: b[1] }, goal.pos))[0]!;
         if (best[0] !== u.pos.x || best[1] !== u.pos.y) { move(s, u.id, { x: best[0], y: best[1] }); continue; }
       }
       break;
@@ -25,4 +35,3 @@ export function autoplay(s: CombatState, maxTurns = 600, minion?: Parameters<typ
     if (!s.over && current(s)?.id === u.id) endTurn(s, u.id);
   }
 }
-

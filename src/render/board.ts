@@ -109,6 +109,9 @@ export class Board {
       else if (e.t === 'status') float(e.unit, STATUS_NAME[e.kind] ?? e.kind, STATUS_COLOR[e.kind] ?? '#fff');
       else if (e.t === 'skip') float(e.unit, 'Pierde el turno', '#ffe84a');
       else if (e.t === 'trap') float(e.unit, '¡Púas!', '#ff8a30');
+      else if (e.t === 'stuck') float(e.unit, '¡Atrapado!', '#7fe05a');
+      else if (e.t === 'devour') float(e.unit, 'Devora', '#c9a0ff');
+      else if (e.t === 'raise') float(e.unit, 'Alza muertos', '#c9a0ff');
       else if (e.t === 'summon') float(e.unit, 'Invocado', '#c77dff');
       else if (e.t === 'phase') float(e.unit, '¡FASE 2!', '#ff3060');
     }
@@ -146,6 +149,11 @@ export class Board {
       g.fillStyle = zone.rock[0]; g.fillRect(X + 8, Y + 8, TILE - 16, TILE - 20);
       g.fillStyle = zone.rock[1]; g.fillRect(X + 8, Y + 8, TILE - 16, 7);
       g.fillStyle = zone.rock[2]; g.fillRect(X + TILE - 17, Y + 15, 9, TILE - 27);
+    }
+    for (const k of c.puddles ?? []) {
+      const [x, y] = k.split(',').map(Number) as [number, number];
+      g.fillStyle = 'rgba(70,200,90,.38)'; g.beginPath(); g.ellipse((x + 0.5) * TILE, (y + 0.6) * TILE, TILE * 0.42, TILE * 0.28, 0, 0, 6.3); g.fill();
+      g.fillStyle = 'rgba(190,255,150,.35)'; g.beginPath(); g.ellipse((x + 0.42) * TILE, (y + 0.55) * TILE, TILE * 0.14, TILE * 0.07, 0, 0, 6.3); g.fill();
     }
     for (const k of c.traps ?? []) {
       const [x, y] = k.split(',').map(Number) as [number, number];

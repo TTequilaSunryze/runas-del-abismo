@@ -107,7 +107,7 @@ export function lootRow(run: RunState): string {
   const h = mine(run);
   const offer = h ? run.offers[ui.myId] : undefined;
   if (!offer || !h) return '';
-  return `<div class="panel loot"><div class="row"><h3>🎁 Botín: elige uno</h3><span class="grow"></span><button class="mini" data-act="pick" data-id="-1">No quiero ninguno</button></div>
+  return `<div class="panel loot"><div class="row"><h3>🎁 Botín: elige uno</h3><span class="grow"></span>${h.rerolls > 0 ? `<button class="mini" data-act="reroll">🎲 Re-tirar (${h.rerolls})</button>` : ''}<button class="mini" data-act="pick" data-id="-1">No quiero ninguno</button></div>
   <div class="cards">${offer.map((it, i) => `<div class="lootcard ${RAR[it.rarity]}"><div class="row"><div class="cell ${RAR[it.rarity]} big">${itemIcon(it)}</div><div>${itemHtml(it)}</div></div>${diffHtml(it, h)}<button class="pri" data-act="pick" data-id="${i}">Quedármelo</button></div>`).join('')}</div>
   <div class="dim sm">Si la ranura está ocupada, va a tu mochila y decides después.</div></div>`;
 }

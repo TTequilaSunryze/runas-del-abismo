@@ -32,9 +32,18 @@ export const ui = {
   selRune: -1,
   leaveArmed: false,
   logOpen: false,
+  /** ascensión elegida (solo cuenta la del anfitrión) y reto diario */
+  asc: 0,
+  daily: false,
+  /** pestaña de la pantalla de inicio */
+  homeTab: 'jugar' as 'jugar' | 'mejoras' | 'logros' | 'diario',
+  board2: null as null | Array<{ names: string; players: number; score: number; won: boolean; zone: number }> | 'cargando' | 'error',
+  tutorial: 0,
   rerender: (): void => {},
 };
 
 export const mine = (run: RunState): HeroSave | undefined => run.heroes.find((h) => h.owner === ui.myId);
 /** Atributo data-tip con HTML para la ayuda flotante. */
 export const tip = (html: string): string => `data-tip="${esc(html)}"`;
+
+export const today = (): string => new Date().toISOString().slice(0, 10);

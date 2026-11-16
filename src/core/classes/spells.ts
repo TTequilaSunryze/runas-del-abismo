@@ -110,6 +110,9 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
     S({ id: 'e_maldicion', name: 'Maldición del Prior', route: 'enemy', ap: 3, cd: 0, range: [2, 7], los: true, target: 'enemy', dmg: [6, 8], status: { kind: 'mark', turns: 2 }, text: '' }),
     S({ id: 'e_barrido', name: 'Barrido del coloso', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', area: 1, dmg: [9, 12], text: '' }),
     S({ id: 'e_llama', name: 'Llama hereje', route: 'enemy', ap: 3, cd: 0, range: [2, 5], los: true, target: 'enemy', dmg: [4, 6], status: { kind: 'burn', turns: 2 }, text: '' }),
+    S({ id: 'e_toque', name: 'Toque helado', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [7, 9], status: { kind: 'mark', turns: 1 }, text: '' }),
+    S({ id: 'e_escudo', name: 'Corteza protectora', route: 'enemy', ap: 2, cd: 2, range: [1, 4], los: true, target: 'ally', shield: 10, text: '' }),
+    S({ id: 'e_avivar', name: 'Avivar las brasas', route: 'enemy', ap: 2, cd: 2, range: [1, 4], los: true, target: 'ally', giveAp: 2, text: '' }),
     S({ id: 'e_mordida', name: 'Mordida', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [7, 9], text: '' }),
     S({ id: 'e_telarana', name: 'Telaraña', route: 'enemy', ap: 3, cd: 0, range: [2, 5], los: true, target: 'enemy', dmg: [4, 6], status: { kind: 'slow', turns: 2, stacks: 2 }, text: '' }),
     S({ id: 'e_espora', name: 'Esporas', route: 'enemy', ap: 3, cd: 0, range: [2, 5], los: true, target: 'enemy', dmg: [3, 5], status: { kind: 'poison', turns: 3, stacks: 2 }, text: '' }),
@@ -131,7 +134,7 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
 // Elemento del daño según la ruta (o el hechizo, en los enemigos).
 const ROUTE_ELEMENT: Record<string, Element> = { fuego: 'fire', hielo: 'ice', veneno: 'poison', luz: 'holy', penitencia: 'holy', juicio: 'holy' };
 const SPELL_ELEMENT: Record<string, Element> = {
-  e_maldicion: 'shadow', e_zarpazo: 'poison', e_llama: 'fire', e_mordisco: 'shadow', e_espora: 'poison', e_latigo: 'poison',
+  e_maldicion: 'shadow', e_toque: 'shadow', e_zarpazo: 'poison', e_llama: 'fire', e_mordisco: 'shadow', e_espora: 'poison', e_latigo: 'poison',
   e_dentellada: 'fire', e_bola: 'fire', e_pira: 'fire', e_cataclismo: 'fire',
 };
 for (const d of Object.values(SPELLS)) d.element = SPELL_ELEMENT[d.id] ?? ROUTE_ELEMENT[d.route];

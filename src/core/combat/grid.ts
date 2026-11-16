@@ -30,7 +30,7 @@ export interface Reach {
 }
 
 /** Casillas alcanzables desde `from` con `max` pasos. `throughUnits` ignora unidades (para medir distancias). */
-export function reachable(s: CombatState, from: Pos, max: number, throughUnits = false): Reach {
+export function reachable(s: CombatState, from: Pos, max: number, throughUnits = false, ghost = false): Reach {
   const cost = new Map<string, number>([[key(from), 0]]);
   const prev = new Map<string, string>();
   const queue: Pos[] = [from];
@@ -42,7 +42,7 @@ export function reachable(s: CombatState, from: Pos, max: number, throughUnits =
     for (const d of DIRS) {
       const n = { x: p.x + d.x, y: p.y + d.y };
       const k = key(n);
-      if (!inBounds(s, n) || cost.has(k) || blocked.has(k)) continue;
+      if (!inBounds(s, n) || cost.has(k) || (!ghost && blocked.has(k))) continue;
       if (!throughUnits && unitAt(s, n)) continue;
       cost.set(k, c + 1);
       prev.set(k, key(p));

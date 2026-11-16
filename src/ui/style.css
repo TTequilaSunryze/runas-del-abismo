@@ -132,3 +132,28 @@ canvas { --ar: 1.7; width: min(100%, calc((100vh - 268px) * var(--ar))); display
   .side { position: static; max-height: none; }
   .cards.c3, .cards.c4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* progresión, tutorial y móvil */
+.htabs { margin: 6px 0; }
+.tabs button.on { border-color: var(--gold); color: var(--gold); }
+.modal { position: fixed; inset: 0; background: rgba(8,5,14,.78); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 12px; }
+.modal .panel { max-width: 460px; }
+.story { font-style: italic; color: #c9b8e8; }
+.rank .row { padding: 3px 0; border-bottom: 1px solid var(--edge); }
+.lootcard.off { opacity: .55; }
+label input[type=checkbox] { width: auto; margin-right: 4px; }
+@media (max-width: 760px) {
+  body { font-size: 14px; }
+  #app { padding: 4px; gap: 6px; }
+  .cols { flex-direction: column !important; }
+  .cols .side { width: 100% !important; max-width: none !important; order: 2; max-height: none; }
+  .cards, .cards.c2, .cards.c3, .cards.c4 { grid-template-columns: 1fr !important; }
+  .bar { flex-wrap: wrap; gap: 6px; }
+  button { padding: 10px 12px; min-height: 40px; }
+  .hud { flex-wrap: wrap; }
+  .spellbar { flex-wrap: wrap; justify-content: center; }
+  .sbtn { min-width: 64px; min-height: 56px; }
+  .cell { width: 44px; height: 44px; }
+  .stage canvas { max-height: 56vh; }
+  h1 { font-size: 20px; letter-spacing: 1px; }
+}

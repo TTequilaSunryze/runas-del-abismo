@@ -55,7 +55,15 @@ export interface Unit {
   statusBonus: number;
   statuses: Partial<Record<StatusKind, StatusState>>;
   spells: SpellSlot[];
-  ai: 'melee' | 'ranged' | 'boss' | null;
+  ai: 'melee' | 'ranged' | 'boss' | 'pillar' | null;
+  /**
+   * Rasgos especiales: puddle (al morir deja una casilla pegajosa), guard (empieza su turno con escudo),
+   * devour (se cura comiendo cadáveres), raise (alza muertos), ghost (atraviesa obstáculos),
+   * hunter (persigue al héroe más frágil), pack (más daño por cada compañero de manada vivo).
+   */
+  traits?: string[];
+  /** cadáver ya usado (devorado o alzado) */
+  used?: boolean;
   /** fase del jefe (1 o 2) */
   phase?: number;
 }
@@ -68,6 +76,8 @@ export interface CombatState extends RngBox {
   obstacles: string[];
   /** casillas con púas: dañan a quien las pisa */
   traps: string[];
+  /** casillas pegajosas: detienen al héroe que entra */
+  puddles: string[];
   units: Unit[];
   /** ids de unidad en orden de iniciativa */
   order: number[];
@@ -92,6 +102,9 @@ export type GameEvent =
   | { t: 'summon'; unit: number }
   | { t: 'phase'; unit: number; phase: number }
   | { t: 'trap'; unit: number }
+  | { t: 'stuck'; unit: number }
+  | { t: 'devour'; unit: number; corpse: number }
+  | { t: 'raise'; unit: number; corpse: number }
   | { t: 'over'; result: 'win' | 'lose' };
 
 export const key = (p: Pos): string => `${p.x},${p.y}`;

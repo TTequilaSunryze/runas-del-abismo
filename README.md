@@ -44,3 +44,7 @@ Cada `push` a `main` pasa los tests y publica en GitHub Pages.
 ## Pruebas locales del online
 
 Añade `?local=1&p=nombre` a la URL en varias pestañas del mismo navegador: las salas funcionan sin servidor.
+
+
+## Progresión (v2)
+Ecos, mejoras permanentes, 17 logros, ascensión 0–10, reto diario con ranking, tutorial, música por zona y adaptación a móvil. Ver `docs/GDD.md`. Las partidas guardadas de versiones anteriores no son compatibles.

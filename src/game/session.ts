@@ -4,7 +4,8 @@ import { runAiTurn } from '../core/combat/ai';
 import { cast, current, endTurn, move, type ActionResult } from '../core/combat/engine';
 import type { ClassId, GameEvent, Pos } from '../core/state';
 import { saveRun, type Peer, type Transport } from '../net/transport';
-import { bossInfo, chooseNode, finishFight, leaveNode, metaAction, newRun, resolveEvent, type MetaAction, type RunState } from './run';
+import type { Perks } from '../content/modes';
+import { bossInfo, chooseNode, recordEvents, finishFight, leaveNode, metaAction, newRun, resolveEvent, type MetaAction, type RunState } from './run';
 
 export type Action = { a: 'move'; to: Pos } | { a: 'cast'; spell: string; at: Pos } | { a: 'end' } | MetaAction;
 
@@ -14,6 +15,12 @@ export interface LobbyPlayer {
   cls: ClassId;
   routes: string[];
   host: boolean;
+  perks: Perks;
+  /** runas desbloqueadas por este jugador */
+  unlocked: string[];
+  /** solo del anfitrión: ascensión elegida y si es el reto diario */
+  asc: number;
+  daily: string | null;
 }
 
 export const TURN_SECONDS = 60;
@@ -38,7 +45,8 @@ export class Session {
   private turnTimer: ReturnType<typeof setTimeout> | null = null;
   private beat: ReturnType<typeof setInterval> | null = null;
   private lastTurnKey = '';
-  private savedStep = -1;
+  private savedKey = '';
+  private track = { caster: null as number | null };
 
   constructor(
     readonly t: Transport,
@@ -50,13 +58,18 @@ export class Session {
     t.on('sync', (p) => {
       if (this.isHost) return;
       const m = p as { run: RunState; ev: GameEvent[] };
-      if (!m?.run || m.run.version !== 5) return;
+      if (!m?.run || m.run.version !== 6) return;
       this.run = m.run;
       this.noteTurn();
       this.onChange(Array.isArray(m.ev) ? m.ev : []);
     });
     t.on('act', (p, from) => {
       if (this.isHost) this.apply(from, p as Action);
+    });
+    t.on('reset', () => {
+      if (this.isHost) return;
+      this.run = null;
+      this.onChange([]);
     });
     t.on('err', (p) => {
       const m = p as { to: string; text: string };
@@ -103,6 +116,9 @@ export class Session {
       .map((p) => ({
         id: p.id, name: String(p.data.name).slice(0, 14), cls: p.data.cls as ClassId,
         routes: Array.isArray(p.data.routes) ? (p.data.routes as string[]) : [], host: !!p.data.host,
+        perks: (p.data.perks && typeof p.data.perks === 'object' ? p.data.perks : {}) as Perks,
+        unlocked: Array.isArray(p.data.unlocked) ? (p.data.unlocked as string[]).slice(0, 20).map(String) : [],
+        asc: Number(p.data.asc) || 0, daily: typeof p.data.daily === 'string' ? p.data.daily : null,
       }))
       .sort((a, b) => Number(b.host) - Number(a.host) || a.id.localeCompare(b.id));
   }
@@ -124,20 +140,32 @@ export class Session {
   // ---------- anfitrión ----------
   startRun(): void {
     if (!this.isHost) return;
-    const players = this.lobby().slice(0, 4).filter((p) => {
+    const all = this.lobby().slice(0, 4);
+    const players = all.filter((p) => {
       const chosen: string[] = [];
       return p.routes.length > 0 && p.routes.every((r) => canPickRoute(p.cls, chosen, r) && chosen.push(r));
     });
     if (!players.length) return;
-    this.run = newRun(this.code, (Date.now() ^ (Math.random() * 2 ** 31)) >>> 0, players.map((p) => ({ owner: p.id, name: p.name, cls: p.cls, routes: p.routes })));
+    const host = all.find((p) => p.id === this.myId);
+    this.run = newRun(this.code, (Date.now() ^ (Math.random() * 2 ** 31)) >>> 0,
+      players.map((p) => ({ owner: p.id, name: p.name, cls: p.cls, routes: p.routes, perks: p.perks })),
+      { asc: host?.asc ?? 0, daily: host?.daily ?? null, unlocked: players.flatMap((p) => p.unlocked) });
     this.afterChange([]);
   }
 
   resume(run: RunState): void {
     if (!this.isHost) return;
     this.run = run;
-    this.savedStep = run.step;
     this.afterChange([]);
+  }
+
+  /** Al terminar: todos vuelven a la sala para jugar otra partida. */
+  backToLobby(): void {
+    if (!this.isHost) return;
+    this.run = null;
+    if (this.aiTimer) clearTimeout(this.aiTimer);
+    for (let i = 0; i < 3; i++) setTimeout(() => this.t.send('reset', null), i * 700);
+    this.onChange([]);
   }
 
   /** Elige un nodo del mapa. */
@@ -199,11 +227,14 @@ export class Session {
 
   private afterChange(events: GameEvent[]): void {
     const run = this.run!;
+    if (this.isHost) recordEvents(run, events, this.track);
     this.broadcast(events);
     this.noteTurn();
     this.onChange(events);
-    if (run.phase === 'map' && run.step !== this.savedStep) {
-      this.savedStep = run.step;
+    // guardado: en cada sala nueva y, en combate, al empezar cada ronda
+    const key = `${run.zone}:${run.step}:${run.phase}:${run.combat?.round ?? 0}`;
+    if (this.isHost && key !== this.savedKey && run.phase !== 'won' && run.phase !== 'lost' && !run.combat?.over) {
+      this.savedKey = key;
       void saveRun(run.code, this.secret, run);
     }
     const c = run.combat;

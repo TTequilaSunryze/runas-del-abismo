@@ -24,7 +24,11 @@ const POISON_DMG = 2;
 const MARK_MULT = 1.3;
 const CRIT_MULT = 1.5;
 const PUSH_CRASH_DMG = 4;
-const TRAP_DMG = 5;
+const TRAP_DMG = 6;
+const GUARD_SHIELD = 0.15;
+const PACK_BONUS = 15;
+
+export const hasTrait = (u: Unit, t: string): boolean => !!u.traits?.includes(t);
 const fail = (reason: string): ActionResult => ({ ok: false, reason });
 
 export function createCombat(setup: CombatSetup): { state: CombatState; events: GameEvent[] } {
@@ -34,7 +38,7 @@ export function createCombat(setup: CombatSetup): { state: CombatState; events: 
     .sort((a, b) => b.initiative - a.initiative || (a.team === b.team ? a.id - b.id : a.team === 'hero' ? -1 : 1))
     .map((u) => u.id);
   const state: CombatState = {
-    version: 1, rng: setup.seed >>> 0, w: setup.w, h: setup.h, obstacles: setup.obstacles.map(key), traps: (setup.traps ?? []).map(key),
+    version: 1, rng: setup.seed >>> 0, w: setup.w, h: setup.h, obstacles: setup.obstacles.map(key), traps: (setup.traps ?? []).map(key), puddles: [],
     units, order, turn: -1, round: 1, over: null, nextId: units.length + 1,
   };
   const events: GameEvent[] = [];
@@ -54,7 +58,8 @@ export function current(s: CombatState): Unit | undefined {
 function checkOver(s: CombatState, ev: GameEvent[]): void {
   if (s.over) return;
   const heroes = s.units.some((u) => u.team === 'hero' && alive(u));
-  const enemies = s.units.some((u) => u.team === 'enemy' && alive(u));
+  // los pilares del jefe no cuentan: basta con vencer al resto
+  const enemies = s.units.some((u) => u.team === 'enemy' && alive(u) && u.ai !== 'pillar');
   if (!heroes) s.over = 'lose';
   else if (!enemies) s.over = 'win';
   if (s.over) ev.push({ t: 'over', result: s.over });
@@ -73,12 +78,13 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
   ev.push({ t: 'damage', unit: u.id, amount: dmg, absorbed, crit: !!opts.crit, source });
   if (!alive(u)) {
     ev.push({ t: 'death', unit: u.id });
+    if (hasTrait(u, 'puddle') && !s.puddles.includes(key(u.pos))) s.puddles.push(key(u.pos));
     checkOver(s, ev);
   }
   return dmg;
 }
 
-function heal(u: Unit, amount: number, ev: GameEvent[]): void {
+export function heal(u: Unit, amount: number, ev: GameEvent[]): void {
   if (!alive(u)) return;
   const real = Math.min(u.maxHp - u.hp, Math.round(amount));
   if (real > 0) {
@@ -112,6 +118,10 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     if (!alive(u)) continue;
     ev.push({ t: 'turn', unit: u.id, round: s.round });
     u.shield = 0;
+    if (hasTrait(u, 'guard')) {
+      u.shield = Math.round(u.maxHp * GUARD_SHIELD);
+      ev.push({ t: 'shield', unit: u.id, amount: u.shield });
+    }
     for (const sp of u.spells) if (sp.cd > 0) sp.cd--;
     if (u.statuses.burn) hurt(s, u, BURN_DMG, ev, 'burn', { pierce: true, element: 'fire' });
     if (alive(u) && u.statuses.poison) hurt(s, u, POISON_DMG * u.statuses.poison.stacks, ev, 'poison', { pierce: true, element: 'poison' });
@@ -143,9 +153,9 @@ function actor(s: CombatState, unitId: number): Unit | string {
 export function move(s: CombatState, unitId: number, to: Pos): ActionResult {
   const u = actor(s, unitId);
   if (typeof u === 'string') return fail(u);
-  const reach = reachable(s, u.pos, u.mp);
+  const reach = reachable(s, u.pos, u.mp, false, hasTrait(u, 'ghost'));
   const cost = reach.cost.get(key(to));
-  if (!cost) return fail('Casilla fuera de alcance');
+  if (!cost || s.obstacles.includes(key(to))) return fail('Casilla fuera de alcance');
   const path = pathTo(reach, u.pos, to);
   const ev: GameEvent[] = [];
   const walked: Pos[] = [];
@@ -157,6 +167,12 @@ export function move(s: CombatState, unitId: number, to: Pos): ActionResult {
       ev.push({ t: 'trap', unit: u.id });
       hurt(s, u, TRAP_DMG, ev, 'trap', { pierce: true });
       if (!alive(u)) break;
+    }
+    // los héroes se quedan pegados en los charcos: pierden el resto de PM
+    if (u.team === 'hero' && s.puddles.includes(key(p)) && !s.obstacles.includes(key(p))) {
+      u.mp = 0;
+      ev.push({ t: 'stuck', unit: u.id });
+      break;
     }
   }
   ev.unshift({ t: 'move', unit: u.id, path: walked });
@@ -247,7 +263,8 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
     if (s.over) break;
     if (def.dmg) {
       const crit = rand(s) * 100 < u.crit + (def.crit ?? 0);
-      const raw = randInt(s, def.dmg[0], def.dmg[1]) * (1 + u.power / 100) * (crit ? CRIT_MULT : 1) * (t.statuses.mark ? MARK_MULT : 1) * (t === main || def.range[1] === 0 ? 1 : 0.5);
+      const pack = hasTrait(u, 'pack') ? s.units.filter((o) => o !== u && o.team === u.team && alive(o) && hasTrait(o, 'pack')).length * PACK_BONUS : 0;
+      const raw = randInt(s, def.dmg[0], def.dmg[1]) * (1 + (u.power + pack) / 100) * (crit ? CRIT_MULT : 1) * (t.statuses.mark ? MARK_MULT : 1) * (t === main || def.range[1] === 0 ? 1 : 0.5);
       dealt += hurt(s, t, raw, ev, def.id, { crit, element: def.element });
     }
     if (def.heal) heal(t, def.heal, ev);

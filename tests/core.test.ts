@@ -104,7 +104,7 @@ describe('combate por iniciativa', () => {
     const leo = current(s)!;
     const before = leo.hp;
     expect(move(s, leo.id, { x: 3, y: 2 }).ok).toBe(true);
-    expect(leo.hp).toBe(before - 5);
+    expect(leo.hp).toBe(before - 6);
   });
   it('un hechizo de área alrededor de uno mismo golpea a los enemigos cercanos', () => {
     const { state: s } = createCombat(setup({ units: [

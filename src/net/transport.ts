@@ -148,3 +148,29 @@ export async function loadRun(code: string): Promise<unknown> {
     return null;
   }
 }
+
+export interface DailyRow {
+  names: string;
+  players: number;
+  score: number;
+  won: boolean;
+  zone: number;
+}
+
+export async function submitDaily(row: DailyRow & { day: string; code: string }): Promise<boolean> {
+  try {
+    const { data, error } = await supabase().rpc('submit_daily', { p_day: row.day, p_code: row.code, p_names: row.names, p_players: row.players, p_score: row.score, p_won: row.won, p_zone: row.zone });
+    return !error && data === true;
+  } catch {
+    return false;
+  }
+}
+
+export async function topDaily(day: string): Promise<DailyRow[] | null> {
+  try {
+    const { data, error } = await supabase().rpc('top_daily', { p_day: day });
+    return error || !Array.isArray(data) ? null : (data as DailyRow[]);
+  } catch {
+    return null;
+  }
+}
