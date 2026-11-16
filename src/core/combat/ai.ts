@@ -61,7 +61,7 @@ function bossTurn(s: CombatState, u: Unit, minion: MinionFactory | undefined, ev
     u.name = 'Coloso del Osario';
     ev.push({ t: 'phase', unit: u.id, phase: 2 });
     if (minion) for (let i = 0; i < Math.max(1, heroes - 1); i++) summon(s, minion(u.pos), u.pos, ev);
-  } else if ((u.phase ?? 1) === 1 && minion && s.round % 2 === 0 && minions < 1 + heroes) {
+  } else if ((u.phase ?? 1) === 1 && minion && s.round % 2 === 0 && minions < heroes) {
     summon(s, minion(u.pos), u.pos, ev);
     u.ap = Math.max(0, u.ap - 3);
   }

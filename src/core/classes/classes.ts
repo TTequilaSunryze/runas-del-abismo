@@ -45,6 +45,15 @@ export const CLASSES: Record<ClassId, ClassDef> = {
       R('arcano', 'Arcano', 'tormenta', ['barrera', 'impulso', 'cupula'], 'Escudos y PA para los aliados.'),
     ],
   },
+  picaro: {
+    id: 'picaro', name: 'Pícaro', hp: 50, armor: 1, power: 0, crit: 15, ap: 7, mp: 4, initiative: 16, baseSpell: 'punalada',
+    routes: [
+      R('veneno', 'Veneno', 'asesino', ['daga_ven', 'nube', 'toxina'], 'Daño por turno que se acumula.'),
+      R('asesino', 'Asesino', 'veneno', ['apunalar', 'emboscada', 'golpe_mortal'], 'Daño directo a un objetivo.'),
+      R('sombras', 'Sombras', 'acrobata', ['cegar', 'punto_debil', 'golpe_bajo'], 'Debilita: quita PA, marca y aturde.'),
+      R('acrobata', 'Acróbata', 'sombras', ['voltereta', 'evasion', 'senal'], 'Movilidad, evasión y apoyo.'),
+    ],
+  },
   clerigo: {
     id: 'clerigo', name: 'Clérigo', hp: 56, armor: 1, power: 4, crit: 5, ap: 6, mp: 3, initiative: 8, baseSpell: 'maza',
     routes: [

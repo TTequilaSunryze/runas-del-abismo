@@ -58,6 +58,8 @@ function weapon(g: CanvasRenderingContext2D, cls: string, x: number, y: number, 
   if (cls === 'guerrero') {
     g.fillStyle = '#d0d6e8'; g.fillRect(hx, hy - 7 * s, s, 7 * s);
     g.fillStyle = '#8a6a2a'; g.fillRect(hx - s, hy, 3 * s, s);
+  } else if (cls === 'picaro') {
+    g.fillStyle = '#d0d6e8'; g.fillRect(hx, hy - 3 * s, s, 4 * s); g.fillRect(x + s, hy - 3 * s, s, 4 * s);
   } else if (cls === 'mago') {
     g.fillStyle = '#7a4a1a'; g.fillRect(hx, hy - 7 * s, s, 10 * s);
     g.fillStyle = '#58a6ff'; g.fillRect(hx - s, hy - 9 * s, 3 * s, 3 * s);

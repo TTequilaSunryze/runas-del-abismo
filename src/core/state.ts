@@ -8,7 +8,7 @@ export interface Pos {
 
 export type Team = 'hero' | 'enemy';
 export type StatusKind = 'burn' | 'poison' | 'slow' | 'stun' | 'mark';
-export type ClassId = 'guerrero' | 'mago' | 'clerigo';
+export type ClassId = 'guerrero' | 'mago' | 'clerigo' | 'picaro';
 
 export interface StatusState {
   turns: number;

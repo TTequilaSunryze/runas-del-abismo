@@ -71,6 +71,20 @@ export function genItem(box: RngBox, theme: ItemTheme, depth: number, min: Rarit
   return { slot: s, name, rarity, stats };
 }
 
+/** Precio de compra en la tienda. */
+export const PRICE = [30, 60, 110, 200] as const;
+export const BAG_SIZE = 8;
+
+/** Diferencia de estadísticas al cambiar `old` por `next` (solo las que cambian). */
+export function statDiff(next: Stats, old: Stats | undefined): Stats {
+  const out: Stats = {};
+  for (const k of new Set([...Object.keys(next), ...Object.keys(old ?? {})]) as Set<StatKey>) {
+    const d = (next[k] ?? 0) - (old?.[k] ?? 0);
+    if (d) out[k] = d;
+  }
+  return out;
+}
+
 export function sumStats(list: Array<Stats | undefined>): Record<StatKey, number> {
   const total: Record<StatKey, number> = { hp: 0, armor: 0, power: 0, crit: 0, ap: 0, mp: 0, initiative: 0 };
   for (const s of list) if (s) for (const k of Object.keys(s) as StatKey[]) total[k] += s[k] ?? 0;

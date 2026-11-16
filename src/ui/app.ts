@@ -1,11 +1,12 @@
 // Pantallas: inicio, sala, combate, entre combates y final.
 import { ZONA1_EVENTS } from '../content/zona1/events';
 import { CLASSES, blockedRoutes, canPickRoute, findRoute, MAX_ROUTES } from '../core/classes/classes';
-import { RARITY_NAME, SLOTS, SLOT_NAME, statsText, type Item } from '../core/items/items';
+import { isMuted, playEvents, sfx, toggleMute } from '../audio/sfx';
+import { BAG_SIZE, PRICE, RARITY_NAME, SLOTS, SLOT_NAME, STAT_NAME, statDiff, statsText, type Item, type Slot, type StatKey } from '../core/items/items';
 import { SPELLS } from '../core/classes/spells';
 import { current, getUnit } from '../core/combat/engine';
 import type { ClassId, GameEvent } from '../core/state';
-import { heroMaxHp, type RunState } from '../game/run';
+import { NODE_HINT, NODE_NAME, POTION_HEAL, POTION_PRICE, heroMaxHp, type HeroSave, type RunState } from '../game/run';
 import { Session, TURN_SECONDS } from '../game/session';
 import { joinRoom, loadRun } from '../net/transport';
 import { Board, STATUS_NAME } from '../render/board';
@@ -74,10 +75,18 @@ async function enter(code: string, isHost: boolean, local: boolean, resume = fal
   saved = null;
   if (resume) {
     const run = (await loadRun(code)) as RunState | null;
-    if (run && run.version === 2 && run.phase === 'between') saved = run;
+    if (run && run.version === 3 && run.phase === 'map') saved = run;
     else notice = 'No se encontró una partida guardada que se pueda continuar.';
   }
-  session.onChange = (ev) => { addLog(ev); render(ev); };
+  let wasMyTurn = false;
+  session.onChange = (ev) => {
+    addLog(ev);
+    playEvents(ev);
+    const mine = !!session?.isMyTurn();
+    if (mine && !wasMyTurn) sfx.myTurn();
+    wasMyTurn = mine;
+    render(ev);
+  };
   session.onError = (text) => { notice = text; render([]); setTimeout(() => { notice = ''; render([]); }, 2500); };
   session.onLobby = () => render([]);
   publish();
@@ -105,7 +114,7 @@ function lobby(): void {
     const why = off ? (me.routes.includes(r.opposite) ? `Bloqueada por ${findRoute(me.cls, r.opposite)!.name}` : 'Ya tienes 2 rutas') : `Opuesta: ${findRoute(me.cls, r.opposite)!.name}`;
     return `<button class="card pickc ${on ? 'on' : ''} ${off ? 'off' : ''}" data-act="route" data-id="${r.id}" ${off ? 'disabled' : ''}><b>${r.name}</b> ${on ? '✔' : ''}<br><span class="dim">${r.text}</span><br>${r.spells.map((id, i) => `<span class="sp"><span class="dim">Nv ${i + 1}</span> ${esc(SPELLS[id]!.name)}: ${esc(SPELLS[id]!.text)}</span>`).join('<br>')}<br><i class="${off ? 'bad' : 'dim'}">${why}</i></button>`;
   }).join('')}</div>
-  <p>${s.isHost ? `<button class="pri" data-act="start" ${ready.length && ready.length === Math.min(4, players.length) ? '' : 'disabled'}>⚔️ Comenzar (${ready.length} de ${Math.min(4, players.length)} listos)</button> ${saved ? `<button data-act="doresume">Reanudar partida guardada (combate ${saved.fight + 1} de ${saved.total})</button>` : ''}` : ''} <button data-act="home">Salir</button></p>`;
+  <p>${s.isHost ? `<button class="pri" data-act="start" ${ready.length && ready.length === Math.min(4, players.length) ? '' : 'disabled'}>⚔️ Comenzar (${ready.length} de ${Math.min(4, players.length)} listos)</button> ${saved ? `<button data-act="doresume">Reanudar partida guardada (sala ${saved.step + 1} de ${saved.map.length})</button>` : ''}` : ''} <button data-act="home">Salir</button></p>`;
 }
 
 // ---------- combate ----------
@@ -143,10 +152,10 @@ function combat(events: GameEvent[]): void {
   const cur = current(c), mine = s.myUnit(), myTurn = s.isMyTurn();
   if (!myTurn && board!.sel) board!.sel = null;
   const left = s.turnEndsAt ? Math.max(0, Math.ceil((s.turnEndsAt - Date.now()) / 1000)) : 0;
-  document.getElementById('info')!.innerHTML = `<b>${run.fight === run.total - 1 ? 'JEFE' : `Combate ${run.fight + 1} de ${run.total}`}</b><span>Ronda ${c.round}</span>
+  document.getElementById('info')!.innerHTML = `<b>${run.kind === 'boss' ? 'JEFE' : run.kind === 'elite' ? 'ÉLITE' : 'Combate'} · sala ${run.step + 1} de ${run.map.length}</b><span>Ronda ${c.round}</span>
     <span class="${myTurn ? 'pill' : ''}">${c.over ? (c.over === 'win' ? '¡Victoria!' : 'Derrota') : myTurn ? 'TU TURNO' : cur ? `Turno de ${esc(cur.name)}` : ''}</span><span id="clock" class="dim">${left && !c.over ? `${left}s` : ''}</span>
     ${notice ? `<span class="bad">${esc(notice)}</span>` : ''}${!s.hostPresent() ? '<span class="bad">Anfitrión desconectado: la partida está en pausa</span>' : ''}
-    ${s.isHost && cur && !cur.ai && !myTurn && !c.over ? '<button data-act="skip">Pasar su turno</button>' : ''}`;
+    ${s.isHost && cur && !cur.ai && !myTurn && !c.over ? '<button data-act="skip">Pasar su turno</button>' : ''}<span class="sp-r"></span>${sysButtons()}`;
   const heroIdx = new Map(c.units.filter((u) => u.team === 'hero').map((u, i) => [u.id, i]));
   document.getElementById('init')!.innerHTML = c.order.map((id) => getUnit(c, id)!).filter((u) => u.hp > 0)
     .map((u) => `<span class="ini ${cur?.id === u.id ? 'on' : ''} ${u.team === 'hero' ? `p${heroIdx.get(u.id)! % 4}` : 'en'}">${esc(u.name)}<br><small>${u.hp}/${u.maxHp}</small></span>`).join('<span class="dim">›</span>');
@@ -162,26 +171,91 @@ function combat(events: GameEvent[]): void {
 }
 
 const RAR = ['r0', 'r1', 'r2', 'r3'];
+let leaveArmed = false;
+
+/** Botones de sistema: sonido y abandonar (con confirmación en dos clics). */
+function sysButtons(): string {
+  const warn = session?.isHost && session.t.kind === 'online' ? '¿Seguro? Termina para todos' : '¿Seguro? Pulsa otra vez';
+  return `<button data-act="mute" title="Sonido">${isMuted() ? '🔇' : '🔊'}</button><button data-act="leave" class="${leaveArmed ? 'danger' : ''}">${leaveArmed ? warn : 'Abandonar'}</button>`;
+}
+
+function topBar(run: RunState): string {
+  const mine = run.heroes.find((h) => h.owner === myId);
+  return `<div id="info" class="row"><b>Sala ${esc(run.code)}</b><span>Las Catacumbas Olvidadas</span>${mine ? `<span class="pill">Oro: ${mine.gold}</span><span>PV ${mine.hp}/${heroMaxHp(mine)}</span><span>Nivel ${mine.level}</span>` : '<span class="dim">Espectador</span>'}
+  ${notice ? `<span class="bad">${esc(notice)}</span>` : ''}${!session!.hostPresent() ? '<span class="bad">Anfitrión desconectado: partida en pausa</span>' : ''}<span class="sp-r"></span>${sysButtons()}</div>`;
+}
+
 function itemHtml(it: Item | undefined, empty = 'vacío'): string {
   return it ? `<b class="${RAR[it.rarity]}">${esc(it.name)}</b> <span class="dim">${RARITY_NAME[it.rarity]}</span><br><span class="sp">${statsText(it.stats)}</span>${it.lore ? `<br><i class="dim sp">${esc(it.lore)}</i>` : ''}` : `<span class="dim">${empty}</span>`;
 }
 
+/** Qué cambia si me pongo `it` en lugar de lo que llevo en esa ranura. */
+function diffHtml(it: Item, h: HeroSave): string {
+  const old = h.equip[it.slot];
+  if (!old) return '<span class="good sp">Ranura libre: todo es mejora</span>';
+  const d = statDiff(it.stats, old.stats);
+  const keys = Object.keys(d) as StatKey[];
+  if (!keys.length) return '<span class="dim sp">Igual que lo que llevas</span>';
+  return `<span class="sp dim">Frente a ${esc(old.name)}:</span><br>` + keys.map((k) => `<span class="sp ${d[k]! > 0 ? 'good' : 'bad'}">${d[k]! > 0 ? '+' : ''}${d[k]} ${STAT_NAME[k]}</span>`).join(' · ');
+}
+
 function heroCards(run: RunState): string {
-  return `<div class="grid">${run.heroes.map((h, i) => `<div class="card"><b class="p${i % 4}">${esc(h.name)}</b> <span class="dim">Nv ${h.level}</span><br>${CLASSES[h.cls].name} · ${h.routes.map((r) => findRoute(h.cls, r)?.name).join(' + ')}<br>PV ${h.hp}/${heroMaxHp(h)}
+  return `<div class="grid">${run.heroes.map((h, i) => `<div class="card"><b class="p${i % 4}">${esc(h.name)}</b> <span class="dim">Nv ${h.level}</span> <span class="pill sp">${h.gold} oro</span><br>${CLASSES[h.cls].name} · ${h.routes.map((r) => findRoute(h.cls, r)?.name).join(' + ')}<br>PV ${h.hp}/${heroMaxHp(h)}
     <div class="sp">${SLOTS.map((sl) => `<span class="dim">${SLOT_NAME[sl]}:</span> ${h.equip[sl] ? `<span class="${RAR[h.equip[sl]!.rarity]}" title="${esc(statsText(h.equip[sl]!.stats))}">${esc(h.equip[sl]!.name)}</span>` : '<span class="dim">—</span>'}`).join('<br>')}</div></div>`).join('')}</div>`;
 }
 
-function between(): void {
+function lootPanel(run: RunState, mine: HeroSave | undefined): string {
+  const offer = mine ? run.offers[myId] : undefined;
+  if (!offer || !mine) return '';
+  return `<h3>Botín: elige un objeto <span class="dim">(si la ranura está ocupada va a tu mochila y decides después)</span></h3>
+  <div class="grid">${offer.map((it, i) => `<div class="card"><span class="dim">${SLOT_NAME[it.slot]}</span><br>${itemHtml(it)}<hr>${diffHtml(it, mine)}<br><button class="pri" data-act="pick" data-id="${i}">Quedármelo</button></div>`).join('')}</div>
+  <p><button data-act="pick" data-id="-1">No quiero ninguno</button></p>`;
+}
+
+/** Mi equipo: 8 ranuras, mochila, y dar o vender objetos. */
+function gearPanel(run: RunState, mine: HeroSave | undefined, selling: boolean): string {
+  if (!mine) return '';
+  const others = run.heroes.filter((h) => h !== mine);
+  const spec = { hp: heroMaxHp(mine) };
+  return `<h3>Tu equipo <span class="dim">(PV máx. ${spec.hp})</span></h3>
+  <div class="grid g4">${SLOTS.map((sl) => { const it = mine.equip[sl]; return `<div class="card slot"><span class="dim">${SLOT_NAME[sl]}</span><br>${itemHtml(it)}${it ? `<br><button class="mini" data-act="unequip" data-id="${sl}">Quitar</button>` : ''}</div>`; }).join('')}</div>
+  <h3>Mochila <span class="dim">(${mine.bag.length}/${BAG_SIZE})</span></h3>
+  ${mine.bag.length ? `<div class="grid">${mine.bag.map((it, i) => `<div class="card"><span class="dim">${SLOT_NAME[it.slot]}</span><br>${itemHtml(it)}<hr>${diffHtml(it, mine)}<br>
+    <button class="mini pri" data-act="equip" data-id="${i}">Equipar</button>${others.map((o) => `<button class="mini" data-act="give" data-id="${i}" data-to="${esc(o.owner)}">Dar a ${esc(o.name)}</button>`).join('')}${selling ? `<button class="mini" data-act="sell" data-id="${i}">Vender (+${Math.floor(PRICE[it.rarity] / 3)} oro)</button>` : ''}</div>`).join('')}</div>` : '<p class="dim">Vacía. Los objetos que no equipes al momento se guardan aquí; puedes dárselos a un compañero o venderlos en la tienda.</p>'}`;
+}
+
+function mapScreen(): void {
   const s = session!, run = s.run!;
-  const end = run.phase !== 'between';
   const mine = run.heroes.find((h) => h.owner === myId);
-  const offer = !end && mine ? run.offers[myId] : undefined;
-  const pending = end ? 0 : Object.keys(run.offers).length;
-  root.innerHTML = `<div class="c"><h1>${run.phase === 'won' ? '¡VICTORIA!' : run.phase === 'lost' ? 'HABÉIS CAÍDO' : `Combate ${run.fight} de ${run.total} superado`}</h1>
-  <p class="dim">${run.phase === 'won' ? 'El Coloso del Osario se desmorona. Las Catacumbas guardan silencio... por ahora.' : run.phase === 'lost' ? 'Las Catacumbas reclaman a otro grupo de aventureros.' : `Subís a nivel ${run.heroes[0]?.level ?? 1}. Los caídos vuelven con el 30% de vida; los demás recuperan un 35%. La partida queda guardada.`}</p></div>
-  ${offer ? `<h3>Tu botín: elige un objeto (sustituye al que lleves en esa ranura)</h3><div class="grid">${offer.map((it, i) => `<div class="card"><span class="dim">${SLOT_NAME[it.slot]}</span><br>${itemHtml(it)}<hr><span class="dim sp">Llevas:</span> <span class="sp">${itemHtml(mine!.equip[it.slot], 'nada')}</span><br><button class="pri" data-act="pick" data-id="${i}">Equipar</button></div>`).join('')}</div><p><button data-act="pick" data-id="-1">No quiero ninguno</button></p>` : ''}
-  <h3>El grupo</h3>${heroCards(run)}
-  <p class="c">${end ? '' : s.isHost ? `<button class="pri" data-act="next">${run.fight === run.total - 1 ? 'Enfrentarse al jefe →' : 'Continuar →'}</button>${pending ? ` <span class="dim">(${pending} jugador${pending > 1 ? 'es' : ''} aún eligiendo botín; si continúas lo pierden)</span>` : ''}` : '<span class="dim">Esperando al anfitrión…</span>'} <button data-act="home">${end ? 'Volver al inicio' : 'Salir'}</button></p>`;
+  const pending = Object.keys(run.offers).length;
+  root.innerHTML = `${topBar(run)}
+  ${run.note ? `<div class="card c">${esc(run.note)}</div>` : ''}
+  <div class="row map">${run.map.map((nodes, i) => `<div class="step ${i === run.step ? 'on' : i < run.step ? 'done' : ''}"><small>Sala ${i + 1}</small>${nodes.map((n) => `<span>${NODE_NAME[n]}</span>`).join('')}</div>`).join('<span class="dim">›</span>')}</div>
+  <h3>Sala ${run.step + 1}: ${s.isHost ? 'elige el camino' : 'el anfitrión elige el camino'}</h3>
+  <div class="grid">${(run.map[run.step] ?? []).map((n, i) => `<button class="card pickc" data-act="node" data-id="${i}" ${s.isHost ? '' : 'disabled'}><b>${NODE_NAME[n]}</b><br><span class="dim">${NODE_HINT[n]}</span></button>`).join('')}</div>
+  ${s.isHost && pending ? `<p class="dim">${pending} jugador${pending > 1 ? 'es' : ''} aún eligiendo botín; si avanzas lo pierden.</p>` : ''}
+  ${lootPanel(run, mine)}${gearPanel(run, mine, false)}
+  <h3>El grupo</h3>${heroCards(run)}`;
+}
+
+function shopScreen(): void {
+  const s = session!, run = s.run!;
+  const mine = run.heroes.find((h) => h.owner === myId);
+  root.innerHTML = `${topBar(run)}
+  <div class="c"><h1>Mercader de reliquias</h1><p class="dim">Cada objeto solo puede comprarlo un jugador. Vende lo que te sobre de la mochila por un tercio de su precio.</p></div>
+  <div class="grid">${(run.shop ?? []).map((sl, i) => `<div class="card ${sl.sold ? 'off' : ''}"><span class="dim">${SLOT_NAME[sl.item.slot]}</span><br>${itemHtml(sl.item)}<hr>${mine ? diffHtml(sl.item, mine) : ''}<br>
+    <button class="pri" data-act="buy" data-id="${i}" ${sl.sold || !mine || mine.gold < sl.price ? 'disabled' : ''}>${sl.sold ? 'Vendido' : `Comprar · ${sl.price} oro`}</button></div>`).join('')}
+    <div class="card"><b>Poción de vida</b><br><span class="sp">Recupera el ${POTION_HEAL * 100}% de tu vida máxima.</span><br><button class="pri" data-act="potion" ${!mine || mine.gold < POTION_PRICE || mine.hp >= heroMaxHp(mine) ? 'disabled' : ''}>Beber · ${POTION_PRICE} oro</button></div></div>
+  <p class="c">${s.isHost ? '<button class="pri" data-act="leavenode">Salir de la tienda →</button>' : '<span class="dim">El anfitrión decide cuándo seguir.</span>'}</p>
+  ${gearPanel(run, mine, true)}
+  <h3>El grupo</h3>${heroCards(run)}`;
+}
+
+function endScreen(): void {
+  const run = session!.run!;
+  root.innerHTML = `${topBar(run)}<div class="c"><h1>${run.phase === 'won' ? '¡VICTORIA!' : 'HABÉIS CAÍDO'}</h1>
+  <p class="dim">${run.phase === 'won' ? 'El Coloso del Osario se desmorona. Las Catacumbas guardan silencio... por ahora.' : `Las Catacumbas reclaman a otro grupo de aventureros en la sala ${run.step + 1}.`}</p></div>
+  <h3>El grupo</h3>${heroCards(run)}<p class="c"><button class="pri" data-act="home">Volver al inicio</button></p>`;
 }
 
 function eventScreen(): void {
@@ -189,26 +263,26 @@ function eventScreen(): void {
   const def = ZONA1_EVENTS.find((e) => e.id === ev.id)!;
   const voters = (i: number): string => run.heroes.filter((h) => ev.votes[h.owner] === i).map((h) => esc(h.name)).join(', ');
   const canVote = run.heroes.some((h) => h.owner === myId) && !ev.result;
-  root.innerHTML = `<div class="c"><h1>${esc(def.title)}</h1><p>${esc(def.text)}</p><p class="dim">Evento de grupo: decide la mayoría y afecta a todos. En caso de empate decide el anfitrión.</p></div>
+  root.innerHTML = `${topBar(run)}<div class="c"><h1>${esc(def.title)}</h1><p>${esc(def.text)}</p><p class="dim">Evento de grupo: decide la mayoría y afecta a todos. En caso de empate decide el anfitrión.</p></div>
   ${ev.result ? `<div class="card c"><b>${esc(ev.result)}</b></div>` : `<div class="grid">${def.options.map((o, i) => `<button class="card pickc ${ev.votes[myId] === i ? 'on' : ''}" data-act="vote" data-id="${i}" ${canVote ? '' : 'disabled'}><b>${esc(o.label)}</b><br><span class="dim">${esc(o.hint)}</span><br><span class="pill">${voters(i) ? `Votos: ${voters(i)}` : 'Sin votos'}</span></button>`).join('')}</div>`}
-  <h3>El grupo</h3>${heroCards(run)}
-  <p class="c">${s.isHost ? (ev.result ? '<button class="pri" data-act="next">Continuar →</button>' : `<button data-act="resolve" ${Object.keys(ev.votes).length ? '' : 'disabled'}>Cerrar la votación ya</button>`) : `<span class="dim">${ev.result ? 'Esperando al anfitrión…' : 'Votad todos para continuar.'}</span>`}</p>`;
+  <p class="c">${s.isHost ? (ev.result ? '<button class="pri" data-act="leavenode">Continuar →</button>' : `<button data-act="resolve" ${Object.keys(ev.votes).length ? '' : 'disabled'}>Cerrar la votación ya</button>`) : `<span class="dim">${ev.result ? 'Esperando al anfitrión…' : 'Votad todos para continuar.'}</span>`}</p>
+  <h3>El grupo</h3>${heroCards(run)}`;
 }
 
 let lastKey = '';
 function render(events: GameEvent[]): void {
   if (!session) return;
   const run = session.run;
-  const want = !run ? 'lobby' : run.phase === 'combat' && run.combat ? 'combat' : run.phase === 'event' && run.event ? 'event' : 'end';
+  const want = !run ? 'lobby' : run.phase === 'combat' && run.combat ? 'combat' : run.phase === 'event' && run.event ? 'event' : run.phase === 'shop' ? 'shop' : run.phase === 'map' ? 'map' : 'end';
   // sin cambios reales no se redibuja: así un latido de red no interrumpe un clic
-  const key = want + JSON.stringify([run, run ? null : session.lobby(), me, notice, session.hostPresent(), board?.sel ?? null, session.isMyTurn(), saved?.fight]);
+  const key = want + JSON.stringify([run, run ? null : session.lobby(), me, notice, session.hostPresent(), board?.sel ?? null, session.isMyTurn(), saved?.step, leaveArmed, isMuted()]);
   if (key === lastKey && want === screen && !events.length) return;
   lastKey = key;
   if (want === 'combat') combat(events);
   else {
     board?.destroy();
     board = null;
-    if (want === 'lobby') lobby(); else if (want === 'event') eventScreen(); else between();
+    if (want === 'lobby') lobby(); else if (want === 'event') eventScreen(); else if (want === 'shop') shopScreen(); else if (want === 'map') mapScreen(); else endScreen();
   }
   screen = want;
 }
@@ -218,6 +292,7 @@ document.addEventListener('click', (e) => {
   const el = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');
   if (!el || (el as HTMLButtonElement).disabled) return;
   const id = el.dataset.id ?? '';
+  sfx.click();
   switch (el.dataset.act) {
     case 'create': void enter(randomText(4, 'ABCDEFGHJKLMNPQRSTUVWXYZ'), true, false); break;
     case 'solo': void enter(randomText(4, 'ABCDEFGHJKLMNPQRSTUVWXYZ'), true, true); break;
@@ -231,7 +306,19 @@ document.addEventListener('click', (e) => {
       else if (canPickRoute(me.cls, me.routes, id)) me.routes = [...me.routes, id];
       publish(); render([]); break;
     case 'start': log.length = 0; session?.startRun(); break;
-    case 'next': log.length = 0; session?.nextFight(); break;
+    case 'node': log.length = 0; session?.choose(Number(id)); break;
+    case 'leavenode': session?.leaveNode(); break;
+    case 'equip': session?.act({ a: 'equip', idx: Number(id) }); break;
+    case 'unequip': session?.act({ a: 'unequip', slot: id as Slot }); break;
+    case 'give': session?.act({ a: 'give', idx: Number(id), to: el.dataset.to ?? '' }); break;
+    case 'sell': session?.act({ a: 'sell', idx: Number(id) }); sfx.coin(); break;
+    case 'buy': session?.act({ a: 'buy', idx: Number(id) }); sfx.coin(); break;
+    case 'potion': session?.act({ a: 'potion' }); break;
+    case 'mute': toggleMute(); render([]); break;
+    case 'leave':
+      if (leaveArmed) { leaveArmed = false; home(); }
+      else { leaveArmed = true; render([]); setTimeout(() => { leaveArmed = false; render([]); }, 4000); }
+      break;
     case 'skip': session?.skipTurn(); break;
     case 'pick': session?.act({ a: 'pick', idx: Number(id) }); break;
     case 'vote': session?.act({ a: 'vote', idx: Number(id) }); break;

@@ -1,12 +1,12 @@
 // Sesión de juego: el anfitrión ejecuta el motor y reparte el estado; los demás envían acciones.
+import { canPickRoute } from '../core/classes/classes';
 import { runAiTurn } from '../core/combat/ai';
 import { cast, current, endTurn, move, type ActionResult } from '../core/combat/engine';
-import { canPickRoute } from '../core/classes/classes';
 import type { ClassId, GameEvent, Pos } from '../core/state';
 import { saveRun, type Peer, type Transport } from '../net/transport';
-import { advance, bossMinion, finishFight, newRun, pickLoot, resolveEvent, vote, type RunState } from './run';
+import { bossMinion, chooseNode, finishFight, leaveNode, metaAction, newRun, resolveEvent, type MetaAction, type RunState } from './run';
 
-export type Action = { a: 'move'; to: Pos } | { a: 'cast'; spell: string; at: Pos } | { a: 'end' } | { a: 'pick'; idx: number } | { a: 'vote'; idx: number };
+export type Action = { a: 'move'; to: Pos } | { a: 'cast'; spell: string; at: Pos } | { a: 'end' } | MetaAction;
 
 export interface LobbyPlayer {
   id: string;
@@ -29,15 +29,16 @@ export class Session {
   onError: (text: string) => void = () => {};
   /** cambió la lista de jugadores de la sala */
   onLobby: () => void = () => {};
+  turnEndsAt = 0;
   private mine: Record<string, unknown> = {};
   private beacons = new Map<string, { data: Record<string, unknown>; at: number }>();
   private beaconTimer: ReturnType<typeof setInterval>;
   private lobbyKey = '';
-  turnEndsAt = 0;
   private aiTimer: ReturnType<typeof setTimeout> | null = null;
   private turnTimer: ReturnType<typeof setTimeout> | null = null;
   private beat: ReturnType<typeof setInterval> | null = null;
   private lastTurnKey = '';
+  private savedStep = -1;
 
   constructor(
     readonly t: Transport,
@@ -49,13 +50,17 @@ export class Session {
     t.on('sync', (p) => {
       if (this.isHost) return;
       const m = p as { run: RunState; ev: GameEvent[] };
-      if (!m?.run || m.run.version !== 2) return;
+      if (!m?.run || m.run.version !== 3) return;
       this.run = m.run;
       this.noteTurn();
       this.onChange(Array.isArray(m.ev) ? m.ev : []);
     });
     t.on('act', (p, from) => {
       if (this.isHost) this.apply(from, p as Action);
+    });
+    t.on('err', (p) => {
+      const m = p as { to: string; text: string };
+      if (m && m.to === this.myId) this.onError(String(m.text).slice(0, 80));
     });
     if (isHost) this.beat = setInterval(() => this.run && this.broadcast([]), HEARTBEAT);
     // Cada jugador se anuncia también por mensaje: la lista no depende solo de la presencia del servidor.
@@ -125,20 +130,26 @@ export class Session {
     });
     if (!players.length) return;
     this.run = newRun(this.code, (Date.now() ^ (Math.random() * 2 ** 31)) >>> 0, players.map((p) => ({ owner: p.id, name: p.name, cls: p.cls, routes: p.routes })));
-    this.nextFight();
+    this.afterChange([]);
   }
 
   resume(run: RunState): void {
     if (!this.isHost) return;
     this.run = run;
+    this.savedStep = run.step;
     this.afterChange([]);
   }
 
-  /** Avanza desde la pantalla de botín o desde un evento ya resuelto. */
-  nextFight(): void {
-    const run = this.run;
-    if (!this.isHost || !run) return;
-    if (run.phase === 'between' || (run.phase === 'event' && run.event?.result)) this.afterChange(advance(run));
+  /** Elige un nodo del mapa. */
+  choose(idx: number): void {
+    if (this.isHost && this.run?.phase === 'map') this.afterChange(chooseNode(this.run, idx));
+  }
+
+  /** Vuelve al mapa desde la tienda o desde un evento resuelto. */
+  leaveNode(): void {
+    if (!this.isHost || !this.run) return;
+    leaveNode(this.run);
+    this.afterChange([]);
   }
 
   /** Cierra la votación del evento con los votos que haya. */
@@ -152,26 +163,24 @@ export class Session {
   skipTurn(): void {
     const c = this.run?.combat;
     const u = c && current(c);
-    if (this.isHost && c && u && !u.ai) this.afterChange(this.unwrap(endTurn(c, u.id)));
+    if (this.isHost && c && u && !u.ai) {
+      const r = endTurn(c, u.id);
+      if (r.ok) this.afterChange(r.events);
+    }
   }
 
-  private unwrap(r: ActionResult): GameEvent[] {
-    if (r.ok) return r.events;
-    this.onError(r.reason);
-    return [];
+  private reject(to: string, text: string): void {
+    if (to === this.myId) this.onError(text);
+    else this.t.send('err', { to, text });
   }
 
   private apply(from: string, a: Action): void {
     const run = this.run;
-    if (!run || !a) return;
-    if (a.a === 'pick' && (run.phase === 'between' || run.phase === 'won')) {
-      pickLoot(run, from, a.idx | 0);
-      this.afterChange([]);
-      return;
-    }
-    if (a.a === 'vote' && run.phase === 'event') {
-      vote(run, from, a.idx | 0);
-      if (run.event && run.heroes.every((h) => run.event!.votes[h.owner] !== undefined)) resolveEvent(run, this.myId);
+    if (!run || !a || typeof a.a !== 'string') return;
+    if (a.a !== 'move' && a.a !== 'cast' && a.a !== 'end') {
+      const err = metaAction(run, from, a);
+      if (err) return this.reject(from, err);
+      if (run.phase === 'event' && run.event && !run.event.result && run.heroes.every((h) => run.event!.votes[h.owner] !== undefined)) resolveEvent(run, this.myId);
       this.afterChange([]);
       return;
     }
@@ -184,10 +193,7 @@ export class Session {
     else if (a.a === 'cast' && a.at) r = cast(c, u.id, String(a.spell), { x: a.at.x | 0, y: a.at.y | 0 });
     else if (a.a === 'end') r = endTurn(c, u.id);
     else return;
-    if (!r.ok) {
-      if (from === this.myId) this.onError(r.reason);
-      return;
-    }
+    if (!r.ok) return this.reject(from, r.reason);
     this.afterChange(r.events);
   }
 
@@ -196,6 +202,10 @@ export class Session {
     this.broadcast(events);
     this.noteTurn();
     this.onChange(events);
+    if (run.phase === 'map' && run.step !== this.savedStep) {
+      this.savedStep = run.step;
+      void saveRun(run.code, this.secret, run);
+    }
     const c = run.combat;
     if (this.aiTimer) clearTimeout(this.aiTimer);
     this.aiTimer = null;
@@ -203,7 +213,6 @@ export class Session {
     if (c.over) {
       this.aiTimer = setTimeout(() => {
         finishFight(run);
-        void saveRun(run.code, this.secret, run);
         this.afterChange([]);
       }, 1600);
     } else if (current(c)?.ai) {
@@ -219,14 +228,16 @@ export class Session {
   private noteTurn(): void {
     const c = this.run?.combat;
     const u = c && !c.over ? current(c) : undefined;
-    const k = c && u ? `${this.run!.fight}:${c.round}:${c.turn}` : '';
+    const k = c && u ? `${this.run!.step}:${c.round}:${c.turn}:${u.id}` : '';
     if (k === this.lastTurnKey) return;
     this.lastTurnKey = k;
     if (this.turnTimer) clearTimeout(this.turnTimer);
     this.turnEndsAt = u && !u.ai ? Date.now() + TURN_SECONDS * 1000 : 0;
     if (this.isHost && c && u && !u.ai) {
       this.turnTimer = setTimeout(() => {
-        if (this.run?.combat === c && current(c)?.id === u.id) this.afterChange(this.unwrap(endTurn(c, u.id)));
+        if (this.run?.combat !== c || current(c)?.id !== u.id) return;
+        const r = endTurn(c, u.id);
+        if (r.ok) this.afterChange(r.events);
       }, TURN_SECONDS * 1000);
     }
   }

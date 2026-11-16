@@ -1,30 +1,42 @@
 import { describe, expect, it } from 'vitest';
 import { ZONA1_ITEMS } from '../src/content/zona1/items';
-import { SLOTS, genItem } from '../src/core/items/items';
-import { advance, bossMinion, finishFight, heroMaxHp, newRun, pickLoot, resolveEvent, vote, TOTAL_FIGHTS, type RunState } from '../src/game/run';
+import { SLOTS, genItem, statDiff } from '../src/core/items/items';
+import { bossMinion, chooseNode, finishFight, heroMaxHp, leaveNode, metaAction, newRun, resolveEvent, type RunState } from '../src/game/run';
 import { autoplay } from './helpers';
 
 const CLS = [
   { cls: 'guerrero', routes: ['baluarte', 'duelista'] }, { cls: 'mago', routes: ['fuego', 'tormenta'] },
-  { cls: 'clerigo', routes: ['luz', 'juicio'] }, { cls: 'mago', routes: ['hielo', 'arcano'] },
+  { cls: 'clerigo', routes: ['luz', 'juicio'] }, { cls: 'picaro', routes: ['veneno', 'sombras'] },
 ] as const;
 
-function playRun(n: number, seed: number): RunState {
-  const run = newRun('TEST', seed, CLS.slice(0, n).map((c, i) => ({ owner: `p${i}`, name: `H${i}`, cls: c.cls, routes: [...c.routes] })));
-  for (let step = 0; step < 40 && run.phase !== 'won' && run.phase !== 'lost'; step++) {
-    if (run.phase === 'between') {
-      for (const h of run.heroes) if (run.offers[h.owner]) pickLoot(run, h.owner, 0);
-      advance(run);
+const make = (n: number, seed: number): RunState =>
+  newRun('TEST', seed, CLS.slice(0, n).map((c, i) => ({ owner: `p${i}`, name: `H${i}`, cls: c.cls, routes: [...c.routes] })));
+
+/** Juega una partida entera eligiendo siempre el nodo `prefer` si existe (o el primero). */
+function playRun(n: number, seed: number, prefer: string): RunState {
+  const run = make(n, seed);
+  for (let step = 0; step < 60 && run.phase !== 'won' && run.phase !== 'lost'; step++) {
+    if (run.phase === 'map') {
+      for (const h of run.heroes) {
+        if (run.offers[h.owner]) expect(metaAction(run, h.owner, { a: 'pick', idx: 0 })).toBeNull();
+        if (h.bag.length) metaAction(run, h.owner, { a: 'equip', idx: 0 });
+      }
+      const nodes = run.map[run.step]!;
+      chooseNode(run, Math.max(0, nodes.indexOf(prefer as never)));
     } else if (run.phase === 'event') {
-      for (const h of run.heroes) vote(run, h.owner, 0);
+      for (const h of run.heroes) metaAction(run, h.owner, { a: 'vote', idx: 0 });
       resolveEvent(run, 'p0');
       expect(run.event!.result).toBeTruthy();
-      advance(run);
+      leaveNode(run);
+    } else if (run.phase === 'shop') {
+      for (const h of run.heroes) { metaAction(run, h.owner, { a: 'buy', idx: 5 }); metaAction(run, h.owner, { a: 'potion' }); }
+      leaveNode(run);
     } else {
       autoplay(run.combat!, 800, bossMinion(run));
       expect(run.combat!.over).not.toBeNull();
       finishFight(run);
     }
+    for (const h of run.heroes) { expect(h.gold).toBeGreaterThanOrEqual(0); expect(h.hp).toBeLessThanOrEqual(heroMaxHp(h)); }
   }
   return run;
 }
@@ -39,25 +51,52 @@ describe('objetos', () => {
       expect(Object.keys(it.stats).length).toBeGreaterThan(0);
     }
   });
+  it('compara estadísticas entre dos objetos', () => {
+    expect(statDiff({ hp: 10, armor: 1 }, { hp: 6, crit: 3 })).toEqual({ hp: 4, armor: 1, crit: -3 });
+  });
+});
+
+describe('mochila y tienda', () => {
+  it('el botín va a la ranura libre o a la mochila, y se puede equipar, quitar y dar', () => {
+    const run = make(2, 1);
+    const [a, b] = run.heroes as [RunState['heroes'][0], RunState['heroes'][0]];
+    const before = heroMaxHp(a);
+    run.offers.p0 = [{ slot: 'peto', name: 'x', rarity: 0, stats: { hp: 10 } }];
+    expect(metaAction(run, 'p0', { a: 'pick', idx: 0 })).toBeNull();
+    expect(heroMaxHp(a)).toBe(before + 10);
+    run.offers.p0 = [{ slot: 'peto', name: 'y', rarity: 1, stats: { hp: 20 } }];
+    metaAction(run, 'p0', { a: 'pick', idx: 0 });
+    expect(a.bag.map((i) => i.name)).toEqual(['y']);
+    expect(metaAction(run, 'p0', { a: 'equip', idx: 0 })).toBeNull();
+    expect(a.equip.peto!.name).toBe('y');
+    expect(a.bag.map((i) => i.name)).toEqual(['x']);
+    expect(metaAction(run, 'p0', { a: 'give', idx: 0, to: 'p1' })).toBeNull();
+    expect(b.equip.peto!.name).toBe('x');
+    expect(metaAction(run, 'p0', { a: 'unequip', slot: 'peto' })).toBeNull();
+    expect(a.hp).toBeLessThanOrEqual(heroMaxHp(a));
+  });
+  it('comprar exige oro y cada objeto se vende una sola vez', () => {
+    const run = make(2, 3);
+    run.map[0] = ['shop'];
+    chooseNode(run, 0);
+    expect(run.phase).toBe('shop');
+    expect(metaAction(run, 'p0', { a: 'buy', idx: 0 })).toBe('No tienes oro suficiente');
+    run.heroes[0]!.gold = 500; run.heroes[1]!.gold = 500;
+    expect(metaAction(run, 'p0', { a: 'buy', idx: 0 })).toBeNull();
+    expect(metaAction(run, 'p1', { a: 'buy', idx: 0 })).toBe('Ya no está a la venta');
+    expect(run.heroes[0]!.gold).toBe(500 - run.shop![0]!.price);
+  });
 });
 
 describe('partida completa', () => {
-  it('equipar un objeto cambia las estadísticas del héroe', () => {
-    const run = newRun('TEST', 1, [{ owner: 'p0', name: 'A', cls: 'guerrero', routes: ['baluarte'] }]);
-    const before = heroMaxHp(run.heroes[0]!);
-    run.offers.p0 = [{ slot: 'peto', name: 'x', rarity: 0, stats: { hp: 10 } }];
-    pickLoot(run, 'p0', 0);
-    expect(heroMaxHp(run.heroes[0]!)).toBe(before + 10);
-    expect(run.offers.p0).toBeUndefined();
-  });
-  it('una partida de 1 a 4 jugadores llega siempre a un final, pasando por eventos y botín', () => {
+  it('de 1 a 4 jugadores y por distintas rutas del mapa, siempre llega a un final', () => {
     const results: string[] = [];
     for (let n = 1; n <= 4; n++)
-      for (const seed of [11, 22, 33]) {
-        const run = playRun(n, seed * n);
+      for (const [seed, prefer] of [[11, 'combat'], [22, 'event'], [33, 'shop'], [44, 'treasure']] as const) {
+        const run = playRun(n, seed * n, prefer);
         expect(['won', 'lost']).toContain(run.phase);
-        if (run.phase === 'won') expect(run.fight).toBe(TOTAL_FIGHTS);
-        results.push(`${n}j:${run.phase}@${run.fight}`);
+        if (run.phase === 'won') expect(run.step).toBe(run.map.length);
+        results.push(`${n}j:${run.phase}@${run.step}`);
       }
     console.log(results.join(' '));
   });
