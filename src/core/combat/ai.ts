@@ -3,7 +3,8 @@
 import { SPELLS, type SpellDef } from '../classes/spells';
 import type { CombatState, GameEvent, Pos, Unit } from '../state';
 import { LATE_ROUND, cast, castProblem, current, endTurn, hasTrait, heal, move, spellOf, summon, type UnitSpec } from './engine';
-import { alive, dist, hasLineOfSight, isFree, reachable } from './grid';
+import { alive, dist, hasLineOfSight, isFree, reachable, same } from './grid';
+import { coneCells, marksOf } from './marks';
 
 /** Lo que la zona aporta a la IA: invocaciones del jefe y de los nigromantes. */
 export interface BossInfo {
@@ -203,10 +204,27 @@ function champCast(s: CombatState, u: Unit, ev: GameEvent[]): boolean {
   for (const d of defs) {
     const around = d.range[1] === 0;
     const near = (list: Unit[], at: Pos): Unit[] => list.filter((x) => dist(x.pos, at) <= (d.area ?? 0));
-    if (d.target === 'cell') {
+    const spheres = marksOf(s, 'sphere', u.id);
+    if (d.cone) {
+      // onda en cono: cuenta enemigos dentro y esferas que pueden chocar
+      const avg = d.dmg ? (d.dmg[0] + d.dmg[1]) / 2 : 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const at = { x: u.pos.x + dx, y: u.pos.y + dy }, cone = coneCells(u.pos, at, d.cone);
+        const hit = foes.filter((f) => cone.some((p) => same(p, f.pos))).length;
+        const orbs = spheres.filter((m) => cone.some((p) => same(p, m.pos))).length;
+        consider(d, at, hit * avg + (hit && orbs ? 12 : 0));
+      }
+    } else if (d.detonate) {
+      consider(d, u.pos, spheres.reduce((a, m) => a + foes.filter((f) => dist(f.pos, m.pos) <= d.detonate!.area).length, 0) * 7);
+    } else if (d.target === 'ground') {
+      // esferas: sobre un enemigo (o, si no hace daño, junto a uno)
+      const avg = d.dmg ? (d.dmg[0] + d.dmg[1]) / 2 : 3;
+      for (const f of foes) consider(d, f.pos, avg + (spheres.length < (d.sphere?.max ?? 0) ? 3 : 0));
+    } else if (d.target === 'cell') {
       if (d.summon) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) consider(d, { x: u.pos.x + dx, y: u.pos.y + dy }, 30);
     } else if (d.target === 'enemy') {
-      const avg = d.dmg ? (d.dmg[0] + d.dmg[1]) / 2 : 0;
+      // Descarga: vale más cuantas más esferas tengas (si tienes pocas, mejor esperar)
+      const avg = (d.dmg ? (d.dmg[0] + d.dmg[1]) / 2 : 0) + (d.consume ? d.consume.per * spheres.length - (spheres.length < 2 ? 6 : 0) : 0);
       const value = (f: Unit): number => avg * (f.statuses.mark ? 1.3 : 1) + (d.status && !f.statuses[d.status.kind] ? (d.status.kind === 'stun' ? 14 : 6) : 0) + (d.drainAp ?? 0) * 3 + (avg >= f.hp ? 10 : 0);
       if (around) consider(d, u.pos, near(foes, u.pos).reduce((a, f) => a + value(f), 0));
       else for (const f of foes) consider(d, f.pos, value(f) + near(foes, f.pos).filter((x) => x !== f).length * avg * 0.5);

@@ -9,7 +9,7 @@ export interface Pos {
 export type Team = 'hero' | 'enemy';
 /** empower: +daño (stacks = %); reach: +alcance; invis: no se le puede apuntar; exposed: -armadura (stacks). */
 export type StatusKind = 'burn' | 'poison' | 'slow' | 'stun' | 'mark' | 'empower' | 'reach' | 'invis' | 'exposed' | 'charm';
-export type ClassId = 'guerrero' | 'mago' | 'clerigo' | 'picaro' | 'arquero' | 'zorro';
+export type ClassId = 'guerrero' | 'mago' | 'clerigo' | 'picaro' | 'arquero' | 'zorro' | 'tejedora';
 
 export interface StatusState {
   turns: number;
@@ -96,6 +96,22 @@ export interface Snare {
   dmg: number;
 }
 
+/**
+ * Marcador en el suelo vinculado a una unidad (Esferas oscuras, Almas, Linternas…).
+ * No bloquea el paso ni la visión y no tiene turno. Caduca al empezar los turnos de su dueño
+ * (o al empezar cada ronda si no tiene dueño) y desaparece si su dueño muere.
+ */
+export interface BoardMark {
+  id: number;
+  kind: string;
+  pos: Pos;
+  team: Team;
+  /** unidad dueña; sin dueño = caduca por rondas */
+  owner?: number;
+  /** turnos que le quedan */
+  turns: number;
+}
+
 export interface CombatState extends RngBox {
   version: 1;
   w: number;
@@ -107,6 +123,8 @@ export interface CombatState extends RngBox {
   /** casillas pegajosas: detienen al héroe que entra */
   puddles: string[];
   snares?: Snare[];
+  /** marcadores en el suelo (ver BoardMark) */
+  marks?: BoardMark[];
   units: Unit[];
   /** ids de unidad en orden de iniciativa */
   order: number[];
@@ -142,6 +160,9 @@ export type GameEvent =
   | { t: 'blink'; unit: number; to: Pos }
   | { t: 'devour'; unit: number; corpse: number }
   | { t: 'raise'; unit: number; corpse: number }
+  | { t: 'markAdd'; kind: string; at: Pos }
+  | { t: 'markGone'; kind: string; at: Pos }
+  | { t: 'markMove'; kind: string; from: Pos; to: Pos }
   | { t: 'over'; result: 'win' | 'lose' };
 
 export const key = (p: Pos): string => `${p.x},${p.y}`;

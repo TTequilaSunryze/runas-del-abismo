@@ -54,6 +54,11 @@ export const BOON_MODS: Record<string, BoonMod> = Object.fromEntries(([
   M('zm_encanto_largo', 'z_encanto', 'Encanto prolongado', 'El encanto dura 2 turnos: el enemigo lo sufre dos veces seguidas.', (d) => { d.status = { kind: 'charm', turns: 2 }; }),
   M('zm_impulso_radio', 'z_impulso', 'Rastreo espiritual', 'El proyectil busca enemigos a 6 casillas en vez de 4.', (d) => { if (d.followUp) d.followUp = { ...d.followUp, radius: 6 }; }),
   M('zm_impulso_veloz', 'z_impulso', 'Impulso amplio', 'Puedes desplazarte hasta 4 casillas.', (d) => { d.range = [1, 4]; }),
+  // Tejedora de Esferas
+  M('tm_cinco', 't_pulso', 'Constelación', 'Hasta 5 esferas a la vez y duran 4 turnos.', (d) => { d.sphere = { turns: 4, max: 5 }; }),
+  M('tm_pulso', 't_pulso', 'Pulso profundo', '+30% de daño.', (d) => { more(d, 1.3); }),
+  M('tm_descarga', 't_descarga', 'Descarga total', '+8 de daño por esfera (en vez de +5).', (d) => { d.consume = { per: 8 }; }),
+  M('tm_dispersion', 't_dispersion', 'Dispersión rápida', 'Cuesta 1 PA menos y se recarga antes.', (d) => { d.ap = Math.max(1, d.ap - 1); d.cd = Math.max(0, d.cd - 1); }),
   // Pícaro
   M('pm_untada', 'punalada', 'Hoja untada', 'Envenena x2 durante 2 turnos.', (d) => { d.status = { kind: 'poison', turns: 2, stacks: 2 }; }),
   M('pm_cuchillo_ven', 'cuchillo', 'Cuchillo envenenado', 'Envenena 3 turnos.', (d) => { d.status = { kind: 'poison', turns: 3, stacks: 1 }; }),

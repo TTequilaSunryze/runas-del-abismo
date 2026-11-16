@@ -15,8 +15,8 @@ describe('kit inicial', () => {
   it('cada clase empieza con 3 habilidades: 2 de daño y 1 de potenciación propia', () => {
     for (const c of Object.values(CLASSES)) {
       expect(c.base).toHaveLength(3);
-      // la Hechicera Zorro tiene su propio kit (control y movilidad): ver el test de abajo
-      if (c.id === 'zorro') continue;
+      // las clases nuevas tienen su propio kit: ver tests/zorro.test.ts y tests/tejedora.test.ts
+      if (c.id === 'zorro' || c.id === 'tejedora') continue;
       const kinds = c.base.map((id) => SPELLS[id]!);
       expect(kinds.filter((d) => d.dmg && d.target === 'enemy').length, c.id).toBeGreaterThanOrEqual(2);
       expect(kinds.filter((d) => d.target === 'self').length, c.id).toBe(1);

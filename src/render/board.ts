@@ -2,6 +2,7 @@ import { SPELLS } from '../core/classes/spells';
 // Tablero de combate: dibuja el estado y convierte clics en acciones.
 import { ZONES } from '../content/zones';
 import { castProblem, current, spellOf, usableMp } from '../core/combat/engine';
+import { coneCells } from '../core/combat/marks';
 import { alive, dist, hasLineOfSight, reachable } from '../core/combat/grid';
 import type { CombatState, GameEvent, Pos, Unit } from '../core/state';
 import type { Session } from '../game/session';
@@ -18,7 +19,7 @@ const ELEMENT_COLOR: Record<string, string> = { fire: '#ff8a30', ice: '#8ae0ff',
 const ELEMENT_NAME: Record<string, string> = { fire: 'fuego', ice: 'hielo', poison: 'veneno', shadow: 'sombra', holy: 'sagrado' };
 const LUNGE_MS = 240;
 
-const CLASS_KINDS = ['guerrero', 'mago', 'clerigo', 'picaro', 'arquero', 'zorro'];
+const CLASS_KINDS = ['guerrero', 'mago', 'clerigo', 'picaro', 'arquero', 'zorro', 'tejedora'];
 /** Índice de color y etiqueta: héroes de jugadores, y héroes rivales (némesis, duelos) dentro de su bando. */
 function teamIdx(c: CombatState): Map<number, number> {
   const m = new Map<number, number>();
@@ -173,6 +174,19 @@ export class Board {
       g.fillStyle = 'rgba(70,200,90,.38)'; g.beginPath(); g.ellipse((x + 0.5) * TILE, (y + 0.6) * TILE, TILE * 0.42, TILE * 0.28, 0, 0, 6.3); g.fill();
       g.fillStyle = 'rgba(190,255,150,.35)'; g.beginPath(); g.ellipse((x + 0.42) * TILE, (y + 0.55) * TILE, TILE * 0.14, TILE * 0.07, 0, 0, 6.3); g.fill();
     }
+    // marcadores en el suelo (esferas oscuras…)
+    for (const m of c.marks ?? []) {
+      const cx = (m.pos.x + 0.5) * TILE, cy = (m.pos.y + 0.45) * TILE, pulse = 1 + Math.sin(performance.now() / 260 + m.id) * 0.06;
+      if (m.kind === 'sphere') {
+        g.fillStyle = 'rgba(122,63,192,.25)'; g.beginPath(); g.arc(cx, cy, TILE * 0.32 * pulse, 0, 6.3); g.fill();
+        g.fillStyle = '#3a1a5a'; g.beginPath(); g.arc(cx, cy, TILE * 0.2 * pulse, 0, 6.3); g.fill();
+        g.fillStyle = '#7a3fc0'; g.beginPath(); g.arc(cx - 2, cy - 2, TILE * 0.13, 0, 6.3); g.fill();
+        g.fillStyle = '#f0d8ff'; g.fillRect(cx - TILE * 0.09, cy - TILE * 0.1, 4, 4);
+      } else {
+        g.strokeStyle = '#c8c8ff'; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, TILE * 0.2, 0, 6.3); g.stroke();
+      }
+      g.fillStyle = '#f0d8ff'; g.font = 'bold 11px monospace'; g.fillText(String(m.turns), m.pos.x * TILE + TILE - 14, m.pos.y * TILE + 14);
+    }
     for (const t of c.snares ?? []) {
       // los cepos rivales no se ven
       if (me0 && t.team !== me0.team) continue;
@@ -202,6 +216,7 @@ export class Board {
             fill(p, seen ? 'rgba(255,150,60,.16)' : 'rgba(120,120,140,.10)');
             if (!castProblem(c, me, SPELLS[def.id]!, p)) { g.strokeStyle = '#f2c14e'; g.lineWidth = 3; g.strokeRect(x * TILE + 4, y * TILE + 4, TILE - 8, TILE - 8); }
           }
+        if (this.hover && def.cone && !castProblem(c, me, SPELLS[def.id]!, this.hover)) for (const p of coneCells(me.pos, this.hover, def.cone)) if (!c.obstacles.includes(`${p.x},${p.y}`)) fill(p, 'rgba(255,60,60,.25)');
         if (this.hover && def.area) {
           for (let y = 0; y < c.h; y++) for (let x = 0; x < c.w; x++) if (dist({ x, y }, this.hover) <= def.area) fill({ x, y }, 'rgba(255,60,60,.2)');
         }

@@ -5,6 +5,7 @@ import { rand, randInt } from '../rng';
 import { tuned } from '../upgrades';
 import { key, type CombatState, type Element, type GameEvent, type Pos, type StatusKind, type Unit } from '../state';
 import { alive, dist, hasLineOfSight, isFree, lineCells, pathTo, reachable, same, unitAt } from './grid';
+import { addMark, clearMarksOf, coneCells, dirOf, marksOf, removeMark, tickMarks } from './marks';
 
 export type UnitSpec = Omit<Unit, 'id'>;
 
@@ -97,6 +98,7 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
   ev.push({ t: 'damage', unit: u.id, amount: dmg, absorbed, crit: !!opts.crit, source });
   if (!alive(u)) {
     ev.push({ t: 'death', unit: u.id });
+    clearMarksOf(s, u.id, ev);
     if (hasTrait(u, 'puddle') && !s.puddles.includes(key(u.pos))) s.puddles.push(key(u.pos));
     if (hasTrait(u, 'split') && u.maxHp >= 16) splitUnit(s, u, ev);
     if (hasTrait(u, 'bomb')) {
@@ -148,10 +150,12 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     if (s.turn >= s.order.length) {
       s.turn = 0;
       s.round++;
+      tickMarks(s, undefined, ev);
     }
     const u = getUnit(s, s.order[s.turn]!)!;
     if (!alive(u)) continue;
     ev.push({ t: 'turn', unit: u.id, round: s.round });
+    tickMarks(s, u.id, ev);
     u.shield = 0;
     // a partir de la ronda 20 se acaban los escudos y curas automáticos: ningún combate dura para siempre
     const late = s.round >= LATE_ROUND;
@@ -317,6 +321,7 @@ export function castProblem(s: CombatState, u: Unit, base: SpellDef, at: Pos): s
     const dead = s.units.find((x) => !alive(x) && same(x.pos, at) && x.team === u.team && x.summoner === undefined);
     return dead ? null : 'Necesitas un aliado caído';
   }
+  if (def.target === 'ground') return s.obstacles.includes(key(at)) ? 'Hay un obstáculo' : null;
   if (t && t.team !== u.team && t.statuses.invis) return 'No puedes ver al objetivo';
   if (def.target === 'cell') {
     if (!isFree(s, at)) return 'Necesitas una casilla libre';
@@ -342,6 +347,11 @@ function dashCell(s: CombatState, u: Unit, target: Pos): Pos | null {
 function push(s: CombatState, from: Pos, u: Unit, cells: number, ev: GameEvent[]): void {
   const dx = Math.abs(u.pos.x - from.x) >= Math.abs(u.pos.y - from.y) ? Math.sign(u.pos.x - from.x) : 0;
   const dy = dx === 0 ? Math.sign(u.pos.y - from.y) : 0;
+  pushDir(s, u, dx, dy, cells, ev);
+}
+
+/** Empuja `u` en una dirección fija; si choca, recibe daño y se detiene. */
+function pushDir(s: CombatState, u: Unit, dx: number, dy: number, cells: number, ev: GameEvent[]): void {
   for (let i = 0; i < cells && alive(u); i++) {
     const n = { x: u.pos.x + dx, y: u.pos.y + dy };
     if (!isFree(s, n)) {
@@ -425,10 +435,28 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
     }
     return { ok: true, events: ev };
   }
-  const wantTeam = def.target === 'enemy' ? (u.team === 'hero' ? 'enemy' : 'hero') : u.team;
-  const main = unitAt(s, at);
-  const lane = def.line ? lineCells(u.pos, at) : [];
+  const wantTeam = def.target === 'enemy' || def.target === 'ground' ? (u.team === 'hero' ? 'enemy' : 'hero') : u.team;
+  const main = def.cone ? undefined : unitAt(s, at);
+  const lane = def.line ? lineCells(u.pos, at) : def.cone ? coneCells(u.pos, at, def.cone) : [];
   const targets = s.units.filter((t) => alive(t) && t.team === wantTeam && (t === main || (def.area ? dist(t.pos, at) <= def.area : false) || lane.some((p) => same(p, t.pos))));
+  // Descarga desatada: consume todas tus esferas, +daño por cada una
+  let flat = 0;
+  if (def.consume) {
+    const mine = marksOf(s, 'sphere', u.id);
+    flat = mine.length * def.consume.per;
+    for (const m of mine) removeMark(s, m, ev);
+  }
+  // Implosión: cada esfera daña a los enemigos pegados a ella
+  if (def.detonate) {
+    const dn = def.detonate;
+    for (const m of marksOf(s, 'sphere', u.id)) {
+      for (const t of s.units.filter((x) => alive(x) && x.team !== u.team && dist(x.pos, m.pos) <= dn.area)) {
+        if (s.over) break;
+        hurt(s, t, randInt(s, dn.dmg[0], dn.dmg[1]) * (1 + (u.power + (u.statuses.empower?.stacks ?? 0)) / 100) * (t.statuses.mark ? MARK_MULT : 1), ev, def.id, { element: def.element });
+      }
+      removeMark(s, m, ev);
+    }
+  }
   const mend = hasTrait(u, 'mender') ? MENDER_MULT : 1;
   let dealt = 0;
   let hits = 0;
@@ -440,7 +468,7 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
       const crit = rand(s) * 100 < u.crit + (def.crit ?? 0);
       const pack = hasTrait(u, 'pack') ? s.units.filter((o) => o !== u && o.team === u.team && alive(o) && hasTrait(o, 'pack')).length * PACK_BONUS : 0;
       const fury = hasTrait(u, 'enrage') && u.hp < u.maxHp / 2 ? ENRAGE_POWER : 0;
-      const raw = randInt(s, def.dmg[0], def.dmg[1]) * (1 + (u.power + pack + fury + (u.statuses.empower?.stacks ?? 0)) / 100) * (crit ? (hasTrait(u, 'execute') ? EXECUTE_MULT : CRIT_MULT) : 1) * (t.statuses.mark ? MARK_MULT : 1) * (t === main || def.range[1] === 0 || def.line ? 1 : 0.5);
+      const raw = (randInt(s, def.dmg[0], def.dmg[1]) + (t === main ? flat : 0)) * (1 + (u.power + pack + fury + (u.statuses.empower?.stacks ?? 0)) / 100) * (crit ? (hasTrait(u, 'execute') ? EXECUTE_MULT : CRIT_MULT) : 1) * (t.statuses.mark ? MARK_MULT : 1) * (t === main || def.range[1] === 0 || def.line || def.cone ? 1 : 0.5);
       const got = hurt(s, t, raw, ev, def.id, { crit, element: def.element, pierce: def.pierce });
       dealt += got;
       hits++;
@@ -485,6 +513,12 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
       if (n) push(s, u.pos, t, n, ev);
     }
   }
+  if (def.cone && def.push) coneBlast(s, u, def, at, targets, ev);
+  if (def.sphere && alive(u)) {
+    // el máximo sale de la mejor versión que tengas de un hechizo de esferas (las bendiciones lo suben)
+    const max = Math.max(def.sphere.max, ...u.spells.map((sp) => spellOf(u, sp.id)?.sphere?.max ?? 0));
+    addMark(s, { kind: 'sphere', pos: at, team: u.team, turns: def.sphere.turns, owner: u.id, max }, ev);
+  }
   if (u.essence !== undefined && hits > 0 && !essenceSpent) u.essence = Math.min(3, u.essence + 1);
   if (def.lifesteal && dealt > 0) heal(u, dealt * def.lifesteal, ev);
   if (def.retreat && main && alive(u)) {
@@ -502,6 +536,47 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
     ev.push({ t: 'shield', unit: u.id, amount: def.selfShield });
   }
   return { ok: true, events: ev };
+}
+
+/**
+ * Onda en cono: primero salen las esferas del cono y luego se empuja a los enemigos, todo en la dirección del lanzamiento.
+ * Una esfera que atraviesa a un enemigo lo daña y lo aturde (élites y jefes son inmunes a aturdir).
+ */
+function coneBlast(s: CombatState, u: Unit, def: SpellDef, at: Pos, targets: Unit[], ev: GameEvent[]): void {
+  const [dx, dy] = dirOf(u.pos, at);
+  const far = (p: Pos): number => -(dx * (p.x - u.pos.x) + dy * (p.y - u.pos.y));
+  // 1) las esferas salen disparadas y atraviesan a los enemigos que encuentran (incluido el que tengan encima)
+  const cone = coneCells(u.pos, at, def.cone!);
+  const stunned = new Set<number>();
+  const strike = (m: { pos: Pos }, hitBy: Set<number>): void => {
+    const foe = s.units.find((x) => alive(x) && x.team !== u.team && same(x.pos, m.pos) && !hitBy.has(x.id));
+    if (!foe || !def.sphereHit || s.over) return;
+    hitBy.add(foe.id);
+    const sh = def.sphereHit;
+    hurt(s, foe, randInt(s, sh.dmg[0], sh.dmg[1]) * (1 + (u.power + (u.statuses.empower?.stacks ?? 0)) / 100), ev, 'esfera', { element: def.element });
+    if (!alive(foe) || stunned.has(foe.id)) return;
+    stunned.add(foe.id);
+    if (foe.rank) ev.push({ t: 'resist', unit: foe.id, what: 'Inmune a aturdir' });
+    else addStatus(foe, 'stun', sh.stun, 1, ev);
+  };
+  for (const m of marksOf(s, 'sphere', u.id).filter((m) => cone.some((p) => same(p, m.pos))).sort((a, b) => far(a.pos) - far(b.pos))) {
+    const from = { ...m.pos }, hitBy = new Set<number>();
+    strike(m, hitBy);
+    for (let i = 0; i < def.push! && !s.over; i++) {
+      const n = { x: m.pos.x + dx, y: m.pos.y + dy };
+      if (n.x < 0 || n.y < 0 || n.x >= s.w || n.y >= s.h || s.obstacles.includes(key(n))) break;
+      m.pos = n;
+      strike(m, hitBy);
+    }
+    if (!same(from, m.pos)) ev.push({ t: 'markMove', kind: m.kind, from, to: { ...m.pos } });
+  }
+  // 2) la onda empuja a los enemigos alcanzados, primero los más lejanos para que no se bloqueen
+  for (const t of [...targets].sort((a, b) => far(a.pos) - far(b.pos))) {
+    if (!alive(t) || s.over) continue;
+    const n = landed(s, t, def.push!);
+    if (n < def.push!) ev.push({ t: 'resist', unit: t.id, what: n ? 'Resiste parte del empujón' : 'Resiste el empujón' });
+    if (n) pushDir(s, t, dx, dy, n, ev);
+  }
 }
 
 export function endTurn(s: CombatState, unitId: number): ActionResult {

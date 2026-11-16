@@ -47,6 +47,12 @@ const ZORRO_LEFT = [
   'oabbgbbo', 'oabbbbba', 'oabbbbba', 'owbbbbba', 'oaaaaaao', 'okaaaako', '..okkk..', '..oo....',
 ];
 SPR.zorro = ZORRO_LEFT.map((r) => r + [...r].reverse().join(''));
+// Tejedora de Esferas: corona dorada, melena oscura y túnica larga.
+const TEJEDORA_LEFT = [
+  '...o.o.o', '...ogggg', '..oaaaaa', '.oaassss', '.oasesss', '.oassssk', '.oaasssk', '..oaaaaa',
+  '..obbabb', '.obbbabb', 'obbbbabb', 'okbbbabb', 'okbbbbbb', '.okbbbbb', '..okkkkk', '..oooooo',
+];
+SPR.tejedora = TEJEDORA_LEFT.map((r) => r + [...r].reverse().join(''));
 
 const BASE: Record<string, string> = { o: '#15101f', w: '#f1ead8', s: '#f0c9a0', e: '#15101f', m: '#b9bfd0', g: '#f2c14e', k: '#2a2438' };
 
@@ -70,7 +76,7 @@ const RIVAL_COLORS = [
   { a: '#6a2a1a', b: '#e07a3a' },
   { a: '#1f5a5a', b: '#4ad0c0' },
 ];
-const HERO_SPRITES = ['guerrero', 'mago', 'clerigo', 'picaro', 'arquero', 'zorro'];
+const HERO_SPRITES = ['guerrero', 'mago', 'clerigo', 'picaro', 'arquero', 'zorro', 'tejedora'];
 
 const ENEMY_LOOK: Record<string, Look> = {
   limo: { sprite: 'slime', pal: { a: '#8fbf6a', b: '#c4e8a0', e: '#102010' } },
@@ -166,6 +172,7 @@ function weapon(g: CanvasRenderingContext2D, cls: string, x: number, y: number, 
   else if (cls === 'mago') { r(14, 4 - up, 1, 12, '#7a4a1a'); r(13, 2 - up, 3, 3, '#58a6ff'); r(14, 3 - up, 1, 1, '#d6ecff'); }
   else if (cls === 'clerigo') { r(14, 5 - up, 1, 10, '#7a4a1a'); r(13, 3 - up, 3, 3, '#f2c14e'); r(14, 2 - up, 1, 1, '#fff2c0'); }
   else if (cls === 'arquero') { r(14, 5, 1, 8, '#8a5a2a'); r(13, 4, 1, 1, '#8a5a2a'); r(13, 13, 1, 1, '#8a5a2a'); r(12 - up, 5, 1, 8, '#d8d0c0'); if (up) r(9, 8, 6, 1, '#e4e8f4'); }
+  else if (cls === 'tejedora') { r(13, 6 - up, 2, 2, '#7a3fc0'); r(11, 3 - up, 2, 2, '#c77dff'); r(14, 2 - up, 2, 2, '#3a1a5a'); r(11, 3 - up, 1, 1, '#f0d8ff'); }
   else if (cls === 'zorro') { r(13, 7 - up, 3, 3, '#c77dff'); r(14, 8 - up, 1, 1, '#f0d8ff'); r(13, 10 - up, 3, 1, '#3a1a5a'); }
   else { r(14, 8 - up, 1, 4, '#e4e8f4'); r(1, 8 + up, 1, 4, '#e4e8f4'); r(14, 12 - up, 1, 1, '#5a4520'); r(1, 12 + up, 1, 1, '#5a4520'); }
 }

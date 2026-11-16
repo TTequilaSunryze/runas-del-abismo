@@ -87,6 +87,12 @@ export const CLASSES: Record<ClassId, ClassDef> = {
       R('base', 'Clásico', '', ['z_orbe', 'z_encanto', 'z_impulso'], 'El kit inicial: un orbe que rebota, un encanto y un salto espiritual.'),
     ],
   },
+  tejedora: {
+    id: 'tejedora', name: 'Tejedora de Esferas', hp: 40, armor: 0, power: 4, crit: 5, ap: 8, mp: 4, initiative: 12, base: ['t_pulso', 't_dispersion', 't_descarga'], tackle: 1, dodge: 5,
+    routes: [
+      R('base', 'Clásico', '', ['t_pulso', 't_dispersion', 't_descarga'], 'El kit inicial: siembra esferas, dispérsalas contra el enemigo y descárgalas todas de golpe.'),
+    ],
+  },
 };
 
 /** Se elige un solo kit inicial. */

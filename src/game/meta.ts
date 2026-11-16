@@ -172,7 +172,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'set3', name: 'De punta en blanco', text: 'Termina una partida con un set completo equipado.', ecos: 50, check: (_r, h) => Object.values(setCounts(h.equip)).some((n) => n >= 3) },
   { id: 'nemesis', name: 'Cara a cara', text: 'Vence a un Némesis: un héroe del Salón convertido en élite.', ecos: 50, check: (r) => r.flags.includes('nemesis') },
   { id: 'maestro', name: 'Maestro de clase', text: 'Alcanza la maestría 5 con una clase.', ecos: 150, check: (_r, _h, m) => Object.values(m.mastery).some((xp) => masteryLevel(xp) >= 5) },
-  classWin('guerrero'), classWin('mago'), classWin('clerigo'), classWin('picaro'), classWin('arquero'), classWin('zorro'),
+  classWin('guerrero'), classWin('mago'), classWin('clerigo'), classWin('picaro'), classWin('arquero'), classWin('zorro'), classWin('tejedora'),
 ];
 
 /** Ecos que gana un jugador al terminar: por salas, jefes y victoria, más por ascensión. */

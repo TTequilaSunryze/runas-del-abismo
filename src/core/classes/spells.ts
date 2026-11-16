@@ -12,8 +12,8 @@ export interface SpellDef {
   range: [number, number];
   /** necesita línea de visión */
   los: boolean;
-  /** 'cell' = una casilla libre (cepos e invocaciones) */
-  target: 'enemy' | 'ally' | 'self' | 'cell';
+  /** 'cell' = una casilla libre (cepos e invocaciones); 'ground' = cualquier casilla sin obstáculo (daña al enemigo que haya) */
+  target: 'enemy' | 'ally' | 'self' | 'cell' | 'ground';
   /** radio del área alrededor del objetivo (0 = solo el objetivo) */
   area?: number;
   dmg?: [number, number];
@@ -70,6 +70,16 @@ export interface SpellDef {
   bounce?: number;
   /** tras teletransportarte, golpea al enemigo más cercano en `radius` casillas */
   followUp?: { dmg: [number, number]; element?: Element; radius: number };
+  /** deja una Esfera oscura en la casilla: dura `turns` turnos tuyos, como mucho `max` a la vez */
+  sphere?: { turns: number; max: number };
+  /** consume todas tus esferas: +`per` de daño por cada una */
+  consume?: { per: number };
+  /** cono frontal de este largo (apuntas a la casilla de al lado para elegir dirección) */
+  cone?: number;
+  /** las esferas empujadas que chocan con un enemigo lo dañan y aturden */
+  sphereHit?: { dmg: [number, number]; stun: number };
+  /** detona todas tus esferas: daño en área alrededor de cada una */
+  detonate?: { dmg: [number, number]; area: number };
   /** invoca un aliado controlado por la IA (uno a la vez) */
   summon?: { kind: string; name: string; hpPct: number; armor: number; ap: number; mp: number; initiative: number; spell: string };
   text: string;
@@ -85,6 +95,12 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
     S({ id: 'z_impulso', name: 'Impulso espiritual', route: 'base', ap: 3, cd: 0, range: [1, 3], los: false, straight: true, target: 'cell', teleport: true, followUp: { dmg: [5, 7], element: 'shadow', radius: 4 }, text: 'Te desplazas hasta 3 casillas en línea recta ignorando el placaje y lanzas un proyectil al enemigo más cercano a 4 casillas.' }),
     S({ id: 'z_drenaje', name: 'Drenaje de esencia', route: 'boon', ap: 2, cd: 1, range: [1, 3], los: true, target: 'enemy', dmg: [4, 6], element: 'shadow', lifesteal: 1, text: 'Te curas todo el daño que haces.' }),
     S({ id: 'z_velo', name: 'Velo espectral', route: 'boon', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', buff: { kind: 'invis', turns: 1 }, selfMp: 2, text: 'Invisible durante 1 turno y ganas 2 PM.' }),
+    // ---------- Tejedora de Esferas ----------
+    S({ id: 't_pulso', name: 'Pulso oscuro', route: 'base', ap: 3, cd: 0, range: [2, 5], los: true, target: 'ground', dmg: [5, 7], element: 'shadow', sphere: { turns: 3, max: 3 }, text: 'Daña al enemigo de la casilla (si lo hay) y deja una Esfera oscura 3 turnos. Máximo 3 esferas: la 4.ª borra la más antigua.' }),
+    S({ id: 't_dispersion', name: 'Dispersión', route: 'base', ap: 4, cd: 2, range: [1, 1], los: false, straight: true, target: 'ground', cone: 3, dmg: [4, 6], element: 'shadow', push: 3, sphereHit: { dmg: [6, 8], stun: 1 }, text: 'Onda en cono de 3 casillas: empuja 3 casillas a enemigos y esferas. Una esfera que choca con un enemigo lo daña y lo aturde 1 turno.' }),
+    S({ id: 't_descarga', name: 'Descarga desatada', route: 'base', ap: 4, cd: 2, range: [2, 6], los: true, target: 'enemy', dmg: [7, 9], element: 'shadow', consume: { per: 5 }, text: 'Consume todas tus esferas: +5 de daño por cada una.' }),
+    S({ id: 't_semilla', name: 'Semilla oscura', route: 'boon', ap: 1, cd: 1, range: [1, 4], los: true, target: 'ground', sphere: { turns: 3, max: 3 }, text: 'Deja una Esfera oscura sin hacer daño.' }),
+    S({ id: 't_implosion', name: 'Implosión', route: 'boon', ap: 3, cd: 2, range: [0, 0], los: false, target: 'self', detonate: { dmg: [6, 8], area: 1 }, element: 'shadow', text: 'Detona todas tus esferas: cada una daña a los enemigos pegados a ella.' }),
     // ---------- Guerrero ----------
     S({ id: 'tajo', name: 'Tajo', route: 'base', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [8, 11], text: 'Golpe cuerpo a cuerpo.' }),
     S({ id: 'muro', name: 'Muro de escudos', route: 'baluarte', ap: 2, cd: 2, range: [0, 0], los: false, target: 'self', shield: 12, text: 'Ganas 12 de escudo.' }),
