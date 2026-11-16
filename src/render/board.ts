@@ -83,6 +83,9 @@ export class Board {
       else if (e.t === 'shield') float(e.unit, `escudo +${e.amount}`, '#58a6ff');
       else if (e.t === 'status') float(e.unit, STATUS_NAME[e.kind] ?? e.kind, STATUS_COLOR[e.kind] ?? '#fff');
       else if (e.t === 'skip') float(e.unit, 'Pierde el turno', '#ffe84a');
+      else if (e.t === 'trap') float(e.unit, '¡Púas!', '#ff8a30');
+      else if (e.t === 'summon') float(e.unit, 'Invocado', '#c77dff');
+      else if (e.t === 'phase') float(e.unit, '¡FASE 2!', '#ff3060');
     }
   }
 
@@ -111,6 +114,12 @@ export class Board {
       g.fillStyle = '#5a5473'; g.fillRect(X + 8, Y + 8, TILE - 16, TILE - 20);
       g.fillStyle = '#7a7498'; g.fillRect(X + 8, Y + 8, TILE - 16, 7);
       g.fillStyle = '#3e3a52'; g.fillRect(X + TILE - 17, Y + 15, 9, TILE - 27);
+    }
+    for (const k of c.traps ?? []) {
+      const [x, y] = k.split(',').map(Number) as [number, number];
+      g.fillStyle = '#3a1820'; g.fillRect(x * TILE + 6, y * TILE + 6, TILE - 12, TILE - 12);
+      g.fillStyle = '#c9c0d8';
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) { const px = x * TILE + 13 + i * 13, py = y * TILE + 15 + j * 13; g.beginPath(); g.moveTo(px, py + 5); g.lineTo(px + 4, py - 5); g.lineTo(px + 8, py + 5); g.fill(); }
     }
     const me = this.session.myUnit();
     const cur = current(c);

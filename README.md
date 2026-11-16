@@ -8,12 +8,13 @@ Zona 1: **Las Catacumbas Olvidadas**.
 | Módulo | Estado |
 | --- | --- |
 | `core`: azar por semilla, estado serializable, combate por iniciativa, línea de visión, estados, IA básica | Hecho, con tests |
-| Clases (Guerrero, Mago, Clérigo) con 4 rutas y bloqueo de rutas opuestas | Hecho (2 hechizos por ruta) |
+| Clases (Guerrero, Mago, Clérigo) con 4 rutas y bloqueo de rutas opuestas | Hecho (3 hechizos por ruta, se desbloquean por nivel) |
 | Guardado en Supabase (`save_run` / `load_run`) | Se guarda tras cada combate; el anfitrión puede reanudar |
 | Interfaz jugable (inicio, sala, clase y rutas, tablero) | Versión mínima |
 | Online (salas con código, Supabase Realtime, anfitrión autoritativo) | Hecho; probado entre pestañas, falta prueba entre dispositivos |
-| Equipo de 8 ranuras y loot | Pendiente |
-| Mazmorra de la Zona 1, eventos de grupo y jefe | Pendiente |
+| Equipo de 8 ranuras, 4 rarezas y botín temático tras cada combate | Hecho |
+| Zona 1: 6 combates, élite, 4 eventos de grupo con votación, trampas y jefe en dos fases | Hecho; falta equilibrar |
+| Mapa con rutas, oro y tienda, arte y sonido | Pendiente |
 
 ## Desarrollo
 

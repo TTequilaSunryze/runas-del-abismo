@@ -10,8 +10,12 @@ export interface EnemyDef {
   ap: number;
   mp: number;
   initiative: number;
-  ai: 'melee' | 'ranged';
+  ai: 'melee' | 'ranged' | 'boss';
   spell: string;
+  /** hechizos extra (jefes) */
+  more?: string[];
+  /** su vida crece con el número de jugadores */
+  scales?: boolean;
 }
 
 export const ZONA1_ENEMIES: Record<string, EnemyDef> = {
@@ -19,19 +23,20 @@ export const ZONA1_ENEMIES: Record<string, EnemyDef> = {
   murcielago: { id: 'murcielago', name: 'Murciélago de cripta', hp: 13, armor: 0, ap: 3, mp: 5, initiative: 16, ai: 'melee', spell: 'e_mordisco' },
   esqueleto: { id: 'esqueleto', name: 'Esqueleto guardián', hp: 24, armor: 1, ap: 3, mp: 3, initiative: 9, ai: 'melee', spell: 'e_golpe' },
   arquero: { id: 'arquero', name: 'Arquero óseo', hp: 17, armor: 0, ap: 3, mp: 2, initiative: 12, ai: 'ranged', spell: 'e_flecha' },
-  caballero: { id: 'caballero', name: 'Caballero sepulcral', hp: 70, armor: 2, ap: 6, mp: 3, initiative: 11, ai: 'melee', spell: 'e_tajo' },
+  caballero: { id: 'caballero', name: 'Caballero sepulcral', hp: 70, armor: 2, ap: 6, mp: 3, initiative: 11, ai: 'melee', spell: 'e_tajo', scales: true },
+  prior: { id: 'prior', name: 'El Prior Hueco', hp: 120, armor: 1, ap: 6, mp: 2, initiative: 6, ai: 'boss', spell: 'e_maldicion', more: ['e_barrido'], scales: true },
   necrofago: { id: 'necrofago', name: 'Necrófago', hp: 30, armor: 1, ap: 3, mp: 3, initiative: 7, ai: 'melee', spell: 'e_zarpazo' },
 };
 
-/** Crea un enemigo de la zona, escalado por profundidad de sala (0 = primera). */
-export function makeEnemy(id: string, pos: Pos, depth = 0): UnitSpec {
+/** Crea un enemigo de la zona, escalado por profundidad de sala (0 = primera) y, si es élite o jefe, por jugadores. */
+export function makeEnemy(id: string, pos: Pos, depth = 0, players = 1): UnitSpec {
   const e = ZONA1_ENEMIES[id];
   if (!e) throw new Error(`Enemigo desconocido: ${id}`);
-  const hp = Math.round(e.hp * (1 + depth * 0.14));
+  const hp = Math.round(e.hp * (1 + depth * 0.14) * (e.scales ? 1 + 0.4 * (players - 1) : 1));
   return {
     team: 'enemy', kind: e.id, name: e.name, owner: null, pos,
     hp, maxHp: hp, shield: 0, armor: e.armor, power: depth * 10, crit: 0,
     ap: e.ap, maxAp: e.ap, mp: e.mp, maxMp: e.mp, initiative: e.initiative, apMod: 0, mpMod: 0,
-    statuses: {}, spells: [{ id: e.spell, cd: 0 }], ai: e.ai,
+    statuses: {}, spells: [e.spell, ...(e.more ?? [])].map((sid) => ({ id: sid, cd: 0 })), ai: e.ai,
   };
 }

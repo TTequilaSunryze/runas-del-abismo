@@ -47,7 +47,9 @@ export interface Unit {
   mpMod: number;
   statuses: Partial<Record<StatusKind, StatusState>>;
   spells: SpellSlot[];
-  ai: 'melee' | 'ranged' | null;
+  ai: 'melee' | 'ranged' | 'boss' | null;
+  /** fase del jefe (1 o 2) */
+  phase?: number;
 }
 
 export interface CombatState extends RngBox {
@@ -56,6 +58,8 @@ export interface CombatState extends RngBox {
   h: number;
   /** casillas bloqueadas, como "x,y" */
   obstacles: string[];
+  /** casillas con púas: dañan a quien las pisa */
+  traps: string[];
   units: Unit[];
   /** ids de unidad en orden de iniciativa */
   order: number[];
@@ -77,6 +81,9 @@ export type GameEvent =
   | { t: 'push'; unit: number; to: Pos }
   | { t: 'skip'; unit: number; reason: StatusKind }
   | { t: 'death'; unit: number }
+  | { t: 'summon'; unit: number }
+  | { t: 'phase'; unit: number; phase: number }
+  | { t: 'trap'; unit: number }
   | { t: 'over'; result: 'win' | 'lose' };
 
 export const key = (p: Pos): string => `${p.x},${p.y}`;

@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import { autoplay } from './helpers';
 import { makeEnemy } from '../src/content/zona1/enemies';
 import { blockedRoutes, canPickRoute, spellsFor } from '../src/core/classes/classes';
 import { makeHero } from '../src/core/classes/factory';
 import { SPELLS } from '../src/core/classes/spells';
 import { runAiTurn } from '../src/core/combat/ai';
 import { cast, castProblem, createCombat, current, endTurn, getUnit, move, type CombatSetup } from '../src/core/combat/engine';
-import { alive, dist, hasLineOfSight, reachable } from '../src/core/combat/grid';
+import { hasLineOfSight } from '../src/core/combat/grid';
 import { rand, seedFrom } from '../src/core/rng';
-import { deserialize, serialize, type CombatState } from '../src/core/state';
+import { deserialize, serialize } from '../src/core/state';
 
 const setup = (over: Partial<CombatSetup> = {}): CombatSetup => ({
   seed: 42, w: 12, h: 7, obstacles: [],
@@ -19,28 +20,6 @@ const setup = (over: Partial<CombatSetup> = {}): CombatSetup => ({
   ],
   ...over,
 });
-
-/** Juega un combate entero: IA para enemigos y un guion simple para héroes. */
-function autoplay(s: CombatState, maxTurns = 400): void {
-  for (let i = 0; i < maxTurns && !s.over; i++) {
-    const u = current(s)!;
-    if (u.ai) { runAiTurn(s); continue; }
-    for (let n = 0; n < 8 && !s.over && current(s)?.id === u.id; n++) {
-      const foes = s.units.filter((e) => e.team === 'enemy' && alive(e)).sort((a, b) => dist(a.pos, u.pos) - dist(b.pos, u.pos));
-      const opt = u.spells.map((sp) => SPELLS[sp.id]!).filter((d) => d.target === 'enemy')
-        .flatMap((d) => foes.map((f) => ({ d, f }))).find(({ d, f }) => !castProblem(s, u, d, f.pos));
-      if (opt) { cast(s, u.id, opt.d.id, opt.f.pos); continue; }
-      if (u.mp > 0 && foes[0]) {
-        const reach = reachable(s, u.pos, u.mp);
-        const best = [...reach.cost.keys()].map((k) => k.split(',').map(Number) as [number, number])
-          .sort((a, b) => dist({ x: a[0], y: a[1] }, foes[0]!.pos) - dist({ x: b[0], y: b[1] }, foes[0]!.pos))[0]!;
-        if (best[0] !== u.pos.x || best[1] !== u.pos.y) { move(s, u.id, { x: best[0], y: best[1] }); continue; }
-      }
-      break;
-    }
-    if (!s.over && current(s)?.id === u.id) endTurn(s, u.id);
-  }
-}
 
 describe('azar por semilla', () => {
   it('la misma semilla da la misma secuencia', () => {
@@ -60,7 +39,9 @@ describe('rutas de clase', () => {
     expect(() => makeHero({ cls: 'mago', name: 'x', owner: 'p', routes: ['fuego', 'hielo'], pos: { x: 0, y: 0 } })).toThrow();
   });
   it('los hechizos salen de las rutas elegidas', () => {
-    expect(spellsFor('clerigo', ['luz'])).toEqual(['maza', 'sanar', 'aura']);
+    expect(spellsFor('clerigo', ['luz'], 1)).toEqual(['maza', 'sanar']);
+    expect(spellsFor('clerigo', ['luz'], 2)).toEqual(['maza', 'sanar', 'aura']);
+    expect(spellsFor('clerigo', ['luz'], 6)).toEqual(['maza', 'sanar', 'aura', 'plegaria']);
   });
   it('todos los hechizos de ruta existen', () => {
     for (const cls of ['guerrero', 'mago', 'clerigo'] as const)
@@ -117,6 +98,23 @@ describe('combate por iniciativa', () => {
     expect(r.ok).toBe(true);
     expect(current(s)!.id).toBe(arq.id);
     expect(arq.ap).toBe(arq.maxAp - 1);
+  });
+  it('las púas dañan a quien las pisa', () => {
+    const { state: s } = createCombat(setup({ traps: [{ x: 2, y: 2 }] }));
+    const leo = current(s)!;
+    const before = leo.hp;
+    expect(move(s, leo.id, { x: 3, y: 2 }).ok).toBe(true);
+    expect(leo.hp).toBe(before - 5);
+  });
+  it('un hechizo de área alrededor de uno mismo golpea a los enemigos cercanos', () => {
+    const { state: s } = createCombat(setup({ units: [
+      makeHero({ cls: 'mago', name: 'Leo', owner: 'p2', routes: ['hielo'], pos: { x: 4, y: 3 } }),
+      makeEnemy('esqueleto', { x: 5, y: 3 }), makeEnemy('limo', { x: 4, y: 5 }), makeEnemy('limo', { x: 9, y: 3 }),
+    ] }));
+    const leo = current(s)!;
+    expect(cast(s, leo.id, 'ventisca', leo.pos).ok).toBe(true);
+    const hit = s.units.filter((u) => u.team === 'enemy' && u.statuses.slow).map((u) => u.pos.x);
+    expect(hit.sort()).toEqual([4, 5]);
   });
   it('guardar y cargar a mitad de combate da exactamente el mismo resultado', () => {
     const { state: a } = createCombat(setup());

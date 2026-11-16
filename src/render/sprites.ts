@@ -29,6 +29,7 @@ const ENEMY_LOOK: Record<string, Look> = {
   esqueleto: { sprite: 'skel', pal: { e: '#c02030' } },
   arquero: { sprite: 'skel', pal: { w: '#c9d6a8', e: '#30a040' } },
   necrofago: { sprite: 'ghoul', pal: { a: '#7d9a78', b: '#4a3a4a', e: '#ffd24a' } },
+  prior: { sprite: 'ghoul', pal: { a: '#b9a8d8', b: '#4a2a7a', e: '#ff3060' }, scale: 1.5 },
   caballero: { sprite: 'skel', pal: { w: '#c8c8d8', e: '#ff2040' }, scale: 1.25 },
 };
 

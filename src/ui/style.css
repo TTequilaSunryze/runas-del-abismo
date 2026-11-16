@@ -21,6 +21,8 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 button.pri { background: #6b3fb5; border-color: #a77cf0; }
 button.pickc.on { border-color: var(--gold); background: #2d2440; }
 .sp { font-size: 13px; }
+.r0 { color: #e8e0f5; } .r1 { color: #58a6ff; } .r2 { color: #c77dff; } .r3 { color: #f2c14e; }
+hr { border: 0; border-top: 1px solid var(--edge); margin: 6px 0; }
 input { font: inherit; background: #000; color: var(--txt); border: 2px solid var(--edge); padding: 6px 8px; }
 canvas { width: 100%; display: block; border: 2px solid var(--edge); image-rendering: pixelated; background: #000; cursor: pointer; }
 .ini { border: 2px solid var(--edge); padding: 2px 8px; background: var(--panel); text-align: center; font-size: 13px; }

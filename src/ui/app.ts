@@ -1,9 +1,11 @@
 // Pantallas: inicio, sala, combate, entre combates y final.
+import { ZONA1_EVENTS } from '../content/zona1/events';
 import { CLASSES, blockedRoutes, canPickRoute, findRoute, MAX_ROUTES } from '../core/classes/classes';
+import { RARITY_NAME, SLOTS, SLOT_NAME, statsText, type Item } from '../core/items/items';
 import { SPELLS } from '../core/classes/spells';
 import { current, getUnit } from '../core/combat/engine';
 import type { ClassId, GameEvent } from '../core/state';
-import type { RunState } from '../game/run';
+import { heroMaxHp, type RunState } from '../game/run';
 import { Session, TURN_SECONDS } from '../game/session';
 import { joinRoom, loadRun } from '../net/transport';
 import { Board, STATUS_NAME } from '../render/board';
@@ -28,7 +30,7 @@ let notice = '';
 const log: string[] = [];
 
 function publish(): void {
-  session?.t.setPresence({ name: me.name, cls: me.cls, routes: me.routes, host: session.isHost });
+  session?.announce({ name: me.name, cls: me.cls, routes: me.routes, host: session.isHost });
 }
 
 // ---------- inicio ----------
@@ -72,16 +74,16 @@ async function enter(code: string, isHost: boolean, local: boolean, resume = fal
   saved = null;
   if (resume) {
     const run = (await loadRun(code)) as RunState | null;
-    if (run && run.version === 1 && run.phase === 'between') saved = run;
+    if (run && run.version === 2 && run.phase === 'between') saved = run;
     else notice = 'No se encontró una partida guardada que se pueda continuar.';
   }
   session.onChange = (ev) => { addLog(ev); render(ev); };
   session.onError = (text) => { notice = text; render([]); setTimeout(() => { notice = ''; render([]); }, 2500); };
-  session.t.onPeers(() => render([]));
+  session.onLobby = () => render([]);
   publish();
   render([]);
   // sala inexistente: nadie es anfitrión
-  if (!isHost) setTimeout(() => { if (session && !session.run && !session.hostPresent()) home(`No hay ninguna sala abierta con el código ${code}.`); }, 6000);
+  if (!isHost) setTimeout(() => { if (session && !session.run && !session.hostPresent()) home(`No hay ninguna sala abierta con el código ${code}. Comprueba el código y que el anfitrión siga en la sala.`); }, 15000);
 }
 
 // ---------- sala ----------
@@ -92,7 +94,7 @@ function lobby(): void {
   const blocked = blockedRoutes(me.cls, me.routes);
   const ready = players.slice(0, 4).filter((p) => p.routes.length > 0);
   root.innerHTML = `<h2>Sala <span class="code">${esc(s.code)}</span> ${s.t.kind === 'local' ? '<span class="dim">(local)</span>' : ''}</h2>
-  <p class="dim">${s.isHost ? 'Comparte el código. Cuando todos tengan clase y ruta, pulsa Comenzar.' : s.hostPresent() ? 'Elige clase y rutas. El anfitrión comienza la partida.' : 'Buscando al anfitrión…'}</p>
+  <p class="dim">${s.isHost ? 'Comparte el código. Cuando todos tengan clase y ruta, pulsa Comenzar.' : s.hostPresent() ? 'Elige clase y rutas. El anfitrión comienza la partida.' : 'Buscando al anfitrión… (puede tardar unos segundos)'}</p>
   ${notice ? `<p class="bad">${esc(notice)}</p>` : ''}
   <div class="grid">${players.map((p, i) => `<div class="card ${i > 3 ? 'off' : ''}"><b class="p${i % 4}">${esc(p.name)}</b> ${p.host ? '👑' : ''} ${p.id === myId ? '<span class="dim">(tú)</span>' : ''}<br>${esc(CLASSES[p.cls]?.name ?? '?')}<br><span class="dim">${p.routes.map((r) => esc(findRoute(p.cls, r)?.name ?? r)).join(' + ') || 'sin ruta todavía'}</span>${i > 3 ? '<br><span class="bad">Sala llena</span>' : ''}</div>`).join('')}</div>
   <h3>Tu clase</h3>
@@ -101,7 +103,7 @@ function lobby(): void {
   <div class="grid">${cls.routes.map((r) => {
     const on = me.routes.includes(r.id), off = !on && blocked.includes(r.id);
     const why = off ? (me.routes.includes(r.opposite) ? `Bloqueada por ${findRoute(me.cls, r.opposite)!.name}` : 'Ya tienes 2 rutas') : `Opuesta: ${findRoute(me.cls, r.opposite)!.name}`;
-    return `<button class="card pickc ${on ? 'on' : ''} ${off ? 'off' : ''}" data-act="route" data-id="${r.id}" ${off ? 'disabled' : ''}><b>${r.name}</b> ${on ? '✔' : ''}<br><span class="dim">${r.text}</span><br>${r.spells.map((id) => `<span class="sp">${esc(SPELLS[id]!.name)}: ${esc(SPELLS[id]!.text)}</span>`).join('<br>')}<br><i class="${off ? 'bad' : 'dim'}">${why}</i></button>`;
+    return `<button class="card pickc ${on ? 'on' : ''} ${off ? 'off' : ''}" data-act="route" data-id="${r.id}" ${off ? 'disabled' : ''}><b>${r.name}</b> ${on ? '✔' : ''}<br><span class="dim">${r.text}</span><br>${r.spells.map((id, i) => `<span class="sp"><span class="dim">Nv ${i + 1}</span> ${esc(SPELLS[id]!.name)}: ${esc(SPELLS[id]!.text)}</span>`).join('<br>')}<br><i class="${off ? 'bad' : 'dim'}">${why}</i></button>`;
   }).join('')}</div>
   <p>${s.isHost ? `<button class="pri" data-act="start" ${ready.length && ready.length === Math.min(4, players.length) ? '' : 'disabled'}>⚔️ Comenzar (${ready.length} de ${Math.min(4, players.length)} listos)</button> ${saved ? `<button data-act="doresume">Reanudar partida guardada (combate ${saved.fight + 1} de ${saved.total})</button>` : ''}` : ''} <button data-act="home">Salir</button></p>`;
 }
@@ -120,6 +122,9 @@ function addLog(events: GameEvent[]): void {
     else if (e.t === 'status') s = `· ${n(e.unit)}: ${STATUS_NAME[e.kind]}`;
     else if (e.t === 'skip') s = `· ${n(e.unit)} pierde el turno`;
     else if (e.t === 'death') s = `✝ ${n(e.unit)} cae`;
+    else if (e.t === 'summon') s = `<span class="bad">Aparece ${n(e.unit)}</span>`;
+    else if (e.t === 'trap') s = `· ${n(e.unit)} pisa unas púas`;
+    else if (e.t === 'phase') s = `<b class="bad">El Prior se funde con el osario: ¡${n(e.unit)}!</b>`;
     else if (e.t === 'over') s = `<b>${e.result === 'win' ? '¡Victoria!' : 'Derrota'}</b>`;
     if (s) log.push(s);
   }
@@ -132,13 +137,13 @@ function combat(events: GameEvent[]): void {
     root.innerHTML = `<div id="info" class="row"></div><div id="init" class="row"></div><canvas id="cv"></canvas><div id="bar" class="row"></div><div id="log"></div>`;
     board?.destroy();
     board = new Board(document.getElementById('cv') as HTMLCanvasElement, s);
-    board.onSelect = () => combat([]);
+    board.onSelect = () => render([]);
   }
   board!.applyEvents(events);
   const cur = current(c), mine = s.myUnit(), myTurn = s.isMyTurn();
   if (!myTurn && board!.sel) board!.sel = null;
   const left = s.turnEndsAt ? Math.max(0, Math.ceil((s.turnEndsAt - Date.now()) / 1000)) : 0;
-  document.getElementById('info')!.innerHTML = `<b>Combate ${run.fight + 1} de ${run.total}</b><span>Ronda ${c.round}</span>
+  document.getElementById('info')!.innerHTML = `<b>${run.fight === run.total - 1 ? 'JEFE' : `Combate ${run.fight + 1} de ${run.total}`}</b><span>Ronda ${c.round}</span>
     <span class="${myTurn ? 'pill' : ''}">${c.over ? (c.over === 'win' ? '¡Victoria!' : 'Derrota') : myTurn ? 'TU TURNO' : cur ? `Turno de ${esc(cur.name)}` : ''}</span><span id="clock" class="dim">${left && !c.over ? `${left}s` : ''}</span>
     ${notice ? `<span class="bad">${esc(notice)}</span>` : ''}${!s.hostPresent() ? '<span class="bad">Anfitrión desconectado: la partida está en pausa</span>' : ''}
     ${s.isHost && cur && !cur.ai && !myTurn && !c.over ? '<button data-act="skip">Pasar su turno</button>' : ''}`;
@@ -156,24 +161,54 @@ function combat(events: GameEvent[]): void {
   lg.scrollTop = 1e9;
 }
 
+const RAR = ['r0', 'r1', 'r2', 'r3'];
+function itemHtml(it: Item | undefined, empty = 'vacío'): string {
+  return it ? `<b class="${RAR[it.rarity]}">${esc(it.name)}</b> <span class="dim">${RARITY_NAME[it.rarity]}</span><br><span class="sp">${statsText(it.stats)}</span>${it.lore ? `<br><i class="dim sp">${esc(it.lore)}</i>` : ''}` : `<span class="dim">${empty}</span>`;
+}
+
+function heroCards(run: RunState): string {
+  return `<div class="grid">${run.heroes.map((h, i) => `<div class="card"><b class="p${i % 4}">${esc(h.name)}</b> <span class="dim">Nv ${h.level}</span><br>${CLASSES[h.cls].name} · ${h.routes.map((r) => findRoute(h.cls, r)?.name).join(' + ')}<br>PV ${h.hp}/${heroMaxHp(h)}
+    <div class="sp">${SLOTS.map((sl) => `<span class="dim">${SLOT_NAME[sl]}:</span> ${h.equip[sl] ? `<span class="${RAR[h.equip[sl]!.rarity]}" title="${esc(statsText(h.equip[sl]!.stats))}">${esc(h.equip[sl]!.name)}</span>` : '<span class="dim">—</span>'}`).join('<br>')}</div></div>`).join('')}</div>`;
+}
+
 function between(): void {
   const s = session!, run = s.run!;
   const end = run.phase !== 'between';
+  const mine = run.heroes.find((h) => h.owner === myId);
+  const offer = !end && mine ? run.offers[myId] : undefined;
+  const pending = end ? 0 : Object.keys(run.offers).length;
   root.innerHTML = `<div class="c"><h1>${run.phase === 'won' ? '¡VICTORIA!' : run.phase === 'lost' ? 'HABÉIS CAÍDO' : `Combate ${run.fight} de ${run.total} superado`}</h1>
-  <p class="dim">${run.phase === 'won' ? 'El Caballero sepulcral cae. Las Catacumbas guardan silencio... por ahora.' : run.phase === 'lost' ? 'Las Catacumbas reclaman a otro grupo de aventureros.' : 'Los caídos vuelven con el 30% de vida; los demás recuperan un 25%. La partida queda guardada.'}</p></div>
-  <div class="grid">${run.heroes.map((h, i) => `<div class="card"><b class="p${i % 4}">${esc(h.name)}</b><br>${CLASSES[h.cls].name} · ${h.routes.map((r) => findRoute(h.cls, r)?.name).join(' + ')}<br>PV ${h.hp}/${CLASSES[h.cls].hp}</div>`).join('')}</div>
-  <p class="c">${end ? '' : s.isHost ? '<button class="pri" data-act="next">Siguiente combate →</button>' : '<span class="dim">Esperando al anfitrión…</span>'} <button data-act="home">${end ? 'Volver al inicio' : 'Salir'}</button></p>`;
+  <p class="dim">${run.phase === 'won' ? 'El Coloso del Osario se desmorona. Las Catacumbas guardan silencio... por ahora.' : run.phase === 'lost' ? 'Las Catacumbas reclaman a otro grupo de aventureros.' : `Subís a nivel ${run.heroes[0]?.level ?? 1}. Los caídos vuelven con el 30% de vida; los demás recuperan un 35%. La partida queda guardada.`}</p></div>
+  ${offer ? `<h3>Tu botín: elige un objeto (sustituye al que lleves en esa ranura)</h3><div class="grid">${offer.map((it, i) => `<div class="card"><span class="dim">${SLOT_NAME[it.slot]}</span><br>${itemHtml(it)}<hr><span class="dim sp">Llevas:</span> <span class="sp">${itemHtml(mine!.equip[it.slot], 'nada')}</span><br><button class="pri" data-act="pick" data-id="${i}">Equipar</button></div>`).join('')}</div><p><button data-act="pick" data-id="-1">No quiero ninguno</button></p>` : ''}
+  <h3>El grupo</h3>${heroCards(run)}
+  <p class="c">${end ? '' : s.isHost ? `<button class="pri" data-act="next">${run.fight === run.total - 1 ? 'Enfrentarse al jefe →' : 'Continuar →'}</button>${pending ? ` <span class="dim">(${pending} jugador${pending > 1 ? 'es' : ''} aún eligiendo botín; si continúas lo pierden)</span>` : ''}` : '<span class="dim">Esperando al anfitrión…</span>'} <button data-act="home">${end ? 'Volver al inicio' : 'Salir'}</button></p>`;
 }
 
+function eventScreen(): void {
+  const s = session!, run = s.run!, ev = run.event!;
+  const def = ZONA1_EVENTS.find((e) => e.id === ev.id)!;
+  const voters = (i: number): string => run.heroes.filter((h) => ev.votes[h.owner] === i).map((h) => esc(h.name)).join(', ');
+  const canVote = run.heroes.some((h) => h.owner === myId) && !ev.result;
+  root.innerHTML = `<div class="c"><h1>${esc(def.title)}</h1><p>${esc(def.text)}</p><p class="dim">Evento de grupo: decide la mayoría y afecta a todos. En caso de empate decide el anfitrión.</p></div>
+  ${ev.result ? `<div class="card c"><b>${esc(ev.result)}</b></div>` : `<div class="grid">${def.options.map((o, i) => `<button class="card pickc ${ev.votes[myId] === i ? 'on' : ''}" data-act="vote" data-id="${i}" ${canVote ? '' : 'disabled'}><b>${esc(o.label)}</b><br><span class="dim">${esc(o.hint)}</span><br><span class="pill">${voters(i) ? `Votos: ${voters(i)}` : 'Sin votos'}</span></button>`).join('')}</div>`}
+  <h3>El grupo</h3>${heroCards(run)}
+  <p class="c">${s.isHost ? (ev.result ? '<button class="pri" data-act="next">Continuar →</button>' : `<button data-act="resolve" ${Object.keys(ev.votes).length ? '' : 'disabled'}>Cerrar la votación ya</button>`) : `<span class="dim">${ev.result ? 'Esperando al anfitrión…' : 'Votad todos para continuar.'}</span>`}</p>`;
+}
+
+let lastKey = '';
 function render(events: GameEvent[]): void {
   if (!session) return;
   const run = session.run;
-  const want = !run ? 'lobby' : run.phase === 'combat' && run.combat ? 'combat' : 'end';
+  const want = !run ? 'lobby' : run.phase === 'combat' && run.combat ? 'combat' : run.phase === 'event' && run.event ? 'event' : 'end';
+  // sin cambios reales no se redibuja: así un latido de red no interrumpe un clic
+  const key = want + JSON.stringify([run, run ? null : session.lobby(), me, notice, session.hostPresent(), board?.sel ?? null, session.isMyTurn(), saved?.fight]);
+  if (key === lastKey && want === screen && !events.length) return;
+  lastKey = key;
   if (want === 'combat') combat(events);
   else {
     board?.destroy();
     board = null;
-    if (want === 'lobby') lobby(); else between();
+    if (want === 'lobby') lobby(); else if (want === 'event') eventScreen(); else between();
   }
   screen = want;
 }
@@ -190,14 +225,17 @@ document.addEventListener('click', (e) => {
     case 'resume': { const h = JSON.parse(store.get('rda_host') ?? 'null') as { code: string } | null; if (h) void enter(h.code, true, false, true); break; }
     case 'doresume': if (saved) { log.length = 0; session?.resume(saved); } break;
     case 'home': home(); break;
-    case 'cls': me.cls = id as ClassId; me.routes = []; publish(); lobby(); break;
+    case 'cls': me.cls = id as ClassId; me.routes = []; publish(); render([]); break;
     case 'route':
       if (me.routes.includes(id)) me.routes = me.routes.filter((r) => r !== id);
       else if (canPickRoute(me.cls, me.routes, id)) me.routes = [...me.routes, id];
-      publish(); lobby(); break;
+      publish(); render([]); break;
     case 'start': log.length = 0; session?.startRun(); break;
     case 'next': log.length = 0; session?.nextFight(); break;
     case 'skip': session?.skipTurn(); break;
+    case 'pick': session?.act({ a: 'pick', idx: Number(id) }); break;
+    case 'vote': session?.act({ a: 'vote', idx: Number(id) }); break;
+    case 'resolve': session?.resolve(); break;
     case 'end': session?.act({ a: 'end' }); break;
     case 'spell': pickSpell(id); break;
   }

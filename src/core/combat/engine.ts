@@ -12,6 +12,7 @@ export interface CombatSetup {
   w: number;
   h: number;
   obstacles: Pos[];
+  traps?: Pos[];
   units: UnitSpec[];
 }
 
@@ -22,6 +23,7 @@ const POISON_DMG = 2;
 const MARK_MULT = 1.3;
 const CRIT_MULT = 1.5;
 const PUSH_CRASH_DMG = 4;
+const TRAP_DMG = 5;
 const fail = (reason: string): ActionResult => ({ ok: false, reason });
 
 export function createCombat(setup: CombatSetup): { state: CombatState; events: GameEvent[] } {
@@ -31,7 +33,7 @@ export function createCombat(setup: CombatSetup): { state: CombatState; events: 
     .sort((a, b) => b.initiative - a.initiative || (a.team === b.team ? a.id - b.id : a.team === 'hero' ? -1 : 1))
     .map((u) => u.id);
   const state: CombatState = {
-    version: 1, rng: setup.seed >>> 0, w: setup.w, h: setup.h, obstacles: setup.obstacles.map(key),
+    version: 1, rng: setup.seed >>> 0, w: setup.w, h: setup.h, obstacles: setup.obstacles.map(key), traps: (setup.traps ?? []).map(key),
     units, order, turn: -1, round: 1, over: null, nextId: units.length + 1,
   };
   const events: GameEvent[] = [];
@@ -142,9 +144,21 @@ export function move(s: CombatState, unitId: number, to: Pos): ActionResult {
   const cost = reach.cost.get(key(to));
   if (!cost) return fail('Casilla fuera de alcance');
   const path = pathTo(reach, u.pos, to);
-  u.pos = { ...to };
-  u.mp -= cost;
-  return { ok: true, events: [{ t: 'move', unit: u.id, path }] };
+  const ev: GameEvent[] = [];
+  const walked: Pos[] = [];
+  for (const p of path) {
+    u.pos = { ...p };
+    u.mp--;
+    walked.push(p);
+    if (s.traps.includes(key(p))) {
+      ev.push({ t: 'trap', unit: u.id });
+      hurt(s, u, TRAP_DMG, ev, 'trap', { pierce: true });
+      if (!alive(u)) break;
+    }
+  }
+  ev.unshift({ t: 'move', unit: u.id, path: walked });
+  if (!alive(u) && !s.over) beginNext(s, ev);
+  return { ok: true, events: ev };
 }
 
 /** Motivo por el que `u` no puede lanzar el hechizo sobre `at`, o null si puede. */
@@ -157,7 +171,9 @@ export function castProblem(s: CombatState, u: Unit, def: SpellDef, at: Pos): st
   if (d < def.range[0] || d > def.range[1]) return 'Fuera de alcance';
   if (def.los && d > 1 && !hasLineOfSight(s, u.pos, at)) return 'Sin línea de visión';
   const t = unitAt(s, at);
-  if (def.target === 'self' && !same(at, u.pos)) return 'Solo sobre ti';
+  const around = def.range[1] === 0;
+  if ((def.target === 'self' || around) && !same(at, u.pos)) return 'Solo sobre ti';
+  if (around) return null;
   if (def.target === 'enemy' && (!t || t.team === u.team)) return 'Necesitas un enemigo como objetivo';
   if (def.target === 'ally' && (!t || t.team !== u.team)) return 'Necesitas un aliado como objetivo';
   if (def.dash && !dashCell(s, u, at)) return 'No hay hueco junto al objetivo';
@@ -185,6 +201,10 @@ function push(s: CombatState, from: Pos, u: Unit, cells: number, ev: GameEvent[]
     }
     u.pos = n;
     ev.push({ t: 'push', unit: u.id, to: { ...n } });
+    if (s.traps.includes(key(n))) {
+      ev.push({ t: 'trap', unit: u.id });
+      hurt(s, u, TRAP_DMG, ev, 'trap', { pierce: true });
+    }
   }
 }
 
@@ -216,7 +236,7 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
     if (s.over) break;
     if (def.dmg) {
       const crit = rand(s) * 100 < u.crit;
-      const raw = randInt(s, def.dmg[0], def.dmg[1]) * (1 + u.power / 100) * (crit ? CRIT_MULT : 1) * (t.statuses.mark ? MARK_MULT : 1) * (t === main ? 1 : 0.5);
+      const raw = randInt(s, def.dmg[0], def.dmg[1]) * (1 + u.power / 100) * (crit ? CRIT_MULT : 1) * (t.statuses.mark ? MARK_MULT : 1) * (t === main || def.range[1] === 0 ? 1 : 0.5);
       dealt += hurt(s, t, raw, ev, def.id, { crit });
     }
     if (def.heal) heal(t, def.heal, ev);
@@ -240,4 +260,19 @@ export function endTurn(s: CombatState, unitId: number): ActionResult {
   const ev: GameEvent[] = [];
   beginNext(s, ev);
   return { ok: true, events: ev };
+}
+
+/** Añade una unidad en la casilla libre más cercana a `near`. Juega al final del orden. */
+export function summon(s: CombatState, spec: UnitSpec, near: Pos, ev: GameEvent[]): Unit | null {
+  const cells = [...reachable(s, near, 4, true).cost.entries()].sort((a, b) => a[1] - b[1]);
+  for (const [k] of cells) {
+    const [x, y] = k.split(',').map(Number) as [number, number];
+    if (!isFree(s, { x, y })) continue;
+    const u: Unit = { ...spec, pos: { x, y }, statuses: {}, spells: spec.spells.map((sp) => ({ ...sp })), id: s.nextId++ };
+    s.units.push(u);
+    s.order.push(u.id);
+    ev.push({ t: 'summon', unit: u.id });
+    return u;
+  }
+  return null;
 }

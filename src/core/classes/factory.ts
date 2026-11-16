@@ -1,19 +1,37 @@
-// Construcción de unidades a partir de los datos de clase.
+// Construcción de héroes a partir de clase, rutas, nivel y equipo.
 import type { UnitSpec } from '../combat/engine';
+import { sumStats, type Stats } from '../items/items';
 import type { ClassId, Pos } from '../state';
 import { CLASSES, canPickRoute, spellsFor } from './classes';
 
-export function makeHero(opts: { cls: ClassId; name: string; owner: string; routes: string[]; pos: Pos }): UnitSpec {
+export interface HeroBuild {
+  cls: ClassId;
+  name: string;
+  owner: string;
+  routes: string[];
+  pos: Pos;
+  /** 1 a MAX_LEVEL; por defecto 3 (todos los hechizos de ruta) */
+  level?: number;
+  /** estadísticas del equipo y de bendiciones o maldiciones */
+  bonus?: Stats[];
+}
+
+/** Cada nivel por encima del 1 da +8% de vida base y +6% de daño. */
+export function makeHero(opts: HeroBuild): UnitSpec {
   const c = CLASSES[opts.cls];
   const chosen: string[] = [];
   for (const r of opts.routes) {
     if (!canPickRoute(opts.cls, chosen, r)) throw new Error(`Ruta no permitida: ${r}`);
     chosen.push(r);
   }
+  const level = opts.level ?? 3;
+  const b = sumStats(opts.bonus ?? []);
+  const hp = Math.max(10, Math.round(c.hp * (1 + 0.08 * (level - 1))) + b.hp);
+  const ap = Math.max(2, c.ap + b.ap), mp = Math.max(1, c.mp + b.mp);
   return {
     team: 'hero', kind: c.id, name: opts.name, owner: opts.owner, pos: opts.pos,
-    hp: c.hp, maxHp: c.hp, shield: 0, armor: c.armor, power: c.power, crit: c.crit,
-    ap: c.ap, maxAp: c.ap, mp: c.mp, maxMp: c.mp, initiative: c.initiative, apMod: 0, mpMod: 0,
-    statuses: {}, spells: spellsFor(opts.cls, chosen).map((id) => ({ id, cd: 0 })), ai: null,
+    hp, maxHp: hp, shield: 0, armor: Math.max(0, c.armor + b.armor), power: c.power + 6 * (level - 1) + b.power, crit: c.crit + b.crit,
+    ap, maxAp: ap, mp, maxMp: mp, initiative: c.initiative + b.initiative, apMod: 0, mpMod: 0,
+    statuses: {}, spells: spellsFor(opts.cls, chosen, level).map((id) => ({ id, cd: 0 })), ai: null,
   };
 }
