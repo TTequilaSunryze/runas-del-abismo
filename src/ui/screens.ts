@@ -62,8 +62,8 @@ function metaPanel(): string {
     return `<div class="panel"><h3>Cuenta</h3>${ui.acctMsg ? `<div class="pill sm">${esc(ui.acctMsg)}</div>` : ''}
     ${a ? `<p>Has entrado como <b>${esc(a.name)}</b> <span class="dim sm">(${esc(a.email)})</span>.</p><div class="dim sm">Tu progreso (ecos, mejoras, maestrías, logros y Salón) se guarda en la cuenta y te sigue a cualquier dispositivo. Tus amigos pueden retar a tu equipo buscando “${esc(a.name)}”.</div><p><button data-act="logout" ${ui.busy ? 'disabled' : ''}>Cerrar sesión</button></p>`
       : `<div class="dim sm">Opcional. Sin cuenta, tu progreso vive solo en este navegador. Con cuenta se guarda en la nube; al entrar por primera vez se une con lo que ya tengas aquí.</div>
-      <div class="form"><label>Email <input id="acemail" type="email" autocomplete="email"></label><label>Contraseña <input id="acpass" type="password" autocomplete="current-password" minlength="6"></label>
-      <label>Nombre de cuenta <span class="dim sm">(solo al crearla; así te encuentran tus amigos)</span> <input id="acname" maxlength="14" value="${esc(ui.me.name.replace(/[^A-Za-z0-9_ñÑáéíóúÁÉÍÓÚ-]/g, ''))}"></label></div>
+      <div class="form"><label>Email <input id="acemail" type="email" autocomplete="email" value="${esc(ui.acEmail)}"></label><label>Contraseña <input id="acpass" type="password" autocomplete="current-password" minlength="6"></label>
+      <label>Nombre de cuenta <span class="dim sm">(solo al crearla; así te encuentran tus amigos)</span> <input id="acname" maxlength="14" value="${esc(ui.acName || ui.me.name.replace(/[^A-Za-z0-9_ñÑáéíóúÁÉÍÓÚ-]/g, ''))}"></label></div>
       <div class="row"><button class="pri" data-act="login" ${ui.busy ? 'disabled' : ''}>Entrar</button><button data-act="signup" ${ui.busy ? 'disabled' : ''}>Crear cuenta</button></div>`}</div>`;
   }
   if (ui.homeTab === 'diario') {

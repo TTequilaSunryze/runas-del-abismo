@@ -39,6 +39,9 @@ export const ui = {
   homeTab: 'jugar' as 'jugar' | 'mejoras' | 'clases' | 'logros' | 'salon' | 'diario' | 'cuenta',
   /** mensajes de la pestaña de cuenta y del salón */
   acctMsg: '',
+  /** lo escrito en el formulario de cuenta, para no perderlo al redibujar */
+  acEmail: '',
+  acName: '',
   hallMsg: '',
   busy: false,
   board2: null as null | Array<{ names: string; players: number; score: number; won: boolean; zone: number }> | 'cargando' | 'error',

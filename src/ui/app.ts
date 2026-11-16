@@ -196,8 +196,13 @@ document.addEventListener('click', (e) => {
     case 'login': case 'signup': {
       const v = (k: string): string => (document.getElementById(k) as HTMLInputElement | null)?.value ?? '';
       const signup = el.dataset.act === 'signup';
+      // se leen los campos ANTES de redibujar (al redibujar se vacían)
+      const email = v('acemail').trim(), pass = v('acpass'), name = v('acname').trim();
+      ui.acEmail = email; ui.acName = name;
+      if (!email || !pass) { ui.acctMsg = 'Escribe tu email y tu contraseña.'; homeScreen(''); break; }
+      if (signup && pass.length < 6) { ui.acctMsg = 'La contraseña debe tener al menos 6 caracteres.'; homeScreen(''); break; }
       ui.busy = true; ui.acctMsg = 'Conectando…'; homeScreen('');
-      void (signup ? signUp(v('acemail'), v('acpass'), v('acname')) : signIn(v('acemail'), v('acpass'))).then((err) => {
+      void (signup ? signUp(email, pass, name) : signIn(email, pass)).then((err) => {
         ui.busy = false; ui.acctMsg = err ?? 'Has entrado. Tu progreso ya se guarda en la cuenta.';
         if (ui.screen === 'home') homeScreen('');
       });
