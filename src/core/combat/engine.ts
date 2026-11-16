@@ -14,6 +14,7 @@ export interface CombatSetup {
   h: number;
   obstacles: Pos[];
   traps?: Pos[];
+  puddles?: Pos[];
   units: UnitSpec[];
 }
 
@@ -29,6 +30,11 @@ const GUARD_SHIELD = 0.15;
 const PACK_BONUS = 15;
 const EXECUTE_MULT = 2;
 const MENDER_MULT = 1.3;
+const REGEN = 0.08;
+const THORNS = 0.3;
+const ENRAGE_POWER = 40;
+const BOMB_DMG = 8;
+const BOMB_PCT = 0.15;
 
 export const hasTrait = (u: Unit, t: string): boolean => !!u.traits?.includes(t);
 const fail = (reason: string): ActionResult => ({ ok: false, reason });
@@ -40,7 +46,7 @@ export function createCombat(setup: CombatSetup): { state: CombatState; events: 
     .sort((a, b) => b.initiative - a.initiative || (a.team === b.team ? a.id - b.id : a.team === 'hero' ? -1 : 1))
     .map((u) => u.id);
   const state: CombatState = {
-    version: 1, rng: setup.seed >>> 0, w: setup.w, h: setup.h, obstacles: setup.obstacles.map(key), traps: (setup.traps ?? []).map(key), puddles: [],
+    version: 1, rng: setup.seed >>> 0, w: setup.w, h: setup.h, obstacles: setup.obstacles.map(key), traps: (setup.traps ?? []).map(key), puddles: (setup.puddles ?? []).map(key),
     units, order, turn: -1, round: 1, over: null, nextId: units.length + 1,
   };
   const events: GameEvent[] = [];
@@ -82,9 +88,25 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
   if (!alive(u)) {
     ev.push({ t: 'death', unit: u.id });
     if (hasTrait(u, 'puddle') && !s.puddles.includes(key(u.pos))) s.puddles.push(key(u.pos));
+    if (hasTrait(u, 'split') && u.maxHp >= 16) splitUnit(s, u, ev);
+    if (hasTrait(u, 'bomb')) {
+      // explota: daña a todo lo que tenga pegado, de cualquier bando (puede encadenar otras explosiones)
+      u.traits = u.traits!.filter((t) => t !== 'bomb');
+      ev.push({ t: 'explode', unit: u.id });
+      for (const o of s.units.filter((x) => x !== u && alive(x) && dist(x.pos, u.pos) <= 1)) hurt(s, o, BOMB_DMG + u.maxHp * BOMB_PCT, ev, 'bomb', { pierce: true, element: 'fire' });
+    }
     checkOver(s, ev);
   }
   return dmg;
+}
+
+/** Se divide en dos copias más pequeñas que no vuelven a dividirse. */
+function splitUnit(s: CombatState, u: Unit, ev: GameEvent[]): void {
+  ev.push({ t: 'split', unit: u.id });
+  const hp = Math.ceil(u.maxHp * 0.4);
+  for (let i = 0; i < 2; i++) {
+    summon(s, { ...u, name: `${u.name.split(' · ')[0]} menor`, hp, maxHp: hp, shield: 0, statuses: {}, traits: (u.traits ?? []).filter((t) => t !== 'split' && t !== 'bomb'), spells: u.spells.map((sp) => ({ ...sp, cd: 0 })), used: false, summoner: u.summoner }, u.pos, ev);
+  }
 }
 
 export function heal(u: Unit, amount: number, ev: GameEvent[]): void {
@@ -126,6 +148,7 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
       ev.push({ t: 'shield', unit: u.id, amount: u.shield });
     }
     for (const sp of u.spells) if (sp.cd > 0) sp.cd--;
+    if (hasTrait(u, 'regen')) heal(u, u.maxHp * REGEN, ev);
     if (u.statuses.burn) hurt(s, u, BURN_DMG, ev, 'burn', { pierce: true, element: 'fire' });
     if (alive(u) && u.statuses.poison) hurt(s, u, POISON_DMG * u.statuses.poison.stacks, ev, 'poison', { pierce: true, element: 'poison' });
     tick(u, 'burn');
@@ -296,8 +319,12 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
     if (def.dmg) {
       const crit = rand(s) * 100 < u.crit + (def.crit ?? 0);
       const pack = hasTrait(u, 'pack') ? s.units.filter((o) => o !== u && o.team === u.team && alive(o) && hasTrait(o, 'pack')).length * PACK_BONUS : 0;
-      const raw = randInt(s, def.dmg[0], def.dmg[1]) * (1 + (u.power + pack) / 100) * (crit ? (hasTrait(u, 'execute') ? EXECUTE_MULT : CRIT_MULT) : 1) * (t.statuses.mark ? MARK_MULT : 1) * (t === main || def.range[1] === 0 || def.line ? 1 : 0.5);
-      dealt += hurt(s, t, raw, ev, def.id, { crit, element: def.element, pierce: def.pierce });
+      const fury = hasTrait(u, 'enrage') && u.hp < u.maxHp / 2 ? ENRAGE_POWER : 0;
+      const raw = randInt(s, def.dmg[0], def.dmg[1]) * (1 + (u.power + pack + fury) / 100) * (crit ? (hasTrait(u, 'execute') ? EXECUTE_MULT : CRIT_MULT) : 1) * (t.statuses.mark ? MARK_MULT : 1) * (t === main || def.range[1] === 0 || def.line ? 1 : 0.5);
+      const got = hurt(s, t, raw, ev, def.id, { crit, element: def.element, pierce: def.pierce });
+      dealt += got;
+      // espinas: devuelven parte del daño cuerpo a cuerpo
+      if (got > 0 && hasTrait(t, 'thorns') && dist(t.pos, u.pos) <= 1 && alive(u)) hurt(s, u, got * THORNS, ev, 'thorns', { pierce: true });
       if (hasTrait(u, 'ignite') && alive(t)) addStatus(t, 'burn', 2, 1, ev);
     }
     if (def.heal) heal(t, def.heal * mend, ev);

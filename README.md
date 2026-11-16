@@ -51,3 +51,6 @@ Ecos, mejoras permanentes, 17 logros, ascensión 0–10, reto diario con ranking
 
 ## v3
 Cuenta con email y contraseña, maestría por clase que desbloquea rutas, mejoras de hechizo, sets de 3 piezas, clase Arquero, reliquias de grupo, Salón de héroes, Némesis y duelos 3 contra 3. Las partidas guardadas anteriores no son compatibles.
+
+## v4
+Iconos de hechizo en pixel art, 31 enemigos nuevos, jefes alternativos, zona 4 (El Abismo), forja, altar, apostador, jaulas con aliados, 22 reliquias, presagios, 14 eventos nuevos y modificadores elegibles. Las partidas guardadas anteriores no son compatibles.

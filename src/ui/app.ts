@@ -15,14 +15,15 @@ import { currentAccount, fetchTeam, restoreAccount, signIn, signOut, signUp } fr
 import { championOf } from '../game/run';
 import { MAX_ASC } from '../content/modes';
 import { setZoneMusic } from '../audio/sfx';
-import { endScreen, eventScreen, homeScreen, lobbyScreen, mapScreen, shopScreen } from './screens';
+import { campScreen, endScreen, eventScreen, homeScreen, lobbyScreen, mapScreen, shopScreen } from './screens';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 
 function publish(): void {
   const m = meta();
   ui.session?.announce({ name: ui.me.name, cls: ui.me.cls, routes: ui.me.routes, host: ui.session.isHost, perks: m.perks, unlocked: m.unlocked, asc: Math.min(ui.asc, m.maxAsc, MAX_ASC), daily: ui.daily ? today() : null,
-    mastery: masteryOf(ui.me.cls), nem: myNemesis(), hasTeam: myTeam().length > 0 });
+    mastery: masteryOf(ui.me.cls), nem: myNemesis(), hasTeam: myTeam().length > 0,
+    mods: ui.daily ? [] : ui.mods, abyss: !ui.daily && ui.abyss && m.stats.wins > 0 });
 }
 
 function home(msg = ''): void {
@@ -59,7 +60,7 @@ async function enter(code: string, isHost: boolean, local: boolean, resume = fal
   ui.notice = '';
   if (resume) {
     const run = (await loadRun(code)) as RunState | null;
-    if (run && run.version === 7 && run.phase === 'map') ui.saved = run;
+    if (run && run.version === 8 && run.phase === 'map') ui.saved = run;
     else ui.notice = 'No se encontró una partida guardada que se pueda continuar.';
   }
   let wasMyTurn = false;
@@ -84,9 +85,9 @@ function render(events: GameEvent[]): void {
   const s = ui.session;
   if (!s) return;
   const run = s.run;
-  const want = !run ? 'lobby' : run.phase === 'combat' && run.combat ? 'combat' : run.phase === 'event' && run.event ? 'event' : run.phase === 'shop' ? 'shop' : run.phase === 'map' ? 'map' : 'end';
+  const want = !run ? 'lobby' : run.phase === 'combat' && run.combat ? 'combat' : run.phase === 'event' && run.event ? 'event' : run.phase === 'shop' ? 'shop' : run.phase === 'camp' && run.camp ? 'camp' : run.phase === 'map' ? 'map' : 'end';
   // sin cambios reales no se redibuja: así un latido de red no interrumpe un clic
-  const key = want + JSON.stringify([meta().ecos, ui.asc, ui.daily, run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selRune, ui.selItem, ui.tab, ui.logOpen]);
+  const key = want + JSON.stringify([meta().ecos, ui.asc, ui.daily, ui.mods, ui.abyss, run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selRune, ui.selItem, ui.tab, ui.logOpen]);
   if (key === lastKey && want === ui.screen && !events.length) return;
   lastKey = key;
   if (want !== ui.screen) hideTip();
@@ -95,7 +96,7 @@ function render(events: GameEvent[]): void {
   else {
     ui.board?.destroy();
     ui.board = null;
-    ({ lobby: lobbyScreen, event: eventScreen, shop: shopScreen, map: mapScreen, end: endScreen })[want]();
+    ({ lobby: lobbyScreen, event: eventScreen, shop: shopScreen, camp: campScreen, map: mapScreen, end: endScreen })[want]();
   }
   ui.screen = want;
   if (want === 'end' && run && run.daily && s.isHost && run.heroes.length) {
@@ -171,6 +172,10 @@ document.addEventListener('click', (e) => {
     case 'again': ui.log.length = 0; s?.backToLobby(); break;
     case 'reroll': s?.act({ a: 'reroll' }); break;
     case 'upgrade': s?.act({ a: 'upgrade', idx: Number(id) }); break;
+    case 'forge': s?.act({ a: 'forge', slot: id as Slot }); break;
+    case 'altar': s?.act({ a: 'altar', opt: Number(id) }); break;
+    case 'gamble': s?.act({ a: 'gamble', opt: Number(id) }); sfx.coin(); break;
+    case 'mod': ui.mods = ui.mods.includes(id) ? ui.mods.filter((x) => x !== id) : ui.mods.length < 3 ? [...ui.mods, id] : ui.mods; publish(); render([]); break;
     case 'champsave': { const h = s?.run?.heroes.find((x) => x.owner === ui.myId); if (s?.run && h) { saveChampion({ ...championOf(s.run, h), by: currentAccount()?.name ?? ui.me.name }); publish(); lastKey = ''; render([]); } break; }
     case 'champdel': removeChampion(id); homeScreen(''); break;
     case 'champteam': toggleTeam(id); homeScreen(''); break;
@@ -214,6 +219,7 @@ document.addEventListener('click', (e) => {
 document.addEventListener('change', (e) => {
   const el = e.target as HTMLInputElement;
   if (el.dataset?.act === 'dailytoggle') { ui.daily = el.checked; publish(); render([]); }
+  if (el.dataset?.act === 'abysstoggle') { ui.abyss = el.checked; publish(); render([]); }
 });
 
 document.addEventListener('keydown', (e) => {

@@ -2,10 +2,11 @@
 import { SPELLS } from '../core/classes/spells';
 import { current, getUnit, spellOf } from '../core/combat/engine';
 import { RUNES } from '../core/runes';
+import { OMENS } from '../content/modes';
 import type { GameEvent } from '../core/state';
 import { Board, STATUS_NAME } from '../render/board';
 import { esc, tip, ui } from './ctx';
-import { spellIcon } from './icons';
+import { spellIcon, spellTip } from './icons';
 import { hpBar, sysButtons } from './panels';
 
 export function addLog(events: GameEvent[]): void {
@@ -23,6 +24,9 @@ export function addLog(events: GameEvent[]): void {
     else if (e.t === 'death') s = `✝ ${n(e.unit)} cae`;
     else if (e.t === 'summon') s = `<span class="bad">Aparece ${n(e.unit)}</span>`;
     else if (e.t === 'trap') s = `· ${n(e.unit)} pisa unas púas`;
+    else if (e.t === 'explode') s = `<span class="bad">${n(e.unit)} explota</span>`;
+    else if (e.t === 'split') s = `<span class="bad">${n(e.unit)} se divide</span>`;
+    else if (e.t === 'blink') s = `<span class="bad">${n(e.unit)} aparece de las sombras</span>`;
     else if (e.t === 'snare') s = `· ${n(e.unit)} cae en un cepo`;
     else if (e.t === 'stuck') s = `· ${n(e.unit)} queda atrapado en el charco`;
     else if (e.t === 'devour') s = `<span class="bad">${n(e.unit)} devora un cadáver</span>`;
@@ -35,6 +39,7 @@ export function addLog(events: GameEvent[]): void {
 }
 
 const TRAIT_TEXT: Record<string, string> = {
+  bomb: 'Explota al morir: daña a todo lo que tenga pegado.', split: 'Al morir se divide en dos copias menores.', regen: 'Recupera el 8% de su vida cada turno.', thorns: 'Devuelve el 30% del daño cuerpo a cuerpo.', enrage: '+40% de daño por debajo de la mitad de vida.', trapper: 'Esconde cepos junto a los héroes.', blink: 'Aparece junto a su presa más frágil.',
   venom: 'Sus venenos aplican una carga más.', ignite: 'Su daño quema.', execute: 'Sus críticos hacen el doble.', mender: 'Cura y protege un 30% más.',
   puddle: 'Al morir deja un charco que inmoviliza.', guard: 'Empieza su turno con escudo.', devour: 'Se cura devorando cadáveres.',
   raise: 'Alza a los muertos como aliados.', ghost: 'Atraviesa obstáculos.', hunter: 'Persigue al héroe más frágil.', pack: 'Más daño por cada compañero de manada.',
@@ -53,10 +58,11 @@ export function combatScreen(events: GameEvent[]): void {
   board.applyEvents(events);
   (document.getElementById('cv') as HTMLCanvasElement).style.setProperty('--ar', String(c.w / c.h));
   const cur = current(c), me = s.myUnit(), myTurn = s.isMyTurn();
+  const omenDef = run.omen ? OMENS.find((o) => o.id === run.omen) : undefined;
   if (!myTurn && board.sel) board.sel = null;
   const left = s.turnEndsAt ? Math.max(0, Math.ceil((s.turnEndsAt - Date.now()) / 1000)) : 0;
   const kind = run.arena ? `🏟️ Duelo: ${esc(run.arena.nameA)} contra ${esc(run.arena.nameB)}` : run.kind === 'boss' ? '👑 JEFE' : run.kind === 'elite' ? '☠️ Élite' : '⚔️ Combate';
-  document.getElementById('info')!.innerHTML = `<b>${kind}</b><span class="dim sm">${run.arena ? '' : `Zona ${run.zone + 1} · sala ${run.step + 1}/${run.map.length} · `}ronda ${c.round}</span>
+  document.getElementById('info')!.innerHTML = `<b>${kind}</b><span class="dim sm">${run.arena ? '' : `Zona ${run.zone + 1} · sala ${run.step + 1}/${run.map.length} · `}ronda ${c.round}</span>${omenDef ? `<span class="pill sm omen" ${tip(`<b>${omenDef.icon} ${esc(omenDef.name)}</b><div class="sm">${esc(omenDef.text)}</div>`)}>${omenDef.icon} ${esc(omenDef.name)}</span>` : ''}
     <span class="turn ${myTurn ? 'mine' : ''}">${c.over ? (c.over === 'win' ? '¡Victoria!' : 'Derrota') : myTurn ? 'TU TURNO' : cur ? `Turno de ${esc(cur.name)}` : ''}</span><span id="clock" class="dim">${left && !c.over ? `${left}s` : ''}</span>
     ${ui.notice ? `<span class="bad">${esc(ui.notice)}</span>` : ''}${!s.hostPresent() ? '<span class="bad">Anfitrión desconectado: partida en pausa</span>' : ''}
     ${s.isHost && cur && !cur.ai && !myTurn && !c.over ? '<button class="mini" data-act="skip">Pasar su turno</button>' : ''}<span class="grow"></span>${sysButtons()}`;
@@ -67,9 +73,8 @@ export function combatScreen(events: GameEvent[]): void {
   document.getElementById('hud')!.innerHTML = me
     ? `<div class="me"><b>${esc(me.name)}</b>${hpBar(me.hp, me.maxHp, me.shield)}<div class="row"><span class="sm pill">PA</span>${pips(me.ap, me.maxAp, 'ap')}</div><div class="row"><span class="sm blu">PM</span>${pips(me.mp, me.maxMp, 'mp')}</div></div>
       <div class="spellbar">${me.spells.map((sp, i) => { const d = spellOf(me, sp.id)!; const rn = sp.rune ? RUNES[sp.rune] : undefined; const off = !myTurn || me.ap < d.ap || sp.cd > 0 || me.hp <= 0;
-        const range = d.range[1] === 0 ? (d.area ? `a tu alrededor (área ${d.area})` : 'sobre ti') : `alcance ${d.range[0] === d.range[1] ? d.range[1] : `${d.range[0]}-${d.range[1]}`}${d.area ? ` · área ${d.area}` : ''}`;
-        return `<button class="sbtn ${board.sel === d.id ? 'on' : ''} ${sp.cd > 0 ? 'cd' : ''}" data-act="spell" data-id="${d.id}" ${off ? 'disabled' : ''} ${tip(`<b>${esc(d.name)}</b><div class="sm">${esc(d.text)}</div><div class="sm dim">${d.ap} PA · ${range}${d.dmg ? ` · daño ${d.dmg[0]}-${d.dmg[1]}` : ''}${d.los && d.range[1] > 1 ? ' · necesita línea de visión' : ''}${d.cd ? ` · espera ${d.cd} turno(s)` : ''}</div>${rn ? `<div class="sm pill">${rn.icon} ${esc(rn.name)}: ${esc(rn.text)}</div>` : ''}${sp.cd > 0 ? `<div class="sm bad">Disponible en ${sp.cd} turno(s)</div>` : ''}`)}>
-          <kbd>${i + 1}</kbd><span class="sico">${spellIcon(d)}</span><span class="cost">${d.ap}</span>${rn ? `<span class="rn">${rn.icon}</span>` : ''}${sp.cd > 0 ? `<span class="cdn">${sp.cd}</span>` : ''}<small>${esc(d.name)}</small></button>`; }).join('')}</div>
+        return `<button class="sbtn ${board.sel === d.id ? 'on' : ''} ${sp.cd > 0 ? 'cd' : ''}" data-act="spell" data-id="${d.id}" ${off ? 'disabled' : ''} ${tip(spellTip(d, `${rn ? `<div class="sm pill">${rn.icon} ${esc(rn.name)}: ${esc(rn.text)}</div>` : ''}${sp.cd > 0 ? `<div class="sm bad">Disponible en ${sp.cd} turno(s)</div>` : ''}`))}>
+          <kbd>${i + 1}</kbd>${spellIcon(d, false)}<span class="cost">${d.ap}</span>${rn ? `<span class="rn">${rn.icon}</span>` : ''}${sp.cd > 0 ? `<span class="cdn">${sp.cd}</span>` : ''}<small>${esc(d.name)}</small></button>`; }).join('')}</div>
       <button class="pri endturn" data-act="end" ${myTurn ? '' : 'disabled'}>Terminar<br>turno<br><small>(E)</small></button>`
     : '<span class="dim">Estás como espectador en este combate.</span>';
   const lg = document.getElementById('log')!;

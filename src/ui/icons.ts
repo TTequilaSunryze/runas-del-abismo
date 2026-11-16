@@ -1,5 +1,8 @@
 // Iconos: objetos en pixel art (12×12, dibujados por código) y símbolos para hechizos y nodos.
 import type { SpellDef } from '../core/classes/spells';
+import { KIND_NAME, rangeText, spellIconUrl, spellKind, spellSummary } from './spellicons';
+
+const esc = (s: unknown): string => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 import type { Item, Slot } from '../core/items/items';
 import type { NodeKind } from '../game/run';
 
@@ -53,22 +56,19 @@ export function iconErrors(): string[] {
   return Object.entries(ICON).flatMap(([k, rows]) => (rows.length !== 12 ? [`${k}: ${rows.length} filas`] : rows.filter((r) => r.length !== 12).map((r) => `${k}: "${r}"`)));
 }
 
-/** Símbolo de un hechizo según lo que hace. */
-export function spellIcon(d: SpellDef): string {
-  if (d.heal) return '💚';
-  if (d.giveAp || d.giveMp) return '📣';
-  if (d.shield && !d.dmg) return '🛡️';
-  if (d.status?.kind === 'stun') return '💫';
-  if (d.status?.kind === 'mark') return '👁️';
-  if (d.element === 'fire') return '🔥';
-  if (d.element === 'ice') return '❄️';
-  if (d.element === 'poison') return '☠️';
-  if (d.element === 'holy') return '✨';
-  if (d.drainAp) return '⚡';
-  if (d.push) return '💥';
-  if (d.dash) return '💨';
-  if (d.area) return '🌀';
-  return d.range[1] > 1 ? '🏹' : '⚔️';
+/** Icono de un hechizo: su dibujo, con el coste en PA y el color de su tipo (daño, curación, control…). */
+export function spellIcon(d: SpellDef, cost = true): string {
+  const k = spellKind(d);
+  return `<span class="sicon k-${k}"><img src="${spellIconUrl(d)}" alt="">${cost ? `<i class="apc">${d.ap}</i>` : ''}</span>`;
 }
 
-export const NODE_ICON: Record<NodeKind, string> = { combat: '⚔️', elite: '☠️', event: '❓', rest: '🔥', shop: '💰', treasure: '🎁', boss: '👑' };
+/** Ayuda flotante de un hechizo, siempre con el mismo formato. */
+export function spellTip(d: SpellDef, extra = ''): string {
+  const k = spellKind(d);
+  return `<div class="row"><b>${esc(d.name)}</b><span class="grow"></span><span class="kt k-${k}">${KIND_NAME[k]}</span></div>
+  <div class="sm">${esc(spellSummary(d))}</div>
+  <div class="sm dim">${d.ap} PA · ${rangeText(d)}${d.cd ? ` · espera ${d.cd} t.` : ''}${d.los && d.range[1] > 1 ? ' · necesita visión' : ''}${d.range[0] >= 2 ? ' · no a pegados' : ''}</div>
+  ${d.text && d.text !== spellSummary(d) ? `<i class="sm dim">${esc(d.text)}</i>` : ''}${extra}`;
+}
+
+export const NODE_ICON: Record<NodeKind, string> = { combat: '⚔️', elite: '☠️', event: '❓', rest: '🔥', shop: '💰', treasure: '🎁', boss: '👑', forge: '🔨', altar: '🕯️', gamble: '🎲', cage: '⛓️' };

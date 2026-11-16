@@ -4,11 +4,12 @@ import { CLASSES, MAX_LEVEL, findRoute } from '../core/classes/classes';
 import { SPELLS } from '../core/classes/spells';
 import { BAG_SIZE, PRICE, RARITY_NAME, SLOTS, SLOT_NAME, STAT_NAME, statDiff, statsText, type Item, type Slot, type StatKey } from '../core/items/items';
 import { SETS, setCounts } from '../core/items/sets';
+import { RELICS } from '../content/relics';
 import { RUNES } from '../core/runes';
 import { UPGRADES, tuned } from '../core/upgrades';
 import { heroMaxHp, heroSpec, zoneOf, type HeroSave, type RunState } from '../game/run';
 import { esc, mine, tip, ui } from './ctx';
-import { itemIcon, spellIcon } from './icons';
+import { itemIcon, spellIcon, spellTip } from './icons';
 
 const RAR = ['r0', 'r1', 'r2', 'r3'];
 
@@ -77,6 +78,7 @@ function gearTab(run: RunState, h: HeroSave, selling: boolean): string {
   const sets = Object.entries(setCounts(h.equip));
   return `${statsLine(h)}
   ${sets.length ? `<div class="lbl">Sets</div>${sets.map(([id, n]) => { const d = SETS[id]!; return `<div class="sm ${n >= 2 ? 'good' : 'dim'}" ${tip(setHtml(id, h.equip))}>${d.icon} ${esc(d.name)} ${n}/3${n >= 3 ? ` · ${esc(d.threeText)}` : n >= 2 ? ` · ${esc(d.twoText)}` : ' · falta 1 pieza para el primer bonus'}</div>`; }).join('')}` : ''}
+  ${h.relics.length ? `<div class="lbl">Reliquias <span class="dim">${h.relics.length}</span></div><div class="chips">${h.relics.map((r) => RELICS[r]).filter(Boolean).map((r) => `<span class="chip ${r!.rare ? 'r3' : 'r2'}" ${tip(`<b>${r!.icon} ${esc(r!.name)}</b><div class="sm">${esc(r!.text)}</div>`)}>${r!.icon} ${esc(r!.name)}</span>`).join('')}</div>` : ''}
   <div class="lbl">Equipado</div>
   <div class="cells">${SLOTS.map((sl) => `<div class="slotbox">${cell(h.equip[sl], `data-act="selitem" data-id="slot:${sl}"`, undefined, sl, ui.selItem === `slot:${sl}`)}<small>${SLOT_NAME[sl]}</small></div>`).join('')}</div>
   <div class="lbl">Mochila <span class="dim">${h.bag.length}/${BAG_SIZE}</span></div>
@@ -98,14 +100,14 @@ function runeTab(h: HeroSave): string {
   <div class="sm ${sel ? 'pill' : 'dim'} hint">${sel ? `${sel.icon} ${esc(sel.name)}: elige el hechizo donde engarzarla.` : 'Una runa por hechizo. Pulsa una runa y luego un hechizo.'}</div>
   <div class="lbl">Tus hechizos</div>
   <div class="spells">${all.map((sp) => { const d = tuned(SPELLS[sp.id]!, { ups: h.ups[sp.id] }); const ups = (h.ups[sp.id] ?? []).map((u) => UPGRADES[u]?.icon ?? '').join(''); const cur = h.sockets[sp.id] ? RUNES[h.sockets[sp.id]!] : undefined; const bad = !!sel && sel.needsDamage && !d.dmg;
-    return `<div class="srow ${known.has(sp.id) ? '' : 'off'}" ${tip(`<b>${esc(d.name)}</b><div class="sm">${esc(d.text)}</div>${known.has(sp.id) ? '' : '<div class="dim sm">Aún bloqueado: se desbloquea al subir de nivel</div>'}`)}><span class="sico">${spellIcon(d)}</span><span class="grow">${esc(d.name)} ${ups}</span>${
+    return `<div class="srow ${known.has(sp.id) ? '' : 'off'}" ${tip(spellTip(d, known.has(sp.id) ? '' : '<div class="dim sm">Aún bloqueado: se desbloquea al subir de nivel</div>'))}>${spellIcon(d)}<span class="grow">${esc(d.name)} ${ups}</span>${
       sel ? `<button class="mini pri" data-act="socket" data-id="${sp.id}" ${bad ? 'disabled' : ''}>${bad ? 'No aplica' : 'Engarzar'}</button>`
       : cur ? `<button class="chip ${cur.rare ? 'r2' : 'r1'}" data-act="unsocket" data-id="${sp.id}" ${tip(`<b>${cur.icon} ${esc(cur.name)}</b><div class="sm">${esc(cur.text)}</div><div class="dim sm">Clic para quitarla</div>`)}>${cur.icon} ${esc(cur.name)} ✕</button>` : '<span class="dim sm">sin runa</span>'}</div>`; }).join('')}</div>`;
 }
 
 function groupTab(run: RunState): string {
   return run.heroes.map((h, i) => `<div class="member"><div class="row"><b class="p${i % 4}">${esc(h.name)}</b><span class="dim sm">${CLASSES[h.cls].name} Nv ${h.level}</span><span class="grow"></span><span class="pill sm">💰 ${h.gold}</span></div>
-    <div class="dim sm">${h.routes.map((r) => findRoute(h.cls, r)?.name).join(' + ')}</div>${hpBar(h.hp, heroMaxHp(h))}
+    <div class="dim sm">${h.routes.map((r) => findRoute(h.cls, r)?.name).join(' + ')}${h.relics.length ? ` · ${h.relics.map((r) => RELICS[r]?.icon ?? '').join('')}` : ''}</div>${hpBar(h.hp, heroMaxHp(h))}
     <div class="cells tiny">${SLOTS.map((sl) => cell(h.equip[sl], 'disabled', undefined, sl)).join('')}</div></div>`).join('');
 }
 
@@ -125,7 +127,7 @@ export function upgradeRow(run: RunState): string {
   return `<div class="panel loot"><div class="row"><h3>✨ Mejora de hechizo: elige una</h3><span class="grow"></span><span class="dim sm">${h.upPending > 1 ? `Te quedan ${h.upPending} elecciones` : 'Dura toda la partida'}</span></div>
   <div class="cards">${h.upOffer.map((o, i) => { const d = SPELLS[o.spell]!, up = UPGRADES[o.up]!; const now = tuned(d, { ups: h.ups[o.spell] }), next = tuned(d, { ups: [...(h.ups[o.spell] ?? []), o.up] });
     const ch = [now.ap !== next.ap ? `PA ${now.ap} → ${next.ap}` : '', now.dmg && next.dmg && now.dmg[1] !== next.dmg[1] ? `daño ${now.dmg[0]}-${now.dmg[1]} → ${next.dmg[0]}-${next.dmg[1]}` : '', now.heal !== next.heal ? `cura ${now.heal} → ${next.heal}` : '', now.shield !== next.shield ? `escudo ${now.shield} → ${next.shield}` : '', now.cd !== next.cd ? `espera ${now.cd} → ${next.cd}` : '', now.range[1] !== next.range[1] ? `alcance ${now.range[1]} → ${next.range[1]}` : '', (now.area ?? 0) !== (next.area ?? 0) ? `área ${now.area ?? 0} → ${next.area}` : ''].filter(Boolean).join(' · ');
-    return `<div class="lootcard r2"><div class="row"><div class="cell big r2"><span class="emo">${spellIcon(d)}</span></div><div><b>${esc(d.name)}</b><div class="pill sm">${up.icon} ${esc(up.name)}</div><div class="sm">${esc(up.text)}</div>${ch ? `<div class="good sm">${ch}</div>` : ''}</div></div><button class="pri" data-act="upgrade" data-id="${i}">Elegir</button></div>`; }).join('')}</div></div>`;
+    return `<div class="lootcard r2"><div class="row">${spellIcon(d)}<div><b>${esc(d.name)}</b><div class="pill sm">${up.icon} ${esc(up.name)}</div><div class="sm">${esc(up.text)}</div>${ch ? `<div class="good sm">${ch}</div>` : ''}</div></div><button class="pri" data-act="upgrade" data-id="${i}">Elegir</button></div>`; }).join('')}</div></div>`;
 }
 
 /** Botín pendiente: tarjetas grandes con icono, datos y comparación. */

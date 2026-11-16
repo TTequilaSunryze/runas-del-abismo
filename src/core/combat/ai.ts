@@ -67,6 +67,36 @@ function fight(s: CombatState, u: Unit, def: SpellDef, keepAway: boolean, ev: Ga
   if (alive(u) && current(s)?.id === u.id) attackAll(s, u, def, ev);
 }
 
+/** Cepos: deja uno oculto junto al héroe más cercano (como mucho 3 del bando a la vez). */
+function trapper(s: CombatState, u: Unit, ev: GameEvent[]): void {
+  const mine = (s.snares ?? []).filter((t) => t.team === u.team).length;
+  if (mine >= 3 || u.ap < 2) return;
+  const foe = s.units.filter((h) => h.team !== u.team && alive(h)).sort((a, b) => dist(a.pos, u.pos) - dist(b.pos, u.pos))[0];
+  if (!foe) return;
+  const cells = [[1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [-2, 0], [0, 2], [0, -2]]
+    .map(([dx, dy]) => ({ x: foe.pos.x + dx!, y: foe.pos.y + dy! }))
+    .filter((p) => isFree(s, p) && !(s.snares ?? []).some((t) => t.k === `${p.x},${p.y}`));
+  const at = cells[(s.round + u.id) % Math.max(1, cells.length)];
+  if (!at) return;
+  (s.snares ??= []).push({ k: `${at.x},${at.y}`, team: u.team, dmg: 7 + Math.round(u.power / 10) });
+  u.ap -= 2;
+}
+
+/** Salto sombrío: si no tiene a nadie al lado, aparece junto al héroe más frágil (cada dos rondas). */
+function blink(s: CombatState, u: Unit, ev: GameEvent[]): void {
+  if (s.round % 2 === 1) return;
+  const foes = s.units.filter((h) => h.team !== u.team && alive(h));
+  if (!foes.length || foes.some((f) => dist(f.pos, u.pos) <= 1)) return;
+  const prey = foes.reduce((a, b) => (b.hp < a.hp ? b : a));
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+    const p = { x: prey.pos.x + dx, y: prey.pos.y + dy };
+    if (!isFree(s, p)) continue;
+    u.pos = p;
+    ev.push({ t: 'blink', unit: u.id, to: { ...p } });
+    return;
+  }
+}
+
 /** Hechizos de apoyo (escudar, dar PA): sobre el aliado más herido que esté a tiro. */
 function support(s: CombatState, u: Unit, ev: GameEvent[]): void {
   for (const sp of u.spells.slice(1)) {
@@ -75,7 +105,7 @@ function support(s: CombatState, u: Unit, ev: GameEvent[]): void {
     const ally = s.units
       .filter((a) => a.team === u.team && alive(a) && a !== u && a.ai !== 'pillar' && !castProblem(s, u, def, a.pos) && (!def.shield || a.shield === 0))
       .sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
-    if (!ally || (def.shield && ally.hp / ally.maxHp > 0.85)) continue;
+    if (!ally || (def.shield && ally.hp / ally.maxHp > 0.85) || (def.heal && ally.hp / ally.maxHp > 0.7)) continue;
     const r = cast(s, u.id, def.id, ally.pos);
     if (r.ok) ev.push(...r.events);
   }
@@ -219,6 +249,8 @@ export function runAiTurn(s: CombatState, info?: BossInfo): GameEvent[] {
   else if (u.ai === 'champ') champTurn(s, u, ev);
   else {
     support(s, u, ev);
+    if (hasTrait(u, 'blink')) blink(s, u, ev);
+    if (hasTrait(u, 'trapper')) trapper(s, u, ev);
     if (hasTrait(u, 'devour')) devour(s, u, ev);
     if (hasTrait(u, 'raise')) raise(s, u, info, ev);
     if (alive(u) && current(s)?.id === u.id) fight(s, u, SPELLS[u.spells[0]!.id]!, u.ai === 'ranged', ev);

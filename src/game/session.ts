@@ -27,6 +27,9 @@ export interface LobbyPlayer {
   nem: unknown;
   /** tiene equipo de duelo */
   hasTeam: boolean;
+  /** solo del anfitrión: modificadores elegidos y si incluye el Abismo */
+  mods: string[];
+  abyss: boolean;
 }
 
 export const TURN_SECONDS = 60;
@@ -67,7 +70,7 @@ export class Session {
     t.on('sync', (p) => {
       if (this.isHost) return;
       const m = p as { run: RunState; ev: GameEvent[] };
-      if (!m?.run || m.run.version !== 7) return;
+      if (!m?.run || m.run.version !== 8) return;
       this.run = m.run;
       this.noteTurn();
       this.onChange(Array.isArray(m.ev) ? m.ev : []);
@@ -140,6 +143,7 @@ export class Session {
         unlocked: Array.isArray(p.data.unlocked) ? (p.data.unlocked as string[]).slice(0, 20).map(String) : [],
         asc: Number(p.data.asc) || 0, daily: typeof p.data.daily === 'string' ? p.data.daily : null,
         mastery: Number(p.data.mastery) || 0, nem: p.data.nem ?? null, hasTeam: !!p.data.hasTeam,
+        mods: Array.isArray(p.data.mods) ? (p.data.mods as unknown[]).slice(0, 3).map(String) : [], abyss: !!p.data.abyss,
       }))
       .sort((a, b) => Number(b.host) - Number(a.host) || a.id.localeCompare(b.id));
   }
@@ -175,7 +179,7 @@ export class Session {
     const host = all.find((p) => p.id === this.myId);
     this.run = newRun(this.code, (Date.now() ^ (Math.random() * 2 ** 31)) >>> 0,
       players.map((p) => ({ owner: p.id, name: p.name, cls: p.cls, routes: p.routes, perks: p.perks, mastery: p.mastery })),
-      { asc: host?.asc ?? 0, daily: host?.daily ?? null, unlocked: players.flatMap((p) => p.unlocked), nemesis: all.map((p) => p.nem).filter(Boolean) });
+      { asc: host?.asc ?? 0, daily: host?.daily ?? null, unlocked: players.flatMap((p) => p.unlocked), nemesis: all.map((p) => p.nem).filter(Boolean), mods: host?.mods ?? [], abyss: host?.abyss ?? false });
     this.afterChange([]);
   }
 

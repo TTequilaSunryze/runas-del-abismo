@@ -64,6 +64,9 @@ export interface Unit {
    * hunter (persigue al héroe más frágil), pack (más daño por cada compañero de manada vivo).
    * De sets de equipo: venom (+1 carga a sus venenos), ignite (su daño quema), execute (críticos x2),
    * mender (+30% a curas y escudos que da).
+   * Más rasgos: bomb (explota al morir), split (se divide al morir), regen (se cura cada turno),
+   * thorns (devuelve daño cuerpo a cuerpo), enrage (más daño por debajo de la mitad), trapper (pone cepos),
+   * blink (aparece junto a su presa).
    */
   traits?: string[];
   /** cadáver ya usado (devorado o alzado) */
@@ -118,6 +121,9 @@ export type GameEvent =
   | { t: 'trap'; unit: number }
   | { t: 'stuck'; unit: number }
   | { t: 'snare'; unit: number }
+  | { t: 'explode'; unit: number }
+  | { t: 'split'; unit: number }
+  | { t: 'blink'; unit: number; to: Pos }
   | { t: 'devour'; unit: number; corpse: number }
   | { t: 'raise'; unit: number; corpse: number }
   | { t: 'over'; result: 'win' | 'lose' };

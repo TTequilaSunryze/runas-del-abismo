@@ -73,11 +73,11 @@ describe('resistencias', () => {
 describe('zonas', () => {
   it('todos los enemigos y hechizos que nombran las zonas existen', () => {
     for (const z of ZONES)
-      for (const id of [...z.pools.flat(), z.shooter, z.elite, z.boss, z.bossMinion, ...z.bossGuard]) {
+      for (const id of [...z.pools.flat(), z.shooter, ...z.elites, ...z.bosses.flatMap((b) => [b.id, b.minion, b.pillar, ...b.guard])]) {
         expect(ENEMIES[id], id).toBeDefined();
         for (const sp of [ENEMIES[id]!.spell, ...(ENEMIES[id]!.more ?? [])]) expect(SPELLS[sp], sp).toBeDefined();
       }
-    expect(ZONES.every((z) => ENEMIES[z.boss]!.more?.length === 1)).toBe(true);
+    expect(ZONES.every((z) => z.bosses.every((b) => ENEMIES[b.id]!.more?.length === 1 && ENEMIES[b.id]!.ai === 'boss'))).toBe(true);
   });
 });
 

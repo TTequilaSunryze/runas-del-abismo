@@ -3,6 +3,7 @@ export const ZONE_STORY: string[] = [
   'Las runas del Abismo se apagan. Descendéis al Osario Hundido, donde los muertos olvidaron cómo callar.',
   'Bajo el osario crece un bosque sin sol. Sus raíces beben de lo que enterraron arriba. Nada aquí es lo que parece.',
   'Más abajo solo queda fuego. El Rey Ceniza guarda la última runa, y no piensa compartirla.',
+  'Bajo las ruinas se abre el Abismo: el lugar de donde salieron las runas. Algo vive ahí abajo, y tiene hambre.',
 ];
 export const CLASS_STORY: Record<string, string> = {
   guerrero: 'Aguanta el golpe, devuelve el golpe. Cada cicatriz es una runa que aún no ha brillado.',

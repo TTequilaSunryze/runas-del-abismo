@@ -1,6 +1,7 @@
 // Zona 2: El Bosque Corrompido. Equipo y eventos de grupo.
 import type { ItemTheme } from '../../core/items/items';
 import { boon, healPct, losePct, type EventDef } from '../zona1/events';
+import { addAlly, giveRelic, giveRune } from '../../game/run';
 
 export const ZONA2_ITEMS: ItemTheme = {
   names: {
@@ -33,6 +34,47 @@ export const ZONA2_EVENTS: EventDef[] = [
     options: [
       { label: 'Beber todos', hint: 'Todos: +18 de vida máxima y +10% de daño, pero pierden el 30% de la vida actual.', apply: (run) => { for (const h of run.heroes) { boon(h, 'hp', 18); boon(h, 'power', 10); losePct(h, 0.3); } return 'Arde por dentro. Después, os sentís enormes.'; } },
       { label: 'Llenar los odres', hint: 'Cada uno gana 30 de oro vendiéndola más tarde.', apply: (run) => { for (const h of run.heroes) h.gold += 30; return 'Alguien pagará bien por esto.'; } },
+    ],
+  },
+  {
+    id: 'ermitano', title: 'La Cabaña del Ermitaño',
+    text: 'Un anciano cubierto de musgo cocina algo que huele a gloria. Tiene sitio para uno más en la mesa… o en su ejército.',
+    options: [
+      { label: 'Pedirle ayuda', hint: 'Una sacerdotisa del bosque os acompaña hasta el final de la zona (cura y dispara).', apply: (run) => { addAlly(run, 'sacerdotisa'); return 'Su nieta coge el arco y la bolsa de hierbas.'; } },
+      { label: 'Comer con él', hint: 'Todos se curan un 40% y ganan +10 de vida máxima.', apply: (run) => { for (const h of run.heroes) { boon(h, 'hp', 10); healPct(h, 0.4); } return 'Mejor guiso que habéis probado nunca. No preguntéis de qué era.'; } },
+    ],
+  },
+  {
+    id: 'nido', title: 'El Nido de las Arañas',
+    text: 'Un nido enorme cuelga entre dos árboles. Dentro brilla el ajuar de alguien que no tuvo suerte.',
+    options: [
+      { label: 'Saquearlo', hint: 'Cada uno gana una reliquia común; el próximo combate tiene presagio de Ciénaga.', apply: (run) => { for (const h of run.heroes) giveRelic(run, h, false); run.nextOmen = 'pantano'; return 'Salís pegajosos y con los bolsillos llenos.'; } },
+      { label: 'Quemarlo', hint: 'Todos: +15% de resistencia al veneno y +5% de daño.', apply: (run) => { for (const h of run.heroes) { boon(h, 'resPoison', 15); boon(h, 'power', 5); } return 'Arde rápido. Las arañas, también.'; } },
+    ],
+  },
+  {
+    id: 'espiritu', title: 'El Espíritu del Ciervo',
+    text: 'Un ciervo blanco os observa desde la niebla. Promete volver cuando más lo necesitéis.',
+    options: [
+      { label: 'Seguirlo', hint: 'En el combate contra el jefe de esta zona, el espíritu lucha a vuestro lado.', apply: (run) => { run.flags.push(`espiritu_${run.zone}`); return 'El ciervo inclina la cabeza y desaparece entre los árboles.'; } },
+      { label: 'Cazarlo', hint: 'Cada uno gana 50 de oro, pero todos pierden 5% de crítico (mala suerte).', apply: (run) => { for (const h of run.heroes) { h.gold += 50; boon(h, 'crit', -5); } return 'Nadie dice nada mientras volvéis. Nadie.'; } },
+    ],
+  },
+  {
+    id: 'semillas', title: 'Las Semillas Susurrantes',
+    text: 'Tres semillas negras laten en un tocón. Cada una promete algo distinto.',
+    options: [
+      { label: 'La semilla del fuego', hint: 'Todos ganan una runa de Fuego.', apply: (run) => { for (const h of run.heroes) h.runes.push('fuego'); return 'La semilla arde y deja una runa en cada mano.'; } },
+      { label: 'La semilla del veneno', hint: 'Todos ganan una runa de Veneno.', apply: (run) => { for (const h of run.heroes) h.runes.push('veneno'); return 'La semilla se pudre y deja una runa en cada mano.'; } },
+      { label: 'La semilla del eco', hint: 'Todos ganan una runa rara al azar, pero pierden el 20% de la vida actual.', apply: (run) => { for (const h of run.heroes) { losePct(h, 0.2); giveRune(run, h, true); } return 'La semilla grita. Os zumban los oídos un buen rato.'; } },
+    ],
+  },
+  {
+    id: 'lobo_herido', title: 'El Lobo Herido',
+    text: 'Un lobo enorme, con una flecha en el costado, os gruñe sin fuerzas.',
+    options: [
+      { label: 'Curarlo', hint: 'El lobo os acompaña hasta el final de la zona.', apply: (run) => { addAlly(run, 'lobo_aliado'); return 'El lobo os lame la mano y se pone a vuestro lado.'; } },
+      { label: 'Dejarlo en paz', hint: 'Todos recuperan un 15% de vida (paráis a descansar).', apply: (run) => { for (const h of run.heroes) healPct(h, 0.15); return 'Os alejáis despacio.'; } },
     ],
   },
 ];

@@ -52,6 +52,8 @@ export function playEvents(events: GameEvent[]): void {
     else if (e.t === 'move') tone(100, 0.05, 'square', 0.025, -30, d);
     else if (e.t === 'summon' || e.t === 'phase') tone(110, 0.5, 'sawtooth', 0.07, 220, d);
     else if (e.t === 'stuck' || e.t === 'devour' || e.t === 'raise') tone(150, 0.25, 'sawtooth', 0.06, 120, d);
+    else if (e.t === 'explode') tone(80, 0.45, 'sawtooth', 0.09, -40, d);
+    else if (e.t === 'blink') tone(1200, 0.15, 'sine', 0.04, -900, d);
     else if (e.t === 'snare') tone(700, 0.1, 'square', 0.06, -500, d);
     else if (e.t === 'trap') tone(900, 0.08, 'square', 0.05, -600, d);
     else if (e.t === 'over') (e.result === 'win' ? sfx.win : sfx.lose)();
@@ -66,6 +68,7 @@ const THEMES: Record<string, { scale: number[]; pat: number[]; ms: number; wave:
   '0': { scale: [196, 220, 233.1, 293.7, 311.1, 392], pat: [0, 2, 3, 2, 0, 4, 3, 2, 1, 2, 5, 4, 0, 2, 3, 1], ms: 320, wave: 'triangle', low: 4 },
   '1': { scale: [174.6, 196, 233.1, 261.6, 311.1, 349.2], pat: [0, 1, 3, 4, 3, 1, 0, 2, 5, 4, 3, 2, 1, 3, 4, 2], ms: 260, wave: 'sine', low: 4 },
   '2': { scale: [164.8, 174.6, 207.7, 247, 261.6, 329.6], pat: [0, 0, 2, 1, 0, 3, 2, 1, 4, 3, 2, 1, 0, 5, 4, 3], ms: 230, wave: 'square', low: 2 },
+  '3': { scale: [138.6, 146.8, 174.6, 207.7, 220, 277.2], pat: [0, 3, 1, 4, 0, 5, 2, 1, 0, 3, 4, 2, 5, 1, 3, 0], ms: 340, wave: 'sine', low: 3 },
   boss: { scale: [146.8, 155.6, 185, 220, 233.1, 293.7], pat: [0, 0, 1, 0, 3, 0, 1, 4, 0, 0, 2, 0, 5, 4, 3, 1], ms: 175, wave: 'sawtooth', low: 2 },
 };
 let theme = 'menu';

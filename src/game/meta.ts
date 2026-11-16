@@ -1,7 +1,7 @@
 // Progresión entre partidas: ecos, mejoras permanentes, logros, runas desbloqueadas y ascensión.
 // Se guarda en el navegador de cada jugador.
 import { CLASSES } from '../core/classes/classes';
-import { MAX_ASC, PERKS, perkLevel, type Perks } from '../content/modes';
+import { MAX_ASC, MOD_ECOS, PERKS, perkLevel, type Perks } from '../content/modes';
 import { RUNES } from '../core/runes';
 import type { ClassId } from '../core/state';
 import { setCounts } from '../core/items/sets';
@@ -165,6 +165,9 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'asc3', name: 'Ascendido', text: 'Gana en ascensión 3 o más.', ecos: 120, check: (r) => won(r) && r.asc >= 3 },
   { id: 'asc10', name: 'Señor del abismo', text: 'Gana en ascensión 10.', ecos: 300, check: (r) => won(r) && r.asc >= 10 },
   { id: 'diario', name: 'Constancia', text: 'Supera la zona 1 en un reto diario.', ecos: 40, check: (r) => !!r.daily && (r.zone >= 1 || won(r)) },
+  { id: 'abismo', name: 'Cerrar el Abismo', text: 'Gana una partida que incluya la zona 4.', ecos: 150, check: (r) => r.flags.includes('abyss_won') },
+  { id: 'reliquias5', name: 'Coleccionista', text: 'Termina una partida con 5 reliquias o más.', ecos: 40, check: (_r, h) => (h.relics?.length ?? 0) >= 5 },
+  { id: 'mutado', name: 'Por gusto', text: 'Gana una partida con 3 modificadores elegidos.', ecos: 100, check: (r) => won(r) && !r.daily && r.mods.length >= 3 },
   { id: 'set3', name: 'De punta en blanco', text: 'Termina una partida con un set completo equipado.', ecos: 50, check: (_r, h) => Object.values(setCounts(h.equip)).some((n) => n >= 3) },
   { id: 'nemesis', name: 'Cara a cara', text: 'Vence a un Némesis: un héroe del Salón convertido en élite.', ecos: 50, check: (r) => r.flags.includes('nemesis') },
   { id: 'maestro', name: 'Maestro de clase', text: 'Alcanza la maestría 5 con una clase.', ecos: 150, check: (_r, _h, m) => Object.values(m.mastery).some((xp) => masteryLevel(xp) >= 5) },
@@ -176,7 +179,7 @@ export function ecosFor(run: RunState): number {
   const rooms = run.zone * 7 + run.step;
   const bosses = run.flags.filter((f) => f.startsWith('boss_')).length;
   const base = rooms * 4 + bosses * 25 + (won(run) ? 60 : 0);
-  return Math.round(base * (1 + 0.2 * run.asc) * (run.daily ? 1.3 : 1));
+  return Math.round((base + (run.flags.includes('abyss_won') ? 80 : 0) + (run.abyss ? Math.max(0, run.zone - 2) * 30 : 0)) * (1 + 0.2 * run.asc) * (run.daily ? 1.3 : 1 + MOD_ECOS * run.mods.length));
 }
 
 export interface Settlement {
@@ -206,7 +209,7 @@ export function settle(run: RunState, myId: string): Settlement | null {
   if (won(run)) m.stats.wins++;
   m.stats.kills += h.stats.kills;
   m.stats.bosses += run.flags.filter((f) => f.startsWith('boss_')).length;
-  m.stats.bestZone = Math.max(m.stats.bestZone, won(run) ? 4 : run.zone + 1);
+  m.stats.bestZone = Math.max(m.stats.bestZone, won(run) ? (run.abyss ? 5 : 4) : run.zone + 1);
   if (won(run) && !run.daily && run.asc >= m.maxAsc && m.maxAsc < MAX_ASC) { m.maxAsc = run.asc + 1; res.asc = m.maxAsc; }
   for (const a of ACHIEVEMENTS) {
     if (m.achievements.includes(a.id) || !a.check(run, h, m)) continue;

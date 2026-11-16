@@ -11,5 +11,11 @@ export const ZONA1_ENEMIES: Record<string, EnemyDef> = {
   prior: { id: 'prior', name: 'El Prior Hueco', hp: 120, armor: 1, ap: 6, mp: 2, initiative: 6, ai: 'boss', spell: 'e_maldicion', more: ['e_barrido'], scales: true, resist: { shadow: 50, poison: 40, holy: -25 } },
   necrofago: { id: 'necrofago', name: 'Necrófago', hp: 30, armor: 1, ap: 3, mp: 3, initiative: 7, ai: 'melee', spell: 'e_zarpazo', resist: { poison: 75, fire: -30 }, traits: ['devour'] },
   espectro: { id: 'espectro', name: 'Espectro', hp: 22, armor: 0, ap: 3, mp: 4, initiative: 15, ai: 'melee', spell: 'e_toque', resist: { poison: 75, shadow: 50, holy: -40 }, traits: ['ghost', 'hunter'] },
+  momia: { id: 'momia', name: 'Momia del osario', hp: 36, armor: 1, ap: 3, mp: 2, initiative: 6, ai: 'melee', spell: 'e_vendaje', resist: { poison: 75, fire: -40 }, traits: ['regen'] },
+  calavera: { id: 'calavera', name: 'Calavera ígnea', hp: 14, armor: 0, ap: 3, mp: 5, initiative: 17, ai: 'melee', spell: 'e_golpe', resist: { fire: 75 }, traits: ['bomb', 'hunter'] },
+  sepulturero: { id: 'sepulturero', name: 'Sepulturero', hp: 26, armor: 1, ap: 4, mp: 3, initiative: 10, ai: 'ranged', spell: 'e_pala', traits: ['trapper'] },
+  gargola: { id: 'gargola', name: 'Gárgola', hp: 34, armor: 3, ap: 3, mp: 3, initiative: 8, ai: 'melee', spell: 'e_garra', resist: { poison: 75, ice: 30 }, traits: ['thorns'] },
+  abominacion: { id: 'abominacion', name: 'Abominación de huesos', hp: 80, armor: 1, ap: 6, mp: 3, initiative: 9, ai: 'melee', spell: 'e_tajo', scales: true, resist: { poison: 60, holy: -30 }, traits: ['devour', 'split'] },
+  planidera: { id: 'planidera', name: 'La Plañidera', hp: 115, armor: 0, ap: 6, mp: 3, initiative: 12, ai: 'boss', spell: 'e_lamento', more: ['e_toque'], scales: true, resist: { shadow: 60, poison: 50, holy: -30 } },
   pilar: { id: 'pilar', name: 'Pilar de huesos', hp: 32, armor: 2, ap: 0, mp: 0, initiative: 1, ai: 'pillar', spell: 'e_golpe', resist: { poison: 75, holy: -30 } },
 };

@@ -120,6 +120,9 @@ export class Board {
       else if (e.t === 'trap') float(e.unit, '¡Púas!', '#ff8a30');
       else if (e.t === 'stuck') float(e.unit, '¡Atrapado!', '#7fe05a');
       else if (e.t === 'snare') float(e.unit, '¡Cepo!', '#d8b060');
+      else if (e.t === 'explode') { float(e.unit, '¡BUM!', '#ff8a30'); if (from) for (let i = 0; i < 6; i++) this.shots.push({ x0: (from.x + 0.5) * TILE, y0: (from.y + 0.5) * TILE, x1: (from.x + 0.5 + Math.cos(i * 1.05) * 1.3) * TILE, y1: (from.y + 0.5 + Math.sin(i * 1.05) * 1.3) * TILE, color: '#ff8a30', t0: now, dur: 260 }); }
+      else if (e.t === 'split') float(e.unit, 'Se divide', '#c9a0ff');
+      else if (e.t === 'blink') { this.shown.set(e.unit, { ...e.to }); float(e.unit, 'Salto sombrío', '#c77dff'); }
       else if (e.t === 'devour') float(e.unit, 'Devora', '#c9a0ff');
       else if (e.t === 'raise') float(e.unit, 'Alza muertos', '#c9a0ff');
       else if (e.t === 'summon') float(e.unit, 'Invocado', '#c77dff');
@@ -287,11 +290,21 @@ export class Board {
     const g = this.g;
     const st = Object.entries(u.statuses).map(([k, v]) => `${STATUS_NAME[k]} ${v!.turns}`).join(', ');
     const res = Object.entries(u.resist ?? {}).filter(([, v]) => v).map(([k, v]) => (v! > 0 ? `Resiste ${ELEMENT_NAME[k]} ${v}%` : `Débil a ${ELEMENT_NAME[k]} ${-v!}%`)).join(' · ');
-    const lines = [`${u.name}  ${u.hp}/${u.maxHp} PV${u.shield ? `  escudo ${u.shield}` : ''}`, `PA ${u.maxAp} · PM ${u.maxMp} · Armadura ${u.armor}`, ...(res ? [res] : []), ...(st ? [st] : [])];
+    // daño estimado del hechizo elegido sobre esta unidad
+    let est = '';
+    const me = this.session.myUnit();
+    const def = me && this.sel ? spellOf(me, this.sel) : undefined;
+    if (me && def?.dmg && u.team !== me.team) {
+      const res = def.element ? Math.min(75, u.resist[def.element] ?? 0) : 0;
+      const f = (1 + me.power / 100) * (u.statuses.mark ? 1.3 : 1) * (1 - res / 100);
+      const lo = Math.max(1, Math.round(def.dmg[0] * f) - (def.pierce ? 0 : u.armor)), hi = Math.max(1, Math.round(def.dmg[1] * f) - (def.pierce ? 0 : u.armor));
+      est = `${def.name}: ${lo}-${hi} de daño${lo >= u.hp + u.shield ? ' · ¡LO MATA!' : hi >= u.hp + u.shield ? ' · puede matarlo' : ''}`;
+    }
+    const lines = [...(est ? [est] : []), `${u.name}  ${u.hp}/${u.maxHp} PV${u.shield ? `  escudo ${u.shield}` : ''}`, `PA ${u.maxAp} · PM ${u.maxMp} · Armadura ${u.armor}`, ...(res ? [res] : []), ...(st ? [st] : [])];
     g.font = '14px ui-monospace, monospace'; g.textAlign = 'left';
     const w = Math.max(...lines.map((l) => g.measureText(l).width)) + 14, hh = lines.length * 18 + 8;
     const x = Math.min(c.w * TILE - w - 4, (h.x + 1) * TILE), y = Math.max(4, Math.min(c.h * TILE - hh - 4, h.y * TILE - 10));
     g.fillStyle = 'rgba(10,6,20,.93)'; g.fillRect(x, y, w, hh); g.strokeStyle = '#3b2f57'; g.lineWidth = 2; g.strokeRect(x, y, w, hh);
-    lines.forEach((l, i) => { g.fillStyle = i ? '#9a8fb5' : '#e8e0f5'; g.fillText(l, x + 7, y + 18 + i * 18); });
+    lines.forEach((l, i) => { g.fillStyle = est && i === 0 ? '#f2c14e' : i > (est ? 1 : 0) ? '#9a8fb5' : '#e8e0f5'; g.fillText(l, x + 7, y + 18 + i * 18); });
   }
 }

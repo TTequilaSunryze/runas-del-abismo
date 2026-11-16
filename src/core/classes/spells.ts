@@ -152,6 +152,22 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
     S({ id: 'e_cataclismo', name: 'Cataclismo', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', area: 1, dmg: [15, 18], text: '' }),
     S({ id: 'e_mordisco', name: 'Mordisco', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [3, 5], lifesteal: 0.5, text: '' }),
     S({ id: 'e_flecha', name: 'Flecha de hueso', route: 'enemy', ap: 3, cd: 0, range: [2, 5], los: true, target: 'enemy', dmg: [5, 7], text: '' }),
+    S({ id: 'e_savia', name: 'Savia curativa', route: 'enemy', ap: 2, cd: 2, range: [1, 4], los: true, target: 'ally', heal: 14, text: '' }),
+    S({ id: 'e_vendaje', name: 'Vendas pútridas', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [6, 8], status: { kind: 'slow', turns: 1, stacks: 1 }, text: '' }),
+    S({ id: 'e_garra', name: 'Garra de piedra', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [7, 9], text: '' }),
+    S({ id: 'e_pala', name: 'Palada', route: 'enemy', ap: 3, cd: 0, range: [2, 5], los: true, target: 'enemy', dmg: [5, 7], text: '' }),
+    S({ id: 'e_espinas', name: 'Latigazo de espinas', route: 'enemy', ap: 3, cd: 0, range: [1, 2], los: true, target: 'enemy', dmg: [7, 9], status: { kind: 'poison', turns: 2, stacks: 1 }, text: '' }),
+    S({ id: 'e_zarpa', name: 'Zarpa sombría', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [9, 11], crit: 15, text: '' }),
+    S({ id: 'e_martillo', name: 'Martillo de forja', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [10, 13], text: '' }),
+    S({ id: 'e_ascua', name: 'Escupir ascuas', route: 'enemy', ap: 3, cd: 0, range: [2, 5], los: true, target: 'enemy', dmg: [6, 8], status: { kind: 'burn', turns: 2 }, text: '' }),
+    S({ id: 'e_lamento', name: 'Lamento', route: 'enemy', ap: 3, cd: 0, range: [2, 6], los: true, target: 'enemy', area: 1, dmg: [7, 9], drainAp: 1, text: '' }),
+    S({ id: 'e_saeta', name: 'Saeta del cazador', route: 'enemy', ap: 3, cd: 0, range: [2, 7], los: true, target: 'enemy', dmg: [9, 12], status: { kind: 'mark', turns: 1 }, text: '' }),
+    S({ id: 'e_fundir', name: 'Colada de metal', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', area: 1, dmg: [13, 16], status: { kind: 'burn', turns: 2 }, text: '' }),
+    S({ id: 'e_vacio', name: 'Rayo del vacío', route: 'enemy', ap: 3, cd: 0, range: [2, 6], los: true, target: 'enemy', dmg: [10, 13], status: { kind: 'slow', turns: 1, stacks: 1 }, text: '' }),
+    S({ id: 'e_mirada', name: 'Mirada abisal', route: 'enemy', ap: 3, cd: 0, range: [2, 7], los: true, target: 'enemy', dmg: [7, 9], status: { kind: 'mark', turns: 2 }, text: '' }),
+    S({ id: 'e_mordaza', name: 'Mordaza del abismo', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [12, 15], lifesteal: 0.4, text: '' }),
+    S({ id: 'e_devorar', name: 'Devorar runas', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', area: 1, dmg: [17, 21], drainAp: 1, text: '' }),
+    S({ id: 'e_eco', name: 'Eco de los caídos', route: 'enemy', ap: 3, cd: 0, range: [2, 7], los: true, target: 'enemy', area: 1, dmg: [11, 14], status: { kind: 'mark', turns: 1 }, text: '' }),
     S({ id: 'e_zarpazo', name: 'Zarpazo pútrido', route: 'enemy', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [6, 8], status: { kind: 'poison', turns: 3, stacks: 1 }, text: '' }),
   ].map((d) => [d.id, d]),
 );
@@ -161,6 +177,7 @@ const ROUTE_ELEMENT: Record<string, Element> = { fuego: 'fire', hielo: 'ice', ve
 const SPELL_ELEMENT: Record<string, Element> = {
   e_maldicion: 'shadow', e_toque: 'shadow', e_zarpazo: 'poison', e_llama: 'fire', e_mordisco: 'shadow', e_espora: 'poison', e_latigo: 'poison',
   e_dentellada: 'fire', e_bola: 'fire', e_pira: 'fire', e_cataclismo: 'fire',
+  e_espinas: 'poison', e_zarpa: 'shadow', e_ascua: 'fire', e_lamento: 'shadow', e_fundir: 'fire', e_vacio: 'shadow', e_mirada: 'shadow', e_mordaza: 'shadow', e_devorar: 'shadow', e_eco: 'shadow',
 };
 for (const d of Object.values(SPELLS)) d.element = SPELL_ELEMENT[d.id] ?? ROUTE_ELEMENT[d.route];
 SPELLS.flecha_hielo!.element = 'ice';

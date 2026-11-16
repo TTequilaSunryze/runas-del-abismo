@@ -9,11 +9,14 @@ import { ACHIEVEMENTS, HALL_SIZE, MASTERY_TEXT, MASTERY_XP, ecosFor, masteryLeve
 import { currentAccount } from '../net/account';
 import { setCounts, SETS } from '../core/items/sets';
 import type { Champion } from '../game/run';
-import { ASCENSION, DAILY_MODS, PERKS, perkLevel } from '../content/modes';
-import { championOf, dailyOf, dailyScore } from '../game/run';
+import { ASCENSION, DAILY_MODS, MOD_ECOS, OMENS, PERKS, perkLevel } from '../content/modes';
+import { ALLIES } from '../content/enemies';
+import { RELICS } from '../content/relics';
+import { SLOTS, SLOT_NAME } from '../core/items/items';
+import { championOf, dailyOf, dailyScore, lastZone } from '../game/run';
 import { CLASS_STORY, ENDING_LOST, ENDING_WON, TUTORIAL, ZONE_STORY } from '../content/story';
 import { esc, mine, store, tip, today, ui } from './ctx';
-import { NODE_ICON, itemIcon, spellIcon } from './icons';
+import { NODE_ICON, itemIcon, spellIcon, spellTip } from './icons';
 import { diffHtml, itemHtml, lootRow, sidePanel, topBar, upgradeRow } from './panels';
 
 const RAR = ['r0', 'r1', 'r2', 'r3'];
@@ -125,7 +128,10 @@ export function lobbyScreen(): void {
     ${s.isHost ? `${ui.saved ? `<button data-act="doresume">Reanudar guardada (zona ${ui.saved.zone + 1}, sala ${ui.saved.step + 1})</button>` : ''}<button class="pri" data-act="start" ${ready.length && ready.length === total ? '' : 'disabled'}>⚔️ Comenzar (${ready.length}/${total})</button>` : ''}<button data-act="home">Salir</button></div>
   <div class="cols"><section class="main">
     ${s.isHost ? `<div class="panel"><div class="row"><b>Dificultad</b><span class="grow"></span><button class="mini" data-act="ascdown" ${ui.asc <= 0 || ui.daily ? 'disabled' : ''}>−</button><b class="pill">Ascensión ${ui.daily ? 3 : ui.asc}</b><button class="mini" data-act="ascup" ${ui.asc >= meta().maxAsc || ui.daily ? 'disabled' : ''}>+</button><label class="sm"><input type="checkbox" data-act="dailytoggle" ${ui.daily ? 'checked' : ''}> Reto diario</label></div>
-      <div class="dim sm">${ui.daily ? dailyOf(today()).mods.map((id) => esc(DAILY_MODS.find((x) => x.id === id)!.name)).join(' + ') + ' · ranking compartido' : esc(ASCENSION.slice(0, ui.asc + 1).slice(-2).join(' '))}${meta().maxAsc < 1 && !ui.daily ? ' · Gana una partida para desbloquear la ascensión 1.' : ''}</div></div>` : players.find((p) => p.host) ? `<div class="panel dim sm">Dificultad del anfitrión: ${players.find((p) => p.host)!.daily ? 'Reto diario' : `Ascensión ${players.find((p) => p.host)!.asc}`}</div>` : ''}
+      <div class="dim sm">${ui.daily ? dailyOf(today()).mods.map((id) => esc(DAILY_MODS.find((x) => x.id === id)!.name)).join(' + ') + ' · ranking compartido' : esc(ASCENSION.slice(0, ui.asc + 1).slice(-2).join(' '))}${meta().maxAsc < 1 && !ui.daily ? ' · Gana una partida para desbloquear la ascensión 1.' : ''}</div>
+      ${ui.daily ? '' : `<div class="row sm"><label ${tip(meta().stats.wins > 0 ? 'Una cuarta zona tras las Ruinas de Ceniza, con enemigos y jefes propios.' : 'Se desbloquea al ganar una partida.')}><input type="checkbox" data-act="abysstoggle" ${ui.abyss && meta().stats.wins > 0 ? 'checked' : ''} ${meta().stats.wins > 0 ? '' : 'disabled'}> 🌀 Incluir El Abismo (zona 4)${meta().stats.wins > 0 ? '' : ' 🔒'}</label></div>
+      <div class="lbl">Modificadores <span class="dim">· hasta 3, +${Math.round(MOD_ECOS * 100)}% de ecos cada uno</span></div>
+      <div class="chips">${DAILY_MODS.map((m) => `<button class="chip ${ui.mods.includes(m.id) ? 'r2 sel' : ''}" data-act="mod" data-id="${m.id}" ${tip(`<b>${esc(m.name)}</b><div class="sm">${esc(m.text)}</div>`)}>${ui.mods.includes(m.id) ? '✔ ' : ''}${esc(m.name)}</button>`).join('')}</div>`}</div>` : players.find((p) => p.host) ? (() => { const hp = players.find((p) => p.host)!; return `<div class="panel dim sm">Dificultad del anfitrión: ${hp.daily ? 'Reto diario' : `Ascensión ${hp.asc}${hp.abyss ? ' · con El Abismo' : ''}${hp.mods.length ? ` · ${hp.mods.map((id) => esc(DAILY_MODS.find((d) => d.id === id)?.name ?? id)).join(', ')}` : ''}`}</div>`; })() : ''}
     <div class="lbl">Tu clase <span class="dim">· maestría ${mlv}/5 con ${cls.name}</span></div>
     <div class="cards c5">${(Object.keys(CLASSES) as ClassId[]).map((id) => { const c = CLASSES[id]; return `<button class="pick ${id === me.cls ? 'on' : ''}" data-act="cls" data-id="${id}"><b>${c.name}</b><span class="dim sm">❤️ ${c.hp} · PA ${c.ap} · PM ${c.mp} · ⏱️ ${c.initiative}</span><span class="dim sm"><i>${esc(CLASS_STORY[id] ?? '')}</i></span><span class="pill sm">Maestría ${masteryOf(id)}</span></button>`; }).join('')}</div>
     <div class="lbl">Tus rutas <span class="dim">· elige 1 o ${MAX_ROUTES}; cada ruta bloquea a su opuesta</span></div>
@@ -134,7 +140,7 @@ export function lobbyScreen(): void {
       const on = me.routes.includes(r.id), off = locked || (!on && blocked.includes(r.id));
       const why = locked ? `🔒 Se desbloquea con maestría ${routeNeeds(me.cls, r.id)} de ${cls.name}: juega partidas con esta clase` : off ? (me.routes.includes(r.opposite) ? `🔒 Bloqueada por ${findRoute(me.cls, r.opposite)!.name}` : '🔒 Ya tienes 2 rutas') : `Opuesta: ${findRoute(me.cls, r.opposite)!.name}`;
       return `<button class="pick ${on ? 'on' : ''}" data-act="route" data-id="${r.id}" ${off ? 'disabled' : ''}><b>${on ? '✔ ' : ''}${r.name}</b><span class="dim sm">${r.text}</span>
-        <span class="row">${r.spells.map((id, i) => { const d = SPELLS[id]!; return `<span class="schip" ${tip(`<b>${esc(d.name)}</b> <span class="dim">nivel ${i + 1}</span><div class="sm">${esc(d.text)}</div><div class="dim sm">${d.ap} PA${d.dmg ? ` · daño ${d.dmg[0]}-${d.dmg[1]}` : ''}${d.cd ? ` · espera ${d.cd}` : ''}</div>`)}>${spellIcon(d)} ${esc(d.name)}</span>`; }).join('')}</span>
+        <span class="row">${r.spells.map((id, i) => { const d = SPELLS[id]!; return `<span class="schip" ${tip(spellTip(d, `<div class="dim sm">Se aprende a nivel ${i + 1}</div>`))}>${spellIcon(d)} ${esc(d.name)}</span>`; }).join('')}</span>
         <i class="sm ${off ? 'bad' : 'dim'}">${why}</i></button>`;
     }).join('')}</div>
   </section>
@@ -153,7 +159,9 @@ export function mapScreen(): void {
   const pending = Object.keys(run.offers).length;
   frame(run, `${run.step === 0 && ZONE_STORY[run.zone] ? `<div class="panel note story"><i>${esc(ZONE_STORY[run.zone]!)}</i></div>` : ''}${run.note ? `<div class="panel note">${esc(run.note)}</div>` : ''}
   <div class="path">${run.map.map((nodes, i) => `<div class="step ${i === run.step ? 'on' : i < run.step ? 'done' : ''}" ${tip(`Sala ${i + 1}: ${nodes.map((n) => NODE_NAME[n]).join(' o ')}`)}>${nodes.map((n) => `<span>${NODE_ICON[n]}</span>`).join('')}</div>`).join('<i></i>')}</div>
-  <div class="lbl">Sala ${run.step + 1} de ${run.map.length} · ${s.isHost ? 'elige el camino' : 'el anfitrión elige el camino'}</div>
+  ${run.allies.length ? `<div class="panel sm">🤝 Os acompañan: ${run.allies.map((a) => `<b>${esc(ALLIES[a]?.name ?? a)}</b>`).join(', ')} <span class="dim">(hasta el final de la zona)</span></div>` : ''}
+  ${run.nextOmen ? `<div class="panel sm">Próximo combate: ${OMENS.find((o) => o.id === run.nextOmen)?.icon} <b>${esc(OMENS.find((o) => o.id === run.nextOmen)?.name ?? '')}</b></div>` : ''}
+  <div class="lbl">Zona ${run.zone + 1}/${lastZone(run) + 1} · Sala ${run.step + 1} de ${run.map.length} · ${s.isHost ? 'elige el camino' : 'el anfitrión elige el camino'}</div>
   <div class="cards c2">${(run.map[run.step] ?? []).map((n, i) => `<button class="pick node" data-act="node" data-id="${i}" ${s.isHost ? '' : 'disabled'}><span class="nico">${NODE_ICON[n]}</span><span><b>${NODE_NAME[n].replace(/^\S+\s/, '')}</b><br><span class="dim sm">${NODE_HINT[n]}</span></span></button>`).join('')}</div>
   ${s.isHost && pending ? `<div class="dim sm">${pending} jugador${pending > 1 ? 'es' : ''} aún eligiendo botín; si avanzas lo pierden.</div>` : ''}
   ${upgradeRow(run)}${lootRow(run)}`);
@@ -164,10 +172,36 @@ export function shopScreen(): void {
   const h = mine(run);
   frame(run, `<div class="row"><h2>💰 Mercader de reliquias</h2><span class="grow"></span>${s.isHost ? '<button class="pri" data-act="leavenode">Salir de la tienda →</button>' : '<span class="dim sm">El anfitrión decide cuándo seguir</span>'}</div>
   <div class="dim sm">Cada objeto solo puede comprarlo un jugador. Para vender, selecciona un objeto de tu mochila (un tercio de su precio).</div>
-  <div class="cards c3">${(run.shop ?? []).map((sl, i) => { const rn = sl.rune ? RUNES[sl.rune] : undefined; const it = sl.item;
+  <div class="cards c3">${(run.shop ?? []).map((sl, i) => { const rn = sl.rune ? RUNES[sl.rune] : undefined; const it = sl.item; const rl = sl.relic ? RELICS[sl.relic] : undefined;
+    if (rl) return `<div class="lootcard ${rl.rare ? 'r3' : 'r2'} ${sl.sold ? 'off' : ''}"><div class="row"><div class="cell big ${rl.rare ? 'r3' : 'r2'}"><span class="emo">${rl.icon}</span></div><div><b>${esc(rl.name)}</b><div class="dim sm">Reliquia ${rl.rare ? 'rara' : 'común'} · para toda la partida</div><div class="sm">${esc(rl.text)}</div></div></div><button class="pri" data-act="buy" data-id="${i}" ${sl.sold || !h || h.gold < sl.price || h.relics.includes(rl.id) ? 'disabled' : ''}>${sl.sold ? 'Vendido' : h?.relics.includes(rl.id) ? 'Ya la tienes' : `Comprar · ${sl.price} 💰`}</button></div>`;
     return `<div class="lootcard ${rn ? (rn.rare ? 'r2' : 'r1') : RAR[it?.rarity ?? 0]} ${sl.sold ? 'off' : ''}">${rn ? `<div class="row"><div class="cell big ${rn.rare ? 'r2' : 'r1'}"><span class="emo">${rn.icon}</span></div><div><b class="${rn.rare ? 'r2' : 'r1'}">${esc(rn.name)}</b><div class="dim sm">Runa ${rn.rare ? 'rara' : 'común'}</div><div class="sm">${esc(rn.text)}</div></div></div>` : it ? `<div class="row"><div class="cell big ${RAR[it.rarity]}">${itemIcon(it)}</div><div>${itemHtml(it)}</div></div>${h ? diffHtml(it, h) : ''}` : ''}
       <button class="pri" data-act="buy" data-id="${i}" ${sl.sold || !h || h.gold < sl.price ? 'disabled' : ''}>${sl.sold ? 'Vendido' : `Comprar · ${sl.price} 💰`}</button></div>`; }).join('')}
     ${''}<div class="lootcard"><div class="row"><div class="cell big"><span class="emo">🧪</span></div><div><b>Poción de vida</b><div class="sm">Recupera el ${POTION_HEAL * 100}% de tu vida máxima.</div></div></div><button class="pri" data-act="potion" ${!h || h.gold < POTION_PRICE || h.hp >= heroMaxHp(h) ? 'disabled' : ''}>Beber · ${POTION_PRICE} 💰</button></div></div>${upgradeRow(run)}`, true);
+}
+
+/** Forja, altar y apostador: cada jugador hace lo suyo una vez y el anfitrión sigue. */
+export function campScreen(): void {
+  const s = ui.session!, run = s.run!, camp = run.camp!;
+  const h = mine(run);
+  const done = h ? camp.done[h.owner] : undefined;
+  const cost = h ? Math.ceil(heroMaxHp(h) * 0.25) : 0;
+  const title = { forge: '🔨 La Forja', altar: '🕯️ El Altar', gamble: '🎲 El Apostador' }[camp.kind];
+  const text = { forge: 'Un yunque y un fuego que no se apaga. Elige una pieza equipada: sube un grado de rareza y sus estadísticas un 30% (las legendarias, un 15%).', altar: 'Un altar viejo que acepta ofrendas. Cada uno puede hacer una.', gamble: 'Un enano con un cubilete. «¿Os sentís con suerte?»' }[camp.kind];
+  let acts = '';
+  if (h && !done) {
+    if (camp.kind === 'forge') acts = `<div class="cards c4">${SLOTS.filter((sl) => h.equip[sl]).map((sl) => { const it = h.equip[sl]!; return `<div class="lootcard ${['r0', 'r1', 'r2', 'r3'][it.rarity]}"><div class="row"><div class="cell big ${['r0', 'r1', 'r2', 'r3'][it.rarity]}">${itemIcon(it)}</div><div>${itemHtml(it)}</div></div><button class="pri" data-act="forge" data-id="${sl}">Forjar ${SLOT_NAME[sl].toLowerCase()}</button></div>`; }).join('') || '<div class="dim">No llevas nada equipado.</div>'}</div>`;
+    else if (camp.kind === 'altar') acts = `<div class="cards c3">
+      <div class="lootcard r2"><b>🩸 Sangre por runa</b><div class="sm">Pierdes ${cost} de vida y ganas una runa rara.</div><button class="pri" data-act="altar" data-id="0" ${h.hp > cost ? '' : 'disabled'}>Ofrecer</button></div>
+      <div class="lootcard r2"><b>🩸 Sangre por saber</b><div class="sm">Pierdes ${cost} de vida y eliges una mejora de hechizo.</div><button class="pri" data-act="altar" data-id="1" ${h.hp > cost ? '' : 'disabled'}>Ofrecer</button></div>
+      <div class="lootcard r1"><b>💰 Oro por vida</b><div class="sm">Pagas 40 de oro y recuperas el 60% de tu vida.</div><button class="pri" data-act="altar" data-id="2" ${h.gold >= 40 ? '' : 'disabled'}>Ofrecer</button></div></div>`;
+    else acts = `<div class="cards c2">
+      <div class="lootcard r1"><b>Apuesta pequeña · 40 💰</b><div class="sm">55% de ganar una reliquia al azar.</div><button class="pri" data-act="gamble" data-id="0" ${h.gold >= 40 ? '' : 'disabled'}>Apostar</button></div>
+      <div class="lootcard r3"><b>Apuesta grande · 100 💰</b><div class="sm">Una reliquia segura y un 30% de ganar otra.</div><button class="pri" data-act="gamble" data-id="1" ${h.gold >= 100 ? '' : 'disabled'}>Apostar</button></div></div>`;
+  }
+  frame(run, `<div class="row"><h2>${title}</h2><span class="grow"></span>${s.isHost ? '<button class="pri" data-act="leavenode">Continuar →</button>' : '<span class="dim sm">El anfitrión decide cuándo seguir</span>'}</div>
+  <div class="panel note">${esc(text)}</div>${acts}
+  ${Object.values(camp.done).length ? `<div class="panel">${Object.values(camp.done).map((t) => `<div class="sm">${esc(t)}</div>`).join('')}</div>` : ''}
+  ${upgradeRow(run)}`);
 }
 
 export function eventScreen(): void {

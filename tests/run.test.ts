@@ -16,6 +16,7 @@ const make = (n: number, seed: number): RunState =>
 function playRun(n: number, seed: number, prefer: string): RunState {
   const run = make(n, seed);
   for (let step = 0; step < 150 && run.phase !== 'won' && run.phase !== 'lost'; step++) {
+    for (const h of run.heroes) for (let k = 0; k < 6 && h.upOffer; k++) metaAction(run, h.owner, { a: 'upgrade', idx: 0 });
     if (run.phase === 'map') {
       for (const h of run.heroes) {
         if (run.offers[h.owner] && metaAction(run, h.owner, { a: 'pick', idx: 0 })) {
@@ -31,6 +32,14 @@ function playRun(n: number, seed: number, prefer: string): RunState {
       resolveEvent(run, 'p0');
       expect(run.event!.result).toBeTruthy();
       leaveNode(run);
+    } else if (run.phase === 'camp') {
+      for (const h of run.heroes) {
+        const k = run.camp!.kind;
+        const err = k === 'forge' ? metaAction(run, h.owner, { a: 'forge', slot: (Object.keys(h.equip)[0] ?? 'arma') as never }) : k === 'altar' ? metaAction(run, h.owner, { a: 'altar', opt: 2 }) : metaAction(run, h.owner, { a: 'gamble', opt: 0 });
+        if (!err) expect(run.camp!.done[h.owner]).toBeTruthy();
+      }
+      leaveNode(run);
+      expect(run.phase).toBe('map');
     } else if (run.phase === 'shop') {
       for (const h of run.heroes) { metaAction(run, h.owner, { a: 'buy', idx: 5 }); metaAction(run, h.owner, { a: 'potion' }); }
       leaveNode(run);

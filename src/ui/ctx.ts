@@ -43,6 +43,9 @@ export const ui = {
   busy: false,
   board2: null as null | Array<{ names: string; players: number; score: number; won: boolean; zone: number }> | 'cargando' | 'error',
   tutorial: 0,
+  /** modificadores elegidos por el anfitrión e incluir el Abismo */
+  mods: [] as string[],
+  abyss: false,
   rerender: (): void => {},
 };
 

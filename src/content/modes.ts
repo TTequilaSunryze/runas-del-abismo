@@ -29,6 +29,35 @@ export const DAILY_MODS: DailyMod[] = [
   { id: 'codicia', name: 'Codicia', text: 'Doble oro, pero todo cuesta el doble.' },
   { id: 'cristal', name: 'Cañón de cristal', text: 'Los héroes tienen un 25% menos de vida y hacen un 25% más de daño.' },
   { id: 'frenesi', name: 'Frenesí', text: 'Los enemigos hacen un 20% más de daño.' },
+  { id: 'elites', name: 'Campeones', text: 'Muchos más enemigos con modificadores de élite.' },
+  { id: 'presagios', name: 'Tiempos de augurio', text: 'Todos los combates tienen un presagio.' },
+  { id: 'veloces', name: 'Cazadores', text: 'Enemigos con +1 PM y +4 de iniciativa.' },
+  { id: 'sin_descanso', name: 'Sin descanso', text: 'Las hogueras se convierten en combates.' },
+  { id: 'jefes', name: 'Tiranos', text: 'Los jefes tienen un 30% más de vida.' },
+  { id: 'pobreza', name: 'Pobreza', text: 'Ganáis la mitad de oro.' },
+];
+/** El reto diario solo usa los modificadores originales (para que el ranking sea comparable). */
+export const DAILY_POOL = ['llamas', 'horda', 'codicia', 'cristal', 'frenesi'];
+/** Ecos extra por cada modificador elegido a mano. */
+export const MOD_ECOS = 0.15;
+export const MAX_MODS = 3;
+
+/** Presagio: una regla especial para un combate concreto. */
+export interface OmenDef {
+  id: string;
+  name: string;
+  icon: string;
+  text: string;
+}
+export const OMENS: OmenDef[] = [
+  { id: 'sangre', name: 'Luna de sangre', icon: '🌕', text: 'Todos hacen un 20% más de daño.' },
+  { id: 'pantano', name: 'Ciénaga', icon: '🟢', text: 'El suelo está lleno de charcos que atrapan a los héroes.' },
+  { id: 'puas', name: 'Suelo de púas', icon: '📌', text: 'Púas por todo el tablero.' },
+  { id: 'bendicion', name: 'Bendición', icon: '🕊️', text: 'Los héroes empiezan con un escudo del 20% de su vida.' },
+  { id: 'oro', name: 'Botín maldito', icon: '💰', text: 'Enemigos con +25% de vida, pero el doble de oro.' },
+  { id: 'eclipse', name: 'Eclipse', icon: '🌑', text: 'Los enemigos se regeneran cada turno.' },
+  { id: 'calma', name: 'Calma antes de la tormenta', icon: '🍃', text: 'Los héroes tienen +1 PA en este combate.' },
+  { id: 'tormenta', name: 'Tormenta rúnica', icon: '⚡', text: 'Enemigos con +1 PM; si ganáis, una runa para cada uno.' },
 ];
 export const DAILY_ASC = 3;
 

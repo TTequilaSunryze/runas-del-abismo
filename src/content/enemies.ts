@@ -4,6 +4,7 @@ import type { Element, Pos } from '../core/state';
 import { ZONA1_ENEMIES } from './zona1/enemies';
 import { ZONA2_ENEMIES } from './zona2/enemies';
 import { ZONA3_ENEMIES } from './zona3/enemies';
+import { ZONA4_ENEMIES } from './zona4/enemies';
 
 export interface EnemyDef {
   id: string;
@@ -25,7 +26,22 @@ export interface EnemyDef {
   traits?: string[];
 }
 
-export const ENEMIES: Record<string, EnemyDef> = { ...ZONA1_ENEMIES, ...ZONA2_ENEMIES, ...ZONA3_ENEMIES };
+/** Aliados que se unen al grupo (jaulas y eventos). Usan la IA de los enemigos, pero en vuestro bando. */
+export const ALLIES: Record<string, EnemyDef> = {
+  mercenario: { id: 'mercenario', name: 'Mercenario', hp: 46, armor: 2, ap: 6, mp: 3, initiative: 10, ai: 'melee', spell: 'e_espadazo', traits: ['guard'] },
+  caballero_aliado: { id: 'caballero_aliado', name: 'Caballero de hueso', hp: 52, armor: 2, ap: 6, mp: 3, initiative: 9, ai: 'melee', spell: 'e_tajo', resist: { poison: 60 } },
+  sacerdotisa: { id: 'sacerdotisa', name: 'Sacerdotisa del bosque', hp: 34, armor: 0, ap: 5, mp: 3, initiative: 12, ai: 'ranged', spell: 'e_flecha', more: ['e_savia'], traits: ['regen'] },
+  lobo_aliado: { id: 'lobo_aliado', name: 'Lobo leal', hp: 40, armor: 1, ap: 6, mp: 5, initiative: 15, ai: 'melee', spell: 'e_mordida' },
+  guardia_forja: { id: 'guardia_forja', name: 'Guardia de forja', hp: 60, armor: 3, ap: 6, mp: 2, initiative: 7, ai: 'melee', spell: 'e_martillo', resist: { fire: 60 }, traits: ['thorns'] },
+  caido: { id: 'caido', name: 'Paladín caído', hp: 70, armor: 3, ap: 6, mp: 3, initiative: 11, ai: 'melee', spell: 'e_espadazo', more: ['e_savia'], resist: { shadow: 40 }, traits: ['regen'] },
+  ciervo: { id: 'ciervo', name: 'Espíritu del ciervo', hp: 60, armor: 1, ap: 6, mp: 5, initiative: 16, ai: 'melee', spell: 'e_raiz', more: ['e_savia'] },
+};
+/** Aliado que se encuentra en una jaula, por zona. */
+export const CAGE_ALLY = ['mercenario', 'lobo_aliado', 'guardia_forja', 'caido'];
+
+export const ENEMIES: Record<string, EnemyDef> = { ...ZONA1_ENEMIES, ...ZONA2_ENEMIES, ...ZONA3_ENEMIES, ...ZONA4_ENEMIES, ...ALLIES };
+
+const addTrait = (u: UnitSpec, t: string): void => { if (!u.traits?.includes(t)) u.traits = [...(u.traits ?? []), t]; };
 
 /** Modificadores de élite: se aplican sobre un enemigo ya creado. */
 export const AFFIXES: Record<string, { name: string; text: string; apply: (u: UnitSpec) => void }> = {
@@ -35,6 +51,13 @@ export const AFFIXES: Record<string, { name: string; text: string; apply: (u: Un
   veloz: { name: 'Veloz', text: '+2 PM y mucha más iniciativa.', apply: (u) => { u.mp += 2; u.maxMp += 2; u.initiative += 10; } },
   enorme: { name: 'Enorme', text: '+50% de vida y +15% de daño.', apply: (u) => { u.hp = u.maxHp = Math.round(u.maxHp * 1.5); u.power += 15; } },
   venenoso: { name: 'Venenoso', text: 'Sus golpes envenenan.', apply: (u) => { u.spells[0]!.rune = 'veneno'; } },
+  reflejante: { name: 'Reflejante', text: 'Devuelve el 30% del daño cuerpo a cuerpo.', apply: (u) => addTrait(u, 'thorns') },
+  regenerador: { name: 'Regenerador', text: 'Recupera el 8% de su vida cada turno.', apply: (u) => addTrait(u, 'regen') },
+  explosivo: { name: 'Explosivo', text: 'Al morir explota y daña a todo lo que tenga pegado.', apply: (u) => addTrait(u, 'bomb') },
+  fantasmal: { name: 'Fantasmal', text: 'Atraviesa obstáculos y persigue al más frágil.', apply: (u) => { addTrait(u, 'ghost'); addTrait(u, 'hunter'); } },
+  furioso: { name: 'Furioso', text: '+40% de daño por debajo de la mitad de vida.', apply: (u) => addTrait(u, 'enrage') },
+  escindido: { name: 'Escindido', text: 'Al morir se divide en dos copias menores.', apply: (u) => addTrait(u, 'split') },
+  trampero: { name: 'Trampero', text: 'Esconde cepos junto a los héroes.', apply: (u) => addTrait(u, 'trapper') },
 };
 
 export interface EnemyOpts {

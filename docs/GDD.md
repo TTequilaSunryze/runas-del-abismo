@@ -38,5 +38,17 @@ Tutorial de 5 pasos la primera vez, textos de zona y clase, pantalla final con r
 - **Salón de héroes** (12): guarda un héroe al acabar. Tu mejor héroe puede aparecer como **Némesis** (élite) en las partidas de tus amigos desde la zona 2.
 - **Duelos 3 contra 3**: contra el equipo de un amigo llevado por la IA (por nombre de cuenta), entrenamiento contra tu reflejo, o en vivo en una sala. Nivel igualado a 12, vida x1,6, terreno en espejo.
 
+## v4: legibilidad y contenido
+- **Iconos de hechizo en pixel art**: uno por hechizo (52 dibujos, paleta por elemento), borde del color de su tipo (daño, curación, escudo, control, apoyo, invocación) y coste en PA. Ayuda flotante con un resumen generado desde los datos. Daño estimado al apuntar a un enemigo (y aviso si lo mata).
+- **Enemigos**: de 25 a 56 (incluye aliados). Rasgos nuevos: explota al morir, se divide, se regenera, espinas, furia, pone cepos, salto sombrío. 13 afijos de élite.
+- **Jefes y élites alternativos**: 2 jefes y 2 élites por zona; cada partida usa uno.
+- **Zona 4 – El Abismo**: se desbloquea al ganar una vez; el anfitrión la incluye. Enemigos, 2 jefes, objetos, 6 eventos y música propios. Reliquia de grupo al entrar.
+- **Salas nuevas**: Forja (mejora una pieza), Altar (sangre u oro por runa rara, mejora de hechizo o vida), Apostador (oro por reliquias), Jaula (un aliado lucha con vosotros hasta el final de la zona). El mapa varía mucho más entre partidas.
+- **Reliquias personales** (22): estadísticas o rasgos (quemar, veneno extra, críticos x2, regenerar, espinas…). Salen de jefes, élites, tesoros, tienda y apuestas.
+- **Presagios** (8): reglas especiales en algunos combates (Luna de sangre, Ciénaga, Eclipse, Botín maldito…).
+- **Eventos**: de 13 a 27, con consecuencias a largo plazo (préstamo que cobra en la zona siguiente, promesa que premia un jefe sin bajas, espíritu que ayuda en el jefe, cofre maldito que endurece el próximo élite, aliados).
+- **Modificadores elegibles**: hasta 3 de 11, +15% de ecos cada uno.
+- **Curva de dificultad**: los enemigos suben un 15% de vida y daño por zona (y un 30% más en el Abismo).
+
 ## Pendiente / ideas
 Sincronizar ecos en la nube con cuenta, más zonas y clases, sprites animados, balance con datos de partidas reales.

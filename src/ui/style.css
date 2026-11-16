@@ -172,3 +172,18 @@ span.cell { display: inline-flex; align-items: center; justify-content: center; 
 .htabs { display: flex; flex-wrap: wrap; gap: 4px; }
 @media (max-width: 1000px) { .cards.c5 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .cards.c5 { grid-template-columns: 1fr 1fr !important; } }
+
+/* iconos de hechizo: dibujo + borde del color de su tipo + coste en PA */
+.sicon { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 6px; background: #0b0812; border: 2px solid var(--kc, var(--edge)); vertical-align: middle; flex: none; }
+.sicon img { width: 24px; height: 24px; image-rendering: pixelated; }
+.sicon .apc { position: absolute; right: -6px; top: -6px; font-style: normal; background: var(--gold); color: #000; border-radius: 8px; font-size: 10px; min-width: 15px; line-height: 15px; text-align: center; font-weight: bold; }
+.schip .sicon { width: 22px; height: 22px; border-width: 1px; }
+.schip .sicon img { width: 18px; height: 18px; }
+.schip .sicon .apc { font-size: 9px; min-width: 13px; line-height: 13px; right: -5px; top: -5px; }
+.sbtn .sicon { width: 46px; height: 46px; }
+.sbtn .sicon img { width: 38px; height: 38px; }
+.loot .sicon { width: 52px; height: 52px; }
+.loot .sicon img { width: 44px; height: 44px; }
+.k-dmg { --kc: #e0475b; } .k-heal { --kc: #4cb85a; } .k-shield { --kc: #58a6ff; } .k-ctrl { --kc: #e8c84a; } .k-buff { --kc: #c77dff; } .k-summon { --kc: #b08040; }
+.kt { font-size: 11px; border-radius: 8px; padding: 0 6px; border: 1px solid var(--kc); color: var(--kc); }
+.schip { display: inline-flex; align-items: center; gap: 4px; }
