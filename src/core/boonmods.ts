@@ -85,3 +85,39 @@ export const BOON_MODS: Record<string, BoonMod> = Object.fromEntries(([
   M('pm_salto', 'punalada', 'Golpe y salto', 'Tras golpear retrocedes 2 casillas.', (d) => { d.retreat = 2; }),
   M('pm_rapido', 'cuchillo', 'Lanzamiento rápido', 'Cuesta 1 PA menos.', (d) => { d.ap = Math.max(1, d.ap - 1); }),
 ] as BoonMod[]).map((m) => [m.id, m]));
+
+/** Bendiciones de clase (pasivas): un rasgo para el motor y, a veces, un cambio en un hechizo. No cuentan como mejora del hechizo. */
+export interface BlessingDef {
+  id: string;
+  cls: string;
+  name: string;
+  icon: string;
+  text: string;
+  trait?: string;
+  mod?: { target: string; apply: (d: SpellDef) => void };
+}
+const B = (d: BlessingDef): BlessingDef => d;
+export const BLESSINGS: Record<string, BlessingDef> = Object.fromEntries(([
+  // Hechicera Zorro
+  B({ id: 'zb_esencia', cls: 'zorro', name: 'Esencia desbordante', icon: '💗', trait: 'esencia2', text: 'El Robo de esencia se activa con 2 cargas en vez de 3; si tienes la vida al máximo, la curación sobrante se vuelve escudo.' }),
+  B({ id: 'zb_danza', cls: 'zorro', name: 'Danza de las nueve colas', icon: '🦊', trait: 'danza', text: 'Tras usar Impulso espiritual, tu siguiente hechizo de ese turno cuesta 1 PA menos.' }),
+  B({ id: 'zb_mirada', cls: 'zorro', name: 'Mirada hipnótica', icon: '👁️', trait: 'mirada', text: 'Encanto dura 1 turno más en enemigos normales y da 1 carga de Robo de esencia al impactar.' }),
+  // Tejedora de Esferas
+  B({ id: 'tb_poder', cls: 'esferas', name: 'Poder ilimitado', icon: '🔮', trait: 'poder', text: 'Hasta 5 Esferas oscuras a la vez y duran 1 turno más.' }),
+  B({ id: 'tb_onda', cls: 'esferas', name: 'Onda expansiva', icon: '🌊', text: 'Dispersión llega 1 casilla más lejos y las esferas empujadas hacen un 30% más de daño al chocar.',
+    mod: { target: 't_dispersion', apply: (d) => { if (d.cone) d.cone++; if (d.sphereHit) d.sphereHit = { ...d.sphereHit, dmg: [Math.round(d.sphereHit.dmg[0] * 1.3), Math.round(d.sphereHit.dmg[1] * 1.3)] }; } } }),
+  B({ id: 'tb_eco', cls: 'esferas', name: 'Eco oscuro', icon: '🌑', trait: 'eco_oscuro', text: 'Cada vez que Descarga desatada mata a un enemigo, caen 2 Esferas oscuras en su casilla y alrededor.' }),
+  // Carcelero de Almas
+  B({ id: 'kb_condena', cls: 'carcelero', name: 'Condenación eterna', icon: '⛓️', trait: 'condena', text: 'Los enemigos que engancha, empuja o aturde tienen un 50% de soltar un Alma aunque no mueran.' }),
+  B({ id: 'kb_faro', cls: 'carcelero', name: 'Faro de las sombras', icon: '🏮', trait: 'faro', text: 'La Linterna espectral dura 2 turnos y cura 10 al aliado que la toma para teletransportarse.',
+    mod: { target: 'k_linterna', apply: (d) => { if (d.lantern) d.lantern = { ...d.lantern, turns: 2 }; } } }),
+  B({ id: 'kb_guadana', cls: 'carcelero', name: 'Guadaña segadora', icon: '💀', trait: 'guadana', text: 'Tras Sentencia de muerte o Despellejar, tu siguiente ataque de ese turno hace +2 de daño por cada Alma de este combate (máx. +20).' }),
+  // Acechador de Sombras
+  B({ id: 'sb_maestro', cls: 'acechador', name: 'Maestro de las sombras', icon: '👥', trait: 'maestro', text: 'Hasta 2 Sombras a la vez, y todas replican tus habilidades de daño.' }),
+  B({ id: 'sb_desprecio', cls: 'acechador', name: 'Desprecio por los débiles', icon: '🗡️', trait: 'desprecio', text: 'Tú y tus sombras hacéis un 25% más de daño a enemigos por debajo de la mitad de su vida.' }),
+  B({ id: 'sb_persistente', cls: 'acechador', name: 'Sombra persistente', icon: '⏳', trait: 'persistente', text: 'Tus Sombras duran 1 turno más y cada intercambio con una Sombra te da +2 PM.' }),
+  // Bárbaro Desatado
+  B({ id: 'bb_inagotable', cls: 'barbaro', name: 'Furia inagotable', icon: '🔥', trait: 'inagotable', text: 'Sed de batalla solo consume la mitad de tu Furia.' }),
+  B({ id: 'bb_negarse', cls: 'barbaro', name: 'Negarse a morir', icon: '💢', trait: 'negarse', text: 'Una vez por combate, si recibes un golpe letal con al menos 60 de Furia, sobrevives con 1 de vida y gastas esa Furia.' }),
+  B({ id: 'bb_torbellino', cls: 'barbaro', name: 'Torbellino sangriento', icon: '🌀', trait: 'torbellino', text: 'Embiste giratorio cuesta 1 PA menos si golpea a 2 o más enemigos.' }),
+] as BlessingDef[]).map((b) => [b.id, b]));

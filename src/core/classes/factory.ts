@@ -34,6 +34,8 @@ export function makeHero(opts: HeroBuild): UnitSpec {
     // la Hechicera Zorro empieza sin esencia acumulada
     ...(opts.cls === 'zorro' ? { essence: 0 } : {}),
     // el Carcelero cosecha almas: armadura fija por cada enemigo que cae con él vivo
-    ...(opts.cls === 'carcelero' ? { souls: 0 } : {}),
+    ...(opts.cls === 'carcelero' ? { souls: 0, soulBank: 0, soulsFight: 0 } : {}),
+    // el Bárbaro acumula Furia (0 a 100)
+    ...(opts.cls === 'barbaro' ? { fury: 0 } : {}),
   };
 }

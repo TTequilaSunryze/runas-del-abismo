@@ -17,8 +17,8 @@ const board = (units: UnitSpec[]) => createCombat({ seed: 5, w: 14, h: 7, obstac
 const turnOf = (s: ReturnType<typeof board>, id: number) => { for (let i = 0; i < 40 && current(s)!.id !== id; i++) endTurn(s, current(s)!.id); };
 
 describe('v8', () => {
-  it('se juega con 5 clases, todas con 60 de vida, 6 PA y 3 PM', () => {
-    expect(PLAYABLE).toEqual(['zorro', 'esferas', 'acechador', 'carcelero', 'arquero']);
+  it('se juega con 6 clases, todas con 60 de vida, 6 PA y 3 PM', () => {
+    expect(PLAYABLE).toEqual(['zorro', 'esferas', 'acechador', 'carcelero', 'barbaro', 'arquero']);
     for (const c of ['guerrero', 'mago', 'picaro', 'clerigo'] as const) expect(CLASSES[c].hidden).toBe(true);
     for (const c of PLAYABLE) expect([CLASSES[c].hp, CLASSES[c].ap, CLASSES[c].mp], c).toEqual([60, 6, 3]);
     // los hechizos de las clases retiradas siguen existiendo
@@ -97,18 +97,19 @@ describe('v8', () => {
   });
 
   it('nunca ofrece mejorar un hechizo que no tienes: ofrece primero el hechizo', () => {
-    const run = newRun('T', 7, [{ owner: 'a', name: 'A', cls: 'zorro', routes: [] }]);
+    const run = newRun('T', 7, [{ owner: 'a', name: 'A', cls: 'arquero', routes: [] }]);
     const h = run.heroes[0]!;
+    h.spellOffers = 3;
     for (let i = 0; i < 40; i++) {
       h.boonOffer = null;
       offerBoon(run, h);
-      for (const o of (h.boonOffer as HeroSave['boonOffer'])?.spells ?? []) if (BOON_MODS[o]) expect([...CLASSES.zorro.base, ...h.boons]).toContain(BOON_MODS[o]!.target);
+      for (const o of (h.boonOffer as HeroSave['boonOffer'])?.spells ?? []) if (BOON_MODS[o]) expect([...CLASSES.arquero.base, ...h.boons]).toContain(BOON_MODS[o]!.target);
     }
-    // con Fuego zorruno ya aprendido, su mejora sí puede salir
-    h.boons = ['z_fuego'];
+    // con Flecha ígnea ya aprendida, su mejora sí puede salir
+    h.boons = ['a_ignea'];
     let seen = false;
-    for (let i = 0; i < 60 && !seen; i++) { h.boonOffer = null; offerBoon(run, h); seen = !!(h.boonOffer as HeroSave['boonOffer'])?.spells.includes('zm_fuego_vivo'); }
+    for (let i = 0; i < 80 && !seen; i++) { h.boonOffer = null; offerBoon(run, h); seen = !!(h.boonOffer as HeroSave['boonOffer'])?.spells.includes('am_ignea'); }
     expect(seen).toBe(true);
-    expect(PATRONS.z_llama!.spells).toContain('zm_fuego_vivo');
+    expect(PATRONS.a_rafaga!.spells).toContain('am_ignea');
   });
 });

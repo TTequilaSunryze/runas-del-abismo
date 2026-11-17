@@ -16,7 +16,7 @@ describe('kit inicial', () => {
     for (const c of Object.values(CLASSES)) {
       expect(c.base).toHaveLength(3);
       // las clases nuevas tienen su propio kit: ver tests/zorro.test.ts, tejedora.test.ts y carcelero.test.ts
-      if (['zorro', 'esferas', 'carcelero', 'acechador'].includes(c.id)) continue;
+      if (['zorro', 'esferas', 'carcelero', 'acechador', 'barbaro'].includes(c.id)) continue;
       const kinds = c.base.map((id) => SPELLS[id]!);
       expect(kinds.filter((d) => d.dmg && d.target === 'enemy').length, c.id).toBeGreaterThanOrEqual(2);
       expect(kinds.filter((d) => d.target === 'self').length, c.id).toBe(1);
@@ -138,13 +138,13 @@ describe('consumibles, bendiciones y botín', () => {
   });
   it('bendiciones de clase: mejoran sus hechizos o dan hechizos nuevos de su clase', async () => {
     const { PATRONS, patronsOf } = await import('../src/content/boons');
-    const { BOON_MODS } = await import('../src/core/boonmods');
+    const { BLESSINGS, BOON_MODS } = await import('../src/core/boonmods');
     const { spellOf } = await import('../src/core/combat/engine');
-    for (const cls of ['guerrero', 'mago', 'clerigo', 'arquero', 'picaro', 'zorro', 'esferas', 'acechador', 'carcelero'] as const) {
-      expect(patronsOf(cls).length).toBeGreaterThanOrEqual(3);
+    for (const cls of ['guerrero', 'mago', 'clerigo', 'arquero', 'picaro', 'zorro', 'esferas', 'acechador', 'carcelero', 'barbaro'] as const) {
+      expect(patronsOf(cls).length).toBeGreaterThanOrEqual(1);
       const own = patronsOf(cls).flatMap((p) => p.spells);
       for (const o of own) {
-        expect(!!BOON_MODS[o] || !!SPELLS[o], o).toBe(true);
+        expect(!!BOON_MODS[o] || !!SPELLS[o] || !!BLESSINGS[o], o).toBe(true);
         // las mejoras apuntan a hechizos de la clase: los iniciales o uno de sus hechizos de bendición
         if (BOON_MODS[o]) expect([...CLASSES[cls].base, ...own]).toContain(BOON_MODS[o]!.target);
       }
@@ -188,6 +188,7 @@ describe('consumibles, bendiciones y botín', () => {
   it('el anfitrión espera a que todos elijan y pulsen Listo', () => {
     const run = newRun('T', 3, [{ owner: 'a', name: 'A', cls: 'guerrero', routes: ['baluarte'] }, { owner: 'b', name: 'B', cls: 'mago', routes: ['fuego'] }]);
     run.stamp = 1;
+    for (const h of run.heroes) h.boonOffer = null;
     run.offers.b = [];
     expect(waitingFor(run, ['a', 'b'], 'a').map((h) => h.owner)).toEqual(['b']);
     expect(metaAction(run, 'b', { a: 'ready' })).toMatch(/Antes elige/);

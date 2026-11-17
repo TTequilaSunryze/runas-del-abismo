@@ -101,6 +101,12 @@ export const CLASSES: Record<ClassId, ClassDef> = {
       R('base', 'Clásico', '', ['s_shuriken', 's_tajo', 's_sombra'], 'El kit inicial: un shuriken, un tajo a tu alrededor y una Sombra que repite tus golpes.'),
     ],
   },
+  barbaro: {
+    id: 'barbaro', name: 'Bárbaro Desatado', hp: 60, armor: 1, power: 0, crit: 5, ap: 6, mp: 3, initiative: 11, base: ['b_sed', 'b_tajo', 'b_embiste'], tackle: 8, dodge: 3,
+    routes: [
+      R('base', 'Clásico', '', ['b_sed', 'b_tajo', 'b_embiste'], 'El kit inicial: cúrate con tu Furia, golpea con el Tajo y entra en combate con el Embiste.'),
+    ],
+  },
   carcelero: {
     id: 'carcelero', name: 'Carcelero de Almas', hp: 60, armor: 1, power: 0, crit: 5, ap: 6, mp: 3, initiative: 9, base: ['k_sentencia', 'k_linterna', 'k_despellejar'], tackle: 6, dodge: 2,
     routes: [
@@ -134,4 +140,4 @@ export function spellsFor(cls: ClassId, chosen: readonly string[], _level = 1): 
 }
 
 /** Clases que se pueden elegir. */
-export const PLAYABLE: ClassId[] = (['zorro', 'esferas', 'acechador', 'carcelero', 'arquero'] as ClassId[]).filter((c) => !CLASSES[c].hidden);
+export const PLAYABLE: ClassId[] = (['zorro', 'esferas', 'acechador', 'carcelero', 'barbaro', 'arquero'] as ClassId[]).filter((c) => !CLASSES[c].hidden);

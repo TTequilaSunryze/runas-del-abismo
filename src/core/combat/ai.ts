@@ -25,7 +25,7 @@ function attackAll(s: CombatState, u: Unit, def: SpellDef, ev: GameEvent[]): voi
   for (let i = 0; i < 6 && !s.over && alive(u); i++) {
     const target = s.units
       .filter((h) => h.team !== u.team && alive(h) && !castProblem(s, u, def, h.pos))
-      .sort((a, b) => a.hp - b.hp)[0];
+      .sort((a, b) => Number(hasTrait(b, 'taunt')) - Number(hasTrait(a, 'taunt')) || a.hp - b.hp)[0];
     if (!target) return;
     const r = cast(s, u.id, def.id, target.pos);
     if (!r.ok) return;
@@ -38,6 +38,9 @@ function fight(s: CombatState, u: Unit, def: SpellDef, keepAway: boolean, ev: Ga
   attackAll(s, u, def, ev);
   if (s.over || !alive(u) || current(s)?.id !== u.id || u.mp <= 0) return;
   let foes = s.units.filter((h) => h.team !== u.team && alive(h) && !h.statuses.invis);
+  // un señuelo cercano atrae a los enemigos
+  const lure = foes.filter((h) => hasTrait(h, 'taunt') && dist(h.pos, u.pos) <= 5);
+  if (lure.length) foes = lure;
   // los cazadores van a por el más frágil
   if (hasTrait(u, 'hunter') && foes.length) foes = [foes.reduce((a, b) => (b.maxHp < a.maxHp ? b : a))];
   const ghost = hasTrait(u, 'ghost');
@@ -205,6 +208,36 @@ function champCast(s: CombatState, u: Unit, ev: GameEvent[]): boolean {
     const around = d.range[1] === 0;
     const near = (list: Unit[], at: Pos): Unit[] => list.filter((x) => dist(x.pos, at) <= (d.area ?? 0));
     const spheres = marksOf(s, 'sphere', u.id);
+    const avgD = d.dmg ? (d.dmg[0] + d.dmg[1]) / 2 : 0;
+    const adj = (p: Pos, r = 1): Unit[] => foes.filter((f) => Math.max(Math.abs(f.pos.x - p.x), Math.abs(f.pos.y - p.y)) <= r);
+    const sp = d.special;
+    if (sp === 'fatuo') { if (foes.some((f) => dist(f.pos, u.pos) <= 3)) consider(d, u.pos, 3 * avgD); continue; }
+    if (sp === 'decoy') { if (u.hp < u.maxHp * 0.5 && adj(u.pos).length) consider(d, u.pos, 16); continue; }
+    if (sp === 'orbit') { if (u.hp < u.maxHp * 0.7 && u.shield === 0) consider(d, u.pos, 8); continue; }
+    if (sp === 'transfuse') { if (spheres.length >= 2 && u.ap <= 3) consider(d, u.pos, 9); continue; }
+    if (sp === 'reap' || sp === 'absorb') { consider(d, u.pos, sp === 'reap' ? 15 : 4 * marksOf(s, 'soul').length); continue; }
+    if (sp === 'thirst') { const f = u.fury ?? 0; if (u.hp < u.maxHp * 0.55 && f >= 40) consider(d, u.pos, 4 + f * 0.22); continue; }
+    if (sp === 'pact') { if ((u.fury ?? 0) <= 40 && u.hp > u.maxHp * 0.6) consider(d, u.pos, 7); continue; }
+    if (sp === 'roar') { const n = adj(u.pos).length; if (n) consider(d, u.pos, n * 7); continue; }
+    if (sp === 'veil') { if (u.hp < u.maxHp * 0.4) consider(d, u.pos, 12); continue; }
+    if (sp === 'guardian') { for (const a of allies.filter((x) => x !== u && x.summoner === undefined && x.hp < x.maxHp * 0.5)) consider(d, a.pos, 10); continue; }
+    if (sp === 'cage') { for (const f of foes) consider(d, f.pos, 6 + adj(f.pos).length * 2); continue; }
+    if (sp === 'gravity') { for (const m of spheres) consider(d, m.pos, foes.filter((f) => dist(f.pos, m.pos) <= 2).length * (avgD + 3)); continue; }
+    if (sp === 'singularity' || sp === 'throwsphere') {
+      for (const f of foes) consider(d, f.pos, avgD + adj(f.pos).filter((x) => x !== f).length * avgD * 0.6 + (sp === 'singularity' ? 4 : 0));
+      continue;
+    }
+    if (sp === 'charge') {
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) for (let i = 1; i <= d.range[1]; i++) {
+        const at = { x: u.pos.x + dx * i, y: u.pos.y + dy * i };
+        const n = foes.filter((f) => dist(f.pos, at) === 1).length;
+        if (n) consider(d, at, n * avgD + 6);
+      }
+      continue;
+    }
+    if (d.detonate && d.keepSpheres) { consider(d, u.pos, spheres.reduce((a, m) => a + foes.filter((f) => dist(f.pos, m.pos) <= 1).length, 0) * avgD); continue; }
+    if (d.target === 'self' && d.buff?.kind === 'frenzy') { if (adj(u.pos).length) consider(d, u.pos, 9); continue; }
+    if (d.status?.kind === 'verdugo') { for (const f of foes) consider(d, f.pos, f.hp > 20 ? 6 : 0); continue; }
     if (d.shadow) {
       // la Sombra junto a un enemigo (para que replique el tajo), si aún no hay
       if (!marksOf(s, 'shadow', u.id).length) for (const f of foes) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) consider(d, { x: f.pos.x + dx, y: f.pos.y + dy }, 14);
@@ -243,7 +276,8 @@ function champCast(s: CombatState, u: Unit, ev: GameEvent[]): boolean {
         for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) for (let i = d.range[0]; i <= d.range[1]; i++) {
           const at = { x: u.pos.x + dx * i, y: u.pos.y + dy * i };
           const prey = foes.filter((f) => dist(f.pos, at) <= fu.radius).sort((a, b) => dist(a.pos, at) - dist(b.pos, at))[0];
-          if (prey) consider(d, at, avg + (avg >= prey.hp ? 12 : 0) - (dist(prey.pos, at) <= 1 ? 2 : 0));
+          // mejor aterrizar lejos de los enemigos: la Zorra es frágil
+          if (prey) consider(d, at, avg + (avg >= prey.hp ? 12 : 0) - foes.filter((f) => dist(f.pos, at) <= 1).length * 5 - (u.hp < u.maxHp * 0.5 ? foes.filter((f) => dist(f.pos, at) <= 2).length * 3 : 0));
         }
       }
     } else if (d.target === 'enemy') {

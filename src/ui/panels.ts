@@ -6,7 +6,7 @@ import { BAG_SIZE, PRICE, RARITY_NAME, SLOTS, SLOT_NAME, STAT_NAME, statDiff, st
 import { SETS, setCounts } from '../core/items/sets';
 import { RELICS } from '../content/relics';
 import { MAX_BOONS, PATRONS, patronBonus, patronOf } from '../content/boons';
-import { BOON_MODS } from '../core/boonmods';
+import { BLESSINGS, BOON_MODS } from '../core/boonmods';
 import { RUNES } from '../core/runes';
 import { MAX_SPELL_UPS, UPGRADES, tuned } from '../core/upgrades';
 import { SOULS_PER_ARMOR } from '../core/combat/engine';
@@ -155,17 +155,20 @@ export function boonRow(run: RunState): string {
   const counts = patronBonus(h.boons).counts;
   const card = (id: string, i: number): string => {
     const pp = patronOf(id)!, n = (counts[pp.id] ?? 0) + 1;
-    const syn = n >= 2 ? `<div class="good sm">Con esta: ${n} de ${esc(pp.name)} → ${esc(n >= 3 ? pp.threeText : pp.twoText)}</div>` : '';
+    const syn = n >= 2 && !pp.noSet ? `<div class="good sm">Con esta: ${n} de ${esc(pp.name)} → ${esc(n >= 3 ? pp.threeText : pp.twoText)}</div>` : '';
+    const bl = BLESSINGS[id];
+    if (bl) return `<div class="lootcard r3"><div class="row"><span class="emo big">${bl.icon}</span><div><b>${esc(bl.name)}</b><div class="pill sm">Bendición de clase (pasiva)</div></div></div><div class="sm">${esc(bl.text)}</div><button class="pri" data-act="boon" data-id="${i}">Elegir</button></div>`;
     const mod = BOON_MODS[id];
     if (mod) {
       const base = SPELLS[mod.target]!, now = tuned(base, { ups: [...h.boons.filter((b) => BOON_MODS[b]?.target === mod.target), ...(h.ups[mod.target] ?? [])] }), next = tuned(base, { ups: [id, ...h.boons.filter((b) => BOON_MODS[b]?.target === mod.target), ...(h.ups[mod.target] ?? [])] });
       return `<div class="lootcard r2"><div class="row">${spellIcon(next)}<div><b>${esc(mod.name)}</b><div class="pill sm">Mejora: ${esc(base.name)}</div></div></div><div class="sm">${esc(mod.text)}</div><div class="dim sm">Ahora: ${now.ap} PA · ${esc(spellSummary(now))}</div><div class="good sm">Después: ${next.ap} PA · ${esc(spellSummary(next))}</div>${syn}<button class="pri" data-act="boon" data-id="${i}">Elegir</button></div>`;
     }
     const d = SPELLS[id]!;
-    return `<div class="lootcard r2"><div class="row">${spellIcon(d)}<div><b>${esc(d.name)}</b><div class="pill sm">Hechizo nuevo</div></div></div><div class="sm">${esc(spellSummary(d))}</div><div class="dim sm">${d.ap} PA · ${rangeText(d)}${d.cd ? ` · espera ${d.cd}` : ''}</div><div class="sm dim"><i>${esc(d.text)}</i></div>${syn}<button class="pri" data-act="boon" data-id="${i}">Elegir</button></div>`;
+    return `<div class="lootcard r2" ${tip(spellTip(d))}><div class="row">${spellIcon(d)}<div><b>${esc(d.name)}</b><div class="pill sm">Hechizo nuevo de ${esc(CLASSES[h.cls].name)}</div></div></div><div class="sm">${esc(d.text)}</div><div class="dim sm">${d.ap} PA · ${rangeText(d)}${d.perTurn ? ` · ${d.perTurn} por turno` : ''}${d.cd ? ` · espera ${d.cd}` : ''}</div>${syn}<button class="pri" data-act="boon" data-id="${i}">Elegir</button></div>`;
   };
-  return `<div class="panel loot boon"><div class="row"><h3>${p.icon} Bendición de ${esc(p.name)}: elige una</h3><span class="grow"></span><span class="dim sm">Bendiciones: ${h.boons.length}/${MAX_BOONS}</span></div>
-  <div class="dim sm">Mejoras de tus hechizos de ${esc(CLASSES[h.cls].name.toLowerCase())} o hechizos nuevos. Con 2 de ${esc(p.name)}: ${esc(p.twoText)} · con 3: ${esc(p.threeText)}.${counts[p.id] ? ` Ya tienes ${counts[p.id]}.` : ''}</div>
+  const allSpells = h.boonOffer.spells.every((x) => SPELLS[x]);
+  return `<div class="panel loot boon"><div class="row"><h3>${p.icon} ${allSpells ? 'Hechizo nuevo' : 'Hechizo nuevo o bendición'}: elige uno</h3><span class="grow"></span><span class="dim sm">Aprendidos: ${h.boons.length}/${MAX_BOONS}</span></div>
+  <div class="dim sm">${p.noSet ? `Hechizos únicos y bendiciones de ${esc(CLASSES[h.cls].name)}, al azar.` : `Mejoras de tus hechizos de ${esc(CLASSES[h.cls].name.toLowerCase())} o hechizos nuevos. Con 2 de ${esc(p.name)}: ${esc(p.twoText)} · con 3: ${esc(p.threeText)}.${counts[p.id] ? ` Ya tienes ${counts[p.id]}.` : ''}`}</div>
   <div class="cards c3">${h.boonOffer.spells.map(card).join('')}</div>
   <button class="mini" data-act="boon" data-id="-1">Rechazar</button></div>`;
 }
@@ -217,9 +220,10 @@ export function statsModal(run: RunState): string {
     <div><div class="lbl">Habilidades</div><div class="chips">${spec.spells.filter((x) => x.charges === undefined).map((sp) => { const d = tuned(SPELLS[sp.id]!, sp); return `<span class="chip" ${tip(spellTip(d))}>${spellIcon(d)} ${esc(d.name)}</span>`; }).join('')}</div>
     ${Object.values(h.bag2).some((n) => n > 0) ? `<div class="lbl">Consumibles</div><div class="chips">${Object.entries(h.bag2).filter(([, n]) => n > 0).map(([id, n]) => `<span class="chip" ${tip(spellTip(SPELLS[id]!))}>${spellIcon(SPELLS[id]!, false)} ${esc(SPELLS[id]!.name)} x${n}</span>`).join('')}</div>` : ''}</div>
     <div>${h.relics.length ? `<div class="lbl">Reliquias</div><div class="chips">${h.relics.map((r) => RELICS[r]).filter(Boolean).map((r) => `<span class="chip" ${tip(esc(r!.text))}>${r!.icon} ${esc(r!.name)}</span>`).join('')}</div>` : ''}
-    ${Object.keys(pat.counts).length ? `<div class="lbl">Bendiciones</div>${Object.entries(pat.counts).map(([id, n]) => { const p = PATRONS[id]!; return `<div class="sm ${n >= 2 ? 'good' : 'dim'}">${p.icon} ${esc(p.name)} ${n}/3 · ${n >= 3 ? esc(p.threeText) : n >= 2 ? esc(p.twoText) : `con 2: ${esc(p.twoText)}`}</div>`; }).join('')}` : ''}
+    ${h.boons.some((b) => BLESSINGS[b]) ? `<div class="lbl">Bendiciones de clase</div>${h.boons.filter((b) => BLESSINGS[b]).map((b) => `<div class="sm good" ${tip(esc(BLESSINGS[b]!.text))}>${BLESSINGS[b]!.icon} ${esc(BLESSINGS[b]!.name)}</div>`).join('')}` : ''}
+    ${Object.keys(pat.counts).some((id) => !PATRONS[id]!.noSet) ? `<div class="lbl">Bendiciones</div>${Object.entries(pat.counts).filter(([id]) => !PATRONS[id]!.noSet).map(([id, n]) => { const p = PATRONS[id]!; return `<div class="sm ${n >= 2 ? 'good' : 'dim'}">${p.icon} ${esc(p.name)} ${n}/3 · ${n >= 3 ? esc(p.threeText) : n >= 2 ? esc(p.twoText) : `con 2: ${esc(p.twoText)}`}</div>`; }).join('')}` : ''}
     ${h.boons.some((b) => BOON_MODS[b]) ? `<div class="lbl">Hechizos mejorados</div>${h.boons.filter((b) => BOON_MODS[b]).map((b) => `<div class="sm" ${tip(esc(BOON_MODS[b]!.text))}>✨ ${esc(BOON_MODS[b]!.name)} <span class="dim">(${esc(SPELLS[BOON_MODS[b]!.target]!.name)})</span></div>`).join('')}` : ''}
-    ${(spec.traits ?? []).length ? `<div class="lbl">Efectos especiales</div>${(spec.traits ?? []).map((t) => `<div class="sm">${esc(TRAIT_LABEL[t] ?? t)}</div>`).join('')}` : ''}</div>
+    ${(spec.traits ?? []).filter((t) => !Object.values(BLESSINGS).some((b) => b.trait === t)).length ? `<div class="lbl">Efectos especiales</div>${(spec.traits ?? []).filter((t) => !Object.values(BLESSINGS).some((b) => b.trait === t)).map((t) => `<div class="sm">${esc(TRAIT_LABEL[t] ?? t)}</div>`).join('')}` : ''}</div>
   </div></div></div>`;
 }
 const TRAIT_LABEL: Record<string, string> = { venom: 'Tus venenos aplican 1 carga más', ignite: 'Todo tu daño quema', execute: 'Tus críticos hacen el doble', mender: 'Curas y escudos +30%', guard: 'Empiezas cada turno con escudo', thorns: 'Devuelves el 30% del daño cuerpo a cuerpo', regen: 'Te regeneras cada turno', enrage: '+40% de daño con poca vida' };

@@ -9,7 +9,7 @@ export type Anim = 'idle' | 'walk' | 'attack' | 'cast' | 'special' | 'death';
 export type Grid = (string | null)[][];
 
 export const MODEL_SIZE = 32;
-export const MODEL_CLASSES = ['zorro', 'esferas', 'carcelero', 'acechador'];
+export const MODEL_CLASSES = ['zorro', 'esferas', 'carcelero', 'acechador', 'barbaro'];
 export const ANIM_FRAMES: Record<Anim, number> = { idle: 4, walk: 4, attack: 4, cast: 4, special: 4, death: 5 };
 
 /** Qué animación usa cada hechizo (por defecto: ataque si daña, lanzamiento si no). */
@@ -18,6 +18,11 @@ const SPELL_ANIM: Record<string, Anim> = {
   t_pulso: 'cast', t_dispersion: 'special', t_descarga: 'attack', t_semilla: 'cast', t_implosion: 'special',
   k_sentencia: 'attack', k_viaje: 'walk', k_linterna: 'cast', k_despellejar: 'attack', k_cosecha: 'cast',
   s_shuriken: 'cast', s_tajo: 'attack', s_sombra: 'special', s_cambio: 'special', s_marca: 'cast', s_ocaso: 'special',
+  z_fuego: 'special', z_espejismo: 'cast', z_vortice: 'cast', z_seduccion: 'special', z_estallido: 'attack', z_vinculo: 'cast',
+  t_voluntad: 'attack', t_gravedad: 'special', t_orbita: 'cast', t_resonancia: 'special', t_singularidad: 'special', t_transfusion: 'cast',
+  k_caja: 'cast', k_explosion: 'attack', k_vinculo: 'attack', k_atraccion: 'cast', k_tormento: 'attack', k_sacrificio: 'cast',
+  s_danza: 'attack', s_paso: 'special', s_velo: 'special', s_convergencia: 'attack', s_cosecha: 'cast',
+  b_sed: 'special', b_tajo: 'attack', b_embiste: 'attack', b_grito: 'special', b_colosal: 'attack', b_pacto: 'special', b_cuchillada: 'attack', b_mirada: 'cast', b_frenesi: 'special',
 };
 
 export function animFor(spell: string, dealsDamage: boolean): Anim {
@@ -349,7 +354,103 @@ function acechador(p: Pen, a: Anim, f: number): void {
   if (a === 'special') for (let i = 0; i < 5; i++) p.glow(10 + i * 3, 29, 2.5, 'rgba(60,20,90,.45)');
 }
 
-const DRAW: Record<string, (p: Pen, a: Anim, f: number) => void> = { zorro, esferas: tejedora, carcelero, acechador };
+// ---------------------------------------------------------------------------
+// Bárbaro Desatado: casco con cuernos, pieles, calavera en el hombro y espadón con runas rojas
+// ---------------------------------------------------------------------------
+
+const BC = { skin: '#c98a62', skinD: '#9a5f40', skinL: '#e2ac84', paint: '#b02a2a', helm: '#8a8f9a', helmD: '#555963', helmL: '#b8bcc6', horn: '#e8dcc0', hornD: '#a89a7a', fur: '#8a7a68', furD: '#5e5040', furL: '#b4a48c', skull: '#ece4d0', skullD: '#a8a08a', kilt: '#6a4a30', kiltD: '#4a3220', belt: '#3a2a1c', boot: '#5a4632', bootD: '#3e3022', blade: '#b8bcc8', bladeD: '#767a86', bladeL: '#eef0f6', rune: '#ff4a3a', hilt: '#4a3424', beard: '#5a3a24', eye: '#2a1410', out: '#1a0f0a' };
+
+/** Espadón: empuñadura en (hx, hy), hoja en el ángulo `deg` (0 = derecha, positivo hacia abajo). */
+function greatsword(p: Pen, hx: number, hy: number, deg: number, len = 15): void {
+  const r = (deg * Math.PI) / 180, dx = Math.cos(r), dy = Math.sin(r), nx = -dy, ny = dx;
+  for (let k = -3; k < 0; k++) p.px(hx + dx * k, hy + dy * k, BC.hilt);
+  for (let w = -2; w <= 2; w++) p.px(hx + dx * 1 + nx * w, hy + dy * 1 + ny * w, BC.hilt);
+  for (let k = 2; k <= len; k++) {
+    const x = hx + dx * k, y = hy + dy * k, wdt = k > len - 2 ? 0 : k > len - 4 ? 1 : 1.6;
+    for (let w = -wdt; w <= wdt + 0.01; w += 0.5) p.px(x + nx * w, y + ny * w, w < -0.6 ? BC.bladeL : w > 0.6 ? BC.bladeD : BC.blade);
+    if (k >= 4 && k <= len - 3 && k % 2 === 0) p.px(x, y, BC.rune);
+  }
+}
+
+function barbaro(p: Pen, a: Anim, f: number): void {
+  const n = ANIM_FRAMES[a], t = f / n;
+  const death = a === 'death' ? f / (n - 1) : 0;
+  if (death >= 0.7) {
+    // tendido en el suelo, con el espadón al lado
+    const y = 25;
+    p.rect(6, y, 20, 4, BC.skin); p.rect(6, y + 3, 20, 1, BC.skinD);
+    p.rect(14, y - 1, 6, 5, BC.kilt);
+    p.rect(22, y - 1, 6, 5, BC.fur);
+    p.rect(26, y - 2, 4, 4, BC.helm); p.px(29, y - 4, BC.horn); p.px(30, y - 5, BC.horn); p.px(26, y - 3, BC.horn);
+    p.rect(3, y, 4, 3, BC.boot);
+    greatsword(p, 9, y + 5, -4, 14);
+    p.outline(BC.out);
+    return;
+  }
+  const kneel = a === 'death' ? Math.round(death * 8) : 0;
+  const bob = a === 'idle' ? (f % 2) : a === 'walk' ? (f % 2 ? -1 : 0) : a === 'special' ? -(f % 2) : 0;
+  const y0 = 4 + bob + kneel;
+  const lean = a === 'attack' ? [0, -1, 2, 1][f]! : a === 'walk' ? 1 : 0;
+  // piernas y botas de piel
+  if (a === 'walk') {
+    const st = f % 2 ? 2 : -2;
+    p.rect(12 + st, y0 + 19, 3, 6, BC.skinD); p.rect(17 - st, y0 + 19, 3, 6, BC.skin);
+    p.rect(11 + st, y0 + 23, 5, 4, BC.boot); p.rect(16 - st, y0 + 23, 5, 4, BC.boot);
+  } else {
+    const spread = a === 'attack' || a === 'special' ? 1 : 0;
+    p.rect(12 - spread, y0 + 19, 3, 6 - kneel, BC.skinD); p.rect(17 + spread, y0 + 19, 3, 6 - kneel, BC.skin);
+    p.rect(11 - spread, y0 + 23 - kneel, 5, 4, BC.boot); p.rect(16 + spread, y0 + 23 - kneel, 5, 4, BC.boot);
+    p.rect(11 - spread, y0 + 23 - kneel, 5, 1, BC.bootD); p.rect(16 + spread, y0 + 23 - kneel, 5, 1, BC.bootD);
+  }
+  // falda de cuero con tiras de piel
+  p.trap(16 + lean, y0 + 16, y0 + 21, 10, 12, BC.kilt);
+  for (let i = 0; i < 4; i++) p.rect(11 + lean + i * 3, y0 + 20, 1, 2, BC.kiltD);
+  p.rect(11 + lean, y0 + 16, 10, 1, BC.belt);
+  // brazo de atrás
+  p.rect(8 + lean, y0 + 10, 3, 7, BC.skinD);
+  p.rect(8 + lean, y0 + 14, 3, 2, BC.fur);
+  // torso musculoso con pintura de guerra y correa cruzada
+  const tx = 11 + lean;
+  p.rect(tx, y0 + 9, 10, 8, BC.skin);
+  p.rect(tx, y0 + 9, 10, 1, BC.skinL);
+  p.rect(tx + 4, y0 + 10, 1, 4, BC.skinD);
+  p.rect(tx + 1, y0 + 13, 8, 1, BC.skinD);
+  p.line(tx + 1, y0 + 11, tx + 3, y0 + 13, BC.paint); p.line(tx + 6, y0 + 11, tx + 8, y0 + 13, BC.paint);
+  p.line(tx, y0 + 10, tx + 9, y0 + 16, BC.belt); p.line(tx + 1, y0 + 10, tx + 9, y0 + 15, BC.belt);
+  // hombreras de piel y calavera en el hombro del arma
+  p.disc(tx - 0.5, y0 + 9.5, 2.6, BC.fur); p.disc(tx - 0.5, y0 + 9, 1.4, BC.furL);
+  p.disc(tx + 10, y0 + 9.5, 2.8, BC.fur); p.disc(tx + 10, y0 + 9, 1.6, BC.furL);
+  p.rect(tx + 9, y0 + 5, 4, 3, BC.skull); p.rect(tx + 9, y0 + 8, 3, 1, BC.skullD);
+  p.px(tx + 10, y0 + 6, BC.out); p.px(tx + 12, y0 + 6, BC.out); p.px(tx + 13, y0 + 4, BC.horn); p.px(tx + 8, y0 + 4, BC.horn);
+  // cabeza con barba
+  const hx = 13 + lean;
+  p.rect(hx, y0 + 3, 6, 6, BC.skin);
+  p.rect(hx, y0 + 7, 6, 3, BC.beard);
+  p.rect(hx + 1, y0 + 9, 4, 1, BC.beard);
+  const angry = a === 'special' || a === 'attack';
+  p.px(hx + 3, y0 + 5, angry ? BC.rune : BC.eye); p.px(hx + 5, y0 + 5, angry ? BC.rune : BC.eye);
+  p.px(hx + 2, y0 + 6, BC.paint); p.px(hx + 5, y0 + 6, BC.paint);
+  // casco con cuernos
+  p.rect(hx - 1, y0, 8, 4, BC.helm);
+  p.rect(hx - 1, y0, 8, 1, BC.helmL);
+  p.rect(hx - 1, y0 + 3, 8, 1, BC.helmD);
+  p.rect(hx + 3, y0 + 3, 1, 3, BC.helmD);
+  for (const [x, y, c] of [[-2, 2, BC.horn], [-3, 1, BC.horn], [-4, 0, BC.horn], [-4, -1, BC.hornD], [-3, -2, BC.hornD], [7, 2, BC.horn], [8, 1, BC.horn], [9, 0, BC.horn], [9, -1, BC.hornD], [8, -2, BC.hornD]] as const) p.px(hx + x, y0 + y, c);
+  // brazo del arma y espadón según la animación
+  const ang = a === 'attack' ? [-130, -75, 15, 55][f]! : a === 'special' ? -100 + wave(t) * 6 : a === 'cast' ? [-60, -90, -90, -60][f]! : a === 'walk' ? 25 + wave(t) * 6 : a === 'death' ? 80 : 60 + f * 3;
+  const handX = 21 + lean + (a === 'attack' && f >= 2 ? 2 : 0), handY = y0 + (a === 'attack' && f < 2 ? 9 : a === 'special' || a === 'cast' ? 8 : 14);
+  p.line(20 + lean, y0 + 10, handX, handY, BC.skin);
+  p.line(21 + lean, y0 + 10, handX + 1, handY, BC.skinD);
+  greatsword(p, handX, handY, ang, 16);
+  p.rect(handX - 1, handY - 1, 2, 2, BC.skin);
+  p.outline(BC.out);
+  // brillo de las runas y aura de furia
+  const rr = (ang * Math.PI) / 180;
+  p.glow(handX + Math.cos(rr) * 9, handY + Math.sin(rr) * 9, a === 'attack' && f === 2 ? 5 : 3, 'rgba(255,74,58,.35)');
+  if (a === 'special') { for (let i = 0; i < 4; i++) p.glow(8 + i * 5 + (f % 2), y0 - 1 + (i % 2) * 2, 2.2, 'rgba(255,90,40,.5)'); p.glow(16, y0 + 14, 9, 'rgba(255,60,30,.18)'); }
+}
+
+const DRAW: Record<string, (p: Pen, a: Anim, f: number) => void> = { zorro, esferas: tejedora, carcelero, acechador, barbaro };
 
 /** Paleta de la Sombra del Acechador: todo morado oscuro, solo los ojos siguen rojos. */
 function shadowTint(c: string): string {

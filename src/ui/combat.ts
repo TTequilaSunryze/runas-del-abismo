@@ -1,6 +1,8 @@
 // Pantalla de combate: tablero, orden de iniciativa, barra de hechizos y registro.
 import { SPELLS } from '../core/classes/spells';
-import { SOULS_PER_ARMOR, apCost, current, getUnit, spellOf, usableMp } from '../core/combat/engine';
+import { SOULS_PER_ARMOR, apCost, current, essenceNeed, furyCrit, furyPower, getUnit, spellOf, usableMp } from '../core/combat/engine';
+import { marksOf } from '../core/combat/marks';
+import type { CombatState, Unit } from '../core/state';
 import { RUNES } from '../core/runes';
 import { OMENS } from '../content/modes';
 import type { GameEvent } from '../core/state';
@@ -75,7 +77,7 @@ export function combatScreen(events: GameEvent[]): void {
   document.getElementById('init')!.innerHTML = c.order.map((id) => getUnit(c, id)!).filter((u) => u.hp > 0)
     .map((u) => `<span class="ini ${cur?.id === u.id ? 'on' : ''} ${u.team === mineTeam ? `p${(heroIdx.get(u.id) ?? 0) % 4}` : 'en'}" ${tip(`<b>${esc(u.name)}</b><div class="sm">${u.hp}/${u.maxHp} PV · iniciativa ${u.initiative}</div>${(u.traits ?? []).map((t) => `<div class="sm dim">${esc(TRAIT_TEXT[t] ?? t)}</div>`).join('')}`)}>${esc(u.name.split(' ')[0])}<i style="width:${(u.hp / u.maxHp) * 100}%"></i></span>`).join('');
   document.getElementById('hud')!.innerHTML = me
-    ? `<div class="me"><b>${esc(me.name)}</b>${hpBar(me.hp, me.maxHp, me.shield)}<div class="row"><span class="sm pill">PA</span>${pips(me.ap, me.maxAp, 'ap')}</div><div class="row"><span class="sm blu">PM</span>${pips(me.mp, me.maxMp, 'mp')}</div>${me.souls !== undefined ? `<div class="sm souls" ${tip(`Cosecha de almas: cada enemigo que muere con el Carcelero vivo es un alma. Cuentan en toda la partida: cada ${SOULS_PER_ARMOR}, +1 de armadura permanente.`)}>💀 ${me.souls} almas · +${Math.floor(me.souls / SOULS_PER_ARMOR)} armadura · próxima en ${SOULS_PER_ARMOR - (me.souls % SOULS_PER_ARMOR)}</div>` : ''}</div>
+    ? `<div class="me"><b>${esc(me.name)}</b>${hpBar(me.hp, me.maxHp, me.shield)}<div class="row"><span class="sm pill">PA</span>${pips(me.ap, me.maxAp, 'ap')}</div><div class="row"><span class="sm blu">PM</span>${pips(me.mp, me.maxMp, 'mp')}</div>${resourceHtml(c, me)}</div>
       ${usableMp(c, me) < me.mp && myTurn ? `<div class="sm blu" ${tip('Placaje: los enemigos pegados a ti te retienen. Al alejarte pierdes PM según tu Huida y su Placaje.')}>⛓ Placado: ${usableMp(c, me)}/${me.mp} PM útiles</div>` : ''}
       <div class="spellbar">${me.spells.map((sp, i) => ({ sp, i })).filter(({ sp }) => sp.charges === undefined).map(({ sp, i }) => { const d = spellOf(me, sp.id)!; const rn = sp.rune ? RUNES[sp.rune] : undefined; const cost = apCost(me, sp.id); const spent = !!d.perTurn && (sp.uses ?? 0) >= d.perTurn; const off = !myTurn || me.ap < cost || sp.cd > 0 || spent || me.hp <= 0;
         return `<button class="sbtn ${board.sel === d.id ? 'on' : ''} ${sp.cd > 0 ? 'cd' : ''}" data-act="spell" data-id="${d.id}" ${off ? 'disabled' : ''} ${tip(spellTip(d, `${rn ? `<div class="sm pill">${rn.icon} ${esc(rn.name)}: ${esc(rn.text)}</div>` : ''}${sp.cd > 0 ? `<div class="sm bad">Disponible en ${sp.cd} turno(s)</div>` : ''}${d.perTurn ? `<div class="sm ${spent ? 'bad' : 'dim'}">Usado ${sp.uses ?? 0}/${d.perTurn} este turno</div>` : ''}${sp.free ? '<div class="sm good">¡Gratis tras rematar!</div>' : ''}`))}>
@@ -88,4 +90,23 @@ export function combatScreen(events: GameEvent[]): void {
   lg.className = `log ${ui.logOpen ? 'open' : ''}`;
   lg.innerHTML = ui.log.slice(ui.logOpen ? -40 : -6).map((l) => `<span>${l}</span>`).join('');
   lg.scrollTop = 1e9;
+}
+
+/** Recursos propios de cada clase, a la vista: Esencia, Esferas, Almas, Furia y Marcas de la muerte. */
+function resourceHtml(c: CombatState, me: Unit): string {
+  const out: string[] = [];
+  if (me.essence !== undefined) {
+    const need = essenceNeed(me), full = me.essence >= need;
+    out.push(`<div class="sm res ${full ? 'good' : ''}" ${tip(`Robo de esencia: cada habilidad que acierta da 1 carga. Con ${need}, la siguiente habilidad de daño te cura el 15% (verás un aura rosa).`)}>🦊 Esencia ${'●'.repeat(me.essence)}${'○'.repeat(Math.max(0, need - me.essence))}${full ? ' · ¡la próxima cura!' : ''}</div>`);
+  }
+  if (me.kind === 'esferas') {
+    const n = marksOf(c, 'sphere', me.id).length, max = me.traits?.includes('poder') ? 5 : 3;
+    out.push(`<div class="sm res" ${tip('Esferas oscuras tuyas en el tablero.')}>🔮 Esferas ${n}/${max}</div>`);
+  }
+  if (me.souls !== undefined) out.push(`<div class="sm souls" ${tip(`Cosecha de almas: cuentan en toda la partida; cada ${SOULS_PER_ARMOR}, +1 de armadura permanente. Las almas sin gastar se usan en Explosión de almas.`)}>💀 ${me.souls} almas (${me.soulBank ?? 0} para gastar) · +${Math.floor(me.souls / SOULS_PER_ARMOR)} armadura · próxima en ${SOULS_PER_ARMOR - (me.souls % SOULS_PER_ARMOR)}</div>`);
+  if (me.fury !== undefined) out.push(`<div class="sm res fury" ${tip('Furia: +20 al golpear, +10 al recibir daño. Cada 20: +5% de daño y +6% de crítico. Si pasas un turno sin atacar ni recibir daño, pierdes 20.')}>🔥 Furia <span class="fbar"><i style="width:${me.fury}%"></i></span> ${me.fury}/100 · +${furyPower(me)}% daño · +${furyCrit(me)}% crít.</div>`);
+  const marked = c.units.filter((u) => u.hp > 0 && u.statuses.deathmark?.from === me.id);
+  if (marked.length) out.push(`<div class="sm res bad">☠ Marca de la muerte: ${marked.map((u) => `${esc(u.name.split(' ')[0]!)} guarda ${u.statuses.deathmark!.stacks} (${u.statuses.deathmark!.turns} t.)`).join(' · ')}</div>`);
+  if (me.kind === 'acechador') { const n = marksOf(c, 'shadow', me.id).length; if (n) out.push(`<div class="sm res">👤 Sombras ${n}</div>`); }
+  return out.join('');
 }

@@ -2,7 +2,7 @@
 // mejoras de sus hechizos de clase o hechizos nuevos de esa clase. Tener 2 y 3 del mismo estilo da bonus.
 import type { Stats } from '../core/items/items';
 import type { ClassId } from '../core/state';
-import { BOON_MODS } from '../core/boonmods';
+import { BLESSINGS, BOON_MODS } from '../core/boonmods';
 
 export interface PatronDef {
   id: string;
@@ -17,6 +17,8 @@ export interface PatronDef {
   trait?: string;
   twoText: string;
   threeText: string;
+  /** sin bonus por tener varias (las clases con hechizos únicos y bendiciones) */
+  noSet?: boolean;
 }
 
 export const PATRONS: Record<string, PatronDef> = Object.fromEntries(
@@ -37,18 +39,11 @@ export const PATRONS: Record<string, PatronDef> = Object.fromEntries(
     { id: 'a_rafaga', cls: 'arquero', name: 'Ráfaga', icon: '🏹', spells: ['am_ligera', 'am_doble', 'a_abanico', 'a_ignea', 'am_ignea'], two: { initiative: 8, dodge: 4 }, three: { ap: 1 }, twoText: '+8 de iniciativa y +4 de huida', threeText: '+1 PA' },
     { id: 'a_trampas', cls: 'arquero', name: 'Trampero', icon: '🪤', spells: ['am_enredo', 'am_veneno', 'a_campo', 'a_conmocion'], two: { status: 1 }, three: { tackle: 4, armor: 1 }, twoText: '+1 turno a tus estados', threeText: '+4 de placaje y +1 de armadura' },
     { id: 'a_bestias', cls: 'arquero', name: 'Bestias', icon: '🐺', spells: ['a_halcon', 'am_salvaje', 'am_marcadora'], two: { hp: 12 }, three: {}, trait: 'regen', twoText: '+12 de vida', threeText: 'Te regeneras cada turno' },
-    { id: 'z_esencia', cls: 'zorro', name: 'Esencia', icon: '🦊', spells: ['zm_orbe_intenso', 'zm_encanto_largo', 'z_drenaje', 'z_maldicion'], two: { power: 6 }, three: { resShadow: 20, hp: 8 }, twoText: '+6% de daño', threeText: '+8 de vida y +20% de res. sombra' },
-    { id: 'z_espiritu', cls: 'zorro', name: 'Espíritu', icon: '👻', spells: ['zm_impulso_radio', 'zm_impulso_veloz', 'z_velo', 'z_espejismo'], two: { dodge: 4 }, three: { mp: 1 }, twoText: '+4 de huida', threeText: '+1 PM' },
-    { id: 'z_llama', cls: 'zorro', name: 'Llama azul', icon: '🔥', spells: ['z_fuego', 'zm_fuego_vivo', 'z_colas'], two: { resFire: 20 }, three: {}, trait: 'ignite', twoText: '+20% de res. fuego', threeText: 'Todo tu daño quema' },
-    { id: 't_dominio', cls: 'esferas', name: 'Dominio', icon: '🔮', spells: ['tm_cinco', 'tm_pulso', 't_semilla', 't_orbita'], two: { power: 6 }, three: { ap: 1 }, twoText: '+6% de daño', threeText: '+1 PA' },
-    { id: 't_ruina', cls: 'esferas', name: 'Ruina', icon: '💥', spells: ['tm_descarga', 'tm_dispersion', 't_implosion'], two: { crit: 8 }, three: { power: 10 }, twoText: '+8% de crítico', threeText: '+10% de daño' },
-    { id: 't_abismo', cls: 'esferas', name: 'Vacío', icon: '🌑', spells: ['t_pozo', 't_vacio', 'tm_vacio', 't_eclipse'], two: { hp: 10 }, three: { status: 1 }, twoText: '+10 de vida', threeText: '+1 turno a tus estados' },
-    { id: 's_filos', cls: 'acechador', name: 'Filos', icon: '🗡️', spells: ['sm_shuriken', 'sm_tajo', 's_marca', 's_ejecucion'], two: { crit: 8 }, three: {}, trait: 'execute', twoText: '+8% de crítico', threeText: 'Tus críticos hacen el doble' },
-    { id: 's_umbra', cls: 'acechador', name: 'Umbra', icon: '👤', spells: ['sm_sombra_larga', 'sm_eco', 's_ocaso', 's_paso'], two: { dodge: 4 }, three: { mp: 1 }, twoText: '+4 de huida', threeText: '+1 PM' },
-    { id: 's_toxinas', cls: 'acechador', name: 'Toxinas', icon: '🧪', spells: ['s_hoja', 'sm_hoja', 's_kunai'], two: { resPoison: 20 }, three: {}, trait: 'venom', twoText: '+20% de res. veneno', threeText: 'Tus venenos aplican 1 carga más' },
-    { id: 'k_cadenas', cls: 'carcelero', name: 'Cadenas', icon: '⛓️', spells: ['km_gancho_largo', 'km_gancho_pesado', 'k_grilletes', 'k_azote', 'km_azote'], two: { tackle: 3, power: 5 }, three: { ap: 1 }, twoText: '+3 de placaje y +5% de daño', threeText: '+1 PA' },
-    { id: 'k_farol', cls: 'carcelero', name: 'Linterna', icon: '🏮', spells: ['km_farol_cura', 'km_farol_largo', 'k_cosecha', 'k_huesos'], two: { hp: 12 }, three: {}, trait: 'mender', twoText: '+12 de vida', threeText: 'Tus curas y escudos son un 30% mayores' },
-    { id: 'k_almas', cls: 'carcelero', name: 'Almas', icon: '💀', spells: ['km_desollar', 'k_alma', 'k_condena'], two: { resShadow: 20 }, three: {}, trait: 'guard', twoText: '+20% de res. sombra', threeText: 'Empiezas cada turno con escudo' },
+    { id: 'z_kitsune', cls: 'zorro', name: 'Kitsune', icon: '🦊', noSet: true, spells: ['z_fuego', 'z_espejismo', 'z_vortice', 'z_seduccion', 'z_estallido', 'z_vinculo', 'zb_esencia', 'zb_danza', 'zb_mirada'], two: {}, three: {}, twoText: '', threeText: '' },
+    { id: 't_tejido', cls: 'esferas', name: 'Vacío', icon: '🔮', noSet: true, spells: ['t_voluntad', 't_gravedad', 't_orbita', 't_resonancia', 't_singularidad', 't_transfusion', 'tb_poder', 'tb_onda', 'tb_eco'], two: {}, three: {}, twoText: '', threeText: '' },
+    { id: 'k_almas', cls: 'carcelero', name: 'Almas', icon: '⛓️', noSet: true, spells: ['k_caja', 'k_explosion', 'k_vinculo', 'k_atraccion', 'k_tormento', 'k_sacrificio', 'kb_condena', 'kb_faro', 'kb_guadana'], two: {}, three: {}, twoText: '', threeText: '' },
+    { id: 's_sombras', cls: 'acechador', name: 'Sombras', icon: '👤', noSet: true, spells: ['s_marca', 's_danza', 's_paso', 's_velo', 's_convergencia', 's_cosecha', 'sb_maestro', 'sb_desprecio', 'sb_persistente'], two: {}, three: {}, twoText: '', threeText: '' },
+    { id: 'b_furia', cls: 'barbaro', name: 'Furia', icon: '🔥', noSet: true, spells: ['b_grito', 'b_colosal', 'b_pacto', 'b_cuchillada', 'b_mirada', 'b_frenesi', 'bb_inagotable', 'bb_negarse', 'bb_torbellino'], two: {}, three: {}, twoText: '', threeText: '' },
     { id: 'p_veneno', cls: 'picaro', name: 'Veneno', icon: '🧪', spells: ['pm_untada', 'pm_cuchillo_ven', 'p_frasco'], two: { status: 1 }, three: {}, trait: 'venom', twoText: '+1 turno a tus estados', threeText: 'Tus venenos aplican 1 carga más' },
     { id: 'p_asesino', cls: 'picaro', name: 'Asesino', icon: '🗡️', spells: ['pm_letal', 'pm_emboscada', 'p_degollar'], two: { crit: 10 }, three: {}, trait: 'execute', twoText: '+10% de crítico', threeText: 'Tus críticos hacen el doble' },
     { id: 'p_sombras', cls: 'picaro', name: 'Sombras', icon: '🌑', spells: ['pm_cegador', 'pm_sombra', 'p_debilidad'], two: { dodge: 5, initiative: 6 }, three: { mp: 1 }, twoText: '+5 de huida y +6 de iniciativa', threeText: '+1 PM' },
@@ -60,6 +55,8 @@ export const PATRONS: Record<string, PatronDef> = Object.fromEntries(
 export const patronsOf = (cls: ClassId): PatronDef[] => Object.values(PATRONS).filter((p) => p.cls === cls);
 /** ¿Es una mejora de hechizo (y no un hechizo nuevo)? */
 export const isMod = (id: string): boolean => !!BOON_MODS[id];
+/** ¿Es una bendición pasiva? */
+export const isBlessing = (id: string): boolean => !!BLESSINGS[id];
 
 /** Patrón al que pertenece una habilidad de bendición. */
 export const patronOf = (spell: string): PatronDef | undefined => Object.values(PATRONS).find((p) => p.spells.includes(spell));
@@ -78,7 +75,7 @@ export function patronBonus(boons: readonly string[]): { stats: Stats[]; traits:
 }
 
 /** Habilidades extra que puede llevar un héroe. */
-export const MAX_BOONS = 6;
+export const MAX_BOONS = 9;
 
 /** Consumibles: qué son y cuánto valen en la tienda. */
 export const CONSUMABLES: Record<string, { name: string; icon: string; price: number }> = {

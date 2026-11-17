@@ -108,6 +108,26 @@ export interface SpellDef {
   pull?: number;
   /** escudo extra por cada esfera tuya en el tablero */
   sphereShield?: number;
+  /** efecto propio de un hechizo concreto (ver `special` en combat/engine.ts) */
+  special?: string;
+  /** necesita al menos una esfera tuya en el tablero */
+  needSphere?: boolean;
+  /** se apunta a una de tus esferas */
+  atSphere?: boolean;
+  /** Furia que consume (y que hay que tener) */
+  furyCost?: number;
+  /** Furia que genera por cada enemigo golpeado (si no, +20 por lanzamiento que golpee) */
+  furyPer?: number;
+  /** daño extra por cada punto de Furia (sobre el objetivo principal) */
+  furyScale?: number;
+  /** todo el área recibe el daño completo (no el 50% de los secundarios) */
+  fullArea?: boolean;
+  /** apareces a la espalda del objetivo antes de golpear */
+  behind?: boolean;
+  /** la Sombra no lo replica */
+  noEcho?: boolean;
+  /** detonar sin consumir las esferas */
+  keepSpheres?: boolean;
   /** invoca un aliado controlado por la IA (uno a la vez) */
   summon?: { kind: string; name: string; hpPct: number; armor: number; ap: number; mp: number; initiative: number; spell: string };
   text: string;
@@ -118,22 +138,19 @@ const S = (d: SpellDef): SpellDef => d;
 export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
   [
     // ---------- Hechicera Zorro ----------
-    S({ id: 'z_orbe', name: 'Orbe del engaño', route: 'base', ap: 3, cd: 0, perTurn: 2, range: [1, 5], los: true, straight: true, line: true, bounce: 2, target: 'enemy', dmg: [4, 5], element: 'shadow', text: 'Un orbe en línea recta: golpea a los enemigos del camino al ir y otra vez al volver. Sus efectos se aplican una sola vez.' }),
-    S({ id: 'z_encanto', name: 'Encanto', route: 'base', ap: 2, cd: 2, range: [1, 7], los: true, straight: true, firstHit: true, pull: 2, target: 'enemy', text: 'Encanta al primer enemigo de la línea y lo atrae 2 casillas hacia ti.' }),
+    S({ id: 'z_orbe', name: 'Orbe del engaño', route: 'base', ap: 3, cd: 0, perTurn: 2, range: [1, 5], los: true, straight: true, line: true, bounce: 2, target: 'enemy', dmg: [4, 6], element: 'shadow', text: 'Un orbe en línea recta: golpea a los enemigos del camino al ir y otra vez al volver. Sus efectos se aplican una sola vez.' }),
+    S({ id: 'z_encanto', name: 'Encanto', route: 'base', ap: 2, cd: 2, range: [1, 7], los: true, straight: true, firstHit: true, pull: 2, status: { kind: 'charm', turns: 1 }, target: 'enemy', text: 'Encanta al primer enemigo de la línea y lo atrae 2 casillas hacia ti. Queda Encantado 1 turno.' }),
     S({ id: 'z_impulso', name: 'Impulso espiritual', route: 'base', ap: 3, cd: 0, perTurn: 1, resetOnKill: true, range: [1, 3], los: false, straight: true, target: 'cell', teleport: true, followUp: { dmg: [5, 7], element: 'shadow', radius: 4 }, text: 'Te desplazas hasta 3 casillas en línea recta ignorando el placaje y lanzas un proyectil al enemigo más cercano a 4 casillas. Si lo remata, puedes volver a usarlo gratis (0 PA).' }),
     S({ id: 'z_drenaje', name: 'Drenaje de esencia', route: 'boon', ap: 2, cd: 1, range: [1, 3], los: true, target: 'enemy', dmg: [4, 6], element: 'shadow', lifesteal: 1, text: 'Te curas todo el daño que haces.' }),
     S({ id: 'z_velo', name: 'Velo espectral', route: 'boon', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', buff: { kind: 'invis', turns: 1 }, selfMp: 2, text: 'Invisible durante 1 turno y ganas 2 PM.' }),
-    S({ id: 'z_fuego', name: 'Fuego zorruno', route: 'boon', ap: 3, cd: 1, range: [2, 5], los: true, target: 'enemy', area: 1, dmg: [4, 6], element: 'fire', status: { kind: 'burn', turns: 2 }, text: 'Llamas azules en área 1 que queman 2 turnos.' }),
-    S({ id: 'z_espejismo', name: 'Espejismo', route: 'boon', ap: 2, cd: 3, range: [0, 4], los: true, target: 'ally', shield: 10, giveMp: 1, text: 'Un doble ilusorio protege a un aliado (o a ti): escudo 10 y +1 PM en su próximo turno.' }),
     S({ id: 'z_colas', name: 'Danza de colas', route: 'boon', ap: 4, cd: 2, range: [0, 0], los: false, target: 'enemy', area: 1, dmg: [6, 8], element: 'shadow', push: 1, pushAll: true, text: 'Giras con tus nueve colas: daña y empuja 1 casilla a los enemigos pegados a ti.' }),
     S({ id: 'z_maldicion', name: 'Maldición kitsune', route: 'boon', ap: 2, cd: 2, range: [1, 5], los: true, target: 'enemy', dmg: [3, 4], element: 'shadow', status: { kind: 'mark', turns: 2 }, text: 'Marca al objetivo: recibe +30% de daño 2 turnos.' }),
     // ---------- Tejedora de Esferas ----------
     S({ id: 't_pulso', name: 'Pulso oscuro', route: 'base', ap: 3, cd: 0, perTurn: 2, range: [1, 5], los: true, target: 'ground', dmg: [4, 6], element: 'shadow', sphere: { turns: 2, max: 3 }, text: 'Daña al enemigo de la casilla (si lo hay) y deja una Esfera oscura 2 turnos. Máximo 3 esferas: la 4.ª borra la más antigua.' }),
-    S({ id: 't_dispersion', name: 'Dispersión', route: 'base', ap: 3, cd: 1, range: [1, 1], los: false, straight: true, target: 'ground', cone: 2, dmg: [4, 6], element: 'shadow', push: 3, sphereHit: { dmg: [6, 8], stun: 1 }, text: 'Onda en cono de 2 casillas: empuja 3 casillas a enemigos y esferas. Una esfera que choca con un enemigo lo daña y lo aturde 1 turno.' }),
-    S({ id: 't_descarga', name: 'Descarga desatada', route: 'base', ap: 5, cd: 0, perTurn: 1, range: [1, 5], los: true, target: 'enemy', dmg: [7, 9], element: 'shadow', consume: { per: 5 }, text: 'Golpea a un solo objetivo y consume todas tus esferas: +5 de daño por cada una.' }),
+    S({ id: 't_dispersion', name: 'Dispersión', route: 'base', ap: 3, cd: 1, range: [1, 1], los: false, straight: true, target: 'ground', cone: 2, dmg: [4, 6], element: 'shadow', push: 3, sphereHit: { dmg: [9, 11], stun: 1 }, text: 'Onda en cono de 2 casillas: empuja 3 casillas a enemigos y esferas. Una esfera que choca con un enemigo lo daña y lo aturde 1 turno.' }),
+    S({ id: 't_descarga', name: 'Descarga desatada', route: 'base', ap: 4, cd: 0, perTurn: 1, range: [1, 5], los: true, target: 'enemy', dmg: [7, 9], element: 'shadow', consume: { per: 8 }, special: 'descarga', text: 'Golpea a un solo objetivo y consume todas tus esferas: +8 de daño por cada una.' }),
     S({ id: 't_semilla', name: 'Semilla oscura', route: 'boon', ap: 1, cd: 1, range: [1, 4], los: true, target: 'ground', sphere: { turns: 2, max: 3 }, text: 'Deja una Esfera oscura sin hacer daño.' }),
     S({ id: 't_implosion', name: 'Implosión', route: 'boon', ap: 3, cd: 2, range: [0, 0], los: false, target: 'self', detonate: { dmg: [6, 8], area: 1 }, element: 'shadow', text: 'Detona todas tus esferas: cada una daña a los enemigos pegados a ella.' }),
-    S({ id: 't_orbita', name: 'Órbita protectora', route: 'boon', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', shield: 4, sphereShield: 5, text: 'Escudo de 4, +5 por cada esfera tuya en el tablero.' }),
     S({ id: 't_pozo', name: 'Pozo gravitatorio', route: 'boon', ap: 3, cd: 2, range: [2, 5], los: true, target: 'enemy', area: 1, dmg: [3, 5], element: 'shadow', status: { kind: 'slow', turns: 1, stacks: 2 }, text: 'Un pozo en área 1: daña y quita 2 PM.' }),
     S({ id: 't_vacio', name: 'Rayo del vacío', route: 'boon', ap: 4, cd: 1, range: [1, 6], los: true, straight: true, line: true, target: 'enemy', dmg: [6, 8], element: 'shadow', text: 'Un rayo en línea recta que atraviesa a todos los enemigos.' }),
     S({ id: 't_eclipse', name: 'Eclipse', route: 'boon', ap: 3, cd: 3, range: [1, 5], los: true, target: 'enemy', dmg: [4, 6], element: 'shadow', drainAp: 2, text: 'Apaga la luz del objetivo: daña y le quita 2 PA.' }),
@@ -142,10 +159,8 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
     S({ id: 's_tajo', name: 'Tajo de sombra', route: 'base', ap: 3, cd: 0, perTurn: 2, range: [0, 0], los: false, target: 'enemy', area: 1, dmg: [5, 7], status: { kind: 'slow', turns: 1, stacks: 1 }, text: 'Giras sobre ti: daña a los enemigos pegados a ti y a tu Sombra y les quita 1 PM.' }),
     S({ id: 's_sombra', name: 'Sombra viviente', route: 'base', ap: 2, cd: 2, range: [1, 4], los: false, target: 'cell', shadow: { turns: 2, echo: 0.5 }, text: 'Pones tu Sombra en una casilla libre durante 2 turnos. Replica tus hechizos de daño al 50%. Mientras exista, Intercambiar (1 PA) te cambia de sitio con ella ignorando el placaje.' }),
     S({ id: 's_cambio', name: 'Intercambiar', route: 'temp', ap: 1, cd: 0, range: [0, 0], los: false, target: 'self', swapShadow: true, text: 'Te cambias de sitio con tu Sombra, ignorando el placaje.' }),
-    S({ id: 's_marca', name: 'Marca mortal', route: 'boon', ap: 3, cd: 3, range: [1, 4], los: true, target: 'enemy', dmg: [5, 7], status: { kind: 'mark', turns: 2 }, text: 'Daña y Marca al enemigo: recibe más daño 2 turnos.' }),
     S({ id: 's_ocaso', name: 'Ocaso', route: 'boon', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', buff: { kind: 'invis', turns: 1 }, selfMp: 2, text: 'Te fundes en la sombra: invisible 1 turno y +2 PM.' }),
     S({ id: 's_kunai', name: 'Lluvia de kunai', route: 'boon', ap: 4, cd: 2, range: [2, 5], los: true, target: 'enemy', area: 1, dmg: [6, 8], text: 'Una lluvia de kunai en área 1.' }),
-    S({ id: 's_paso', name: 'Paso sombrío', route: 'boon', ap: 2, cd: 2, range: [1, 4], los: false, target: 'cell', teleport: true, text: 'Te teletransportas a una casilla libre, ignorando el placaje.' }),
     S({ id: 's_hoja', name: 'Hoja envenenada', route: 'boon', ap: 3, cd: 1, range: [1, 1], los: false, target: 'enemy', dmg: [5, 7], element: 'poison', status: { kind: 'poison', turns: 3, stacks: 2 }, text: 'Cuerpo a cuerpo: envenena x2 durante 3 turnos.' }),
     S({ id: 's_ejecucion', name: 'Ejecución silenciosa', route: 'boon', ap: 4, cd: 3, range: [1, 1], los: false, target: 'enemy', dmg: [12, 15], crit: 20, text: 'Un golpe cuerpo a cuerpo devastador, con +20% de crítico.' }),
     // ---------- Carcelero de Almas ----------
@@ -160,6 +175,44 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
     S({ id: 'k_azote', name: 'Azote de cadenas', route: 'boon', ap: 4, cd: 2, range: [1, 4], los: true, straight: true, line: true, target: 'enemy', dmg: [6, 8], element: 'shadow', text: 'Las cadenas barren la línea: dañan a todos los enemigos en ella.' }),
     S({ id: 'k_huesos', name: 'Coraza de huesos', route: 'boon', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', shield: 12, text: 'Ganas 12 de escudo.' }),
     S({ id: 'k_alma', name: 'Alma en pena', route: 'boon', ap: 3, cd: 2, range: [1, 4], los: true, target: 'enemy', dmg: [6, 8], element: 'shadow', lifesteal: 0.5, text: 'Arrancas un trozo de alma: te curas la mitad del daño.' }),
+    // ---------- Hechizos únicos (v9): Hechicera Zorro ----------
+    S({ id: 'z_fuego', name: 'Fuego zorruno', route: 'boon', ap: 2, cd: 0, perTurn: 1, range: [0, 0], los: false, target: 'self', dmg: [4, 5], element: 'fire', special: 'fatuo', text: '3 llamas azules giran a tu alrededor. Al acabar tu turno, cada una vuela al enemigo más cercano (a 3 casillas; si empatan, al de menos vida y luego al de menos resistencias) y suma Esencia.' }),
+    S({ id: 'z_espejismo', name: 'Espejismo ilusorio', route: 'boon', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', special: 'decoy', text: 'Dejas un señuelo con 1 de vida en tu casilla y retrocedes 2 casillas ignorando el placaje. Los enemigos cercanos atacan antes al señuelo.' }),
+    S({ id: 'z_vortice', name: 'Vórtice espiritual', route: 'boon', ap: 3, cd: 2, range: [2, 5], los: true, target: 'ground', area: 1, fullArea: true, dmg: [4, 6], element: 'shadow', special: 'vortex', text: 'Un remolino daña en cruz y atrae 1 casilla hacia el centro a los enemigos de alrededor. Ideal para alinearlos antes del Orbe.' }),
+    S({ id: 'z_seduccion', name: 'Seducción arcana', route: 'boon', ap: 2, cd: 2, range: [1, 4], los: true, target: 'enemy', dmg: [3, 4], element: 'shadow', special: 'seduce', text: 'Si el objetivo está Encantado o por debajo de la mitad de su vida, le robas 1 PA y 1 PM para este turno.' }),
+    S({ id: 'z_estallido', name: 'Estallido de colas', route: 'boon', ap: 3, cd: 2, range: [1, 1], los: false, straight: true, target: 'ground', cone: 2, dmg: [5, 7], element: 'shadow', push: 1, special: 'tails', text: 'Cono frontal de 2 casillas: daña y empuja 1. Si alcanza a 2 o más enemigos, te curas al instante como con el Robo de esencia.' }),
+    S({ id: 'z_vinculo', name: 'Vínculo etéreo', route: 'boon', ap: 3, cd: 2, range: [1, 4], los: true, target: 'enemy', behind: true, dmg: [4, 6], element: 'shadow', status: { kind: 'vuln', turns: 1 }, text: 'Apareces a la espalda del enemigo, lo golpeas y lo dejas Vulnerable: +20% de daño recibido hasta su turno.' }),
+    // ---------- Tejedora de Esferas ----------
+    S({ id: 't_voluntad', name: 'Fuerza de voluntad', route: 'boon', ap: 2, cd: 1, range: [1, 5], los: true, target: 'ground', needSphere: true, special: 'throwsphere', area: 1, fullArea: true, dmg: [5, 7], element: 'shadow', status: { kind: 'slow', turns: 1, stacks: 2 }, text: 'Agarras tu esfera más antigua y la arrojas a la casilla: daña en cruz y quita 2 PM.' }),
+    S({ id: 't_gravedad', name: 'Gravedad inversa', route: 'boon', ap: 3, cd: 2, range: [0, 9], los: false, target: 'ground', atSphere: true, special: 'gravity', fullArea: true, dmg: [3, 4], element: 'shadow', text: 'Elige una de tus esferas: atrae 1 casilla hacia ella a los enemigos a 2 casillas y les hace daño ligero.' }),
+    S({ id: 't_orbita', name: 'Órbita defensiva', route: 'boon', ap: 2, cd: 2, range: [0, 0], los: false, target: 'self', needSphere: true, special: 'orbit', shield: 10, text: 'Consumes tu esfera más cercana: escudo de 10 y el primer enemigo que te golpee cuerpo a cuerpo sale despedido 1 casilla.' }),
+    S({ id: 't_resonancia', name: 'Resonancia oscura', route: 'boon', ap: 3, cd: 2, range: [0, 0], los: false, target: 'self', needSphere: true, detonate: { dmg: [6, 8], area: 1 }, keepSpheres: true, element: 'shadow', text: 'Todas tus esferas emiten un pulso: dañan a los enemigos pegados a ellas sin consumirse.' }),
+    S({ id: 't_singularidad', name: 'Singularidad', route: 'boon', ap: 4, cd: 3, range: [2, 5], los: true, target: 'ground', special: 'singularity', dmg: [9, 12], element: 'shadow', text: 'Un agujero negro de 2×2: daño alto a los enemigos de dentro y crea 2 esferas.' }),
+    S({ id: 't_transfusion', name: 'Transfusión de vacío', route: 'boon', ap: 1, cd: 0, perTurn: 1, range: [0, 0], los: false, target: 'self', needSphere: true, special: 'transfuse', text: 'Consumes tu esfera más antigua y recuperas 2 PA. Una vez por turno.' }),
+    // ---------- Carcelero de Almas ----------
+    S({ id: 'k_caja', name: 'La caja', route: 'boon', ap: 4, cd: 3, range: [2, 5], los: true, target: 'ground', special: 'cage', text: 'Muros espectrales en las 8 casillas alrededor de la elegida, hasta tu próximo turno. El enemigo que entre en ellas sufre daño y pierde todos sus PM.' }),
+    S({ id: 'k_explosion', name: 'Explosión de almas', route: 'boon', ap: 2, cd: 2, range: [0, 0], los: false, target: 'enemy', area: 1, square: true, dmg: [5, 7], element: 'shadow', special: 'soulburst', text: 'Gastas hasta 3 almas: onda 3×3 a tu alrededor con +3 de daño y 5 de curación por cada alma gastada.' }),
+    S({ id: 'k_vinculo', name: 'Cadenas vinculantes', route: 'boon', ap: 3, cd: 2, range: [1, 4], los: true, target: 'enemy', dmg: [3, 4], element: 'shadow', special: 'chainlink', text: 'Encadenas al objetivo con otro enemigo a 2 casillas de él. Si uno de los dos se mueve o lo empujan, el otro sufre daño y pierde 2 PM.' }),
+    S({ id: 'k_atraccion', name: 'Atracción del abismo', route: 'boon', ap: 2, cd: 1, range: [0, 0], los: false, target: 'self', special: 'absorb', text: 'Absorbes todas las almas que haya en el tablero, sin caminar hasta ellas: 5 de escudo por cada una.' }),
+    S({ id: 'k_tormento', name: 'Tormento espectral', route: 'boon', ap: 3, cd: 1, range: [1, 1], los: false, straight: true, target: 'ground', cone: 3, dmg: [5, 7], element: 'shadow', status: { kind: 'hobble', turns: 2 }, text: 'Arco frontal de 3 casillas con la guadaña: daña y reduce a la mitad la Huida de los golpeados (quedan atrapados por tu placaje).' }),
+    S({ id: 'k_sacrificio', name: 'Sacrificio del guardián', route: 'boon', ap: 2, cd: 3, range: [1, 4], los: true, target: 'ally', special: 'guardian', text: 'Te vinculas a un aliado hasta su turno: el 40% del daño que reciba lo recibes tú (con tu armadura).' }),
+    // ---------- Acechador de Sombras ----------
+    S({ id: 's_marca', name: 'Marca de la muerte', route: 'boon', ap: 4, cd: 3, range: [1, 3], los: true, target: 'enemy', dmg: [5, 7], status: { kind: 'deathmark', turns: 2 }, special: 'deathmark', text: 'Dejas una Sombra a su espalda. Durante 2 turnos guarda el 35% de todo el daño que le hagáis tú y tus sombras; al acabar, estalla con todo ese daño.' }),
+    S({ id: 's_danza', name: 'Danza de cuchillas', route: 'boon', ap: 3, cd: 2, range: [0, 0], los: false, target: 'enemy', area: 1, dmg: [4, 6], status: { kind: 'bleed', turns: 2, stacks: 1 }, text: 'Tú y todas tus sombras giráis a la vez: corte en cruz que hace sangrar 2 turnos.' }),
+    S({ id: 's_paso', name: 'Paso sombrío', route: 'boon', ap: 2, cd: 2, range: [1, 4], los: false, target: 'enemy', behind: true, special: 'isolated', text: 'Te teletransportas a la espalda de un enemigo ignorando el placaje. Si está aislado (sin aliados a 2 casillas), ganas 1 PM.' }),
+    S({ id: 's_velo', name: 'Velo de penumbra', route: 'boon', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', buff: { kind: 'invis', turns: 1 }, special: 'veil', text: 'Invisible 1 turno (o hasta que ataques) y dejas una Sombra en tu casilla.' }),
+    S({ id: 's_convergencia', name: 'Convergencia letal', route: 'boon', ap: 3, cd: 2, range: [1, 5], los: true, target: 'enemy', dmg: [6, 8], noEcho: true, special: 'converge', text: 'Tu Sombra se lanza junto al objetivo y lo golpeáis los dos a la vez. Si lo flanqueáis por lados opuestos, ambos golpes son críticos.' }),
+    S({ id: 's_cosecha', name: 'Cosecha oscura', route: 'boon', ap: 1, cd: 0, perTurn: 1, range: [0, 0], los: false, target: 'self', special: 'reap', text: 'Si tu Sombra y tú habéis golpeado al mismo enemigo este turno, recuperas 2 PA. Una vez por turno.' }),
+    // ---------- Bárbaro Desatado ----------
+    S({ id: 'b_sed', name: 'Sed de batalla', route: 'base', ap: 2, cd: 0, perTurn: 1, range: [0, 0], los: false, target: 'self', special: 'thirst', text: 'Consumes toda tu Furia para curarte: 4 de vida, más 22 por cada 100 de Furia. Reinicia la Furia a 0.' }),
+    S({ id: 'b_tajo', name: 'Tajo despiadado', route: 'base', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [7, 9], furyScale: 0.08, text: 'Golpe cuerpo a cuerpo que pega más cuanta más Furia tengas (+8 con 100). Genera 20 de Furia.' }),
+    S({ id: 'b_embiste', name: 'Embiste giratorio', route: 'base', ap: 2, cd: 0, perTurn: 1, range: [1, 3], los: false, straight: true, target: 'cell', dmg: [3, 5], special: 'charge', text: 'Te lanzas en línea recta hasta 3 casillas ignorando el placaje: dañas a los enemigos que atraviesas y a los pegados al aterrizar. Genera 20 de Furia.' }),
+    S({ id: 'b_grito', name: 'Grito desmoralizador', route: 'boon', ap: 2, cd: 2, range: [0, 0], los: false, target: 'self', special: 'roar', text: 'Rugido 3×3 a tu alrededor: quita 2 PA a los enemigos y ganas 15 de Furia por cada uno.' }),
+    S({ id: 'b_colosal', name: 'Golpe colosal', route: 'boon', ap: 4, cd: 2, range: [1, 1], los: false, target: 'enemy', dmg: [16, 20], furyCost: 50, special: 'colossal', text: 'Consume 50 de Furia: golpe devastador que empuja 2 casillas; si choca contra algo, lo aturde 1 turno.' }),
+    S({ id: 'b_pacto', name: 'Pacto de sangre', route: 'boon', ap: 1, cd: 0, perTurn: 1, range: [0, 0], los: false, target: 'self', selfDmgPct: 0.15, special: 'pact', text: 'Sacrificas el 15% de tu vida actual: +40 de Furia y +1 PM este turno.' }),
+    S({ id: 'b_cuchillada', name: 'Cuchillada giratoria', route: 'boon', ap: 3, cd: 1, range: [0, 0], los: false, target: 'enemy', area: 1, square: true, dmg: [5, 7], furyPer: 10, text: 'Golpeas las 8 casillas de alrededor: 10 de Furia por cada enemigo golpeado.' }),
+    S({ id: 'b_mirada', name: 'Mirada del verdugo', route: 'boon', ap: 2, cd: 3, range: [1, 4], los: true, target: 'enemy', status: { kind: 'verdugo', turns: 2 }, text: 'Marcas a tu presa 2 turnos: empiezas tus turnos con +1 PM y tus ataques contra ella generan el doble de Furia.' }),
+    S({ id: 'b_frenesi', name: 'Frenesí imparable', route: 'boon', ap: 3, cd: 4, range: [0, 0], los: false, target: 'self', buff: { kind: 'frenzy', turns: 2 }, text: 'Durante 2 turnos eres inmune al placaje y al aturdimiento, pero recibes un 15% más de daño.' }),
     // ---------- Guerrero ----------
     S({ id: 'tajo', name: 'Tajo', route: 'base', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [8, 11], text: 'Golpe cuerpo a cuerpo.' }),
     S({ id: 'muro', name: 'Muro de escudos', route: 'baluarte', ap: 2, cd: 2, range: [0, 0], los: false, target: 'self', shield: 12, text: 'Ganas 12 de escudo.' }),

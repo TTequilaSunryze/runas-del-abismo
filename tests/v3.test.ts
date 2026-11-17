@@ -90,6 +90,9 @@ describe('mejoras de hechizo', () => {
   it('una sola recompensa por sala: equipo y mejora de hechizo se alternan', () => {
     const run = newRun('T', 3, [{ owner: 'a', name: 'A', cls: 'zorro', routes: [] }]);
     const h = run.heroes[0]!;
+    // ya vio sus 3 primeras ofertas de hechizo
+    h.boonOffer = null;
+    h.spellOffers = 3;
     const before = heroSpec(h).spells.filter((sp) => sp.charges === undefined).length;
     for (let f = 0; f < 2; f++) {
       run.combat = createCombat({ seed: 1, w: 8, h: 5, obstacles: [], units: [heroSpec(h, { x: 1, y: 1 })] }).state;

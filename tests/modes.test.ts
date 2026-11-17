@@ -16,7 +16,7 @@ describe('ascensión', () => {
   it('los élites llevan modificadores', () => {
     const run = newRun('T', 7, P, { asc: 2 });
     run.kind = 'elite';
-    const elite = buildFight(run).units.find((u) => u.kind === 'caballero')!;
+    const elite = buildFight(run).units.find((u) => u.rank === 'elite')!;
     expect(elite.name.split(',').length).toBe(2);
   });
 });

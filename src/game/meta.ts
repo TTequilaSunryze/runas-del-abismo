@@ -88,7 +88,7 @@ export function mergeMeta(a: Meta, b: Partial<Meta>): Meta {
 // ---------- maestría de clase ----------
 /** Experiencia necesaria para cada nivel de maestría (1 a 5). */
 export const MASTERY_XP = [40, 110, 220, 380, 600];
-export const MASTERY_TEXT = ['Desbloquea un 2.º kit inicial', 'Desbloquea un 3.er kit inicial', 'Desbloquea un 4.º kit inicial', 'Desbloquea un 5.º kit inicial', 'Maestro: empiezas cada partida con una bendición de clase'];
+export const MASTERY_TEXT = ['Desbloquea un 2.º kit inicial', 'Desbloquea un 3.er kit inicial', 'Desbloquea un 4.º kit inicial', 'Desbloquea un 5.º kit inicial', 'Maestro: tus ofertas de hechizos y bendiciones muestran 4 opciones'];
 /** Oro inicial extra por cada nivel de maestría que no abre un kit nuevo. */
 export const MASTERY_GOLD = 25;
 /** Lo que da el nivel `i + 1` de maestría de una clase. */
@@ -185,7 +185,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'set3', name: 'De punta en blanco', text: 'Termina una partida con un set completo equipado.', ecos: 50, check: (_r, h) => Object.values(setCounts(h.equip)).some((n) => n >= 3) },
   { id: 'nemesis', name: 'Cara a cara', text: 'Vence a un Némesis: un héroe del Salón convertido en élite.', ecos: 50, check: (r) => r.flags.includes('nemesis') },
   { id: 'maestro', name: 'Maestro de clase', text: 'Alcanza la maestría 5 con una clase.', ecos: 150, check: (_r, _h, m) => Object.values(m.mastery).some((xp) => masteryLevel(xp) >= 5) },
-  classWin('guerrero'), classWin('mago'), classWin('clerigo'), classWin('picaro'), classWin('arquero'), classWin('zorro'), classWin('esferas'), classWin('carcelero'), classWin('acechador'),
+  classWin('guerrero'), classWin('mago'), classWin('clerigo'), classWin('picaro'), classWin('arquero'), classWin('zorro'), classWin('esferas'), classWin('carcelero'), classWin('acechador'), classWin('barbaro'),
 ];
 
 /** Ecos que gana un jugador al terminar: por salas, jefes y victoria, más por ascensión. */

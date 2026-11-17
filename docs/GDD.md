@@ -110,3 +110,15 @@ Tres clases con mecánica propia (nombres y diseños originales). Cada una tiene
 - **Dificultad**: `DIFF` en `run.ts` (zona 1 −50%, +45% por zona; grupos de 1-2 jugadores, un poco más fácil). Simulación con la IA de campeón (30 partidas): tríos 40-60%, 4 jugadores ~63%, dúos 17-37%.
 - **El Abismo (zona 4)** ya no es opcional: no se muestra hasta ganar por primera vez y desde entonces se juega siempre.
 - **Interfaz**: ficha de hechizo en lista (coste, daño, alcance, zona, usos, recarga y efectos); retrato del personaje en la selección; barra de maestría con lo que falta para el siguiente nivel.
+
+## v9 · Hechizos únicos, bendiciones de clase y el Bárbaro Desatado
+
+- **Pool por clase** (`PATRONS` con `noSet`): 6 hechizos únicos y 3 bendiciones pasivas por clase (`BLESSINGS` en `core/boonmods.ts`). Las ofertas son al azar y solo de la clase del jugador. Ya no salen hechizos genéricos.
+- **3 ofertas de hechizo antes de la sala 3**: una al empezar, otra tras la sala 1 y otra en la sala 2 (santuario, combate o jaula: esa fila ya no tiene evento). Las 3 primeras ofertas son solo hechizos. Maestría 5: 4 opciones por oferta.
+- **Zorro**: Fuego zorruno (3 llamas que vuelan al acabar el turno: al más cercano a 3; si empatan, el de menos vida y luego menos resistencias), Espejismo ilusorio (señuelo que atrae a los enemigos), Vórtice espiritual, Seducción arcana, Estallido de colas, Vínculo etéreo. Bendiciones: Esencia desbordante, Danza de las nueve colas, Mirada hipnótica. **Aura rosa** cuando la siguiente habilidad va a curar.
+- **Tejedora**: Descarga cuesta 4 PA y suma +8 por esfera; las esferas que chocan hacen 9-11. Fuerza de voluntad, Gravedad inversa, Órbita defensiva, Resonancia oscura, Singularidad, Transfusión de vacío. Bendiciones: Poder ilimitado, Onda expansiva, Eco oscuro.
+- **Carcelero**: cada muerte deja un alma en el suelo y una que se puede gastar. La caja, Explosión de almas, Cadenas vinculantes, Atracción del abismo, Tormento espectral, Sacrificio del guardián. Bendiciones: Condenación eterna, Faro de las sombras, Guadaña segadora.
+- **Acechador**: Marca de la muerte (guarda el 35% del daño y estalla), Danza de cuchillas (sangrado), Paso sombrío, Velo de penumbra, Convergencia letal, Cosecha oscura. Bendiciones: Maestro de las sombras (2 Sombras), Desprecio por los débiles, Sombra persistente.
+- **Bárbaro Desatado** (60/6/3, armadura 1, placaje 8): Furia de 0 a 100 (+20 al golpear, +10 al recibir daño, −20 por turno sin pelear; cada 20, +5% de daño y +6% de crítico). Kit: Sed de batalla, Tajo despiadado, Embiste giratorio. 6 hechizos: Grito desmoralizador, Golpe colosal, Pacto de sangre, Cuchillada giratoria, Mirada del verdugo, Frenesí imparable. Bendiciones: Furia inagotable, Negarse a morir, Torbellino sangriento. Modelo animado de 32×32 (reposo, andar, ataque, furia y muerte).
+- **Interfaz**: Esencia, Esferas, Almas, Furia y Marcas de la muerte en la barra del héroe y sobre el tablero; llamas, muros de La caja y almas dibujados en el suelo; iconos nuevos.
+- **Simulación** (bots, 30 partidas): tríos con Carcelero y Arquero entre 37% (Zorro) y 60% (Bárbaro); 4 jugadores con clases nuevas, 63%.

@@ -10,6 +10,7 @@ export const CLASS_STORY: Record<string, string> = {
   mago: 'Poca vida, mucho fuego. Escoge bien tu escuela: no hay vuelta atrás.',
   clerigo: 'La luz sostiene al grupo; la sombra se cobra lo que la luz perdona.',
   arquero: 'Nunca dejes que se acerquen. Un buen disparo vale más que diez golpes.',
+  barbaro: 'La furia no se apaga: se gasta. Y yo tengo de sobra.',
   zorro: 'Nueve colas y ninguna prisa. Lo que te alcanza, ya te pertenece.',
   acechador: 'Dos filos, una sola sombra. Cuando me veas venir, ya habrás caído dos veces.',
   carcelero: 'Ninguna alma se escapa de mi linterna. Ni las de ellos, ni las vuestras.',

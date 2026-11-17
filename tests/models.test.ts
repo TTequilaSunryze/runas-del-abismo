@@ -4,8 +4,8 @@ import { ANIM_FRAMES, MODEL_CLASSES, MODEL_SIZE, animFor, modelFrame, type Anim 
 import { CLASSES } from '../src/core/classes/classes';
 
 describe('modelos animados', () => {
-  it('existen para las 4 clases nuevas y no para las antiguas', () => {
-    expect(MODEL_CLASSES.sort()).toEqual(['acechador', 'carcelero', 'esferas', 'zorro']);
+  it('existen para las 5 clases nuevas y no para las antiguas', () => {
+    expect([...MODEL_CLASSES].sort()).toEqual(['acechador', 'barbaro', 'carcelero', 'esferas', 'zorro']);
     for (const c of MODEL_CLASSES) expect(CLASSES[c as keyof typeof CLASSES]).toBeTruthy();
   });
   it('todos los fotogramas miden 32×32 y tienen dibujo', () => {

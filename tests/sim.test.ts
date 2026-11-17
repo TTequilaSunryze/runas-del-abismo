@@ -44,11 +44,10 @@ it.skipIf(!(globalThis as unknown as { process?: { env: Record<string, string | 
     '3 arq+carc+zorro': [['arquero', 'carcelero', 'zorro']],
     '3 arq+carc+esferas': [['arquero', 'carcelero', 'esferas']],
     '3 arq+carc+acechador': [['arquero', 'carcelero', 'acechador']],
-    '3 arq+zorro+arq': [['arquero', 'zorro', 'arquero']],
-    '2 zorro+carc': [['zorro', 'carcelero']],
-    '2 arq+carc': [['arquero', 'carcelero']],
-    '1 carc': [['carcelero']],
-    '4 nuevas': [['carcelero', 'esferas', 'zorro', 'acechador']],
+    '3 arq+carc+barbaro': [['arquero', 'carcelero', 'barbaro']],
+    '3 nuevas zorro+esferas+barbaro': [['zorro', 'esferas', 'barbaro']],
+    '4 nuevas carc+esferas+zorro+acechador': [['carcelero', 'esferas', 'zorro', 'acechador']],
+    '4 nuevas barbaro+acechador+zorro+carc': [['barbaro', 'acechador', 'zorro', 'carcelero']],
   };
   const env = (globalThis as unknown as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
   if (env.DBASE) DIFF.base = Number(env.DBASE);
@@ -68,7 +67,7 @@ it.skipIf(!(globalThis as unknown as { process?: { env: Record<string, string | 
 }, 600000);
 
 it('partidas con las clases nuevas terminan sin atascos (3 y 4 jugadores)', () => {
-  for (const [list, seed] of [[['esferas', 'zorro', 'arquero'], 101], [['carcelero', 'esferas', 'zorro', 'acechador'], 202]] as const) {
+  for (const [list, seed] of [[['esferas', 'zorro', 'barbaro'], 101], [['carcelero', 'esferas', 'barbaro', 'acechador'], 202]] as const) {
     const { run, stalls } = play([...list] as ClassId[], seed);
     expect(['won', 'lost']).toContain(run.phase);
     expect(stalls).toBe(0);

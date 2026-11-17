@@ -1,7 +1,7 @@
 import { SPELLS } from '../core/classes/spells';
 // Tablero de combate: dibuja el estado y convierte clics en acciones.
 import { ZONES } from '../content/zones';
-import { castProblem, current, spellOf, usableMp } from '../core/combat/engine';
+import { castProblem, current, essenceNeed, furyCrit, furyPower, spellOf, usableMp } from '../core/combat/engine';
 import { coneCells } from '../core/combat/marks';
 import { alive, dist, hasLineOfSight, reachable } from '../core/combat/grid';
 import type { CombatState, GameEvent, Pos, Unit } from '../core/state';
@@ -10,8 +10,8 @@ import { PLAYER_COLORS, drawUnit, isModel } from './sprites';
 import { ANIM_FRAMES, animFor, type Anim } from './models';
 
 const TILE = 56;
-const STATUS_COLOR: Record<string, string> = { burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0', charm: '#ff9ad8' };
-export const STATUS_NAME: Record<string, string> = { burn: 'Quemadura', poison: 'Veneno', slow: 'Ralentizado', stun: 'Aturdido', mark: 'Marcado', empower: 'Potenciado', reach: 'Alcance+', invis: 'Invisible', exposed: 'Expuesto', charm: 'Encantado' };
+const STATUS_COLOR: Record<string, string> = { burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0', charm: '#ff9ad8', vuln: '#c9a0ff', bleed: '#e03040', hobble: '#9ad0e8', guarded: '#7fe0b0', deathmark: '#ff3a4a', verdugo: '#ff8a30', frenzy: '#ff5030', orbita: '#b07cff', chained: '#a0a8c0' };
+export const STATUS_NAME: Record<string, string> = { burn: 'Quemadura', poison: 'Veneno', slow: 'Ralentizado', stun: 'Aturdido', mark: 'Marcado', empower: 'Potenciado', reach: 'Alcance+', invis: 'Invisible', exposed: 'Expuesto', charm: 'Encantado', vuln: 'Vulnerable', bleed: 'Sangrado', hobble: 'Atrapado', guarded: 'Protegido', deathmark: 'Marca de la muerte', verdugo: 'Presa', frenzy: 'Frenesí', orbita: 'Órbita', chained: 'Encadenado' };
 
 interface Float { x: number; y: number; text: string; color: string; t0: number }
 interface Shot { x0: number; y0: number; x1: number; y1: number; color: string; t0: number; dur: number; orb?: boolean }
@@ -29,11 +29,11 @@ const ACT_MS = 480;
 /** duración de la animación de muerte de los modelos animados */
 const DEATH_MS = 900;
 
-const CLASS_KINDS = ['guerrero', 'mago', 'clerigo', 'picaro', 'arquero', 'zorro', 'esferas', 'carcelero', 'acechador'];
+const CLASS_KINDS = ['guerrero', 'mago', 'clerigo', 'picaro', 'arquero', 'zorro', 'esferas', 'carcelero', 'acechador', 'barbaro'];
 /** Índice de color y etiqueta: héroes de jugadores, y héroes rivales (némesis, duelos) dentro de su bando. */
 function teamIdx(c: CombatState): Map<number, number> {
   const m = new Map<number, number>();
-  for (const team of ['hero', 'enemy'] as const) c.units.filter((u) => u.team === team && CLASS_KINDS.includes(u.kind)).forEach((u, i) => m.set(u.id, i));
+  for (const team of ['hero', 'enemy'] as const) c.units.filter((u) => u.team === team && CLASS_KINDS.includes(u.kind) && u.ai !== 'decoy').forEach((u, i) => m.set(u.id, i));
   return m;
 }
 
@@ -119,6 +119,8 @@ export class Board {
         const sh = c.marks?.find((m) => m.kind === 'shadow' && m.owner === u.id);
         for (const p of [from, ...(sh ? [sh.pos] : [])]) this.rings.push({ x: (p.x + 0.5) * TILE, y: (p.y + 0.55) * TILE, color: e.element ? ELEMENT_COLOR[e.element] ?? '#e8e0ff' : '#e8e0ff', t0: now, dur: SPIN_MS, r: TILE * 0.85, spin: true });
       }
+      if (e.t === 'markAdd' && e.kind === 'pulse') this.rings.push({ x: (e.at.x + 0.5) * TILE, y: (e.at.y + 0.45) * TILE, color: '#c9a0ff', t0: now, dur: 420, r: TILE * 1.2 });
+      if (e.t === 'flame') this.shots.push({ x0: (e.from.x + 0.5) * TILE, y0: (e.from.y + 0.4) * TILE, x1: (e.at.x + 0.5) * TILE, y1: (e.at.y + 0.4) * TILE, color: '#4ad0ff', t0: now, dur: 300, orb: true });
       if (e.t === 'markAdd' && e.kind === 'sphere') {
         // la esfera aparece con una pequeña explosión
         const x = (e.at.x + 0.5) * TILE, y = (e.at.y + 0.45) * TILE;
@@ -171,6 +173,8 @@ export class Board {
       else if (e.t === 'raise') float(e.unit, 'Alza muertos', '#c9a0ff');
       else if (e.t === 'summon') float(e.unit, 'Invocado', '#c77dff');
       else if (e.t === 'phase') float(e.unit, '¡FASE 2!', '#ff3060');
+      else if (e.t === 'detonate') float(e.unit, `¡Marca de la muerte! ${e.amount}`, '#ff3a4a');
+      else if (e.t === 'caged') float(e.unit, '¡La caja!', '#7fe0b0');
       else if (e.t === 'reset') float(e.unit, `¡Remate! ${SPELLS[e.spell]?.name ?? ''} gratis`, '#4ad0ff');
     }
   }
@@ -232,6 +236,29 @@ export class Board {
         const o = c.units.find((x) => x.id === m.owner);
         const sk = o && this.spins.has(o.id) ? (now - this.spins.get(o.id)!) / SPIN_MS : 1;
         if (o) drawUnit(g, o.kind, o.team, 0, cx, (m.pos.y + 1) * TILE - 6, TILE, { anim: sk < 1 ? 'attack' : 'idle', frame: sk < 1 ? Math.floor(sk * ANIM_FRAMES.attack) : Math.floor(now / 260) % ANIM_FRAMES.idle, tint: 'shadow', alpha: 0.85, flip: sk < 1 ? Math.floor(sk * 6) % 2 === 0 : this.faceLeft.get(o.id) ?? false });
+      } else if (m.kind === 'flame') {
+        // llama azul del Fuego zorruno
+        const fy = cy + Math.sin(now / 160 + m.id) * 3, fl = 1 + Math.sin(now / 90 + m.id) * 0.12;
+        g.fillStyle = 'rgba(74,208,255,.25)'; g.beginPath(); g.arc(cx, fy, TILE * 0.26, 0, 6.3); g.fill();
+        g.fillStyle = '#2a7ad8'; g.beginPath(); g.moveTo(cx - 7, fy + 6); g.quadraticCurveTo(cx, fy - 16 * fl, cx + 7, fy + 6); g.fill();
+        g.fillStyle = '#7ae8ff'; g.beginPath(); g.moveTo(cx - 4, fy + 5); g.quadraticCurveTo(cx, fy - 9 * fl, cx + 4, fy + 5); g.fill();
+        g.fillStyle = '#ffffff'; g.fillRect(cx - 1, fy, 2, 4);
+        continue;
+      } else if (m.kind === 'cage') {
+        // muro espectral de La caja
+        const X = m.pos.x * TILE, Y = m.pos.y * TILE;
+        g.fillStyle = 'rgba(127,224,176,.16)'; g.fillRect(X + 4, Y + 4, TILE - 8, TILE - 8);
+        g.strokeStyle = `rgba(160,255,210,${0.55 + 0.25 * Math.sin(now / 200 + m.id)})`; g.lineWidth = 2;
+        for (let i = 1; i < 4; i++) { g.beginPath(); g.moveTo(X + (i * TILE) / 4, Y + 6); g.lineTo(X + (i * TILE) / 4, Y + TILE - 6); g.stroke(); }
+        g.strokeRect(X + 5, Y + 5, TILE - 10, TILE - 10);
+        continue;
+      } else if (m.kind === 'soul') {
+        // alma suelta: un fuego fatuo verdoso
+        const fy = cy + Math.sin(now / 300 + m.id) * 4;
+        g.fillStyle = 'rgba(140,240,210,.25)'; g.beginPath(); g.arc(cx, fy, TILE * 0.2, 0, 6.3); g.fill();
+        g.fillStyle = '#9af0d0'; g.beginPath(); g.arc(cx, fy, 5, 0, 6.3); g.fill();
+        g.fillStyle = '#ffffff'; g.fillRect(cx - 2, fy - 2, 3, 3);
+        continue;
       } else if (m.kind === 'lantern') {
         g.fillStyle = 'rgba(127,224,90,.18)'; g.beginPath(); g.arc(cx, cy + 4, TILE * 0.45 * pulse, 0, 6.3); g.fill();
         g.fillStyle = '#6a6a78'; g.fillRect(cx - 1, cy - TILE * 0.3, 2, TILE * 0.12);
@@ -316,8 +343,25 @@ export class Board {
       const sp0 = this.spins.get(u.id), spk = sp0 === undefined ? 1 : (now - sp0) / SPIN_MS;
       // durante el giro mira alternativamente a cada lado
       const left = spk < 1 ? Math.floor(spk * 6) % 2 === 0 : this.faceLeft.get(u.id) ?? !def0;
+      // aura: la siguiente habilidad de daño de la Zorra la curará (Robo de esencia lleno)
+      if (u.essence !== undefined && u.essence >= essenceNeed(u)) {
+        const k = 0.5 + 0.5 * Math.sin(now / 180);
+        const gr = g.createRadialGradient(cx, by - TILE * 0.35, 4, cx, by - TILE * 0.35, TILE * 0.62);
+        gr.addColorStop(0, `rgba(255,120,200,${0.35 + 0.2 * k})`); gr.addColorStop(1, 'rgba(255,120,200,0)');
+        g.fillStyle = gr; g.beginPath(); g.arc(cx, by - TILE * 0.35, TILE * 0.62, 0, 6.3); g.fill();
+        g.strokeStyle = `rgba(255,170,220,${0.6 + 0.3 * k})`; g.lineWidth = 2; g.beginPath(); g.ellipse(cx, by - 2, TILE * 0.38, 9, 0, 0, 6.3); g.stroke();
+      }
+      // Furia alta: el Bárbaro arde
+      if ((u.fury ?? 0) >= 60) { g.fillStyle = `rgba(255,70,30,${0.12 + ((u.fury ?? 0) / 100) * 0.18})`; g.beginPath(); g.arc(cx, by - TILE * 0.4, TILE * 0.5, 0, 6.3); g.fill(); }
       drawUnit(g, u.kind, u.team, heroIdx.get(u.id) ?? 0, cx + (lg ? lg.dx * swing * TILE * 0.3 : 0), by + bob + (lg ? lg.dy * swing * TILE * 0.3 : 0), TILE,
-        { flash: (this.flash.get(u.id) ?? 0) > now, swing, flip: def0 ? left : !left, alpha: u.statuses.invis ? 0.4 : 1, anim, frame });
+        { flash: (this.flash.get(u.id) ?? 0) > now, swing, flip: def0 ? left : !left, alpha: u.statuses.invis ? 0.4 : u.ai === 'decoy' ? 0.55 : 1, anim, frame });
+      // Marca de la muerte: calavera con el daño guardado
+      const dmk = u.statuses.deathmark;
+      if (dmk) {
+        const mx = cx + TILE * 0.32, my = s.y * TILE + 18;
+        g.fillStyle = '#1a0610'; g.fillRect(mx - 9, my - 9, 18 + String(dmk.stacks).length * 7, 16);
+        g.fillStyle = '#ff3a4a'; g.font = 'bold 12px ui-monospace, monospace'; g.textAlign = 'left'; g.fillText(`☠${dmk.stacks}`, mx - 7, my + 3);
+      }
       this.bars(u, cx, s.y * TILE + 2, heroIdx.get(u.id));
     }
     // caídos: se desvanecen hacia arriba
@@ -391,6 +435,8 @@ export class Board {
     g.fillStyle = '#000'; g.fillRect(x - 1, top - 1, w + 2, 7);
     g.fillStyle = u.team === 'hero' ? '#4cb85a' : '#e0475b'; g.fillRect(x, top, (w * u.hp) / u.maxHp, 5);
     if (u.shield > 0) { g.fillStyle = '#58a6ff'; g.fillRect(x, top + 5, Math.min(w, (w * u.shield) / u.maxHp), 3); }
+    if (u.fury !== undefined) { g.fillStyle = '#000'; g.fillRect(x - 1, top - 6, w + 2, 5); g.fillStyle = '#ff6a20'; g.fillRect(x, top - 5, (w * u.fury) / 100, 3); }
+    if (u.essence !== undefined) for (let i = 0; i < essenceNeed(u); i++) { g.fillStyle = i < u.essence ? '#ff8ad0' : '#3a2040'; g.fillRect(x + i * 7, top - 6, 5, 4); }
     let ix = x;
     for (const k of Object.keys(u.statuses)) { g.fillStyle = STATUS_COLOR[k] ?? '#fff'; g.fillRect(ix, top + 9, 6, 6); ix += 8; }
     if (heroIdx !== undefined) {
@@ -405,7 +451,7 @@ export class Board {
     const u = c.units.find((x) => alive(x) && x.pos.x === h.x && x.pos.y === h.y);
     if (!u) return;
     const g = this.g;
-    const st = [...Object.entries(u.statuses).map(([k, v]) => `${STATUS_NAME[k]} ${v!.turns}`), ...(u.essence !== undefined ? [`Esencia ${u.essence}/3`] : []), ...(u.souls !== undefined ? [`Almas ${u.souls}`] : [])].join(', ');
+    const st = [...Object.entries(u.statuses).map(([k, v]) => `${STATUS_NAME[k]} ${v!.turns}${k === 'deathmark' ? ` (guarda ${v!.stacks})` : ''}`), ...(u.essence !== undefined ? [`Esencia ${u.essence}/${essenceNeed(u)}${u.essence >= essenceNeed(u) ? ' ¡cura!' : ''}`] : []), ...(u.souls !== undefined ? [`Almas ${u.souls} (${u.soulBank ?? 0} para gastar)`] : []), ...(u.fury !== undefined ? [`Furia ${u.fury}: +${furyPower(u)}% daño, +${furyCrit(u)}% crít.`] : [])].join(', ');
     const res = Object.entries(u.resist ?? {}).filter(([, v]) => v).map(([k, v]) => (v! > 0 ? `Resiste ${ELEMENT_NAME[k]} ${v}%` : `Débil a ${ELEMENT_NAME[k]} ${-v!}%`)).join(' · ');
     // daño estimado del hechizo elegido sobre esta unidad
     let est = '';

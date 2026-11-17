@@ -8,14 +8,17 @@ export interface Pos {
 
 export type Team = 'hero' | 'enemy';
 /** empower: +daño (stacks = %); reach: +alcance; invis: no se le puede apuntar; exposed: -armadura (stacks). */
-export type StatusKind = 'burn' | 'poison' | 'slow' | 'stun' | 'mark' | 'empower' | 'reach' | 'invis' | 'exposed' | 'charm';
-export type ClassId = 'guerrero' | 'mago' | 'clerigo' | 'picaro' | 'arquero' | 'zorro' | 'esferas' | 'carcelero' | 'acechador';
+export type StatusKind = 'burn' | 'poison' | 'slow' | 'stun' | 'mark' | 'empower' | 'reach' | 'invis' | 'exposed' | 'charm'
+  | 'vuln' | 'bleed' | 'hobble' | 'guarded' | 'deathmark' | 'verdugo' | 'frenzy' | 'orbita' | 'chained';
+export type ClassId = 'guerrero' | 'mago' | 'clerigo' | 'picaro' | 'arquero' | 'zorro' | 'esferas' | 'carcelero' | 'acechador' | 'barbaro';
 
 export interface StatusState {
   turns: number;
   stacks: number;
-  /** unidad que aplicó el estado (Encantado: hacia quién se mueve) */
+  /** unidad que aplicó el estado (Encantado, Marca de la muerte, Guardián, Verdugo…) */
   from?: number;
+  /** Cadenas vinculantes: la otra unidad encadenada */
+  link?: number;
 }
 
 export type Element = 'fire' | 'ice' | 'poison' | 'shadow' | 'holy';
@@ -68,7 +71,7 @@ export interface Unit {
   statusBonus: number;
   statuses: Partial<Record<StatusKind, StatusState>>;
   spells: SpellSlot[];
-  ai: 'melee' | 'ranged' | 'boss' | 'pillar' | 'champ' | null;
+  ai: 'melee' | 'ranged' | 'boss' | 'pillar' | 'champ' | 'decoy' | null;
   /**
    * Rasgos especiales: puddle (al morir deja una casilla pegajosa), guard (empieza su turno con escudo),
    * devour (se cura comiendo cadáveres), raise (alza muertos), ghost (atraviesa obstáculos),
@@ -88,8 +91,26 @@ export interface Unit {
   summoner?: number;
   /** Robo de esencia (Hechicera Zorro): 0 a 3 cargas */
   essence?: number;
-  /** Cosecha de almas (Carcelero): enemigos muertos en este combate con él vivo */
+  /** Cosecha de almas (Carcelero): almas de toda la partida (dan armadura) */
   souls?: number;
+  /** almas que puede gastar (Explosión de almas) */
+  soulBank?: number;
+  /** almas gastadas en el lanzamiento en curso */
+  spentSouls?: number;
+  /** almas cosechadas en este combate (Guadaña segadora) */
+  soulsFight?: number;
+  /** Guadaña segadora: el próximo ataque de este turno pega más */
+  reaper?: boolean;
+  /** Furia del Bárbaro (0 a 100) */
+  fury?: number;
+  /** ha atacado o recibido daño desde su último turno (si no, pierde Furia) */
+  furyHot?: boolean;
+  /** Negarse a morir ya usado en este combate */
+  undying?: boolean;
+  /** PA de descuento en su próximo hechizo de este turno (Danza de las nueve colas) */
+  discount?: number;
+  /** este turno su Sombra y él golpearon al mismo enemigo (Cosecha oscura) */
+  syncHit?: boolean;
   /** enemigo enganchado este turno por Sentencia de muerte */
   hooked?: number;
   /** élites y jefes: inmunes a aturdir y resisten la pérdida de PA/PM y los empujones */
@@ -174,6 +195,10 @@ export type GameEvent =
   /** la Sombra replica un hechizo desde su casilla */
   | { t: 'echo'; unit: number; from: Pos; at: Pos; element?: Element }
   | { t: 'reset'; unit: number; spell: string }
+  | { t: 'fury'; unit: number; value: number }
+  | { t: 'flame'; unit: number; from: Pos; at: Pos }
+  | { t: 'detonate'; unit: number; amount: number }
+  | { t: 'caged'; unit: number }
   | { t: 'markAdd'; kind: string; at: Pos }
   | { t: 'markGone'; kind: string; at: Pos }
   | { t: 'markMove'; kind: string; from: Pos; to: Pos }
