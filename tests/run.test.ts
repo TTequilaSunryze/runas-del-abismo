@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ZONA1_ITEMS } from '../src/content/zona1/items';
 import { SLOTS, genItem, statDiff } from '../src/core/items/items';
-import { bossInfo, chooseNode, finishFight, heroMaxHp, leaveNode, metaAction, newRun, resolveEvent, type RunState } from '../src/game/run';
+import { availableNodes, bossInfo, chooseNode, finishFight, heroMaxHp, leaveNode, metaAction, newRun, resolveEvent, type RunState } from '../src/game/run';
 import { autoplay } from './helpers';
 
 const CLS = [
@@ -25,8 +25,8 @@ function playRun(n: number, seed: number, prefer: string): RunState {
         }
         if (h.bag.length) metaAction(run, h.owner, { a: 'equip', idx: 0 });
       }
-      const nodes = run.map[run.step]!;
-      chooseNode(run, Math.max(0, nodes.indexOf(prefer as never)));
+      const nodes = run.map[run.step]!, av = availableNodes(run);
+      chooseNode(run, av.find((i) => nodes[i] === prefer) ?? av[0]!);
     } else if (run.phase === 'event') {
       for (const h of run.heroes) metaAction(run, h.owner, { a: 'vote', idx: 0 });
       resolveEvent(run, 'p0');

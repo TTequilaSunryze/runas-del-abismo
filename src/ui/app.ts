@@ -16,7 +16,7 @@ import { addFriend, invite, removeFriend, setRoom, socialHandlers } from '../net
 import { championOf } from '../game/run';
 import { MAX_ASC } from '../content/modes';
 import { setMusicVolume, setZoneMusic } from '../audio/sfx';
-import { statsModal } from './panels';
+import { mapModal, statsModal } from './panels';
 import { campScreen, endScreen, eventScreen, homeScreen, lobbyScreen, mapScreen, shopScreen } from './screens';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -92,7 +92,7 @@ function render(events: GameEvent[]): void {
   const run = s.run;
   const want = !run ? 'lobby' : run.phase === 'combat' && run.combat ? 'combat' : run.phase === 'event' && run.event ? 'event' : run.phase === 'shop' ? 'shop' : run.phase === 'camp' && run.camp ? 'camp' : run.phase === 'map' ? 'map' : 'end';
   // sin cambios reales no se redibuja: así un latido de red no interrumpe un clic
-  const key = want + JSON.stringify([meta().ecos, ui.asc, ui.daily, ui.mods, ui.abyss, run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), s.t.connected(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selRune, ui.selItem, ui.tab, ui.logOpen, ui.statsOpen, ui.forgeTab]);
+  const key = want + JSON.stringify([meta().ecos, ui.asc, ui.daily, ui.mods, ui.abyss, run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), s.t.connected(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selRune, ui.selItem, ui.tab, ui.logOpen, ui.statsOpen, ui.mapOpen, ui.forgeTab]);
   if (key === lastKey && want === ui.screen && !events.length) return;
   lastKey = key;
   if (want !== ui.screen) hideTip();
@@ -109,6 +109,8 @@ function render(events: GameEvent[]): void {
   // ficha del personaje por encima de cualquier pantalla
   document.getElementById('statsmodal')?.remove();
   if (ui.statsOpen && run) ui.root.insertAdjacentHTML('beforeend', statsModal(run));
+  document.getElementById('mapmodal')?.remove();
+  if (ui.mapOpen && run && !run.arena) ui.root.insertAdjacentHTML('beforeend', mapModal(run));
   if (want === 'end' && run && run.daily && s.isHost && run.heroes.length) {
     const k = `${run.code}:${run.daily}:${run.zone}:${run.step}:${run.phase}`;
     if (k !== submitted) { submitted = k; void submitDaily({ day: run.daily, code: run.code, names: run.heroes.map((h) => h.name).join(', ').slice(0, 60), players: run.heroes.length, score: dailyScore(run), won: run.phase === 'won', zone: Math.min(2, run.zone) }); }
@@ -197,6 +199,7 @@ document.addEventListener('click', (e) => {
     case 'joinfriend': case 'acceptinv': ui.invites = ui.invites.filter((x) => x.code !== id); drawInvites(); void enter(id, false, false); break;
     case 'dropinv': ui.invites = ui.invites.filter((x) => x.code !== id); drawInvites(); break;
     case 'invite': if (s) { invite(id, s.code); ui.notice = `Invitación enviada a ${id}`; render([]); setTimeout(() => { ui.notice = ''; render([]); }, 2500); } break;
+    case 'map': ui.mapOpen = !ui.mapOpen; lastKey = ''; render([]); break;
     case 'stats': ui.statsOpen = !ui.statsOpen; lastKey = ''; render([]); break;
     case 'altar': s?.act({ a: 'altar', opt: Number(id) }); break;
     case 'gamble': s?.act({ a: 'gamble', opt: Number(id) }); sfx.coin(); break;
@@ -259,6 +262,7 @@ document.addEventListener('change', (e) => {
 
 document.addEventListener('keydown', (e) => {
   const s = ui.session;
+  if ((e.target as HTMLElement).tagName !== 'INPUT' && s?.run && !s.run.arena && (e.key === 'm' || e.key === 'M' || (e.key === 'Escape' && ui.mapOpen))) { ui.mapOpen = e.key === 'Escape' ? false : !ui.mapOpen; lastKey = ''; render([]); return; }
   if ((e.target as HTMLElement).tagName !== 'INPUT' && s?.run && !s.run.arena && (e.key === 's' || e.key === 'S' || (e.key === 'Escape' && ui.statsOpen))) { ui.statsOpen = e.key === 'Escape' ? false : !ui.statsOpen; lastKey = ''; render([]); return; }
   if (ui.screen !== 'combat' || !s?.isMyTurn() || (e.target as HTMLElement).tagName === 'INPUT') return;
   const u = s.myUnit();

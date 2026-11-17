@@ -17,6 +17,7 @@ import { reachable } from '../core/combat/grid';
 import { BAG_SIZE, PRICE, SLOTS, STAT_NAME, genItem, genSetPiece, sumStats, type Item, type Rarity, type Slot, type StatKey, type Stats } from '../core/items/items';
 import { pick, rand, randInt, seedFrom, shuffle, type RngBox } from '../core/rng';
 import { RUNES } from '../core/runes';
+import { makeActMap, type ActMap } from './map';
 import type { ClassId, CombatState, GameEvent, Pos } from '../core/state';
 
 export interface HeroSave {
@@ -145,6 +146,12 @@ export interface RunState extends RngBox {
   /** sala actual del mapa */
   step: number;
   map: NodeKind[][];
+  /** aristas del mapa: links[capa][nodo] = nodos de la capa siguiente */
+  links: number[][][];
+  /** nodo elegido en la capa anterior (−1 al empezar el acto) */
+  at: number;
+  /** nodo elegido en cada capa ya recorrida */
+  trail: number[];
   phase: 'map' | 'combat' | 'event' | 'shop' | 'camp' | 'won' | 'lost';
   /** tipo del combate en curso */
   kind: NodeKind;
@@ -186,11 +193,23 @@ export const DIFF = { base: -0.45, perZone: 0.45 };
 export const POTION_PRICE = 25;
 export const POTION_HEAL = 0.3;
 
-function makeMap(box: RngBox, mods: string[] = []): NodeKind[][] {
-  const two = (list: NodeKind[]): NodeKind[] => shuffle(box, list).slice(0, 2);
-  // 7 salas por zona; las intermedias varían mucho entre partidas
-  const map: NodeKind[][] = [['combat'], ['shrine', pick(box, ['combat', 'cage'] as NodeKind[])], two(['combat', 'treasure', 'shop', 'forge', 'gamble']), ['elite', pick(box, ['combat', 'event'] as NodeKind[])], two(['combat', 'event', 'treasure', 'altar', 'cage', 'shrine']), two(['rest', 'shop', 'forge', 'altar']), ['boss']];
-  return mods.includes('sin_descanso') ? map.map((n) => n.map((k) => (k === 'rest' ? 'combat' : k))) : map;
+function makeMap(box: RngBox, mods: string[] = []): ActMap {
+  const m = makeActMap(box);
+  if (mods.includes('sin_descanso')) m.layers = m.layers.map((n) => n.map((k) => (k === 'rest' ? 'combat' : k)));
+  return m;
+}
+
+/** Nodos de la sala actual a los que se puede ir desde el último elegido (índices en `map[step]`). */
+export function availableNodes(run: Pick<RunState, 'map' | 'links' | 'at' | 'step'>): number[] {
+  const row = run.map[run.step] ?? [];
+  const from = run.step > 0 && run.at >= 0 ? run.links?.[run.step - 1]?.[run.at] : undefined;
+  const ok = (from ?? []).filter((i) => i < row.length);
+  return ok.length ? ok : row.map((_, i) => i);
+}
+
+function setMap(run: RunState): void {
+  const m = makeMap(run, run.mods);
+  run.map = m.layers; run.links = m.links; run.at = -1; run.trail = [];
 }
 
 export interface RunOpts {
@@ -223,7 +242,7 @@ export function newRun(code: string, seed: number, players: NewHero[], opts: Run
     version: 9, code, asc: daily ? DAILY_ASC : Math.max(0, Math.min(10, opts.asc ?? 0)), daily: opts.daily ?? null, mods: daily?.mods ?? [...new Set((opts.mods ?? []).filter((m) => DAILY_MODS.some((d) => d.id === m)))].slice(0, MAX_MODS),
     camp: null, bossPick: [], abyss: !daily && !!opts.abyss, allies: [], omen: null, nextOmen: null, cage: null, ready: {}, stamp: 0,
     unlocked: [...new Set(opts.unlocked ?? [])].filter((r) => RUNES[r]), flags: [],
-    zone: 0, zoneFight: 0, rng: (daily?.seed ?? seed) >>> 0, fight: 0, step: 0, map: [], phase: 'map', kind: 'combat', combat: null,
+    zone: 0, zoneFight: 0, rng: (daily?.seed ?? seed) >>> 0, fight: 0, step: 0, map: [], links: [], at: -1, trail: [], phase: 'map', kind: 'combat', combat: null,
     offers: {}, event: null, eventsSeen: [], shop: null, ambush: false, note: ZONES[0]!.intro,
     nemesis: (opts.nemesis ?? []).map(cleanChampion).filter((c): c is Champion => !!c).slice(0, 8), nemesisUsed: [],
     heroes: players.map((p) => ({
@@ -233,7 +252,7 @@ export function newRun(code: string, seed: number, players: NewHero[], opts: Run
       relics: [], boons: [], boonOffer: null, bag2: { c_vida: 1 }, ups: {}, upOffer: null, mastery: Math.max(0, Math.min(5, Math.floor(Number(p.mastery) || 0))), upPending: 0,
     })),
   };
-  run.map = makeMap(run, run.mods);
+  setMap(run);
   run.bossPick = ZONES.map((z) => randInt(run, 0, z.bosses.length - 1));
   for (const h of run.heroes) {
     const base = heroMaxHp(h);
@@ -655,7 +674,9 @@ export const rewardOf = (run: Pick<RunState, 'kind' | 'fight'>): Reward => (run.
 /** El anfitrión elige uno de los nodos de la sala actual. */
 export function chooseNode(run: RunState, idx: number): GameEvent[] {
   const node = run.map[run.step]?.[idx];
-  if (run.phase !== 'map' || !node) return [];
+  if (run.phase !== 'map' || !node || !availableNodes(run).includes(idx)) return [];
+  run.at = idx;
+  run.trail[run.step] = idx;
   run.offers = {};
   run.note = '';
   run.stamp++;
@@ -824,7 +845,7 @@ export function finishFight(run: RunState): void {
     run.zone++;
     run.zoneFight = 0;
     run.step = 0;
-    run.map = makeMap(run, run.mods);
+    setMap(run);
     run.allies = [];
     for (const h of run.heroes) { h.hp = Math.min(heroMaxHp(h), h.hp + Math.ceil(heroMaxHp(h) * 0.5)); h.rerolls = perkLevel(h.perks, 'reroll') + (h.relics.includes('dado') ? 1 : 0); }
     run.note = `${won} ${zoneOf(run).intro} Recuperáis el 50% de la vida.`;

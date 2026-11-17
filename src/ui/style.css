@@ -228,3 +228,4 @@ span.cell { display: inline-flex; align-items: center; justify-content: center; 
 .res { margin-top: 2px; }
 .fbar { display: inline-block; width: 60px; height: 7px; background: #2a1410; border: 1px solid #5a2a1a; vertical-align: middle; }
 .fbar i { display: block; height: 100%; background: linear-gradient(90deg, #ff8a30, #ff3020); }
+.sq[data-act="map"] { width: auto; padding: 0 8px; }

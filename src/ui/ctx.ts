@@ -46,6 +46,7 @@ export const ui = {
   invites: [] as Array<{ from: string; code: string; at: number }>,
   /** ventana de estadísticas abierta */
   statsOpen: false,
+  mapOpen: false,
   acName: '',
   hallMsg: '',
   busy: false,

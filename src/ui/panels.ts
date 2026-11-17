@@ -10,9 +10,9 @@ import { BLESSINGS, BOON_MODS } from '../core/boonmods';
 import { RUNES } from '../core/runes';
 import { MAX_SPELL_UPS, UPGRADES, tuned } from '../core/upgrades';
 import { SOULS_PER_ARMOR } from '../core/combat/engine';
-import { heroMaxHp, heroSpec, pendingOf, statBreakdown, upCount, zoneOf, type HeroSave, type RunState } from '../game/run';
+import { NODE_NAME, availableNodes, heroMaxHp, heroSpec, pendingOf, statBreakdown, upCount, zoneOf, type HeroSave, type RunState } from '../game/run';
 import { esc, mine, tip, ui } from './ctx';
-import { itemIcon, spellIcon, spellTip } from './icons';
+import { NODE_ICON, itemIcon, spellIcon, spellTip } from './icons';
 import { rangeText, spellSummary } from './spellicons';
 
 const RAR = ['r0', 'r1', 'r2', 'r3'];
@@ -25,7 +25,7 @@ export function volumeControl(): string {
 export function sysButtons(): string {
   const s = ui.session;
   const warn = s?.isHost && s.t.kind === 'online' ? '¿Seguro? Termina para todos' : '¿Seguro? Pulsa otra vez';
-  return `${ui.session?.run && !ui.session.run.arena ? `<button class="sq" data-act="stats" ${tip('Ficha del personaje: estadísticas totales (S)')}>📊</button>` : ''}${volumeControl()}<button data-act="leave" class="${ui.leaveArmed ? 'danger' : ''}">${ui.leaveArmed ? warn : 'Abandonar'}</button>`;
+  return `${ui.session?.run && !ui.session.run.arena ? `<button class="sq" data-act="map" ${tip('Mapa del acto (M)')}>🗺️ Mapa</button>` : ''}${ui.session?.run && !ui.session.run.arena ? `<button class="sq" data-act="stats" ${tip('Ficha del personaje: estadísticas totales (S)')}>📊</button>` : ''}${volumeControl()}<button data-act="leave" class="${ui.leaveArmed ? 'danger' : ''}">${ui.leaveArmed ? warn : 'Abandonar'}</button>`;
 }
 
 export function hpBar(hp: number, max: number, shield = 0): string {
@@ -227,3 +227,29 @@ export function statsModal(run: RunState): string {
   </div></div></div>`;
 }
 const TRAIT_LABEL: Record<string, string> = { venom: 'Tus venenos aplican 1 carga más', ignite: 'Todo tu daño quema', execute: 'Tus críticos hacen el doble', mender: 'Curas y escudos +30%', guard: 'Empiezas cada turno con escudo', thorns: 'Devuelves el 30% del daño cuerpo a cuerpo', regen: 'Te regeneras cada turno', enrage: '+40% de daño con poca vida' };
+
+/** Mapa del acto como overlay: capas de abajo (inicio) a arriba (jefe), con las rutas posibles. */
+export function mapModal(run: RunState): string {
+  const L = run.map.length, W = 520, rowH = 58, H = L * rowH + 20;
+  const pos = (l: number, i: number): [number, number] => [((i + 0.5) / run.map[l]!.length) * W, H - 30 - l * rowH];
+  const avail = run.phase === 'map' ? availableNodes(run) : [];
+  const here = (l: number, i: number): boolean => run.trail[l] === i && l < run.step;
+  const current = (l: number, i: number): boolean => run.phase !== 'map' && l === run.step && run.trail[l] === i;
+  const lines = run.links.map((rows, l) => rows.map((to, i) => to.map((j) => {
+    const [x1, y1] = pos(l, i), [x2, y2] = pos(l + 1, j);
+    const walked = run.trail[l] === i && (run.trail[l + 1] === j && l + 1 < run.step || (l + 1 === run.step && avail.includes(j)));
+    return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${walked ? '#f2c14e' : '#5a4a6e'}" stroke-width="${walked ? 3 : 2}" opacity="${walked ? 1 : 0.6}"/>`;
+  }).join('')).join('')).join('');
+  const nodes = run.map.map((row, l) => row.map((k, i) => {
+    const [x, y] = pos(l, i);
+    const can = l === run.step && avail.includes(i), done = here(l, i) || current(l, i);
+    const stroke = can ? '#f2c14e' : done ? '#6fcf6f' : '#5a4a6e';
+    return `<g opacity="${l < run.step && !done ? 0.35 : 1}"><title>${esc(NODE_NAME[k])}</title><circle cx="${x}" cy="${y}" r="20" fill="#241a33" stroke="${stroke}" stroke-width="${can || done ? 3 : 2}"/><text x="${x}" y="${y + 7}" text-anchor="middle" font-size="20">${NODE_ICON[k]}</text></g>`;
+  }).join('')).join('');
+  const legend = (['combat', 'elite', 'event', 'shrine', 'shop', 'rest', 'boss'] as const).map((k) => `<span class="chip">${NODE_ICON[k]} ${esc(NODE_NAME[k].replace(/^\S+\s/, ''))}</span>`).join('');
+  return `<div class="modal" id="mapmodal" data-act="map"><div class="panel wide" onclick="event.stopPropagation()">
+  <div class="row"><h2>🗺️ Mapa · Zona ${run.zone + 1}</h2><span class="dim sm">Sala ${Math.min(run.step + 1, L)} de ${L}</span><span class="grow"></span><button class="mini" data-act="map">Cerrar ✕</button></div>
+  <div class="chips">${legend}</div>
+  <svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;display:block;margin:6px auto">${lines}${nodes}</svg>
+  <div class="dim sm">Dorado: caminos disponibles · Verde: ruta recorrida. El jefe está arriba.</div></div></div>`;
+}
