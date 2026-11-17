@@ -342,7 +342,7 @@ describe('Bárbaro Desatado', () => {
     const u = me(s);
     u.fury = 100; u.hp = 20;
     ok(s, u, 'b_sed', u.pos);
-    expect(u.hp).toBe(20 + 4 + 22);
+    expect(u.hp).toBe(20 + 2 + 12);
     expect(u.fury).toBe(50);
   });
   it('Embiste giratorio: atraviesa ignorando el placaje y daña al pasar y al aterrizar', () => {

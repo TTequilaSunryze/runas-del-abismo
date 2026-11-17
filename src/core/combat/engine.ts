@@ -53,7 +53,7 @@ export function tackleKeep(dodge: number, tackle: number): number {
 export const hasTrait = (u: Unit, t: string): boolean => !!u.traits?.includes(t);
 
 /** Furia del Bárbaro: cada 20 puntos, +5% de daño y +6% de crítico. */
-export const furyPower = (u: Unit): number => Math.floor((u.fury ?? 0) / 20) * 5;
+export const furyPower = (u: Unit): number => Math.floor((u.fury ?? 0) / 20) * 2;
 export const furyCrit = (u: Unit): number => Math.floor((u.fury ?? 0) / 20) * 6;
 export const FURY_MAX = 100;
 /** Esencia necesaria para que la siguiente habilidad de daño cure (Esencia desbordante: 2). */
@@ -1070,7 +1070,7 @@ const SELF_SPECIALS: Record<string, SelfSpecial> = {
   // Sed de batalla: consume la Furia (la mitad con Furia inagotable) para curarse
   thirst: (_s, u, _d, _at, ev) => {
     const f = u.fury ?? 0;
-    heal(u, 4 + f * 0.22, ev);
+    heal(u, 2 + f * 0.12, ev);
     addFury(u, -(hasTrait(u, 'inagotable') ? Math.ceil(f / 2) : f), ev);
   },
   // Pacto de sangre: (la vida ya se pagó) +40 de Furia y +1 PM

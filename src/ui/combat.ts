@@ -103,7 +103,7 @@ function resourceHtml(c: CombatState, me: Unit): string {
     out.push(`<div class="sm res" ${tip('Esferas oscuras tuyas en el tablero.')}>🔮 Esferas ${n}/${max}</div>`);
   }
   if (me.souls !== undefined) out.push(`<div class="sm souls" ${tip(`Cosecha de almas: cuentan en toda la partida; cada ${SOULS_PER_ARMOR}, +1 de armadura permanente. Las almas sin gastar se usan en Explosión de almas.`)}>💀 ${me.souls} almas (${me.soulBank ?? 0} para gastar) · +${Math.floor(me.souls / SOULS_PER_ARMOR)} armadura · próxima en ${SOULS_PER_ARMOR - (me.souls % SOULS_PER_ARMOR)}</div>`);
-  if (me.fury !== undefined) out.push(`<div class="sm res fury" ${tip('Furia: +20 al golpear, +10 al recibir daño. Cada 20: +5% de daño y +6% de crítico. Si pasas un turno sin atacar ni recibir daño, pierdes 20.')}>🔥 Furia <span class="fbar"><i style="width:${me.fury}%"></i></span> ${me.fury}/100 · +${furyPower(me)}% daño · +${furyCrit(me)}% crít.</div>`);
+  if (me.fury !== undefined) out.push(`<div class="sm res fury" ${tip('Furia: +20 al golpear, +10 al recibir daño. Cada 20: +2% de daño y +6% de crítico. Si pasas un turno sin atacar ni recibir daño, pierdes 20.')}>🔥 Furia <span class="fbar"><i style="width:${me.fury}%"></i></span> ${me.fury}/100 · +${furyPower(me)}% daño · +${furyCrit(me)}% crít.</div>`);
   const marked = c.units.filter((u) => u.hp > 0 && u.statuses.deathmark?.from === me.id);
   if (marked.length) out.push(`<div class="sm res bad">☠ Marca de la muerte: ${marked.map((u) => `${esc(u.name.split(' ')[0]!)} guarda ${u.statuses.deathmark!.stacks} (${u.statuses.deathmark!.turns} t.)`).join(' · ')}</div>`);
   if (me.kind === 'acechador') { const n = marksOf(c, 'shadow', me.id).length; if (n) out.push(`<div class="sm res">👤 Sombras ${n}</div>`); }
