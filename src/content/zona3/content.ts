@@ -1,7 +1,7 @@
 // Zona 3: Las Ruinas de Ceniza. Equipo y eventos de grupo.
 import type { ItemTheme } from '../../core/items/items';
 import { boon, healPct, losePct, type EventDef } from '../zona1/events';
-import { addAlly, giveItem, giveRelic } from '../../game/run';
+import { addAlly, buildBossOffer, giveItem, giveRelic } from '../../game/run';
 
 export const ZONA3_ITEMS: ItemTheme = {
   names: {
@@ -56,7 +56,7 @@ export const ZONA3_EVENTS: EventDef[] = [
     id: 'oraculo', title: 'El Oráculo de Hollín',
     text: 'Una mujer con los ojos cosidos lee el humo. Por oro, os dice qué os espera.',
     options: [
-      { label: 'Pagar 40 de oro cada uno', hint: 'Todos eligen una mejora de hechizo extra (si alguno no puede pagar, no hay trato).', apply: (run) => { if (run.heroes.some((h) => h.gold < 40)) return 'El oráculo no fía.'; for (const h of run.heroes) { h.gold -= 40; h.upPending++; } return 'El humo dibuja formas que solo vosotros entendéis.'; } },
+      { label: 'Pagar 40 de oro cada uno', hint: 'Todos reciben una recompensa de hechizo como la del jefe (si alguno no puede pagar, no hay trato).', apply: (run) => { if (run.heroes.some((h) => h.gold < 40)) return 'El oráculo no fía.'; for (const h of run.heroes) { h.gold -= 40; h.bossOffer = buildBossOffer(run, h); } return 'El humo dibuja formas que solo vosotros entendéis.'; } },
       { label: 'Preguntar gratis', hint: 'El próximo combate tiene presagio de Bendición.', apply: (run) => { run.nextOmen = 'bendicion'; return '«Lo próximo será fácil», dice. Mentir no le cuesta nada.'; } },
     ],
   },

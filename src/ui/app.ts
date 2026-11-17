@@ -16,7 +16,7 @@ import { addFriend, invite, removeFriend, setRoom, socialHandlers } from '../net
 import { championOf } from '../game/run';
 import { MAX_ASC } from '../content/modes';
 import { setMusicVolume, setZoneMusic } from '../audio/sfx';
-import { mapModal, statsModal } from './panels';
+import { mapModal, statsModal, victoryModal } from './panels';
 import { endScreen, eventScreen, homeScreen, lobbyScreen, mapScreen, shopScreen } from './screens';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -98,7 +98,7 @@ function render(events: GameEvent[]): void {
   if (want !== ui.screen) hideTip();
   const meH = run?.heroes.find((h) => h.owner === ui.myId);
   setZoneMusic(!run ? 'lobby' : want === 'combat' ? (run.kind === 'boss' ? 'boss' : 'combat') : want === 'end' ? 'end' : want === 'shop' ? 'calm'
-    : want === 'event' || meH?.boonOffer || meH?.upOffer ? 'choice' : `map${Math.min(3, run.zone)}`);
+    : want === 'event' || meH?.boonOffer || meH?.bossOffer ? 'choice' : `map${Math.min(3, run.zone)}`);
   if (want === 'combat') combatScreen(events);
   else {
     ui.board?.destroy();
@@ -109,6 +109,8 @@ function render(events: GameEvent[]): void {
   // ficha del personaje por encima de cualquier pantalla
   document.getElementById('statsmodal')?.remove();
   if (ui.statsOpen && run) ui.root.insertAdjacentHTML('beforeend', statsModal(run));
+  document.getElementById('victorymodal')?.remove();
+  if (run && run.phase === 'map' && run.report && !run.arena && ui.reportClosed !== run.report.stamp) ui.root.insertAdjacentHTML('beforeend', victoryModal(run));
   document.getElementById('mapmodal')?.remove();
   if (ui.mapOpen && run && !run.arena) ui.root.insertAdjacentHTML('beforeend', mapModal(run));
   if (want === 'end' && run && run.daily && s.isHost && run.heroes.length) {
@@ -180,7 +182,8 @@ document.addEventListener('click', (e) => {
     case 'ascdown': ui.asc = Math.max(0, ui.asc - 1); publish(); render([]); break;
     case 'again': ui.log.length = 0; s?.backToLobby(); break;
     case 'reroll': s?.act({ a: 'reroll' }); break;
-    case 'upgrade': s?.act({ a: 'upgrade', idx: Number(id) }); break;
+    case 'bossreward': s?.act({ a: 'bossreward', idx: Number(id) }); break;
+    case 'report': ui.reportClosed = s?.run?.report?.stamp ?? -1; lastKey = ''; render([]); break;
     case 'boon': s?.act({ a: 'boon', idx: Number(id) }); break;
     case 'ready': s?.act({ a: 'ready' }); break;
     case 'forceready': s?.forceReady(); break;

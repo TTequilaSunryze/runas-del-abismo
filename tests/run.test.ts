@@ -16,7 +16,7 @@ const make = (n: number, seed: number): RunState =>
 function playRun(n: number, seed: number, prefer: string): RunState {
   const run = make(n, seed);
   for (let step = 0; step < 150 && run.phase !== 'won' && run.phase !== 'lost'; step++) {
-    for (const h of run.heroes) for (let k = 0; k < 6 && h.upOffer; k++) metaAction(run, h.owner, { a: 'upgrade', idx: 0 });
+    for (const h of run.heroes) if (h.bossOffer) expect(metaAction(run, h.owner, { a: 'bossreward', idx: 0 })).toBeNull();
     if (run.phase === 'map') {
       for (const h of run.heroes) {
         if (run.offers[h.owner] && metaAction(run, h.owner, { a: 'pick', idx: 0 })) {

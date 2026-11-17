@@ -231,3 +231,13 @@ span.cell { display: inline-flex; align-items: center; justify-content: center; 
 .sq[data-act="map"] { width: auto; padding: 0 8px; }
 /* rarezas del equipo: Common blanco, Uncommon azul, Rare naranja, Legendary rojo */
 .ir0 { color: #FFFFFF; --rc: #FFFFFF; } .ir1 { color: #3B82F6; --rc: #3B82F6; } .ir2 { color: #F97316; --rc: #F97316; } .ir3 { color: #EF4444; --rc: #EF4444; }
+/* modal de victoria */
+.victory .panel { max-width: 640px; }
+.vtitle { text-align: center; color: var(--gold); letter-spacing: 1px; margin: 4px 0 8px; }
+.loot-icons { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.loot-icons .cell.big { width: 52px; height: 52px; aspect-ratio: auto; }
+.vsum { display: flex; gap: 16px; margin-bottom: 4px; }
+.vbar { display: flex; align-items: center; gap: 8px; margin: 2px 0; }
+.vbar span { width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vbar i { height: 8px; background: var(--gold); border-radius: 4px; min-width: 2px; }
+.vbar b { min-width: 28px; }

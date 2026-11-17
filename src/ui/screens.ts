@@ -89,7 +89,7 @@ export function champCard(c: Champion, inTeam: boolean, actions = true): string 
   const ups = Object.values(c.ups).reduce((a, l) => a + l.length, 0);
   return `<div class="lootcard ${c.won ? 'r3' : 'r1'}"><div class="row"><b>${esc(c.name)}</b><span class="dim sm">${CLASSES[c.cls].name}</span><span class="grow"></span>${c.won ? '<span>🏆</span>' : ''}${c.asc ? `<span class="pill sm">A${c.asc}</span>` : ''}</div>
   <div class="sm dim">${c.routes.map((r) => esc(findRoute(c.cls, r)?.name ?? r)).join(' + ')}</div>
-  <div class="cells tiny">${Object.values(c.equip).map((it) => `<span class="cell ${RAR[it.rarity]}" ${tip(itemHtml(it))}>${itemIcon(it)}</span>`).join('')}</div>
+  <div class="cells tiny">${Object.values(c.equip).map((it) => `<span class="cell ${RAR[it.rarity]}" ${tip(itemHtml(it, true))}>${itemIcon(it)}</span>`).join('')}</div>
   <div class="sm dim">✨ ${ups} mejoras</div>
   ${actions ? `<div class="row"><button class="mini ${inTeam ? 'pri' : ''}" data-act="champteam" data-id="${esc(c.id)}">${inTeam ? '✔ En el equipo' : 'Añadir al equipo'}</button><span class="grow"></span><button class="mini" data-act="champdel" data-id="${esc(c.id)}">Borrar</button></div>` : ''}</div>`;
 }

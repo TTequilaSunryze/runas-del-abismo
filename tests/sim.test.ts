@@ -11,7 +11,7 @@ function play(classes: ClassId[], seed: number): { run: RunState; stalls: number
   let stalls = 0;
   for (let step = 0; step < 200 && run.phase !== 'won' && run.phase !== 'lost'; step++) {
     for (const h of run.heroes) {
-      for (let k = 0; k < 6 && h.upOffer; k++) metaAction(run, h.owner, { a: 'upgrade', idx: 0 });
+      if (h.bossOffer) metaAction(run, h.owner, { a: 'bossreward', idx: 0 });
       for (let k = 0; k < 6 && h.boonOffer; k++) metaAction(run, h.owner, { a: 'boon', idx: k % 3 } as never);
     }
     if (run.phase === 'map') {

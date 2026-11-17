@@ -45,6 +45,8 @@ export const ui = {
   /** ventana de estadísticas abierta */
   statsOpen: false,
   mapOpen: false,
+  /** sello del último informe de combate cerrado */
+  reportClosed: -1,
   acName: '',
   hallMsg: '',
   busy: false,

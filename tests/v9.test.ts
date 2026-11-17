@@ -9,7 +9,7 @@ import { SPELLS } from '../src/core/classes/spells';
 import { cast, castProblem, createCombat, current, endTurn, essenceNeed, move, type UnitSpec } from '../src/core/combat/engine';
 import { addMark, marksOf } from '../src/core/combat/marks';
 import { runAiTurn } from '../src/core/combat/ai';
-import { finishFight, heroSpec, newRun, offerBoon, type HeroSave } from '../src/game/run';
+import { buildBossOffer, finishFight, heroSpec, newRun, offerBoon } from '../src/game/run';
 import type { ClassId, CombatState, Unit } from '../src/core/state';
 
 const NEW: ClassId[] = ['zorro', 'esferas', 'carcelero', 'acechador', 'barbaro'];
@@ -36,36 +36,30 @@ describe('pool de cada clase', () => {
       for (const id of bless) expect(BLESSINGS[id]!.cls).toBe(c);
     }
   });
-  it('las ofertas son al azar, de su clase, y las 3 primeras son hechizos nuevos', () => {
+  it('el santuario ofrece las bendiciones de su clase y el jefe sus hechizos únicos, al azar', () => {
     for (const c of NEW) {
       const run = newRun('T', 11, [{ owner: 'a', name: 'A', cls: c, routes: [] }]);
       const h = run.heroes[0]!;
       const pool = new Set(patronsOf(c).flatMap((p) => p.spells));
+      expect(h.boonOffer, c).toBeNull();
+      offerBoon(run, h);
+      expect(h.boonOffer!.spells, c).toHaveLength(3);
+      for (const o of h.boonOffer!.spells) expect(BLESSINGS[o]?.cls).toBe(c);
       const got = new Set<string>();
-      expect(h.boonOffer, c).toBeTruthy();
-      for (let i = 0; i < 30; i++) {
-        if (!h.boonOffer) offerBoon(run, h);
-        for (const o of h.boonOffer!.spells) { expect(pool.has(o), `${c} ${o}`).toBe(true); got.add(o); if (i < 3 || (h.spellOffers ?? 0) <= 3) expect(!!SPELLS[o], o).toBe(true); }
-        h.boonOffer = null;
-      }
-      expect([...got].filter((x) => SPELLS[x]).length, c).toBe(6);
+      for (let i = 0; i < 60; i++) for (const o of buildBossOffer(run, h)) { if (o.kind === 'spell') { expect(pool.has(o.id), `${c} ${o.id}`).toBe(true); expect(SPELLS[o.id]).toBeTruthy(); got.add(o.id); } }
+      expect(got.size, c).toBe(6);
     }
   });
-  it('3 ofertas de hechizo nuevo antes de la sala 3', () => {
-    for (const seed of [1, 2, 3, 4, 5, 6]) {
+  it('sin ofertas de hechizo hasta derrotar al jefe', () => {
+    for (const seed of [1, 2, 3]) {
       const run = newRun('T', seed, [{ owner: 'a', name: 'A', cls: 'barbaro', routes: [] }]);
       const h = run.heroes[0]!;
-      expect(run.map[1]).not.toContain('event');
-      let offers = 0;
-      const take = (): void => { if (h.boonOffer) { offers++; h.boonOffer = null; } };
-      take();
       for (const room of [0, 1]) {
         run.combat = createCombat({ seed: 1, w: 8, h: 5, obstacles: [], units: [heroSpec(h, { x: 1, y: 1 })] }).state;
         run.combat.over = 'win'; run.phase = 'combat'; run.kind = 'combat'; run.step = room;
         finishFight(run);
-        take();
+        expect(h.boonOffer).toBeNull(); expect(h.bossOffer).toBeNull();
       }
-      expect(offers).toBeGreaterThanOrEqual(3);
     }
   });
 });
@@ -415,7 +409,7 @@ describe('simulación corta', () => {
   });
   it('las bendiciones se aplican al héroe', () => {
     const run = newRun('T', 3, [{ owner: 'a', name: 'A', cls: 'esferas', routes: [] }]);
-    const h = run.heroes[0]! as HeroSave;
+    const h = run.heroes[0]!;
     h.boons = ['tb_poder', 'tb_onda'];
     const u = heroSpec(h);
     expect(u.traits).toContain('poder');

@@ -5,6 +5,7 @@ import { cast, createCombat, current, endTurn, move, type UnitSpec } from '../sr
 import { makeHero } from '../src/core/classes/factory';
 import { makeEnemy } from '../src/content/enemies';
 import { tuned, UPGRADES } from '../src/core/upgrades';
+import { upCount } from '../src/game/run';
 import { championOf, cleanChampion, finishFight, heroSpec, metaAction, newArena, newRun, type Champion } from '../src/game/run';
 import { autoplay } from './helpers';
 
@@ -57,36 +58,28 @@ describe('arquero', () => {
 });
 
 describe('mejoras de hechizo', () => {
-  it('una sola recompensa por sala: equipo y mejora de hechizo se alternan', () => {
+  it('los hechizos solo se ofrecen al vencer al jefe, en orden: mejora, mejora, hechizo nuevo', () => {
     const run = newRun('T', 3, [{ owner: 'a', name: 'A', cls: 'zorro', routes: [] }]);
     const h = run.heroes[0]!;
-    // ya vio sus 3 primeras ofertas de hechizo
-    h.boonOffer = null;
-    h.spellOffers = 3;
-    const before = heroSpec(h).spells.filter((sp) => sp.charges === undefined).length;
-    for (let f = 0; f < 2; f++) {
+    expect(h.boonOffer).toBeNull(); expect(h.bossOffer).toBeNull();
+    for (const kind of ['combat', 'combat', 'elite'] as const) {
       run.combat = createCombat({ seed: 1, w: 8, h: 5, obstacles: [], units: [heroSpec(h, { x: 1, y: 1 })] }).state;
-      run.combat.over = 'win'; run.phase = 'combat'; run.kind = 'combat';
+      run.combat.over = 'win'; run.phase = 'combat'; run.kind = kind;
       finishFight(run);
-      expect(h.level).toBe(1);
-      const got = [!!run.offers.a, !!h.upOffer, !!h.boonOffer].filter(Boolean).length;
-      expect(got).toBe(1);
-      expect(f === 0 ? !!run.offers.a : !!h.upOffer).toBe(true);
-      if (run.offers.a) metaAction(run, 'a', { a: 'pick', idx: 0 });
-      if (h.upOffer) { const o = h.upOffer[0]!; expect(metaAction(run, 'a', { a: 'upgrade', idx: 0 })).toBeNull(); expect(h.ups[o.spell]).toContain(o.up); }
+      expect(h.bossOffer).toBeNull(); expect(h.boonOffer).toBeNull();
+      delete run.offers.a;
     }
-    // el élite da una bendición, sin equipo
     run.combat = createCombat({ seed: 1, w: 8, h: 5, obstacles: [], units: [heroSpec(h, { x: 1, y: 1 })] }).state;
-    run.combat.over = 'win'; run.phase = 'combat'; run.kind = 'elite';
+    run.combat.over = 'win'; run.phase = 'combat'; run.kind = 'boss';
     finishFight(run);
-    expect(h.boonOffer).toBeTruthy();
-    expect(run.offers.a).toBeUndefined();
-    // los hechizos nuevos solo llegan si se eligen
-    expect(heroSpec(h).spells.filter((sp) => sp.charges === undefined).length).toBe(before);
-  });
-  it('la maestría 5 empieza con una bendición de clase', () => {
-    const run = newRun('T', 3, [{ owner: 'a', name: 'A', cls: 'guerrero', routes: [], mastery: 5 }]);
-    expect(run.heroes[0]!.boonOffer).toBeTruthy();
+    const o = h.bossOffer!;
+    expect(o).toHaveLength(3);
+    expect(o[0]!.kind).toBe('up'); expect(o[1]!.kind).toBe('up'); expect(o[2]!.kind).toBe('spell');
+    expect((o[0] as { spell: string }).spell).not.toBe((o[1] as { spell: string }).spell);
+    expect(run.report?.turns).toBeGreaterThan(0);
+    expect(metaAction(run, 'a', { a: 'bossreward', idx: 0 })).toBeNull();
+    expect(h.bossOffer).toBeNull();
+    expect(upCount(h, (o[0] as { spell: string }).spell)).toBe(1);
   });
   it('potenciado sube el daño un 20%', () => {
     const d = tuned(SPELLS.tajo!, { ups: ['pot'] });

@@ -4,7 +4,7 @@ import { CLASSES } from '../src/core/classes/classes';
 import { makeHero } from '../src/core/classes/factory';
 import { SPELLS } from '../src/core/classes/spells';
 import { cast, castProblem, createCombat, current, endTurn, move, tackleKeep, usableMp, type UnitSpec } from '../src/core/combat/engine';
-import { finishFight, heroMaxHp, heroSpec, metaAction, newRun, offerBoon, waitingFor } from '../src/game/run';
+import { finishFight, heroMaxHp, heroSpec, metaAction, newRun, waitingFor } from '../src/game/run';
 import { spellKind } from '../src/ui/spellicons';
 
 const hero = (cls: 'guerrero' | 'mago' | 'picaro' | 'arquero' | 'clerigo' = 'guerrero', pos = { x: 1, y: 3 }, routes: string[] = []): UnitSpec => makeHero({ cls, name: 'H', owner: 'p0', routes, pos, level: 3 });
@@ -137,7 +137,7 @@ describe('consumibles, bendiciones y botín', () => {
     expect(B.hp).toBe(Math.round(B.maxHp * 0.4));
   });
   it('bendiciones de clase: mejoran sus hechizos o dan hechizos nuevos de su clase', async () => {
-    const { PATRONS, patronsOf } = await import('../src/content/boons');
+    const { patronsOf } = await import('../src/content/boons');
     const { BLESSINGS, BOON_MODS } = await import('../src/core/boonmods');
     const { spellOf } = await import('../src/core/combat/engine');
     for (const cls of ['guerrero', 'mago', 'clerigo', 'arquero', 'picaro', 'zorro', 'esferas', 'acechador', 'carcelero', 'barbaro'] as const) {
@@ -151,9 +151,6 @@ describe('consumibles, bendiciones y botín', () => {
     }
     const run = newRun('T', 3, [{ owner: 'a', name: 'A', cls: 'mago', routes: [] }]);
     const h = run.heroes[0]!;
-    offerBoon(run, h);
-    expect(h.boonOffer!.spells).toHaveLength(3);
-    expect(PATRONS[h.boonOffer!.patron]!.cls).toBe('mago');
     // mejora: Chispa voraz da área 1 y quema 3 turnos
     h.boonOffer = null;
     h.boons = ['mm_voraz'];

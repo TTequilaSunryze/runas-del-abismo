@@ -24,7 +24,7 @@ function addEffect(d: SpellDef, st: NonNullable<SpellDef['status']>): void {
   else if (!d.extraStatus) d.extraStatus = st;
 }
 /** Un mismo hechizo se puede mejorar como mucho estas veces por partida (bendiciones incluidas). */
-export const MAX_SPELL_UPS = 2;
+export const MAX_SPELL_UPS = 3;
 
 export const UPGRADES: Record<string, UpgradeDef> = Object.fromEntries(
   ([

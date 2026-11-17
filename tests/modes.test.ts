@@ -38,15 +38,15 @@ describe('mejoras permanentes', () => {
     const h = boosted.heroes[0]!;
     expect(heroMaxHp(h)).toBeGreaterThan(heroMaxHp(base.heroes[0]!));
     expect(h.gold).toBe(50);
-    h.boonOffer = null; h.spellOffers = 3;
+    h.boonOffer = null;
     boosted.combat = createCombat({ seed: 1, w: 8, h: 5, obstacles: [], units: [heroSpec(h, { x: 1, y: 1 })] }).state;
-    boosted.combat.over = 'win'; boosted.phase = 'combat'; boosted.kind = 'boss';
+    boosted.combat.over = 'win'; boosted.phase = 'combat'; boosted.kind = 'elite';
     finishFight(boosted);
-    expect(boosted.offers.p0).toHaveLength(4);
+    expect(boosted.offers.p0).toHaveLength(3);
     const first = boosted.offers.p0!.map((i) => i.name).join();
     expect(metaAction(boosted, 'p0', { a: 'reroll' })).toBeNull();
     expect(metaAction(boosted, 'p0', { a: 'reroll' })).toBe('No te quedan re-tiradas en esta zona');
-    expect(boosted.offers.p0).toHaveLength(4);
+    expect(boosted.offers.p0).toHaveLength(3);
     void first;
   });
   it('los niveles fuera de rango se recortan', () => {

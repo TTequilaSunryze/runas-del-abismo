@@ -8,7 +8,7 @@ import { MAX_BOONS, PATRONS, patronBonus, patronOf } from '../content/boons';
 import { BLESSINGS, BOON_MODS } from '../core/boonmods';
 import { MAX_SPELL_UPS, UPGRADES, tuned } from '../core/upgrades';
 import { SOULS_PER_ARMOR } from '../core/combat/engine';
-import { NODE_NAME, availableNodes, heroMaxHp, heroSpec, pendingOf, statBreakdown, upCount, zoneOf, type HeroSave, type RunState } from '../game/run';
+import { NODE_NAME, availableNodes, heroMaxHp, heroSpec, pendingOf, statBreakdown, upCount, zoneOf, type BossOption, type HeroSave, type RunState } from '../game/run';
 import { esc, mine, tip, ui } from './ctx';
 import { NODE_ICON, itemIcon, spellIcon, spellTip } from './icons';
 import { rangeText, spellSummary } from './spellicons';
@@ -49,16 +49,16 @@ export function diffHtml(it: Item, h: HeroSave): string {
   return `<div class="sm"><span class="dim">Frente a ${esc(old.name)}:</span><br>${keys.map((k) => `<span class="${d[k]! > 0 ? 'good' : 'bad'}">${d[k]! > 0 ? '+' : ''}${d[k]} ${STAT_NAME[k]}</span>`).join('<br>')}</div>`;
 }
 
-export function itemHtml(it: Item): string {
+export function itemHtml(it: Item, withIcon = false): string {
   const aff = it.affixes?.length
     ? it.affixes.map((x) => `<div class="sm affix"><span class="dim">${x.kind === 'prefix' ? 'Prefijo' : 'Sufijo'} · ${esc(x.name)}:</span> <span class="good">+${x.value} ${STAT_NAME[x.stat]}</span></div>`).join('')
     : `<div class="sm">${statsText(it.stats).split(' · ').join('<br>')}</div>`;
-  return `<b class="${RAR[it.rarity]}">${esc(it.name)}</b><div class="dim sm">${SLOT_NAME[it.slot]} · <span class="${RAR[it.rarity]}">${RARITY_NAME[it.rarity]}</span></div>${aff}${it.lore ? `<i class="dim sm">${esc(it.lore)}</i>` : ''}`;
+  return `<div class="row">${withIcon ? `<span class="cell ${RAR[it.rarity]}" style="width:44px;height:44px">${itemIcon(it)}</span>` : ''}<div><b class="${RAR[it.rarity]}">${esc(it.name)}</b><div class="dim sm">${SLOT_NAME[it.slot]} · <span class="${RAR[it.rarity]}">${RARITY_NAME[it.rarity]}</span></div></div></div>${aff}${it.lore ? `<i class="dim sm">${esc(it.lore)}</i>` : ''}`;
 }
 
 /** Casilla con el icono del objeto; al pasar el ratón muestra sus datos y la comparación. */
 export function cell(it: Item | undefined, attrs: string, h?: HeroSave, slot?: Slot, sel = false): string {
-  const t = it ? itemHtml(it) + (h ? diffHtml(it, h) : '') : slot ? `<span class="dim">${SLOT_NAME[slot]}: vacío</span>` : '';
+  const t = it ? itemHtml(it, true) + (h ? diffHtml(it, h) : '') : slot ? `<span class="dim">${SLOT_NAME[slot]}: vacío</span>` : '';
   return `<button class="cell ${it ? RAR[it.rarity] : 'empty'} ${sel ? 'sel' : ''}" ${attrs} ${t ? tip(t) : ''}>${itemIcon(it, slot)}</button>`;
 }
 
@@ -116,15 +116,50 @@ export function sidePanel(run: RunState, selling = false): string {
   <div class="tabbody">${tab === 'grupo' || !h ? groupTab(run) : tab === 'hechizos' ? spellsTab(h) : gearTab(run, h, selling)}</div></aside>`;
 }
 
-/** Mejora de hechizo pendiente: se elige una. */
-export function upgradeRow(run: RunState): string {
+/** Carta de una opción de la recompensa del jefe. */
+function bossCard(h: HeroSave, o: BossOption, i: number): string {
+  const n = i + 1;
+  if (o.kind === 'gold') return `<div class="lootcard r1"><div class="row"><span class="emo big">💰</span><div><b>Oro</b><div class="pill sm">Opción ${n}</div></div></div><div class="sm">Recibes ${o.amount} de oro.</div><button class="pri" data-act="bossreward" data-id="${i}">Elegir</button></div>`;
+  if (o.kind === 'heal') return `<div class="lootcard r1"><div class="row"><span class="emo big">❤️</span><div><b>Curación</b><div class="pill sm">Opción ${n}</div></div></div><div class="sm">Recuperas el 50% de tu vida máxima.</div><button class="pri" data-act="bossreward" data-id="${i}">Elegir</button></div>`;
+  if (o.kind === 'spell') {
+    const d = SPELLS[o.id]!;
+    return `<div class="lootcard r3" ${tip(spellTip(d))}><div class="row">${spellIcon(d)}<div><b>${esc(d.name)}</b><div class="pill sm">Opción ${n} · Hechizo nuevo de ${esc(CLASSES[h.cls].name)}</div></div></div><div class="sm">${esc(d.text)}</div><div class="dim sm">${d.ap} PA · ${rangeText(d)}${d.perTurn ? ` · ${d.perTurn} por turno` : ''}${d.cd ? ` · espera ${d.cd}` : ''}</div><button class="pri" data-act="bossreward" data-id="${i}">Aprender</button></div>`;
+  }
+  const d = SPELLS[o.spell]!, g = UPGRADES[o.up], m = BOON_MODS[o.up];
+  const have = [...h.boons.filter((b) => BOON_MODS[b]?.target === o.spell), ...(h.ups[o.spell] ?? [])];
+  const now = tuned(d, { ups: have }), next = tuned(d, { ups: [...have, o.up] });
+  const lvl = upCount(h, o.spell);
+  return `<div class="lootcard r2"><div class="row">${spellIcon(next)}<div><b>${esc(d.name)}</b><div class="pill sm">Opción ${n} · Mejora: ${g?.icon ?? '✨'} ${esc((g ?? m)?.name ?? o.up)}</div></div></div><div class="sm">${esc((g ?? m)?.text ?? '')}</div><div class="dim sm">Ahora: ${now.ap} PA · ${esc(spellSummary(now))}</div><div class="good sm">Después: ${next.ap} PA · ${esc(spellSummary(next))}</div><div class="dim sm">Nivel del hechizo: ${lvl + 1} → ${lvl + 2} de ${MAX_SPELL_UPS + 1}</div><button class="pri" data-act="bossreward" data-id="${i}">Elegir</button></div>`;
+}
+
+/** Recompensa del jefe pendiente: mejora, mejora y hechizo nuevo. */
+export function bossRow(run: RunState): string {
   const h = mine(run);
-  if (!h?.upOffer) return '';
-  return `<div class="panel loot"><div class="row"><h3>✨ Mejora de hechizo: elige una</h3><span class="grow"></span><span class="dim sm">${h.upPending > 1 ? `Te quedan ${h.upPending} elecciones` : 'Dura toda la partida'}</span></div>
-  <div class="cards">${h.upOffer.map((o, i) => { const d = SPELLS[o.spell]!, up = UPGRADES[o.up]!; const now = tuned(d, { ups: h.ups[o.spell] }), next = tuned(d, { ups: [...(h.ups[o.spell] ?? []), o.up] });
-    const ch = [now.ap !== next.ap ? `PA ${now.ap} → ${next.ap}` : '', now.dmg && next.dmg && now.dmg[1] !== next.dmg[1] ? `daño ${now.dmg[0]}-${now.dmg[1]} → ${next.dmg[0]}-${next.dmg[1]}` : '', now.heal !== next.heal ? `cura ${now.heal} → ${next.heal}` : '', now.shield !== next.shield ? `escudo ${now.shield} → ${next.shield}` : '', now.cd !== next.cd ? `espera ${now.cd} → ${next.cd}` : '', now.range[1] !== next.range[1] ? `alcance ${now.range[1]} → ${next.range[1]}` : '', (now.area ?? 0) !== (next.area ?? 0) ? `área ${now.area ?? 0} → ${next.area}` : ''].filter(Boolean).join(' · ');
-    const n = upCount(h, o.spell);
-    return `<div class="lootcard r2"><div class="row">${spellIcon(d)}<div><b>${esc(d.name)}</b><div class="pill sm">${up.icon} ${esc(up.name)}</div><div class="sm">${esc(up.text)}</div>${ch ? `<div class="good sm">${ch}</div>` : ''}<div class="dim sm">Mejoras de este hechizo: ${n} → ${n + 1} de ${MAX_SPELL_UPS}</div></div></div><button class="pri" data-act="upgrade" data-id="${i}">Elegir</button></div>`; }).join('')}</div></div>`;
+  if (!h?.bossOffer) return '';
+  return `<div class="panel loot boon"><div class="row"><h3>👑 Recompensa del jefe: elige una</h3><span class="grow"></span><span class="dim sm">Aprendidos: ${h.boons.length}/${MAX_BOONS}</span></div>
+  <div class="dim sm">Mejora de un hechizo, mejora de otro y un hechizo nuevo de ${esc(CLASSES[h.cls].name)}. Cada hechizo se mejora como máximo ${MAX_SPELL_UPS} veces.</div>
+  <div class="cards c3">${h.bossOffer.map((o, i) => bossCard(h, o, i)).join('')}</div></div>`;
+}
+
+/** Modal de victoria: botín en iconos con tooltip, recompensa del jefe, resumen y «Continuar». */
+export function victoryModal(run: RunState): string {
+  const r = run.report, h = mine(run);
+  if (!r) return '';
+  const chip = (icon: string, tipHtml: string, cls = ''): string => `<span class="cell big ${cls}" ${tip(tipHtml)}><span class="emo">${icon}</span></span>`;
+  const mineLoot = r.loot.filter((l) => !h || l.owner === h.owner);
+  const offer = h ? run.offers[h.owner] : undefined;
+  const items = offer && h ? `<div class="lbl">Elige un objeto <span class="dim sm">(o ninguno)</span></div><div class="cells loot-icons">${offer.map((it, i) => `<button class="cell big ${RAR[it.rarity]}" data-act="pick" data-id="${i}" ${tip(itemHtml(it, true) + diffHtml(it, h) + '<div class="dim sm">Clic para quedártelo</div>')}>${itemIcon(it)}</button>`).join('')}<button class="mini" data-act="pick" data-id="-1">Ninguno</button></div>` : '';
+  const total = Math.max(1, ...r.damage.map((x) => x.dmg));
+  return `<div class="modal victory" id="victorymodal"><div class="panel wide" onclick="event.stopPropagation()">
+  <h2 class="vtitle">FIN DEL COMBATE - ¡HAS GANADO!</h2>
+  <div class="lbl">Botín</div>
+  <div class="cells loot-icons">${chip('💰', `<b>Oro</b><div class="sm">+${r.gold} de oro para cada uno.</div>`)}${mineLoot.map((l) => chip(l.icon, `<b>${esc(l.name)}</b><div class="sm">${esc(l.text)}</div>`, l.rare ? 'ir3' : 'ir1')).join('')}</div>
+  ${items}
+  ${bossRow(run)}
+  <div class="lbl">Resumen</div>
+  <div class="vsum sm"><span>⏱️ ${r.turns} ronda${r.turns === 1 ? '' : 's'}</span><span>⚔️ ${r.damage.reduce((a, x) => a + x.dmg, 0)} de daño</span></div>
+  ${r.damage.map((x) => `<div class="vbar sm"><span>${esc(x.name)}</span><i style="width:${Math.round((x.dmg / total) * 100)}%"></i><b>${x.dmg}</b></div>`).join('')}
+  <div class="row"><span class="grow"></span><button class="pri" data-act="report">Continuar</button></div></div></div>`;
 }
 
 /** Bendición pendiente: 3 habilidades de un patrón (las del mismo patrón se potencian entre sí). */
@@ -154,7 +189,7 @@ export function boonRow(run: RunState): string {
 }
 
 /** Todo lo que el jugador tiene pendiente de elegir. */
-export const pendingRows = (run: RunState): string => `${boonRow(run)}${upgradeRow(run)}${lootRow(run)}`;
+export const pendingRows = (run: RunState): string => `${boonRow(run)}${bossRow(run)}${lootRow(run)}`;
 
 /** Control para cambiar de sala: el anfitrión espera a que todos estén listos; los demás pulsan «Listo». */
 export function advanceBar(run: RunState, label: string, act = 'leavenode'): string {

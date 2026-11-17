@@ -181,7 +181,7 @@ export function spellKind(d: SpellDef): SpellKind {
   return 'dmg';
 }
 
-const ST: Record<string, string> = { burn: 'quema', poison: 'envenena', slow: 'ralentiza', stun: 'aturde', mark: 'marca' };
+const ST: Record<string, string> = { burn: 'quema', poison: 'envenena', slow: 'ralentiza', stun: 'aturde', mark: 'marca', charm: 'encanta', vuln: 'vulnerable', bleed: 'sangra', hobble: 'frena', chained: 'encadena' };
 const EL: Record<string, string> = { fire: 'de fuego', ice: 'de hielo', poison: 'de veneno', holy: 'sagrado', shadow: 'de sombra' };
 
 /** Forma: dónde actúa. */
@@ -203,7 +203,7 @@ export function spellSummary(d: SpellDef): string {
   if (d.dmg) parts.push(`${d.dash ? 'y daña' : 'Daña'} ${d.dmg[0]}-${d.dmg[1]}${d.element ? ` ${EL[d.element]}` : ''}`);
   if (d.heal) parts.push(`Cura ${d.heal}`);
   if (d.shield) parts.push(`${parts.length ? 'escudo' : 'Da escudo'} ${d.shield}`);
-  for (const st of [d.status, d.extraStatus]) if (st) parts.push(`${ST[st.kind]}${st.stacks && st.stacks > 1 ? ` x${st.stacks}` : ''} ${st.turns} t.`);
+  for (const st of [d.status, d.extraStatus]) if (st) parts.push(`${ST[st.kind] ?? st.kind}${st.stacks && st.stacks > 1 ? ` x${st.stacks}` : ''} ${st.turns} t.`);
   if (d.drainAp) parts.push(`quita ${d.drainAp} PA`);
   if (d.giveAp) parts.push(`da ${d.giveAp} PA`);
   if (d.giveMp) parts.push(`da ${d.giveMp} PM`);

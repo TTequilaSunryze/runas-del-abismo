@@ -116,10 +116,8 @@ describe('Carcelero de Almas', () => {
     s.units[0]!.souls = 4;
     s.over = 'win';
     run.combat = s;
-    const pend = h.upPending;
     finishFight(run);
     expect(h.souls).toBe(4);
-    expect(pend).toBe(0);
   });
   it('la IA lo juega sin errores ni bucles', () => {
     const s = board([{ ...carc(), ai: 'champ' }, { ...ally({ x: 1, y: 5 }), ai: 'champ' }, foe({ x: 6, y: 3 }, 60), foe({ x: 8, y: 2 }, 60)]);

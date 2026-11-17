@@ -7,8 +7,8 @@ import { CLASSES, PLAYABLE } from '../src/core/classes/classes';
 import { makeHero } from '../src/core/classes/factory';
 import { SPELLS } from '../src/core/classes/spells';
 import { cast, castProblem, createCombat, current, endTurn, type UnitSpec } from '../src/core/combat/engine';
-import { canUpgrade, MAX_SPELL_UPS, tuned } from '../src/core/upgrades';
-import { ensureUpOffer, newRun, offerBoon, upCount, type HeroSave } from '../src/game/run';
+import { canUpgrade, MAX_SPELL_UPS, tuned, UPGRADES } from '../src/core/upgrades';
+import { buildBossOffer, heroSpec, newRun, upCount } from '../src/game/run';
 import type { ClassId } from '../src/core/state';
 
 const hero = (cls: ClassId, pos = { x: 1, y: 3 }): UnitSpec => makeHero({ cls, name: 'H', owner: 'p0', routes: [], pos, level: 1 });
@@ -78,9 +78,9 @@ describe('v8', () => {
     expect(castProblem(s, h, SPELLS.z_impulso!, { x: 7, y: 4 })).toMatch(/turno/);
   });
 
-  it('un hechizo se mejora como mucho 2 veces y solo con una mejora elemental', () => {
+  it('un hechizo se mejora como mucho 3 veces y solo con una mejora elemental', () => {
     const d = SPELLS.z_orbe!;
-    expect(canUpgrade(d, ['pot', 'cri'], 'efi')).toBe(false);
+    expect(canUpgrade(d, ['pot', 'cri', 'el_fuego'], 'efi')).toBe(false);
     expect(canUpgrade(d, ['el_fuego'], 'el_hielo')).toBe(false);
     expect(canUpgrade(d, ['el_fuego'], 'pot')).toBe(true);
     const t = tuned(d, { ups: ['el_fuego'] });
@@ -90,26 +90,33 @@ describe('v8', () => {
     const run = newRun('T', 2, [{ owner: 'a', name: 'A', cls: 'zorro', routes: [] }]);
     const h = run.heroes[0]!;
     h.boons = ['zm_orbe_intenso'];
-    h.ups = { z_orbe: ['pot'] };
+    h.ups = { z_orbe: ['pot', 'el_fuego'] };
     expect(upCount(h, 'z_orbe')).toBe(MAX_SPELL_UPS);
-    for (let i = 0; i < 20; i++) { h.upOffer = null; h.upPending = 1; ensureUpOffer(run, h); expect((h.upOffer as HeroSave['upOffer'])?.some((o) => o.spell === 'z_orbe') ?? false).toBe(false); }
-    for (let i = 0; i < 20; i++) { h.boonOffer = null; offerBoon(run, h); expect((h.boonOffer as HeroSave['boonOffer'])?.spells.some((x) => BOON_MODS[x]?.target === 'z_orbe') ?? false).toBe(false); }
+    for (let i = 0; i < 30; i++) expect(buildBossOffer(run, h).some((o) => o.kind === 'up' && o.spell === 'z_orbe')).toBe(false);
   });
 
   it('nunca ofrece mejorar un hechizo que no tienes: ofrece primero el hechizo', () => {
     const run = newRun('T', 7, [{ owner: 'a', name: 'A', cls: 'arquero', routes: [] }]);
     const h = run.heroes[0]!;
-    h.spellOffers = 3;
-    for (let i = 0; i < 40; i++) {
-      h.boonOffer = null;
-      offerBoon(run, h);
-      for (const o of (h.boonOffer as HeroSave['boonOffer'])?.spells ?? []) if (BOON_MODS[o]) expect([...CLASSES.arquero.base, ...h.boons]).toContain(BOON_MODS[o]!.target);
-    }
+    for (let i = 0; i < 40; i++) for (const o of buildBossOffer(run, h)) if (o.kind === 'up') expect([...CLASSES.arquero.base, ...h.boons]).toContain(o.spell);
     // con Flecha ígnea ya aprendida, su mejora sí puede salir
     h.boons = ['a_ignea'];
     let seen = false;
-    for (let i = 0; i < 80 && !seen; i++) { h.boonOffer = null; offerBoon(run, h); seen = !!(h.boonOffer as HeroSave['boonOffer'])?.spells.includes('am_ignea'); }
+    for (let i = 0; i < 80 && !seen; i++) seen = buildBossOffer(run, h).some((o) => o.kind === 'up' && o.up === 'am_ignea');
     expect(seen).toBe(true);
     expect(PATRONS.a_rafaga!.spells).toContain('am_ignea');
+  });
+  it('con todos los hechizos al máximo, las mejoras se sustituyen por hechizos nuevos u oro/curación', () => {
+    const run = newRun('T', 7, [{ owner: 'a', name: 'A', cls: 'zorro', routes: [] }]);
+    const h = run.heroes[0]!;
+    for (const id of heroSpec(h).spells.map((sp) => sp.id)) {
+      h.ups[id] = [];
+      for (const up of Object.keys(UPGRADES)) if (canUpgrade(SPELLS[id]!, h.ups[id]!, up)) h.ups[id]!.push(up);
+      for (const m of Object.values(BOON_MODS)) if (m.target === id && upCount(h, id) < MAX_SPELL_UPS) h.boons.push(m.id);
+    }
+    const o = buildBossOffer(run, h);
+    expect(o).toHaveLength(3);
+    expect(o.some((x) => x.kind === 'up')).toBe(false);
+    for (const x of o) expect(['spell', 'gold', 'heal']).toContain(x.kind);
   });
 });

@@ -5,7 +5,7 @@ import { DAILY_ASC, DAILY_MODS, DAILY_POOL, MAX_MODS, OMENS, perkLevel, type Per
 import { BASE_ZONES, ZONES, type BossDef, type ZoneDef } from '../content/zones';
 import type { BossInfo } from '../core/combat/ai';
 import { RELIC_EVENTS, RELICS } from '../content/relics';
-import { CONSUMABLES, MAX_BOONS, MAX_CONSUMABLE, PATRONS, patronBonus, patronOf, patronsOf } from '../content/boons';
+import { CONSUMABLES, MAX_BOONS, MAX_CONSUMABLE, patronBonus, patronsOf } from '../content/boons';
 import { BLESSINGS, BOON_MODS } from '../core/boonmods';
 import { CLASSES, MAX_LEVEL, canPickRoute } from '../core/classes/classes';
 import { SPELLS } from '../core/classes/spells';
@@ -17,6 +17,25 @@ import { BAG_SIZE, PRICE, SLOTS, STAT_NAME, genItem, sumStats, type DropKind, ty
 import { pick, rand, randInt, seedFrom, shuffle, type RngBox } from '../core/rng';
 import { makeActMap, type ActMap } from './map';
 import type { ClassId, CombatState, GameEvent, Pos } from '../core/state';
+
+/** Una opción de la recompensa del jefe. */
+export type BossOption =
+  | { kind: 'up'; spell: string; up: string }
+  | { kind: 'spell'; id: string }
+  | { kind: 'gold'; amount: number }
+  | { kind: 'heal' };
+
+/** Resumen del último combate ganado (lo muestra el modal de victoria). */
+export interface FightReport {
+  stamp: number;
+  kind: NodeKind;
+  turns: number;
+  gold: number;
+  /** daño infligido por cada héroe en este combate */
+  damage: Array<{ owner: string; name: string; dmg: number }>;
+  /** botín que no se elige: reliquias, consumibles, aliados */
+  loot: Array<{ owner: string; icon: string; name: string; text: string; rare?: boolean }>;
+}
 
 export interface HeroSave {
   owner: string;
@@ -37,16 +56,12 @@ export interface HeroSave {
   stats: HeroStats;
   /** mejoras de hechizo elegidas: id de hechizo → ids de mejora */
   ups: Record<string, string[]>;
-  /** elecciones de mejora que le quedan por hacer */
-  upPending: number;
   /** Carcelero: almas cosechadas en toda la partida (cada 5, +1 de armadura) */
   souls?: number;
   /** Carcelero: almas sin gastar (Explosión de almas) */
   soulBank?: number;
-  /** ofertas de hechizos nuevos recibidas (las 3 primeras son solo hechizos) */
-  spellOffers?: number;
-  /** mejoras entre las que elegir ahora */
-  upOffer: Array<{ spell: string; up: string }> | null;
+  /** recompensa del jefe pendiente: mejora, mejora, hechizo nuevo (en ese orden) */
+  bossOffer: BossOption[] | null;
   /** nivel de maestría de la clase al empezar */
   mastery: number;
   /** reliquias personales */
@@ -92,11 +107,11 @@ export interface GroupEvent {
 export type NodeKind = 'combat' | 'elite' | 'event' | 'rest' | 'shop' | 'boss' | 'cage' | 'shrine';
 export const NODE_NAME: Record<NodeKind, string> = { combat: '⚔️ Combate', elite: '☠️ Élite', event: '❓ Evento de grupo', rest: '🔥 Descanso', shop: '💰 Tienda', boss: '👑 Jefe', cage: '⛓️ Jaula', shrine: '✨ Santuario' };
 export const NODE_HINT: Record<NodeKind, string> = {
-  combat: 'Enemigos normales. Oro y, por turnos, un objeto o una mejora de hechizo.', elite: 'El campeón de la zona, con modificadores. Una bendición de clase.',
+  combat: 'Enemigos normales. Oro y, a veces, un objeto.', elite: 'El campeón de la zona, con modificadores. Oro y objetos mejores.',
   event: 'Una decisión que se vota y afecta a todos.', rest: 'Todos recuperan el 40% de su vida.',
-  shop: 'Gastad vuestro oro en objetos y pociones.', boss: 'El guardián de la zona. Dos fases. Un objeto y una reliquia.',
+  shop: 'Gastad vuestro oro en objetos y pociones.', boss: 'El guardián de la zona. Dos fases. Objetos, una reliquia y una mejora o un hechizo nuevo.',
   cage: 'Un prisionero vigilado: venced a sus captores y luchará con vosotros hasta el final de la zona.',
-  shrine: 'Cada uno elige 1 de 3 bendiciones de su clase: mejoras de sus hechizos o hechizos nuevos.',
+  shrine: 'Cada uno elige una de las bendiciones pasivas de su clase.',
 };
 
 export interface ShopSlot {
@@ -129,6 +144,10 @@ export interface RunState extends RngBox {
   /** sala actual del mapa */
   step: number;
   map: NodeKind[][];
+  /** resumen del último combate ganado */
+  report?: FightReport | null;
+  /** daño acumulado de cada héroe al empezar el combate */
+  dmg0?: Record<string, number>;
   /** aristas del mapa: links[capa][nodo] = nodos de la capa siguiente */
   links: number[][][];
   /** nodo elegido en la capa anterior (−1 al empezar el acto) */
@@ -231,7 +250,7 @@ export function newRun(code: string, seed: number, players: NewHero[], opts: Run
       owner: p.owner, name: p.name, cls: p.cls, routes: kitOf(p.cls, p.routes), hp: 0, level: 1, gold: 0, equip: {}, bag: [], boon: {},
       perks: Object.fromEntries(['vit', 'gold', 'loot', 'reroll', 'aid'].map((k) => [k, perkLevel(p.perks, k)])),
       rerolls: 0, stats: { dmg: 0, kills: 0, falls: 0, heal: 0, maxGold: 0 },
-      relics: [], boons: [], boonOffer: null, bag2: { c_vida: 1 }, ups: {}, upOffer: null, mastery: Math.max(0, Math.min(5, Math.floor(Number(p.mastery) || 0))), upPending: 0,
+      relics: [], boons: [], boonOffer: null, bag2: { c_vida: 1 }, ups: {}, bossOffer: null, mastery: Math.max(0, Math.min(5, Math.floor(Number(p.mastery) || 0))),
     })),
   };
   setMap(run);
@@ -245,9 +264,6 @@ export function newRun(code: string, seed: number, players: NewHero[], opts: Run
     h.gold = perkLevel(h.perks, 'gold') * 25 + noKit * 25;
     h.rerolls = perkLevel(h.perks, 'reroll');
     h.hp = Math.round(heroMaxHp(h) * (run.asc >= 8 ? 0.75 : 1));
-    // todos empiezan eligiendo un hechizo nuevo de su clase
-    h.upPending = 0;
-    offerBoon(run, h);
   }
   return run;
 }
@@ -276,48 +292,54 @@ export function addAlly(run: RunState, id: string): void { if (run.allies.length
 const modsOn = (h: Pick<HeroSave, 'boons'>, spell: string): string[] => h.boons.filter((b) => BOON_MODS[b]?.target === spell);
 /** Veces que ya se ha mejorado un hechizo en esta partida (bendiciones y mejoras). */
 export const upCount = (h: Pick<HeroSave, 'boons' | 'ups'>, spell: string): number => modsOn(h, spell).length + (h.ups[spell]?.length ?? 0);
-/** ¿Le faltan ofertas de hechizo nuevo de las primeras? */
-const needsEarly = (h: HeroSave): boolean => (h.spellOffers ?? 0) < EARLY_SPELL_OFFERS;
-
-/** Hechizos que se cuentan como «ofertas de hechizo nuevo» antes de mezclar bendiciones. */
-export const EARLY_SPELL_OFFERS = 3;
+/** Hechizos únicos de la clase del héroe (el pool del que aprende) que aún no tiene. */
+export function newSpellPool(h: Pick<HeroSave, 'cls' | 'boons' | 'routes' | 'level'>): string[] {
+  const owned = new Set(heroSpec({ ...h, owner: '', name: '', equip: {} } as Build).spells.map((sp) => sp.id));
+  return [...new Set(patronsOf(h.cls).flatMap((p) => p.spells))].filter((id) => !!SPELLS[id] && SPELLS[id]!.route === 'boon' && !BOON_MODS[id] && !BLESSINGS[id] && !h.boons.includes(id) && !owned.has(id));
+}
 
 /**
- * Bendición de clase: 3 opciones al azar entre los hechizos únicos y las bendiciones de su clase (nunca de otra).
- * Las 3 primeras ofertas de la partida son solo hechizos nuevos. Maestría 5: 4 opciones.
+ * Santuario: bendiciones pasivas de la clase (hasta 3 en total). Elige una o rechaza.
  */
 export function offerBoon(run: RunState, h: HeroSave): void {
   if (h.boonOffer) return;
-  if (h.boons.length >= MAX_BOONS) { h.upPending++; ensureUpOffer(run, h); return; }
-  const mineCls = patronsOf(h.cls).map((p) => p.id);
-  const owned = new Set(heroSpec(h).spells.map((sp) => sp.id));
-  // nunca se ofrece mejorar un hechizo que no tienes: en su lugar se ofrece el hechizo; ni más de 2 mejoras por hechizo
-  const real = (id: string): string | null => {
-    if (h.boons.includes(id)) return null;
-    if (BLESSINGS[id]) return id;
-    const mod = BOON_MODS[id];
-    if (!mod) return SPELLS[id] ? id : null;
-    if (!owned.has(mod.target)) return SPELLS[mod.target]?.route === 'boon' && !h.boons.includes(mod.target) ? mod.target : null;
-    return upCount(h, mod.target) < MAX_SPELL_UPS ? id : null;
+  const mineCls = patronsOf(h.cls);
+  const left = mineCls.flatMap((p) => p.spells.filter((id) => !!BLESSINGS[id] && !h.boons.includes(id)).map((id) => ({ p: p.id, id })));
+  if (!left.length) return;
+  const patron = left[0]!.p;
+  h.boonOffer = { patron, spells: shuffle(run, left.map((x) => x.id)).slice(0, 3) };
+}
+
+/**
+ * Recompensa del jefe, siempre en este orden: 1) mejora de un hechizo que tienes, 2) mejora de otro hechizo que tienes,
+ * 3) hechizo nuevo del pool de tu clase. Si no hay mejoras posibles se sustituyen por hechizos nuevos, oro o curación.
+ */
+export function buildBossOffer(run: RunState, h: HeroSave): BossOption[] {
+  const spells = heroSpec(h).spells.filter((sp) => sp.charges === undefined).map((sp) => sp.id);
+  const choices = (id: string): string[] => {
+    const def = SPELLS[id]!;
+    const have = [...modsOn(h, id), ...(h.ups[id] ?? [])];
+    if (upCount(h, id) >= MAX_SPELL_UPS) return [];
+    const generic = Object.keys(UPGRADES).filter((up) => canUpgrade(def, have, up));
+    const own = Object.keys(BOON_MODS).filter((m) => BOON_MODS[m]!.target === id && !h.boons.includes(m) && !have.includes(m));
+    return [...generic, ...own];
   };
-  const early = (h.spellOffers ?? 0) < EARLY_SPELL_OFFERS;
-  const ok = (id: string): boolean => !early || (!BLESSINGS[id] && !BOON_MODS[id]);
-  const fresh = (p: string): string[] => [...new Set(PATRONS[p]!.spells.map(real).filter((x): x is string => !!x && ok(x)))];
-  const any = mineCls.filter((p) => fresh(p).length);
-  if (!any.length) return;
-  const mine = any.filter((p) => h.boons.some((b) => patronOf(b)?.id === p));
-  const patron = mine.length && rand(run) < 0.6 ? pick(run, mine) : pick(run, any);
-  const spells = shuffle(run, fresh(patron));
-  for (const p of shuffle(run, any)) for (const sp of shuffle(run, fresh(p))) if (!spells.includes(sp)) spells.push(sp);
-  h.boonOffer = { patron, spells: spells.slice(0, h.mastery >= 5 ? 4 : 3) };
-  h.spellOffers = (h.spellOffers ?? 0) + 1;
+  const withUps = shuffle(run, spells.filter((id) => choices(id).length));
+  const out: BossOption[] = [];
+  for (const id of withUps.slice(0, 2)) out.push({ kind: 'up', spell: id, up: pick(run, choices(id)) });
+  const pool = h.boons.length >= MAX_BOONS ? [] : shuffle(run, newSpellPool(h));
+  const gold: BossOption = { kind: 'gold', amount: 60 + 40 * run.zone };
+  // huecos 1 y 2 sin mejora: hechizo nuevo si queda alguno, y si no oro u curación
+  while (out.length < 2) out.push(pool.length > 1 ? { kind: 'spell', id: pool.shift()! } : out.some((o) => o.kind === 'gold') ? { kind: 'heal' } : gold);
+  out.push(pool.length ? { kind: 'spell', id: pool.shift()! } : out.some((o) => o.kind === 'heal') ? gold : { kind: 'heal' });
+  return out;
 }
 
 /** Qué le falta a un jugador para poder seguir (botín, mejoras o bendiciones sin elegir). */
 export function pendingOf(run: RunState, h: HeroSave): string[] {
   const out: string[] = [];
   if (run.offers[h.owner]) out.push('botín');
-  if (h.upOffer) out.push('mejora de hechizo');
+  if (h.bossOffer) out.push('recompensa del jefe');
   if (h.boonOffer) out.push('bendición');
   return out;
 }
@@ -383,18 +405,6 @@ export function heroSpec(h: Build, pos: Pos = { x: 0, y: 0 }): UnitSpec {
   }
   if (traits.length) u.traits = traits;
   return u;
-}
-
-/** Propone mejoras de hechizo si al héroe le queda alguna elección pendiente. */
-export function ensureUpOffer(run: RunState, h: HeroSave): void {
-  if (h.upOffer || h.upPending <= 0) return;
-  const all = heroSpec(h).spells.filter((sp) => sp.charges === undefined).flatMap((sp) => Object.keys(UPGRADES).filter((id) => canUpgrade(SPELLS[sp.id]!, [...modsOn(h, sp.id), ...(h.ups[sp.id] ?? [])], id)).map((up) => ({ spell: sp.id, up })));
-  if (!all.length) { h.upPending = 0; return; }
-  const out: Array<{ spell: string; up: string }> = [];
-  // primero una por hechizo, para que haya variedad
-  for (const o of shuffle(run, all)) if (out.length < (h.mastery >= 4 ? 4 : 3) && !out.some((x) => x.spell === o.spell)) out.push(o);
-  for (const o of shuffle(run, all)) if (out.length < (h.mastery >= 4 ? 4 : 3) && !out.includes(o)) out.push(o);
-  h.upOffer = out;
 }
 
 const STAT_LIMIT: Partial<Record<StatKey, number>> = { ap: 1, mp: 1, status: 1, armor: 8 };
@@ -619,16 +629,14 @@ function offerLoot(run: RunState, h: HeroSave, kind: DropKind): void {
   run.offers[h.owner] = Array.from({ length: n }, () => genLoot(run, kind));
 }
 
-/** Recompensa de un combate ganado: una sola cosa por sala. Normal: equipo y mejora de hechizo alternos; élite: bendición; jefe: equipo. */
-export type Reward = 'loot' | 'up' | 'boon';
-export const rewardOf = (run: Pick<RunState, 'kind' | 'fight'>): Reward => (run.kind === 'elite' ? 'boon' : run.kind === 'boss' ? 'loot' : run.fight % 2 === 1 ? 'up' : 'loot');
-
 /** El anfitrión elige uno de los nodos de la sala actual. */
 export function chooseNode(run: RunState, idx: number): GameEvent[] {
   const node = run.map[run.step]?.[idx];
   if (run.phase !== 'map' || !node || !availableNodes(run).includes(idx)) return [];
   run.at = idx;
   run.trail[run.step] = idx;
+  run.report = null;
+  run.dmg0 = Object.fromEntries(run.heroes.map((h) => [h.owner, h.stats.dmg]));
   run.offers = {};
   run.note = '';
   run.stamp++;
@@ -670,7 +678,7 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
     run.step++;
   } else if (node === 'shrine') {
     for (const h of run.heroes) offerBoon(run, h);
-    run.note = 'El santuario despierta el poder de cada clase: elegid una bendición.';
+    run.note = 'El santuario despierta el poder de cada clase: elegid una bendición pasiva.';
     run.step++;
   }
   return [];
@@ -727,6 +735,7 @@ export function finishFight(run: RunState): void {
   const gold = Math.round((25 + run.fight * 8 + (run.kind === 'elite' ? 20 : run.kind === 'boss' ? 40 : 0)) * (run.mods.includes('codicia') ? 2 : 1) * (run.omen === 'oro' ? 2 : 1) * (run.mods.includes('pobreza') ? 0.5 : 1));
   const flawless = c.units.every((u) => u.team !== 'hero' || u.summoner !== undefined || u.hp > 0);
   const extra: string[] = [];
+  const loot: FightReport['loot'] = [];
   if (run.kind === 'boss' && flawless) run.flags.push(`flawless_${run.zone}`);
   if (run.kind === 'boss') run.flags.push(`boss_${run.zone}`);
   for (const h of run.heroes) {
@@ -737,7 +746,7 @@ export function finishFight(run: RunState): void {
     // botín variado: consumibles (seguros tras élite o jefe)
     if (run.kind !== 'combat' || rand(run) < 0.4) {
       const r = rand(run), id = r < 0.4 ? 'c_vida' : r < 0.65 ? 'c_fuego' : r < 0.9 ? 'c_humo' : 'c_resu';
-      if ((h.bag2[id] ?? 0) < MAX_CONSUMABLE) { h.bag2[id] = (h.bag2[id] ?? 0) + 1; extra.push(`${h.name}: ${CONSUMABLES[id]!.icon} ${CONSUMABLES[id]!.name}`); }
+      if ((h.bag2[id] ?? 0) < MAX_CONSUMABLE) { h.bag2[id] = (h.bag2[id] ?? 0) + 1; extra.push(`${h.name}: ${CONSUMABLES[id]!.icon} ${CONSUMABLES[id]!.name}`); loot.push({ owner: h.owner, icon: CONSUMABLES[id]!.icon, name: CONSUMABLES[id]!.name, text: 'Consumible de combate' }); }
     }
     // Cosecha de almas del Carcelero: cuentan en toda la partida (cada 5, +1 de armadura)
     if (u?.souls !== undefined) {
@@ -747,12 +756,9 @@ export function finishFight(run: RunState): void {
       const gained = Math.floor(h.souls / SOULS_PER_ARMOR) - before;
       if (gained > 0) extra.push(`${h.name}: ${h.souls} almas, +${gained} de armadura`);
     }
-    // una sola recompensa por sala; si no hay nada que ofrecer de ese tipo, equipo
-    // hasta 3 ofertas de hechizo nuevo antes de la sala 3: las primeras recompensas son hechizos
-    const reward = needsEarly(h) ? 'boon' : rewardOf(run);
-    if (reward === 'boon') offerBoon(run, h);
-    else if (reward === 'up') { h.upPending++; ensureUpOffer(run, h); }
-    if (!h.boonOffer && !h.upOffer) offerLoot(run, h, dropKindOf(run));
+    // objetos según la sala; los hechizos solo llegan al vencer al jefe de la zona
+    offerLoot(run, h, dropKindOf(run));
+    if (run.kind === 'boss' && run.zone < lastZone(run)) h.bossOffer = buildBossOffer(run, h);
     const max = heroMaxHp(h);
     // los caídos vuelven con el 30%; los demás recuperan un 35% entre combates
     const healPct = (0.35 + perkLevel(h.perks, 'aid') * 0.08) * (run.asc >= 3 ? 0.7 : 1);
@@ -761,13 +767,13 @@ export function finishFight(run: RunState): void {
     h.stats.maxGold = Math.max(h.stats.maxGold, h.gold);
     // reliquias: siempre tras el jefe, a veces tras un élite; y la promesa cumplida
     const relicHere = run.kind === 'boss' || (run.kind === 'elite' && rand(run) < 0.35);
-    if (relicHere) { const r = giveRelic(run, h, run.kind === 'boss' ? undefined : false); if (r) extra.push(`${h.name}: ${RELICS[r]!.icon} ${RELICS[r]!.name}`); }
-    if (run.kind === 'boss' && flawless && run.flags.includes(`promesa_${run.zone}`)) { const r = giveRelic(run, h, true); if (r) extra.push(`${h.name} (promesa): ${RELICS[r]!.icon} ${RELICS[r]!.name}`); }
+    if (relicHere) { const r = giveRelic(run, h, run.kind === 'boss' ? undefined : false); if (r) { extra.push(`${h.name}: ${RELICS[r]!.icon} ${RELICS[r]!.name}`); loot.push({ owner: h.owner, icon: RELICS[r]!.icon, name: RELICS[r]!.name, text: RELICS[r]!.text, rare: !!RELICS[r]!.rare }); } }
+    if (run.kind === 'boss' && flawless && run.flags.includes(`promesa_${run.zone}`)) { const r = giveRelic(run, h, true); if (r) { extra.push(`${h.name} (promesa): ${RELICS[r]!.icon} ${RELICS[r]!.name}`); loot.push({ owner: h.owner, icon: RELICS[r]!.icon, name: RELICS[r]!.name, text: RELICS[r]!.text, rare: !!RELICS[r]!.rare }); } }
   }
   if (run.cage) { addAlly(run, run.cage); extra.push(`Liberáis al prisionero: ${makeEnemy(run.cage, { x: 0, y: 0 }).name} os acompaña hasta el final de la zona`); run.cage = null; }
   run.stamp++;
-  const what = { loot: 'un objeto', up: 'una mejora de hechizo', boon: 'una bendición de clase' }[rewardOf(run)];
-  run.note = `Victoria: cada uno gana ${gold} de oro y elige ${what}.${extra.length ? ` También: ${extra.join(' · ')}.` : ''}`;
+  run.note = `Victoria: cada uno gana ${gold} de oro.${extra.length ? ` También: ${extra.join(' · ')}.` : ''}`;
+  run.report = { stamp: run.stamp, kind: run.kind, turns: c.round, gold, loot, damage: run.heroes.map((h) => ({ owner: h.owner, name: h.name, dmg: Math.max(0, h.stats.dmg - (run.dmg0?.[h.owner] ?? h.stats.dmg)) })) };
   run.omen = null;
   run.ambush = false;
   run.fight++;
@@ -824,7 +830,7 @@ export type MetaAction =
   | { a: 'buy'; idx: number }
   | { a: 'potion' }
   | { a: 'reroll' }
-  | { a: 'upgrade'; idx: number }
+  | { a: 'bossreward'; idx: number }
   | { a: 'boon'; idx: number }
   | { a: 'ready' };
 
@@ -900,13 +906,15 @@ export function metaAction(run: RunState, owner: string, a: MetaAction): string 
       slot.sold = true;
       break;
     }
-    case 'upgrade': {
-      const o = h.upOffer?.[a.idx];
-      if (!o) return 'No hay mejora que elegir';
-      (h.ups[o.spell] ??= []).push(o.up);
-      h.upOffer = null;
-      h.upPending = Math.max(0, h.upPending - 1);
-      ensureUpOffer(run, h);
+    case 'bossreward': {
+      const o = h.bossOffer?.[a.idx];
+      if (!o) return 'No tienes recompensa del jefe pendiente';
+      if (o.kind === 'up') {
+        if (BOON_MODS[o.up]) h.boons.push(o.up); else (h.ups[o.spell] ??= []).push(o.up);
+      } else if (o.kind === 'spell') { if (!h.boons.includes(o.id)) h.boons.push(o.id); }
+      else if (o.kind === 'gold') h.gold += o.amount;
+      else h.hp = Math.min(heroMaxHp(h), h.hp + Math.ceil(heroMaxHp(h) * 0.5));
+      h.bossOffer = null;
       break;
     }
     case 'reroll': {
