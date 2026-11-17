@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildFight, dailyOf, finishFight, heroMaxHp, heroSpec, metaAction, newRun, priceOf, recordEvents } from '../src/game/run';
+import { buildFight, dailyOf, finishFight, heroMaxHp, heroSpec, newRun, priceOf, recordEvents } from '../src/game/run';
 import { cast, createCombat, current } from '../src/core/combat/engine';
 
 const P = [{ owner: 'p0', name: 'A', cls: 'guerrero' as const, routes: ['baluarte'] }];
