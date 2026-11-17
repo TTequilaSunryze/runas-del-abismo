@@ -150,7 +150,7 @@ export function victoryModal(run: RunState): string {
   const found = r.items.filter((x) => !h || x.owner === h.owner).map((x) => x.item);
   const items = found.map((it) => `<span class="cell big ${RAR[it.rarity]}" ${tip(itemHtml(it, true))}>${itemIcon(it)}</span>`).join('');
   const total = Math.max(1, ...r.damage.map((x) => x.dmg));
-  return `<div class="modal victory" id="victorymodal"><div class="panel wide" onclick="event.stopPropagation()">
+  return `<div class="modal victory" id="victorymodal"><div class="panel wide">
   <h2 class="vtitle">FIN DEL COMBATE - ¡HAS GANADO!</h2>
   <div class="lbl">Has encontrado…</div>
   <div class="cells loot-icons">${chip('💰', `<b>Oro</b><div class="sm">+${r.gold} de oro para cada uno.</div>`)}${items}${mineLoot.map((l) => chip(l.icon, `<b>${esc(l.name)}</b><div class="sm">${esc(l.text)}</div>`, l.rare ? 'ir3' : 'ir1')).join('')}</div>
@@ -245,8 +245,9 @@ const TRAIT_LABEL: Record<string, string> = { venom: 'Tus venenos aplican 1 carg
 
 /** Dibujo del mapa: capas de abajo (inicio) a arriba (jefe). Con `pick`, los nodos disponibles se pulsan para ir a ellos. */
 export function mapSvg(run: RunState, pick = false): string {
-  const L = run.map.length, W = 520, rowH = 62, H = L * rowH + 20;
-  const pos = (l: number, i: number): [number, number] => [((i + 0.5) / run.map[l]!.length) * W, H - 30 - l * rowH];
+  // de izquierda (inicio) a derecha (jefe)
+  const L = run.map.length, colW = 78, H = 300, W = L * colW;
+  const pos = (l: number, i: number): [number, number] => [colW / 2 + l * colW, 10 + ((i + 0.5) / run.map[l]!.length) * (H - 40)];
   const avail = run.phase === 'map' ? availableNodes(run) : [];
   const here = (l: number, i: number): boolean => run.trail[l] === i && l < run.step;
   const current = (l: number, i: number): boolean => run.phase !== 'map' && l === run.step && run.trail[l] === i;
@@ -264,7 +265,7 @@ export function mapSvg(run: RunState, pick = false): string {
     const label = can ? `<text x="${x}" y="${y + 36}" text-anchor="middle" font-size="12" fill="#f2c14e">${esc(NODE_NAME[k].replace(/^\S+\s/, ''))}</text>` : '';
     return `<g ${click} opacity="${l < run.step && !done ? 0.35 : 1}"><title>${esc(NODE_NAME[k])}</title><circle cx="${x}" cy="${y}" r="${can ? 24 : 20}" fill="${can ? '#3a2c1a' : '#241a33'}" stroke="${stroke}" stroke-width="${can || done ? 3 : 2}"/><text x="${x}" y="${y + 7}" text-anchor="middle" font-size="20" pointer-events="none">${NODE_ICON[k]}</text>${label}</g>`;
   }).join('')).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;display:block;margin:6px auto">${lines}${nodes}</svg>`;
+  return `<svg class="actmap" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${lines}${nodes}</svg>`;
 }
 
 const mapLegend = (): string => (['combat', 'elite', 'event', 'shrine', 'shop', 'rest', 'boss'] as const).map((k) => `<span class="chip">${NODE_ICON[k]} ${esc(NODE_NAME[k].replace(/^\S+\s/, ''))}</span>`).join('');
@@ -276,7 +277,7 @@ export function mapModal(run: RunState): string {
   <div class="row"><h2>🗺️ Mapa · Zona ${run.zone + 1}</h2><span class="dim sm">Sala ${Math.min(run.step + 1, L)} de ${L}</span><span class="grow"></span><button class="mini" data-act="map">Cerrar ✕</button></div>
   <div class="chips">${mapLegend()}</div>
   ${mapSvg(run)}
-  <div class="dim sm">Dorado: caminos disponibles · Verde: ruta recorrida. El jefe está arriba.</div></div></div>`;
+  <div class="dim sm">Dorado: caminos disponibles · Verde: ruta recorrida. El jefe está a la derecha.</div></div></div>`;
 }
 
 export { mapLegend };
