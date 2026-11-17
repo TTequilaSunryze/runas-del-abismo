@@ -2,29 +2,24 @@
 import { CLASSES, PLAYABLE, findRoute } from '../core/classes/classes';
 import { classPortraitUrl } from '../render/sprites';
 import { SPELLS } from '../core/classes/spells';
-import { RUNES } from '../core/runes';
 import type { ClassId } from '../core/state';
 import { NODE_HINT, NODE_NAME, POTION_HEAL, availableNodes, POTION_PRICE, eventDef, heroMaxHp, type RunState } from '../game/run';
 import { TURN_SECONDS } from '../game/session';
 import { ACHIEVEMENTS, HALL_SIZE, MASTERY_XP, ecosFor, masteryOf, masteryProgress, masteryText, meta, myTeam, openRoutes, routeNeeds, settle } from '../game/meta';
 import { currentAccount } from '../net/account';
 import { friendsStatus } from '../net/social';
-import { setCounts, SETS } from '../core/items/sets';
 import type { Champion } from '../game/run';
 import { ASCENSION, DAILY_MODS, MOD_ECOS, OMENS, PERKS, perkLevel } from '../content/modes';
 import { ALLIES } from '../content/enemies';
 import { RELICS } from '../content/relics';
-import { SLOTS, SLOT_NAME } from '../core/items/items';
 import { championOf, dailyOf, dailyScore, lastZone } from '../game/run';
 import { CLASS_STORY, ENDING_LOST, ENDING_WON, TUTORIAL, ZONE_STORY } from '../content/story';
 import { esc, mine, store, tip, today, ui } from './ctx';
 import { NODE_ICON, itemIcon, spellIcon, spellTip } from './icons';
 import { advanceBar, diffHtml, itemHtml, pendingRows, sidePanel, topBar, volumeControl } from './panels';
 import { CONSUMABLES, MAX_CONSUMABLE } from '../content/boons';
-import { FORGE_MAX, forgeCost, forged } from '../game/run';
-import { STAT_NAME, type Item, type StatKey } from '../core/items/items';
 
-const RAR = ['r0', 'r1', 'r2', 'r3'];
+const RAR = ['ir0', 'ir1', 'ir2', 'ir3'];
 
 function metaPanel(): string {
   const m = meta();
@@ -38,8 +33,8 @@ function metaPanel(): string {
   if (ui.homeTab === 'logros') {
     return `<div class="panel"><div class="row"><h3>Logros</h3><span class="grow"></span><span class="dim sm">${m.achievements.length}/${ACHIEVEMENTS.length}</span></div>
     <div class="dim sm">Partidas: ${m.stats.runs} · Victorias: ${m.stats.wins} · Bajas: ${m.stats.kills} · Jefes: ${m.stats.bosses} · Ascensión máxima: ${m.maxAsc}</div>
-    <div class="cards c2">${ACHIEVEMENTS.map((a) => { const on = m.achievements.includes(a.id), r = a.rune ? RUNES[a.rune] : undefined;
-      return `<div class="lootcard ${on ? 'r3' : 'off'}"><b>${on ? '🏆' : '🔒'} ${esc(a.name)}</b><div class="sm">${esc(a.text)}</div><div class="sm dim">${[a.ecos ? `+${a.ecos} ✨` : '', r ? `runa ${r.icon} ${esc(r.name)}` : ''].filter(Boolean).join(' · ') || ' '}</div></div>`; }).join('')}</div></div>`;
+    <div class="cards c2">${ACHIEVEMENTS.map((a) => { const on = m.achievements.includes(a.id);
+      return `<div class="lootcard ${on ? 'r3' : 'off'}"><b>${on ? '🏆' : '🔒'} ${esc(a.name)}</b><div class="sm">${esc(a.text)}</div><div class="sm dim">${[a.ecos ? `+${a.ecos} ✨` : ''].filter(Boolean).join(' · ') || ' '}</div></div>`; }).join('')}</div></div>`;
   }
   if (ui.homeTab === 'clases') {
     return `<div class="panel"><h3>Maestría de clase</h3><div class="dim sm">Jugar con una clase le da experiencia de maestría (más cuanto más lejos llegues y más alta sea la ascensión). Cada nivel abre rutas y ventajas de esa clase.</div>
@@ -52,7 +47,7 @@ function metaPanel(): string {
   if (ui.homeTab === 'salon') {
     const team = m.team;
     return `<div class="panel"><div class="row"><h3>Salón de héroes</h3><span class="grow"></span><span class="dim sm">${m.hall.length}/${HALL_SIZE} · equipo ${team.length}/3</span></div>
-    <div class="dim sm">Al terminar una partida puedes guardar aquí a tu héroe, con su equipo, runas y mejoras. Elige 3 para tu equipo de duelo. Tu mejor héroe puede aparecer como <b>Némesis</b> (un élite) en las partidas que juegues con otros.</div>
+    <div class="dim sm">Al terminar una partida puedes guardar aquí a tu héroe, con su equipo y mejoras. Elige 3 para tu equipo de duelo. Tu mejor héroe puede aparecer como <b>Némesis</b> (un élite) en las partidas que juegues con otros.</div>
     ${ui.hallMsg ? `<div class="pill sm">${esc(ui.hallMsg)}</div>` : ''}
     ${m.hall.length ? `<div class="cards c2">${m.hall.map((c) => champCard(c, team.includes(c.id))).join('')}</div>` : '<div class="dim">Aún no has guardado ningún héroe. Termina una partida y pulsa “Guardar en el Salón”.</div>'}</div>
     <div class="panel"><h3>🏟️ Duelos 3 contra 3</h3><div class="dim sm">En los duelos todos tienen más vida para que duren: cuenta la clase, el kit, el equipo, las runas y las mejoras. No dan ecos.</div>
@@ -91,12 +86,11 @@ function metaPanel(): string {
 
 /** Ficha de un héroe guardado. */
 export function champCard(c: Champion, inTeam: boolean, actions = true): string {
-  const sets = Object.entries(setCounts(c.equip)).filter(([, n]) => n >= 2).map(([id, n]) => `${SETS[id]!.icon}${n}`).join(' ');
   const ups = Object.values(c.ups).reduce((a, l) => a + l.length, 0);
   return `<div class="lootcard ${c.won ? 'r3' : 'r1'}"><div class="row"><b>${esc(c.name)}</b><span class="dim sm">${CLASSES[c.cls].name}</span><span class="grow"></span>${c.won ? '<span>🏆</span>' : ''}${c.asc ? `<span class="pill sm">A${c.asc}</span>` : ''}</div>
   <div class="sm dim">${c.routes.map((r) => esc(findRoute(c.cls, r)?.name ?? r)).join(' + ')}</div>
-  <div class="cells tiny">${Object.values(c.equip).map((it) => `<span class="cell ${RAR[it.rarity]} ${it.set ? 'inset' : ''}" ${tip(itemHtml(it, c.equip))}>${itemIcon(it)}</span>`).join('')}</div>
-  <div class="sm dim">🔮 ${Object.keys(c.sockets).length} runas · ✨ ${ups} mejoras${sets ? ` · sets ${sets}` : ''}</div>
+  <div class="cells tiny">${Object.values(c.equip).map((it) => `<span class="cell ${RAR[it.rarity]}" ${tip(itemHtml(it))}>${itemIcon(it)}</span>`).join('')}</div>
+  <div class="sm dim">✨ ${ups} mejoras</div>
   ${actions ? `<div class="row"><button class="mini ${inTeam ? 'pri' : ''}" data-act="champteam" data-id="${esc(c.id)}">${inTeam ? '✔ En el equipo' : 'Añadir al equipo'}</button><span class="grow"></span><button class="mini" data-act="champdel" data-id="${esc(c.id)}">Borrar</button></div>` : ''}</div>`;
 }
 
@@ -188,49 +182,13 @@ export function shopScreen(): void {
   const h = mine(run);
   frame(run, `<div class="row"><h2>💰 Mercader de reliquias</h2></div>${advanceBar(run, 'Salir de la tienda →')}
   <div class="dim sm">Cada objeto solo puede comprarlo un jugador. Para vender, selecciona un objeto de tu mochila (un tercio de su precio).</div>
-  <div class="cards c3">${(run.shop ?? []).map((sl, i) => { const rn = sl.rune ? RUNES[sl.rune] : undefined; const it = sl.item; const rl = sl.relic ? RELICS[sl.relic] : undefined;
+  <div class="cards c3">${(run.shop ?? []).map((sl, i) => { const it = sl.item; const rl = sl.relic ? RELICS[sl.relic] : undefined;
     const cs = sl.consumable ? CONSUMABLES[sl.consumable] : undefined;
     if (cs) { const have = h?.bag2[sl.consumable!] ?? 0; const d = SPELLS[sl.consumable!]!; return `<div class="lootcard r1"><div class="row">${spellIcon(d)}<div><b>${esc(cs.name)}</b><div class="dim sm">Consumible de combate · llevas ${have}/${MAX_CONSUMABLE}</div><div class="sm">${esc(d.text)}</div></div></div><button class="pri" data-act="buy" data-id="${i}" ${!h || h.gold < sl.price || have >= MAX_CONSUMABLE ? 'disabled' : ''}>Comprar · ${sl.price} 💰</button></div>`; }
     if (rl) return `<div class="lootcard ${rl.rare ? 'r3' : 'r2'} ${sl.sold ? 'off' : ''}"><div class="row"><div class="cell big ${rl.rare ? 'r3' : 'r2'}"><span class="emo">${rl.icon}</span></div><div><b>${esc(rl.name)}</b><div class="dim sm">Reliquia ${rl.rare ? 'rara' : 'común'} · para toda la partida</div><div class="sm">${esc(rl.text)}</div></div></div><button class="pri" data-act="buy" data-id="${i}" ${sl.sold || !h || h.gold < sl.price || h.relics.includes(rl.id) ? 'disabled' : ''}>${sl.sold ? 'Vendido' : h?.relics.includes(rl.id) ? 'Ya la tienes' : `Comprar · ${sl.price} 💰`}</button></div>`;
-    return `<div class="lootcard ${rn ? (rn.rare ? 'r2' : 'r1') : RAR[it?.rarity ?? 0]} ${sl.sold ? 'off' : ''}">${rn ? `<div class="row"><div class="cell big ${rn.rare ? 'r2' : 'r1'}"><span class="emo">${rn.icon}</span></div><div><b class="${rn.rare ? 'r2' : 'r1'}">${esc(rn.name)}</b><div class="dim sm">Runa ${rn.rare ? 'rara' : 'común'}</div><div class="sm">${esc(rn.text)}</div></div></div>` : it ? `<div class="row"><div class="cell big ${RAR[it.rarity]}">${itemIcon(it)}</div><div>${itemHtml(it)}</div></div>${h ? diffHtml(it, h) : ''}` : ''}
+    return `<div class="lootcard ${RAR[it?.rarity ?? 0]} ${sl.sold ? 'off' : ''}">${it ? `<div class="row"><div class="cell big ${RAR[it.rarity]}">${itemIcon(it)}</div><div>${itemHtml(it)}</div></div>${h ? diffHtml(it, h) : ''}` : ''}
       <button class="pri" data-act="buy" data-id="${i}" ${sl.sold || !h || h.gold < sl.price ? 'disabled' : ''}>${sl.sold ? 'Vendido' : `Comprar · ${sl.price} 💰`}</button></div>`; }).join('')}
     ${''}<div class="lootcard"><div class="row"><div class="cell big"><span class="emo">🧪</span></div><div><b>Poción de vida</b><div class="sm">Recupera el ${POTION_HEAL * 100}% de tu vida máxima.</div></div></div><button class="pri" data-act="potion" ${!h || h.gold < POTION_PRICE || h.hp >= heroMaxHp(h) ? 'disabled' : ''}>Beber · ${POTION_PRICE} 💰</button></div></div>${pendingRows(run)}`, true);
-}
-
-/** Forja, altar y apostador: cada jugador hace lo suyo una vez y el anfitrión sigue. */
-export function campScreen(): void {
-  const s = ui.session!, run = s.run!, camp = run.camp!;
-  const h = mine(run);
-  const done = h ? camp.done[h.owner] : undefined;
-  const cost = h ? Math.ceil(heroMaxHp(h) * 0.25) : 0;
-  const title = { forge: '🔨 La Forja', altar: '🕯️ El Altar', gamble: '🎲 El Apostador' }[camp.kind];
-  const text = { forge: 'Un yunque y un fuego que no se apaga. Cada mejora cuesta oro y sube un 20% las estadísticas de la pieza (hasta +5). En verde, cómo quedará.', altar: 'Un altar viejo que acepta ofrendas. Cada uno puede hacer una.', gamble: 'Un enano con un cubilete. «¿Os sentís con suerte?»' }[camp.kind];
-  let acts = '';
-  if (h && (!done || camp.kind === 'forge')) {
-    if (camp.kind === 'forge') {
-      const card = (it: Item, act: string, where: string): string => {
-        const max = (it.lvl ?? 0) >= FORGE_MAX, cost = forgeCost(run, it), nx = forged(it);
-        const rows = (Object.keys(it.stats) as StatKey[]).map((k) => { const a = it.stats[k] ?? 0, b = nx.stats[k] ?? 0; return `<div class="sm">${STAT_NAME[k]}: ${a}${!max && b !== a ? ` → <b class="good">${b}</b>` : ''}</div>`; }).join('');
-        return `<div class="lootcard ${['r0', 'r1', 'r2', 'r3'][it.rarity]}"><div class="row"><div class="cell big ${['r0', 'r1', 'r2', 'r3'][it.rarity]}">${itemIcon(it)}</div><div><b>${esc(it.name)}</b><div class="dim sm">${where} · mejora ${it.lvl ?? 0}/${FORGE_MAX}</div>${rows}</div></div>
-        <button class="pri" data-act="forge" data-id="${act}" ${max || h.gold < cost ? 'disabled' : ''}>${max ? 'Al máximo' : `Forjar +${(it.lvl ?? 0) + 1} · ${cost} 💰`}</button></div>`;
-      };
-      acts = `<div class="tabs"><button class="${ui.forgeTab === 'equipo' ? 'on' : ''}" data-act="forgetab" data-id="equipo">Equipado</button><button class="${ui.forgeTab === 'mochila' ? 'on' : ''}" data-act="forgetab" data-id="mochila">Mochila (${h.bag.length})</button><span class="grow"></span><b class="pill">💰 ${h.gold}</b></div>
-      <div class="cards c3">${ui.forgeTab === 'equipo'
-        ? SLOTS.filter((sl) => h.equip[sl]).map((sl) => card(h.equip[sl]!, `e:${sl}`, SLOT_NAME[sl])).join('') || '<div class="dim">No llevas nada equipado.</div>'
-        : h.bag.map((it, i) => card(it, `b:${i}`, `Mochila · ${SLOT_NAME[it.slot]}`)).join('') || '<div class="dim">La mochila está vacía.</div>'}</div>`;
-    }
-    else if (camp.kind === 'altar') acts = `<div class="cards c3">
-      <div class="lootcard r2"><b>🩸 Sangre por runa</b><div class="sm">Pierdes ${cost} de vida y ganas una runa rara.</div><button class="pri" data-act="altar" data-id="0" ${h.hp > cost ? '' : 'disabled'}>Ofrecer</button></div>
-      <div class="lootcard r2"><b>🩸 Sangre por saber</b><div class="sm">Pierdes ${cost} de vida y eliges una mejora de hechizo.</div><button class="pri" data-act="altar" data-id="1" ${h.hp > cost ? '' : 'disabled'}>Ofrecer</button></div>
-      <div class="lootcard r1"><b>💰 Oro por vida</b><div class="sm">Pagas 40 de oro y recuperas el 60% de tu vida.</div><button class="pri" data-act="altar" data-id="2" ${h.gold >= 40 ? '' : 'disabled'}>Ofrecer</button></div></div>`;
-    else acts = `<div class="cards c2">
-      <div class="lootcard r1"><b>Apuesta pequeña · 40 💰</b><div class="sm">55% de ganar una reliquia al azar.</div><button class="pri" data-act="gamble" data-id="0" ${h.gold >= 40 ? '' : 'disabled'}>Apostar</button></div>
-      <div class="lootcard r3"><b>Apuesta grande · 100 💰</b><div class="sm">Una reliquia segura y un 30% de ganar otra.</div><button class="pri" data-act="gamble" data-id="1" ${h.gold >= 100 ? '' : 'disabled'}>Apostar</button></div></div>`;
-  }
-  frame(run, `<div class="row"><h2>${title}</h2></div>${advanceBar(run, 'Continuar →')}
-  <div class="panel note">${esc(text)}</div>${acts}
-  ${Object.values(camp.done).length ? `<div class="panel">${Object.values(camp.done).map((t) => `<div class="sm">${esc(t)}</div>`).join('')}</div>` : ''}
-  ${pendingRows(run)}`);
 }
 
 export function eventScreen(): void {
@@ -266,9 +224,9 @@ export function endScreen(): void {
   ${run.daily ? `<p class="pill">Reto diario ${esc(run.daily)}: ${score} puntos</p>` : run.asc ? `<p class="dim">Ascensión ${run.asc}</p>` : ''}
   <div class="panel"><div class="row"><h3>Tu recompensa</h3><span class="grow"></span><b class="pill">+${res?.ecos ?? ecosFor(run)} ✨ ecos</b><span class="dim sm">(tienes ${m.ecos})</span></div>
     ${res?.asc ? `<div class="good">🔓 Ascensión ${res.asc} desbloqueada: la próxima partida puede ser más difícil y dar más ecos.</div>` : ''}
-    ${res?.achievements.length ? res.achievements.map((a) => `<div class="lootcard r3"><b>🏆 ${esc(a.name)}</b> <span class="sm">${esc(a.text)}</span><div class="sm good">${[a.ecos ? `+${a.ecos} ✨` : '', a.rune && RUNES[a.rune] ? `Runa desbloqueada: ${RUNES[a.rune]!.icon} ${esc(RUNES[a.rune]!.name)}` : ''].filter(Boolean).join(' · ')}</div></div>`).join('') : ''}
+    ${res?.achievements.length ? res.achievements.map((a) => `<div class="lootcard r3"><b>🏆 ${esc(a.name)}</b> <span class="sm">${esc(a.text)}</span><div class="sm good">${[a.ecos ? `+${a.ecos} ✨` : ''].filter(Boolean).join(' · ')}</div></div>`).join('') : ''}
     ${res ? `<div class="row sm"><b>🎓 Maestría de ${CLASSES[res.mastery.cls].name}</b><span class="good">+${res.mastery.xp} exp</span><span class="grow"></span><span class="pill">Nivel ${res.mastery.after}/5</span></div>${res.mastery.after > res.mastery.before ? Array.from({ length: res.mastery.after - res.mastery.before }, (_, k) => res.mastery.before + k).map((i) => `<div class="good">🔓 ${esc(masteryText(res.mastery.cls, i))}</div>`).join('') : `<div class="dim sm">${MASTERY_XP[res.mastery.after] ? `Faltan ${MASTERY_XP[res.mastery.after]! - res.mastery.total} de experiencia para el nivel ${res.mastery.after + 1}: ${esc(masteryText(res.mastery.cls, res.mastery.after))}` : 'Maestría máxima.'}</div>`}${masteryBar(res.mastery.cls)}` : ''}
-    <div class="dim sm">Gasta tus ecos en <b>Mejoras</b> (pantalla de inicio): vida, oro, runas y re-tiradas permanentes.</div></div>
+    <div class="dim sm">Gasta tus ecos en <b>Mejoras</b> (pantalla de inicio): vida, oro y re-tiradas permanentes.</div></div>
   <div class="panel"><h3>Resumen del grupo</h3>${run.heroes.map((h, i) => `<div class="row sm"><b class="p${i % 4}">${esc(h.name)}</b><span class="dim">${CLASSES[h.cls].name}</span><span class="grow"></span><span>⚔️ ${h.stats.dmg} (${Math.round((h.stats.dmg / total) * 100)}%)</span><span>☠️ ${h.stats.kills}</span><span>✚ ${h.stats.heal}</span><span class="${h.stats.falls ? 'bad' : 'good'}">💀 ${h.stats.falls}</span></div>`).join('')}</div>
   ${myHero ? `<div class="panel"><div class="row"><div><b>🏟️ Salón de héroes</b><div class="dim sm">Guarda a ${esc(myHero.name)} tal como está para tus duelos 3 contra 3 y para que vuelva como Némesis.</div></div><span class="grow"></span><button data-act="champsave" ${saved ? 'disabled' : ''}>${saved ? '✔ Guardado' : 'Guardar en el Salón'}</button></div></div>` : ''}
   <div class="row">${s.isHost ? '<button class="pri" data-act="again">⚔️ Jugar otra partida</button>' : '<span class="dim sm">Esperando al anfitrión para otra partida…</span>'}<button data-act="home">Volver al inicio</button></div></div>`);

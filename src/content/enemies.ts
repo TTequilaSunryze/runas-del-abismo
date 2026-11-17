@@ -45,12 +45,12 @@ const addTrait = (u: UnitSpec, t: string): void => { if (!u.traits?.includes(t))
 
 /** Modificadores de élite: se aplican sobre un enemigo ya creado. */
 export const AFFIXES: Record<string, { name: string; text: string; apply: (u: UnitSpec) => void }> = {
-  ardiente: { name: 'Ardiente', text: 'Sus golpes queman; resiste el fuego.', apply: (u) => { u.spells[0]!.rune = 'fuego'; u.resist.fire = (u.resist.fire ?? 0) + 50; } },
-  vampirico: { name: 'Vampírico', text: 'Se cura con el daño que hace.', apply: (u) => { u.spells[0]!.rune = 'vampiro'; } },
+  ardiente: { name: 'Ardiente', text: 'Sus golpes queman; resiste el fuego.', apply: (u) => { u.spells[0]!.imbue = 'fuego'; u.resist.fire = (u.resist.fire ?? 0) + 50; } },
+  vampirico: { name: 'Vampírico', text: 'Se cura con el daño que hace.', apply: (u) => { u.spells[0]!.imbue = 'vampiro'; } },
   blindado: { name: 'Blindado', text: '+2 de armadura y +20% de vida.', apply: (u) => { u.armor += 2; u.hp = u.maxHp = Math.round(u.maxHp * 1.2); } },
   veloz: { name: 'Veloz', text: '+2 PM y mucha más iniciativa.', apply: (u) => { u.mp += 2; u.maxMp += 2; u.initiative += 10; } },
   enorme: { name: 'Enorme', text: '+50% de vida y +15% de daño.', apply: (u) => { u.hp = u.maxHp = Math.round(u.maxHp * 1.5); u.power += 15; } },
-  venenoso: { name: 'Venenoso', text: 'Sus golpes envenenan.', apply: (u) => { u.spells[0]!.rune = 'veneno'; } },
+  venenoso: { name: 'Venenoso', text: 'Sus golpes envenenan.', apply: (u) => { u.spells[0]!.imbue = 'veneno'; } },
   reflejante: { name: 'Reflejante', text: 'Devuelve el 30% del daño cuerpo a cuerpo.', apply: (u) => addTrait(u, 'thorns') },
   regenerador: { name: 'Regenerador', text: 'Recupera el 8% de su vida cada turno.', apply: (u) => addTrait(u, 'regen') },
   explosivo: { name: 'Explosivo', text: 'Al morir explota y daña a todo lo que tenga pegado.', apply: (u) => addTrait(u, 'bomb') },

@@ -20,12 +20,11 @@ describe('progresión', () => {
     settle(r, 'a');
     expect(meta().ecos).toBe(before);
   });
-  it('ganar desbloquea ascensión, logros y runa', () => {
+  it('ganar desbloquea ascensión y logros', () => {
     const r = mk(); r.phase = 'won'; r.zone = 2; r.step = 6; r.flags = ['boss_0', 'boss_1', 'boss_2'];
     const s = settle(r, 'a')!;
     expect(s.asc).toBe(1);
     expect(s.achievements.map((x) => x.id)).toContain('victoria');
-    expect(meta().unlocked).toContain('sangrienta');
   });
   it('las mejoras cuestan ecos y tienen tope', () => {
     meta().ecos = 1000;

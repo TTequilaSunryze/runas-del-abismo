@@ -1,6 +1,6 @@
 // Mejoras de hechizo: se eligen al subir de nivel y duran toda la partida.
 import type { SpellDef } from './classes/spells';
-import { withRune } from './runes';
+import { withImbue } from './imbue';
 import type { SpellSlot } from './state';
 import { BLESSINGS, BOON_MODS } from './boonmods';
 
@@ -44,8 +44,8 @@ export const UPGRADES: Record<string, UpgradeDef> = Object.fromEntries(
   ] as UpgradeDef[]).map((u) => [u.id, u]),
 );
 
-/** El hechizo tal como queda con las mejoras y la runa de su ranura (sin modificar el original). */
-export function tuned(def: SpellDef, slot: Pick<SpellSlot, 'rune' | 'ups'> | undefined): SpellDef {
+/** El hechizo tal como queda con las mejoras y el efecto innato de su ranura (sin modificar el original). */
+export function tuned(def: SpellDef, slot: Pick<SpellSlot, 'imbue' | 'ups'> | undefined): SpellDef {
   let d = def;
   if (slot?.ups?.length) {
     d = { ...def, range: [...def.range] as [number, number] };
@@ -53,7 +53,7 @@ export function tuned(def: SpellDef, slot: Pick<SpellSlot, 'rune' | 'ups'> | und
     for (const id of slot.ups) { const bm = BOON_MODS[id] ?? BLESSINGS[id]?.mod; if (bm && bm.target === def.id) bm.apply(d); }
     for (const id of slot.ups) { const up = UPGRADES[id]; if (up?.fits(d)) up.apply(d); }
   }
-  return withRune(d, slot?.rune);
+  return withImbue(d, slot?.imbue);
 }
 
 /** ¿Se puede aplicar otra vez esta mejora a este hechizo? */

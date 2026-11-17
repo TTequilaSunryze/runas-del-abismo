@@ -1,7 +1,7 @@
 // Zona 3: Las Ruinas de Ceniza. Equipo y eventos de grupo.
 import type { ItemTheme } from '../../core/items/items';
 import { boon, healPct, losePct, type EventDef } from '../zona1/events';
-import { addAlly, giveRelic, giveRune } from '../../game/run';
+import { addAlly, giveItem, giveRelic } from '../../game/run';
 
 export const ZONA3_ITEMS: ItemTheme = {
   names: {
@@ -72,7 +72,7 @@ export const ZONA3_EVENTS: EventDef[] = [
     id: 'trono_ceniza', title: 'El Trono de Ceniza',
     text: 'El trono del Rey, vacío. Quien se siente en él gana su favor… o su ira.',
     options: [
-      { label: 'Sentarse', hint: 'Cada uno gana 2 runas al azar, pero todos pierden -10 de vida máxima.', apply: (run) => { for (const h of run.heroes) { boon(h, 'hp', -10); giveRune(run, h); giveRune(run, h); } return 'Por un momento, el reino entero os pertenece.'; } },
+      { label: 'Sentarse', hint: 'Cada uno gana un objeto Rare o mejor, pero todos pierden -10 de vida máxima.', apply: (run) => { for (const h of run.heroes) { boon(h, 'hp', -10); giveItem(run, h, 'combat', 2); } return 'Por un momento, el reino entero os pertenece.'; } },
       { label: 'Saquear sus joyas', hint: 'Cada uno gana 60 de oro.', apply: (run) => { for (const h of run.heroes) h.gold += 60; return 'Las joyas aún están calientes.'; } },
     ],
   },

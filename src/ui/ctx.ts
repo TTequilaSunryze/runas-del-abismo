@@ -26,10 +26,9 @@ export const ui = {
   notice: '',
   log: [] as string[],
   /** pestaña del panel lateral */
-  tab: 'equipo' as 'equipo' | 'runas' | 'grupo',
+  tab: 'equipo' as 'equipo' | 'hechizos' | 'grupo',
   /** objeto seleccionado: "bag:3" o "slot:arma" */
   selItem: '',
-  selRune: -1,
   leaveArmed: false,
   logOpen: false,
   /** ascensión elegida (solo cuenta la del anfitrión) y reto diario */
@@ -41,7 +40,6 @@ export const ui = {
   acctMsg: '',
   /** lo escrito en el formulario de cuenta, para no perderlo al redibujar */
   acEmail: '',
-  forgeTab: 'equipo' as 'equipo' | 'mochila',
   friendMsg: '',
   invites: [] as Array<{ from: string; code: string; at: number }>,
   /** ventana de estadísticas abierta */

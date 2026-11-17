@@ -32,14 +32,6 @@ function playRun(n: number, seed: number, prefer: string): RunState {
       resolveEvent(run, 'p0');
       expect(run.event!.result).toBeTruthy();
       leaveNode(run);
-    } else if (run.phase === 'camp') {
-      for (const h of run.heroes) {
-        const k = run.camp!.kind;
-        const err = k === 'forge' ? metaAction(run, h.owner, { a: 'forge', slot: (Object.keys(h.equip)[0] ?? 'arma') as never }) : k === 'altar' ? metaAction(run, h.owner, { a: 'altar', opt: 2 }) : metaAction(run, h.owner, { a: 'gamble', opt: 0 });
-        if (!err) expect(run.camp!.done[h.owner]).toBeTruthy();
-      }
-      leaveNode(run);
-      expect(run.phase).toBe('map');
     } else if (run.phase === 'shop') {
       for (const h of run.heroes) { metaAction(run, h.owner, { a: 'buy', idx: 5 }); metaAction(run, h.owner, { a: 'potion' }); }
       leaveNode(run);
@@ -58,7 +50,7 @@ describe('objetos', () => {
   it('genera objetos válidos para las 8 ranuras y respeta la rareza mínima', () => {
     const box = { rng: 5 };
     for (const slot of SLOTS) {
-      const it = genItem(box, ZONA1_ITEMS, 3, 2, slot);
+      const it = genItem(box, ZONA1_ITEMS, 1, 'combat', 2, slot);
       expect(it.slot).toBe(slot);
       expect(it.rarity).toBeGreaterThanOrEqual(2);
       expect(Object.keys(it.stats).length).toBeGreaterThan(0);

@@ -1,6 +1,6 @@
 // Zona 4: El Abismo. Equipo y eventos de grupo.
 import type { ItemTheme } from '../../core/items/items';
-import { addAlly, giveRelic, giveRune } from '../../game/run';
+import { addAlly, giveItem, giveRelic } from '../../game/run';
 import { boon, healPct, losePct, type EventDef } from '../zona1/events';
 
 export const ZONA4_ITEMS: ItemTheme = {
@@ -22,9 +22,9 @@ export const ZONA4_ITEMS: ItemTheme = {
 export const ZONA4_EVENTS: EventDef[] = [
   {
     id: 'fuente_runas', title: 'La Fuente de las Runas',
-    text: 'Un manantial de luz donde flotan runas sin dueño. Tocarlo duele; no tocarlo, también.',
+    text: 'Un manantial de luz donde flotan tesoros sin dueño. Tocarlo duele; no tocarlo, también.',
     options: [
-      { label: 'Sumergir las manos', hint: 'Cada uno: 2 runas raras, pero pierde el 30% de la vida actual.', apply: (run) => { for (const h of run.heroes) { losePct(h, 0.3); giveRune(run, h, true); giveRune(run, h, true); } return 'Las runas se os pegan a la piel como brasas frías.'; } },
+      { label: 'Sumergir las manos', hint: 'Cada uno: un objeto Rare o mejor, pero pierde el 30% de la vida actual.', apply: (run) => { for (const h of run.heroes) { losePct(h, 0.3); giveItem(run, h, 'elite', 2); } return 'Los tesoros se os pegan a la piel como brasas frías.'; } },
       { label: 'Beber de la fuente', hint: 'Todos se curan por completo.', apply: (run) => { for (const h of run.heroes) healPct(h, 1); return 'La luz os llena y se apaga despacio.'; } },
     ],
   },
@@ -46,9 +46,9 @@ export const ZONA4_EVENTS: EventDef[] = [
   },
   {
     id: 'hambre', title: 'El Hambre',
-    text: 'Una boca sin cuerpo pide comida. Acepta runas.',
+    text: 'Una boca sin cuerpo pide comida. Acepta ofrendas.',
     options: [
-      { label: 'Alimentarla', hint: 'Cada uno pierde una runa suelta (si tiene) y gana +20 de vida máxima.', apply: (run) => { for (const h of run.heroes) { if (h.runes.length) h.runes.pop(); boon(h, 'hp', 20); h.hp += 20; } return 'La boca mastica y escupe algo parecido a la gratitud.'; } },
+      { label: 'Alimentarla', hint: 'Cada uno pierde 30 de oro (si tiene) y gana +20 de vida máxima.', apply: (run) => { for (const h of run.heroes) { h.gold = Math.max(0, h.gold - 30); boon(h, 'hp', 20); h.hp += 20; } return 'La boca mastica y escupe algo parecido a la gratitud.'; } },
       { label: 'Huir', hint: 'El próximo combate es una emboscada (más enemigos, mejor botín).', apply: (run) => { run.ambush = true; return 'La boca os sigue. Y trae compañía.'; } },
     ],
   },

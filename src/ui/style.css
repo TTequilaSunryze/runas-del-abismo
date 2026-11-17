@@ -229,3 +229,5 @@ span.cell { display: inline-flex; align-items: center; justify-content: center; 
 .fbar { display: inline-block; width: 60px; height: 7px; background: #2a1410; border: 1px solid #5a2a1a; vertical-align: middle; }
 .fbar i { display: block; height: 100%; background: linear-gradient(90deg, #ff8a30, #ff3020); }
 .sq[data-act="map"] { width: auto; padding: 0 8px; }
+/* rarezas del equipo: Common blanco, Uncommon azul, Rare naranja, Legendary rojo */
+.ir0 { color: #FFFFFF; --rc: #FFFFFF; } .ir1 { color: #3B82F6; --rc: #3B82F6; } .ir2 { color: #F97316; --rc: #F97316; } .ir3 { color: #EF4444; --rc: #EF4444; }

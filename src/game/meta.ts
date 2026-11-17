@@ -1,17 +1,15 @@
-// Progresión entre partidas: ecos, mejoras permanentes, logros, runas desbloqueadas y ascensión.
+// Progresión entre partidas: ecos, mejoras permanentes, logros y ascensión.
 // Se guarda en el navegador de cada jugador.
 import { CLASSES } from '../core/classes/classes';
 import { MAX_ASC, MOD_ECOS, PERKS, perkLevel, type Perks } from '../content/modes';
-import { RUNES } from '../core/runes';
 import type { ClassId } from '../core/state';
-import { setCounts } from '../core/items/sets';
 import type { Champion, HeroSave, RunState } from './run';
 
 export interface Meta {
   v: 1;
   ecos: number;
   perks: Perks;
-  /** runas desbloqueadas por logros */
+  /** reservado */
   unlocked: string[];
   /** ascensión más alta disponible */
   maxAsc: number;
@@ -155,7 +153,6 @@ export interface AchievementDef {
   name: string;
   text: string;
   ecos?: number;
-  rune?: string;
   check: (run: RunState, h: HeroSave, m: Meta) => boolean;
 }
 
@@ -166,10 +163,9 @@ const classWin = (cls: ClassId): AchievementDef => ({
 });
 
 export const ACHIEVEMENTS: AchievementDef[] = [
-  { id: 'jefe1', name: 'Silencio en el osario', text: 'Vence al Prior Hueco.', rune: 'bendicion', check: (r) => r.flags.includes('boss_0') },
-  { id: 'jefe2', name: 'Raíz arrancada', text: 'Vence a la Madre Raíz.', rune: 'aturdidora', check: (r) => r.flags.includes('boss_1') },
-  { id: 'victoria', name: 'Fin del abismo', text: 'Gana una partida completa.', rune: 'sangrienta', ecos: 60, check: won },
-  { id: 'runico', name: 'Rúnico', text: 'Termina una partida con 4 runas engarzadas.', rune: 'silencio', check: (_r, h) => Object.keys(h.sockets).length >= 4 },
+  { id: 'jefe1', name: 'Silencio en el osario', text: 'Vence al Prior Hueco.', check: (r) => r.flags.includes('boss_0') },
+  { id: 'jefe2', name: 'Raíz arrancada', text: 'Vence a la Madre Raíz.', check: (r) => r.flags.includes('boss_1') },
+  { id: 'victoria', name: 'Fin del abismo', text: 'Gana una partida completa.', ecos: 60, check: won },
   { id: 'impecable', name: 'Impecable', text: 'Vence a un jefe sin que caiga nadie.', ecos: 50, check: (r) => r.flags.some((f) => f.startsWith('flawless_')) },
   { id: 'leyenda', name: 'Reliquia legendaria', text: 'Termina una partida con un objeto legendario equipado.', ecos: 40, check: (_r, h) => Object.values(h.equip).some((i) => i.rarity === 3) },
   { id: 'rico', name: 'Avaricia', text: 'Llega a tener 300 de oro.', ecos: 30, check: (_r, h) => h.stats.maxGold >= 300 },
@@ -182,7 +178,6 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'abismo', name: 'Cerrar el Abismo', text: 'Gana una partida que incluya la zona 4.', ecos: 150, check: (r) => r.flags.includes('abyss_won') },
   { id: 'reliquias5', name: 'Coleccionista', text: 'Termina una partida con 5 reliquias o más.', ecos: 40, check: (_r, h) => (h.relics?.length ?? 0) >= 5 },
   { id: 'mutado', name: 'Por gusto', text: 'Gana una partida con 3 modificadores elegidos.', ecos: 100, check: (r) => won(r) && !r.daily && r.mods.length >= 3 },
-  { id: 'set3', name: 'De punta en blanco', text: 'Termina una partida con un set completo equipado.', ecos: 50, check: (_r, h) => Object.values(setCounts(h.equip)).some((n) => n >= 3) },
   { id: 'nemesis', name: 'Cara a cara', text: 'Vence a un Némesis: un héroe del Salón convertido en élite.', ecos: 50, check: (r) => r.flags.includes('nemesis') },
   { id: 'maestro', name: 'Maestro de clase', text: 'Alcanza la maestría 5 con una clase.', ecos: 150, check: (_r, _h, m) => Object.values(m.mastery).some((xp) => masteryLevel(xp) >= 5) },
   classWin('guerrero'), classWin('mago'), classWin('clerigo'), classWin('picaro'), classWin('arquero'), classWin('zorro'), classWin('esferas'), classWin('carcelero'), classWin('acechador'), classWin('barbaro'),
@@ -229,7 +224,6 @@ export function settle(run: RunState, myId: string): Settlement | null {
     if (m.achievements.includes(a.id) || !a.check(run, h, m)) continue;
     m.achievements.push(a.id);
     if (a.ecos) m.ecos += a.ecos;
-    if (a.rune && RUNES[a.rune] && !m.unlocked.includes(a.rune)) m.unlocked.push(a.rune);
     res.achievements.push(a);
   }
   m.claimed = [...m.claimed.slice(-30), key];

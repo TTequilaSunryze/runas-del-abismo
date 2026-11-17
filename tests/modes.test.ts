@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildFight, chooseNode, dailyOf, heroMaxHp, metaAction, newRun, priceOf, recordEvents } from '../src/game/run';
+import { buildFight, dailyOf, finishFight, heroMaxHp, heroSpec, metaAction, newRun, priceOf, recordEvents } from '../src/game/run';
 import { cast, createCombat, current } from '../src/core/combat/engine';
 
 const P = [{ owner: 'p0', name: 'A', cls: 'guerrero' as const, routes: ['baluarte'] }];
@@ -34,13 +34,14 @@ describe('reto diario', () => {
 describe('mejoras permanentes', () => {
   it('dan vida, oro, runas, opciones de botín y re-tiradas', () => {
     const base = newRun('T', 3, P);
-    const boosted = newRun('T', 3, [{ ...P[0]!, perks: { vit: 5, gold: 2, rune: 2, loot: 1, reroll: 1, hack: 99 } }]);
+    const boosted = newRun('T', 3, [{ ...P[0]!, perks: { vit: 5, gold: 2, loot: 1, reroll: 1, hack: 99 } }]);
     const h = boosted.heroes[0]!;
     expect(heroMaxHp(h)).toBeGreaterThan(heroMaxHp(base.heroes[0]!));
     expect(h.gold).toBe(50);
-    expect(h.runes).toHaveLength(3);
-    boosted.map[0] = ['treasure'];
-    chooseNode(boosted, 0);
+    h.boonOffer = null; h.spellOffers = 3;
+    boosted.combat = createCombat({ seed: 1, w: 8, h: 5, obstacles: [], units: [heroSpec(h, { x: 1, y: 1 })] }).state;
+    boosted.combat.over = 'win'; boosted.phase = 'combat'; boosted.kind = 'boss';
+    finishFight(boosted);
     expect(boosted.offers.p0).toHaveLength(4);
     const first = boosted.offers.p0!.map((i) => i.name).join();
     expect(metaAction(boosted, 'p0', { a: 'reroll' })).toBeNull();

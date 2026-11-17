@@ -110,6 +110,6 @@ describe('modificadores de élite', () => {
     expect(tough.name).toBe('Caballero sepulcral · Blindado, Ardiente');
     expect(tough.armor).toBe(plain.armor + 2);
     expect(tough.maxHp).toBeGreaterThan(plain.maxHp);
-    expect(tough.spells[0]!.rune).toBe('fuego');
+    expect(tough.spells[0]!.imbue).toBe('fuego');
   });
 });

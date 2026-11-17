@@ -65,10 +65,14 @@ const DEATHMARK_PCT = 0.35;
 const GUARD_SHARE = 0.4;
 /** quién está lanzando el hechizo en curso (para la Marca de la muerte) */
 let casting: number | null = null;
+/** escuela del hechizo en curso: lo mágico usa el % de daño mágico del equipo y lo demás el físico */
+let castingSchool: 'phys' | 'magic' | null = null;
+export const isMagicSpell = (d: Pick<SpellDef, 'id' | 'element'>): boolean => !!d.element || /^[ztk]_/.test(d.id);
 
 /** Multiplicador de daño de `u` contra `t`: poder, potenciado, Furia, Marcado, Vulnerable, Frenesí y Desprecio. */
 export function dmgScale(u: Unit, t: Unit, extraPower = 0): number {
-  return (1 + (u.power + extraPower + (u.statuses.empower?.stacks ?? 0) + furyPower(u)) / 100)
+  const school = castingSchool === 'magic' ? (u.powerMagic ?? 0) : castingSchool === 'phys' ? (u.powerPhys ?? 0) : 0;
+  return (1 + (u.power + school + extraPower + (u.statuses.empower?.stacks ?? 0) + furyPower(u)) / 100)
     * (t.statuses.mark ? MARK_MULT : 1) * (t.statuses.vuln ? VULN_MULT : 1) * (t.statuses.frenzy ? FRENZY_TAKEN : 1)
     * (hasTrait(u, 'desprecio') && t.hp < t.maxHp / 2 ? 1.25 : 1);
 }
@@ -527,7 +531,9 @@ function pushDir(s: CombatState, u: Unit, dx: number, dy: number, cells: number,
 
 export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): ActionResult {
   casting = unitId;
-  try { return castInner(s, unitId, spellId, at); } finally { casting = null; }
+  const sd = SPELLS[spellId];
+  castingSchool = sd ? (isMagicSpell(sd) ? 'magic' : 'phys') : null;
+  try { return castInner(s, unitId, spellId, at); } finally { casting = null; castingSchool = null; }
 }
 
 function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): ActionResult {

@@ -7,7 +7,7 @@ import { makeHero } from '../src/core/classes/factory';
 import { SPELLS } from '../src/core/classes/spells';
 import { runAiTurn } from '../src/core/combat/ai';
 import { cast, createCombat, current, endTurn, type UnitSpec } from '../src/core/combat/engine';
-import { bossOf, buildFight, chooseNode, finishFight, heroSpec, lastZone, leaveNode, metaAction, newRun } from '../src/game/run';
+import { bossOf, buildFight, chooseNode, finishFight, heroSpec, lastZone, newRun } from '../src/game/run';
 import { spellGlyphErrors, spellSummary } from '../src/ui/spellicons';
 
 const hero = (pos = { x: 1, y: 3 }): UnitSpec => makeHero({ cls: 'guerrero', name: 'H', owner: 'p0', routes: ['baluarte'], pos, level: 3 });
@@ -85,37 +85,9 @@ describe('contenido', () => {
 
 const P = [{ owner: 'a', name: 'A', cls: 'guerrero' as const, routes: ['baluarte'] }];
 describe('salas, reliquias y presagios', () => {
-  it('forja: cuesta oro, sirve para equipo y mochila y sube hasta +5', () => {
+  it('reliquias: cambian estadísticas y rasgos', () => {
     const run = newRun('T', 3, P);
     const h = run.heroes[0]!;
-    h.equip.arma = { slot: 'arma', name: 'Espada', rarity: 0, stats: { power: 10 } };
-    h.bag.push({ slot: 'casco', name: 'Yelmo', rarity: 1, stats: { hp: 15 } });
-    run.map[run.step] = ['forge'];
-    chooseNode(run, 0);
-    expect(run.phase).toBe('camp');
-    h.gold = 0;
-    expect(metaAction(run, 'a', { a: 'forge', slot: 'arma' })).toBe('No tienes oro suficiente');
-    h.gold = 5000;
-    expect(metaAction(run, 'a', { a: 'forge', slot: 'arma' })).toBeNull();
-    expect(h.equip.arma!.stats.power).toBe(12);
-    expect(h.equip.arma!.name).toBe('Espada +1');
-    expect(metaAction(run, 'a', { a: 'forge', bag: 0 })).toBeNull();
-    expect(h.bag[0]!.stats.hp).toBe(18);
-    for (let i = 0; i < 4; i++) expect(metaAction(run, 'a', { a: 'forge', slot: 'arma' })).toBeNull();
-    expect(h.equip.arma!.lvl).toBe(5);
-    expect(metaAction(run, 'a', { a: 'forge', slot: 'arma' })).toBeTruthy();
-    expect(h.gold).toBeLessThan(5000);
-    leaveNode(run);
-    expect(run.phase).toBe('map');
-  });
-  it('apostador y reliquias: cambian estadísticas y rasgos', () => {
-    const run = newRun('T', 3, P);
-    const h = run.heroes[0]!;
-    h.gold = 500;
-    run.map[run.step] = ['gamble'];
-    chooseNode(run, 0);
-    expect(metaAction(run, 'a', { a: 'gamble', opt: 1 })).toBeNull();
-    expect(h.relics.length).toBeGreaterThanOrEqual(1);
     h.relics = ['caparazon', 'raiz'];
     const u = heroSpec(h);
     expect(u.armor).toBe(heroSpec({ ...h, relics: [] }).armor + 2);

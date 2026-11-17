@@ -9,14 +9,12 @@ import { CONSUMABLES, MAX_BOONS, MAX_CONSUMABLE, PATRONS, patronBonus, patronOf,
 import { BLESSINGS, BOON_MODS } from '../core/boonmods';
 import { CLASSES, MAX_LEVEL, canPickRoute } from '../core/classes/classes';
 import { SPELLS } from '../core/classes/spells';
-import { SETS, setBonus } from '../core/items/sets';
 import { MAX_SPELL_UPS, UPGRADES, canUpgrade } from '../core/upgrades';
 import { makeHero } from '../core/classes/factory';
 import { SOULS_PER_ARMOR, createCombat, type CombatSetup, type UnitSpec } from '../core/combat/engine';
 import { reachable } from '../core/combat/grid';
-import { BAG_SIZE, PRICE, SLOTS, STAT_NAME, genItem, genSetPiece, sumStats, type Item, type Rarity, type Slot, type StatKey, type Stats } from '../core/items/items';
+import { BAG_SIZE, PRICE, SLOTS, STAT_NAME, genItem, sumStats, type DropKind, type Item, type Rarity, type Slot, type StatKey, type Stats } from '../core/items/items';
 import { pick, rand, randInt, seedFrom, shuffle, type RngBox } from '../core/rng';
-import { RUNES } from '../core/runes';
 import { makeActMap, type ActMap } from './map';
 import type { ClassId, CombatState, GameEvent, Pos } from '../core/state';
 
@@ -30,10 +28,6 @@ export interface HeroSave {
   gold: number;
   equip: Partial<Record<Slot, Item>>;
   bag: Item[];
-  /** runas sin engarzar */
-  runes: string[];
-  /** runa engarzada en cada hechizo: id de hechizo → id de runa */
-  sockets: Record<string, string>;
   /** bendiciones y maldiciones de eventos */
   boon: Stats;
   /** mejoras permanentes del jugador (compradas con ecos) */
@@ -74,7 +68,6 @@ export interface Champion {
   routes: string[];
   level: number;
   equip: Partial<Record<Slot, Item>>;
-  sockets: Record<string, string>;
   ups: Record<string, string[]>;
   asc: number;
   won: boolean;
@@ -96,28 +89,18 @@ export interface GroupEvent {
   result?: string;
 }
 
-export type NodeKind = 'combat' | 'elite' | 'event' | 'rest' | 'shop' | 'treasure' | 'boss' | 'forge' | 'altar' | 'gamble' | 'cage' | 'shrine';
-export const NODE_NAME: Record<NodeKind, string> = { combat: '⚔️ Combate', elite: '☠️ Élite', event: '❓ Evento de grupo', rest: '🔥 Descanso', shop: '💰 Tienda', treasure: '🎁 Tesoro', boss: '👑 Jefe', forge: '🔨 Forja', altar: '🕯️ Altar', gamble: '🎲 Apostador', cage: '⛓️ Jaula', shrine: '✨ Santuario' };
+export type NodeKind = 'combat' | 'elite' | 'event' | 'rest' | 'shop' | 'boss' | 'cage' | 'shrine';
+export const NODE_NAME: Record<NodeKind, string> = { combat: '⚔️ Combate', elite: '☠️ Élite', event: '❓ Evento de grupo', rest: '🔥 Descanso', shop: '💰 Tienda', boss: '👑 Jefe', cage: '⛓️ Jaula', shrine: '✨ Santuario' };
 export const NODE_HINT: Record<NodeKind, string> = {
   combat: 'Enemigos normales. Oro y, por turnos, un objeto o una mejora de hechizo.', elite: 'El campeón de la zona, con modificadores. Una bendición de clase.',
   event: 'Una decisión que se vota y afecta a todos.', rest: 'Todos recuperan el 40% de su vida.',
-  shop: 'Gastad vuestro oro en objetos y pociones.', treasure: 'Cada uno elige un objeto raro o mejor, sin combatir.', boss: 'El guardián de la zona. Dos fases. Un objeto, una runa rara y una reliquia.',
-  forge: 'Cada uno mejora una pieza equipada: sube de rareza y de estadísticas.', altar: 'Cada uno sacrifica vida u oro a cambio de runas, mejoras de hechizo o curación.',
-  gamble: 'Apuesta oro por reliquias. Puede salir bien… o no.', cage: 'Un prisionero vigilado: venced a sus captores y luchará con vosotros hasta el final de la zona.',
+  shop: 'Gastad vuestro oro en objetos y pociones.', boss: 'El guardián de la zona. Dos fases. Un objeto y una reliquia.',
+  cage: 'Un prisionero vigilado: venced a sus captores y luchará con vosotros hasta el final de la zona.',
   shrine: 'Cada uno elige 1 de 3 bendiciones de su clase: mejoras de sus hechizos o hechizos nuevos.',
 };
 
-/** Salas de una sola parada en las que cada jugador hace algo por su cuenta. */
-export type CampKind = 'forge' | 'altar' | 'gamble';
-export interface Camp {
-  kind: CampKind;
-  /** lo que ya hizo cada jugador (texto del resultado) */
-  done: Record<string, string>;
-}
-
 export interface ShopSlot {
   item?: Item;
-  rune?: string;
   relic?: string;
   consumable?: string;
   price: number;
@@ -133,7 +116,7 @@ export interface RunState extends RngBox {
   daily: string | null;
   /** modificadores del reto diario */
   mods: string[];
-  /** runas desbloqueadas por logros (de cualquiera del grupo) */
+  /** reservado (antes: desbloqueos por logros) */
   unlocked: string[];
   /** hitos de la partida, para logros: p. ej. flawless_0 = jefe de la zona 1 sin bajas */
   flags: string[];
@@ -152,7 +135,7 @@ export interface RunState extends RngBox {
   at: number;
   /** nodo elegido en cada capa ya recorrida */
   trail: number[];
-  phase: 'map' | 'combat' | 'event' | 'shop' | 'camp' | 'won' | 'lost';
+  phase: 'map' | 'combat' | 'event' | 'shop' | 'won' | 'lost';
   /** tipo del combate en curso */
   kind: NodeKind;
   heroes: HeroSave[];
@@ -169,7 +152,6 @@ export interface RunState extends RngBox {
   /** héroes guardados por los jugadores: pueden volver como élites */
   nemesis: Champion[];
   nemesisUsed: string[];
-  camp: Camp | null;
   /** jefe elegido en cada zona (índice en ZoneDef.bosses) */
   bossPick: number[];
   /** se juega también la zona 4 */
@@ -240,14 +222,14 @@ export function newRun(code: string, seed: number, players: NewHero[], opts: Run
   const daily = opts.daily ? dailyOf(opts.daily) : null;
   const run: RunState = {
     version: 9, code, asc: daily ? DAILY_ASC : Math.max(0, Math.min(10, opts.asc ?? 0)), daily: opts.daily ?? null, mods: daily?.mods ?? [...new Set((opts.mods ?? []).filter((m) => DAILY_MODS.some((d) => d.id === m)))].slice(0, MAX_MODS),
-    camp: null, bossPick: [], abyss: !daily && !!opts.abyss, allies: [], omen: null, nextOmen: null, cage: null, ready: {}, stamp: 0,
-    unlocked: [...new Set(opts.unlocked ?? [])].filter((r) => RUNES[r]), flags: [],
+    bossPick: [], abyss: !daily && !!opts.abyss, allies: [], omen: null, nextOmen: null, cage: null, ready: {}, stamp: 0,
+    unlocked: [...new Set(opts.unlocked ?? [])], flags: [],
     zone: 0, zoneFight: 0, rng: (daily?.seed ?? seed) >>> 0, fight: 0, step: 0, map: [], links: [], at: -1, trail: [], phase: 'map', kind: 'combat', combat: null,
     offers: {}, event: null, eventsSeen: [], shop: null, ambush: false, note: ZONES[0]!.intro,
     nemesis: (opts.nemesis ?? []).map(cleanChampion).filter((c): c is Champion => !!c).slice(0, 8), nemesisUsed: [],
     heroes: players.map((p) => ({
-      owner: p.owner, name: p.name, cls: p.cls, routes: kitOf(p.cls, p.routes), hp: 0, level: 1, gold: 0, equip: {}, bag: [], runes: [], sockets: {}, boon: {},
-      perks: Object.fromEntries(['vit', 'gold', 'rune', 'loot', 'reroll', 'aid'].map((k) => [k, perkLevel(p.perks, k)])),
+      owner: p.owner, name: p.name, cls: p.cls, routes: kitOf(p.cls, p.routes), hp: 0, level: 1, gold: 0, equip: {}, bag: [], boon: {},
+      perks: Object.fromEntries(['vit', 'gold', 'loot', 'reroll', 'aid'].map((k) => [k, perkLevel(p.perks, k)])),
       rerolls: 0, stats: { dmg: 0, kills: 0, falls: 0, heal: 0, maxGold: 0 },
       relics: [], boons: [], boonOffer: null, bag2: { c_vida: 1 }, ups: {}, upOffer: null, mastery: Math.max(0, Math.min(5, Math.floor(Number(p.mastery) || 0))), upPending: 0,
     })),
@@ -263,7 +245,6 @@ export function newRun(code: string, seed: number, players: NewHero[], opts: Run
     h.gold = perkLevel(h.perks, 'gold') * 25 + noKit * 25;
     h.rerolls = perkLevel(h.perks, 'reroll');
     h.hp = Math.round(heroMaxHp(h) * (run.asc >= 8 ? 0.75 : 1));
-    for (let i = 0; i <= perkLevel(h.perks, 'rune'); i++) h.runes.push(randomRune(run, false));
     // todos empiezan eligiendo un hechizo nuevo de su clase
     h.upPending = 0;
     offerBoon(run, h);
@@ -288,7 +269,6 @@ export function giveRelic(run: RunState, h: HeroSave, rare?: boolean): string | 
   if (r.stats?.hp) h.hp = Math.max(1, h.hp + r.stats.hp);
   return r.id;
 }
-export function giveRune(run: RunState, h: HeroSave, rare?: boolean): void { h.runes.push(randomRune(run, rare)); }
 /** Un aliado se une al grupo hasta el final de la zona. */
 export function addAlly(run: RunState, id: string): void { if (run.allies.length < 2) run.allies.push(id); }
 
@@ -333,21 +313,6 @@ export function offerBoon(run: RunState, h: HeroSave): void {
   h.spellOffers = (h.spellOffers ?? 0) + 1;
 }
 
-/** Mejora de forja: +20% a sus estadísticas (no a PA, PM ni turnos de estado), hasta +5. */
-export const FORGE_MAX = 5;
-export function forgeCost(run: RunState, it: Item): number {
-  return priceOf(run, Math.round((35 + 30 * (it.lvl ?? 0)) * (1 + 0.25 * it.rarity) * (1 + 0.3 * run.zone)));
-}
-export function forged(it: Item): Item {
-  const stats: Stats = {};
-  for (const k of Object.keys(it.stats) as StatKey[]) {
-    const v = it.stats[k] ?? 0;
-    stats[k] = k === 'ap' || k === 'mp' || k === 'status' ? v : v > 0 ? Math.max(v + 1, Math.round(v * 1.2)) : v;
-  }
-  const lvl = (it.lvl ?? 0) + 1;
-  return { ...it, stats, lvl, name: `${it.name.replace(/ \+\d+$/, '')} +${lvl}` };
-}
-
 /** Qué le falta a un jugador para poder seguir (botín, mejoras o bendiciones sin elegir). */
 export function pendingOf(run: RunState, h: HeroSave): string[] {
   const out: string[] = [];
@@ -362,12 +327,11 @@ export function waitingFor(run: RunState, present: readonly string[], hostId: st
   return run.heroes.filter((h) => present.includes(h.owner) && (pendingOf(run, h).length > 0 || (run.stamp > 0 && h.owner !== hostId && run.ready[h.owner] !== run.stamp)));
 }
 
-/** Desglose de estadísticas de un héroe: clase y nivel, equipo, sets, reliquias, bendiciones y eventos. */
+/** Desglose de estadísticas de un héroe: clase y nivel, equipo, reliquias, bendiciones y eventos. */
 export function statBreakdown(h: HeroSave): Array<{ key: string; name: string; base: number; parts: Array<[string, number]>; total: number }> {
   const spec = heroSpec(h);
   const sum = (list: Array<Stats | undefined>) => sumStats(list);
   const equip = sum(Object.values(h.equip).map((i) => i.stats));
-  const sets = sum(setBonus(h.equip).stats);
   const rel = sum(h.relics.map((r) => RELICS[r]?.stats));
   const pat = sum(patronBonus(h.boons).stats);
   const boon = sum([h.boon]);
@@ -380,31 +344,23 @@ export function statBreakdown(h: HeroSave): Array<{ key: string; name: string; b
   ];
   return rows.map(([key, name, b, total]) => {
     const k = key as StatKey;
-    const parts: Array<[string, number]> = ([['Equipo', equip[k]], ['Sets', sets[k]], ['Reliquias', rel[k]], ['Bendiciones', pat[k]], ['Eventos', boon[k]], ['Almas', k === 'armor' && spec.souls !== undefined ? Math.floor(spec.souls / SOULS_PER_ARMOR) : 0]] as Array<[string, number]>).filter(([, v]) => v);
+    const parts: Array<[string, number]> = ([['Equipo', equip[k]], ['Reliquias', rel[k]], ['Bendiciones', pat[k]], ['Eventos', boon[k]], ['Almas', k === 'armor' && spec.souls !== undefined ? Math.floor(spec.souls / SOULS_PER_ARMOR) : 0]] as Array<[string, number]>).filter(([, v]) => v);
     return { key, name, base: b, parts, total };
   });
-}
-
-export const RUNE_PRICE = [45, 90] as const;
-
-/** Runa al azar: `rare` true = rara, false = común, undefined = cualquiera (las raras salen menos). */
-export function randomRune(run: RunState, rare?: boolean): string {
-  const want = rare ?? rand(run) < 0.25;
-  return pick(run, Object.values(RUNES).filter((r) => r.rare === want && (!r.locked || run.unlocked.includes(r.id)))).id;
 }
 
 /** Precio con los recargos de la ascensión y del reto diario. */
 export const priceOf = (run: RunState, base: number): number => Math.round(base * (run.asc >= 4 ? 1.25 : 1) * (run.mods.includes('codicia') ? 2 : 1));
 
-type Build = Pick<HeroSave, 'cls' | 'name' | 'owner' | 'routes' | 'level' | 'equip' | 'sockets'> & { boon?: Stats; ups?: Record<string, string[]>; relics?: string[]; boons?: string[]; bag2?: Record<string, number>; souls?: number; soulBank?: number };
+type Build = Pick<HeroSave, 'cls' | 'name' | 'owner' | 'routes' | 'level' | 'equip'> & { boon?: Stats; ups?: Record<string, string[]>; relics?: string[]; boons?: string[]; bag2?: Record<string, number>; souls?: number; soulBank?: number };
 
-/** El héroe listo para combatir: clase, nivel, equipo, sets, runas y mejoras. */
+/** El héroe listo para combatir: clase, nivel, equipo y mejoras. */
 export function heroSpec(h: Build, pos: Pos = { x: 0, y: 0 }): UnitSpec {
-  const sets = setBonus(h.equip);
+  const traits: string[] = [];
   const relics = (h.relics ?? []).map((r) => RELICS[r]).filter((r) => !!r);
   const pat = patronBonus(h.boons ?? []);
-  const u = makeHero({ cls: h.cls, name: h.name, owner: h.owner, routes: h.routes, pos, level: h.level, bonus: [...Object.values(h.equip).map((i) => i.stats), ...sets.stats, h.boon, ...relics.map((r) => r!.stats), ...pat.stats] });
-  for (const t of pat.traits) if (!sets.traits.includes(t)) sets.traits.push(t);
+  const u = makeHero({ cls: h.cls, name: h.name, owner: h.owner, routes: h.routes, pos, level: h.level, bonus: [...Object.values(h.equip).map((i) => i.stats), h.boon, ...relics.map((r) => r!.stats), ...pat.stats] });
+  for (const t of pat.traits) if (!traits.includes(t)) traits.push(t);
   // Carcelero: las almas de toda la partida dan armadura (+1 cada 5)
   if (u.souls !== undefined) { u.souls = Math.max(0, Math.floor(h.souls ?? 0)); u.soulBank = Math.max(0, Math.floor(h.soulBank ?? 0)); u.armor += Math.floor(u.souls / SOULS_PER_ARMOR); }
   // habilidades de bendición y consumibles (con sus usos)
@@ -412,7 +368,7 @@ export function heroSpec(h: Build, pos: Pos = { x: 0, y: 0 }): UnitSpec {
     // bendiciones pasivas: un rasgo y, si la tiene, un cambio en un hechizo
     const bl = BLESSINGS[b];
     if (bl) {
-      if (bl.trait && !sets.traits.includes(bl.trait)) sets.traits.push(bl.trait);
+      if (bl.trait && !traits.includes(bl.trait)) traits.push(bl.trait);
       if (bl.mod) { const sp = u.spells.find((x) => x.id === bl.mod!.target); if (sp) sp.ups = [b, ...(sp.ups ?? [])]; }
       continue;
     }
@@ -421,12 +377,11 @@ export function heroSpec(h: Build, pos: Pos = { x: 0, y: 0 }): UnitSpec {
     else if (SPELLS[b] && !u.spells.some((x) => x.id === b)) u.spells.push({ id: b, cd: 0 });
   }
   for (const [id, n] of Object.entries(h.bag2 ?? {})) if (n > 0 && SPELLS[id]) u.spells.push({ id, cd: 0, charges: n });
-  for (const r of relics) if (r!.trait && !sets.traits.includes(r!.trait)) sets.traits.push(r!.trait);
+  for (const r of relics) if (r!.trait && !traits.includes(r!.trait)) traits.push(r!.trait);
   for (const sp of u.spells) {
-    if (h.sockets[sp.id]) sp.rune = h.sockets[sp.id];
     if (h.ups?.[sp.id]?.length) sp.ups = [...(sp.ups ?? []), ...h.ups[sp.id]!];
   }
-  if (sets.traits.length) u.traits = sets.traits;
+  if (traits.length) u.traits = traits;
   return u;
 }
 
@@ -461,20 +416,18 @@ export function cleanChampion(x: unknown): Champion | null {
         const v = Math.round(Number(it.stats?.[k]) || 0);
         if (v) stats[k] = Math.max(-40, Math.min(STAT_LIMIT[k] ?? 60, v));
       }
-      equip[sl] = { slot: sl, name: String(it.name ?? '?').slice(0, 40), rarity: Math.max(0, Math.min(3, Math.floor(Number(it.rarity) || 0))) as Rarity, stats, ...(it.set && SETS[it.set] && SETS[it.set]!.pieces[sl] ? { set: it.set } : {}) };
+      equip[sl] = { slot: sl, name: String(it.name ?? '?').slice(0, 40), rarity: Math.max(0, Math.min(3, Math.floor(Number(it.rarity) || 0))) as Rarity, stats };
     }
     const level = Math.max(1, Math.min(MAX_LEVEL, Math.floor(Number(c.level) || 1)));
     const known = makeHero({ cls: c.cls, name: 'x', owner: 'x', routes, pos: { x: 0, y: 0 }, level }).spells.map((sp) => sp.id);
-    const sockets: Record<string, string> = {}, ups: Record<string, string[]> = {};
+    const ups: Record<string, string[]> = {};
     let total = 0;
     for (const id of known) {
-      const r = c.sockets?.[id];
-      if (typeof r === 'string' && RUNES[r]) sockets[id] = r;
       const list: string[] = [];
       for (const up of Array.isArray(c.ups?.[id]) ? c.ups[id]! : []) if (total < 7 && canUpgrade(SPELLS[id]!, list, String(up))) { list.push(String(up)); total++; }
       if (list.length) ups[id] = list;
     }
-    return { id: String(c.id ?? '').slice(0, 40) || 'x', name: String(c.name ?? 'Héroe').slice(0, 14), by: String(c.by ?? '').slice(0, 14), cls: c.cls, routes, level, equip, sockets, ups,
+    return { id: String(c.id ?? '').slice(0, 40) || 'x', name: String(c.name ?? 'Héroe').slice(0, 14), by: String(c.by ?? '').slice(0, 14), cls: c.cls, routes, level, equip, ups,
       asc: Math.max(0, Math.min(10, Math.floor(Number(c.asc) || 0))), won: !!c.won, date: String(c.date ?? '').slice(0, 10) };
   } catch {
     return null;
@@ -483,7 +436,7 @@ export function cleanChampion(x: unknown): Champion | null {
 
 /** Foto de un héroe de la partida para guardarlo en el Salón. */
 export function championOf(run: RunState, h: HeroSave): Champion {
-  return { id: `${run.code}-${run.rng >>> 0}-${h.owner.slice(0, 6)}`, name: h.name, by: h.name, cls: h.cls, routes: [...h.routes], level: h.level, equip: structuredClone(h.equip), sockets: { ...h.sockets }, ups: structuredClone(h.ups),
+  return { id: `${run.code}-${run.rng >>> 0}-${h.owner.slice(0, 6)}`, name: h.name, by: h.name, cls: h.cls, routes: [...h.routes], level: h.level, equip: structuredClone(h.equip), ups: structuredClone(h.ups),
     asc: run.asc, won: run.phase === 'won', date: new Date().toISOString().slice(0, 10) };
 }
 
@@ -647,24 +600,23 @@ export function recordEvents(run: RunState, events: GameEvent[], track: { caster
   }
 }
 
-/** Un objeto de botín. A veces es una pieza de set, sobre todo de los sets que el héroe ya empezó. */
-export function genLoot(run: RunState, h: HeroSave | undefined, min: Rarity, depth = run.fight, forceSet = false): Item {
-  const mine = h ? [...Object.values(h.equip), ...h.bag].filter((i) => i.set) : [];
-  const started = [...new Set(mine.map((i) => i.set!))].filter((id) => SETS[id] && mine.filter((i) => i.set === id).length < 3);
-  if (forceSet || rand(run) < (started.length ? 0.3 : 0.14)) {
-    const set = started.length && rand(run) < 0.75 ? SETS[pick(run, started)]! : pick(run, Object.values(SETS));
-    const all = Object.keys(set.pieces) as Slot[];
-    const missing = all.filter((sl) => !mine.some((i) => i.set === set.id && i.slot === sl));
-    return genSetPiece(run, zoneOf(run).items, depth, set, pick(run, missing.length ? missing : all));
-  }
-  return genItem(run, zoneOf(run).items, depth, min);
+
+/** Tipo de sala del que sale el botín (la jaula vigilada cuenta como élite). */
+export const dropKindOf = (run: Pick<RunState, 'kind' | 'ambush'>): DropKind => (run.kind === 'boss' ? 'boss' : run.kind === 'elite' || run.ambush ? 'elite' : 'combat');
+
+/** Probabilidad de que un combate suelte objeto: sube con el acto; élites y jefes siempre. */
+export const dropChance = (act: number, kind: DropKind): number => (kind === 'combat' ? Math.min(0.85, 0.5 + 0.1 * act) : 1);
+
+/** Un objeto de botín según el acto y la sala. */
+export function genLoot(run: RunState, kind: DropKind = dropKindOf(run), min: Rarity = 0): Item {
+  return genItem(run, zoneOf(run).items, run.zone, kind, min);
 }
 
-function offerLoot(run: RunState, h: HeroSave, count: number, min: Rarity, forceSet = false): void {
-  run.offers[h.owner] = Array.from({ length: count + perkLevel(h.perks, 'loot') + (h.relics.includes('lupa') ? 1 : 0) }, (_, i) => genLoot(run, h, min, run.fight, forceSet && i === 0));
-}
-function offerAll(run: RunState, count: number, min: Rarity, forceSet = false): void {
-  for (const h of run.heroes) offerLoot(run, h, count, min, forceSet);
+/** Botín de objetos de un héroe: 1 opción en combate normal, 2 en élite, 3 en jefe (más las del perk y la lupa). */
+function offerLoot(run: RunState, h: HeroSave, kind: DropKind): void {
+  if (!(rand(run) < dropChance(run.zone, kind))) return;
+  const n = { combat: 1, elite: 2, boss: 3, shop: 1 }[kind] + perkLevel(h.perks, 'loot') + (h.relics.includes('lupa') ? 1 : 0);
+  run.offers[h.owner] = Array.from({ length: n }, () => genLoot(run, kind));
 }
 
 /** Recompensa de un combate ganado: una sola cosa por sala. Normal: equipo y mejora de hechizo alternos; élite: bendición; jefe: equipo. */
@@ -703,11 +655,10 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
     run.event = { id: e.id, votes: {} };
     run.phase = 'event';
   } else if (node === 'shop') {
-    run.shop = Array.from({ length: 6 }, (_, i): ShopSlot => {
-      const item = genLoot(run, run.heroes.length ? pick(run, run.heroes) : undefined, i < 2 ? 2 : i < 4 ? 1 : 0, run.fight + 1, i === 0);
+    run.shop = Array.from({ length: 6 }, (): ShopSlot => {
+      const item = genLoot(run, 'shop');
       return { item, price: priceOf(run, PRICE[item.rarity]), sold: false };
     });
-    for (const rare of [false, true]) run.shop.push({ rune: randomRune(run, rare), price: priceOf(run, RUNE_PRICE[rare ? 1 : 0]), sold: false });
     const rel = pick(run, Object.values(RELICS));
     run.shop.push({ relic: rel.id, price: priceOf(run, rel.rare ? 160 : 100), sold: false });
     // consumibles: no se agotan (cada uno compra los suyos)
@@ -717,18 +668,9 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
     for (const h of run.heroes) h.hp = Math.min(heroMaxHp(h), h.hp + Math.ceil(heroMaxHp(h) * 0.4));
     run.note = 'Descansáis junto a una hoguera: todos recuperáis el 40% de la vida.';
     run.step++;
-  } else if (node === 'forge' || node === 'altar' || node === 'gamble') {
-    run.camp = { kind: node, done: {} };
-    run.phase = 'camp';
   } else if (node === 'shrine') {
     for (const h of run.heroes) offerBoon(run, h);
     run.note = 'El santuario despierta el poder de cada clase: elegid una bendición.';
-    run.step++;
-  } else {
-    offerAll(run, 3, 1, true);
-    const lucky: string[] = [];
-    for (const h of run.heroes) { if (rand(run) < 0.15) { const r = giveRelic(run, h); if (r) lucky.push(`${h.name} (${RELICS[r]!.name})`); } }
-    run.note = `Encontráis un ajuar funerario intacto: un objeto a elegir para cada uno (con una pieza de set).${lucky.length ? ` Reliquias: ${lucky.join(', ')}.` : ''}`;
     run.step++;
   }
   return [];
@@ -736,10 +678,9 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
 
 /** Salir de la tienda o de un evento ya resuelto y volver al mapa. */
 export function leaveNode(run: RunState): void {
-  if (run.phase === 'shop' || run.phase === 'camp' || (run.phase === 'event' && run.event?.result)) {
-    // el «Listo» dado en la tienda, la forja o el evento vale también para el mapa que sigue
-    run.note = run.phase === 'event' ? (run.event?.result ?? '') : run.phase === 'camp' ? '' : 'Dejáis atrás al mercader de reliquias.';
-    run.camp = null;
+  if (run.phase === 'shop' || (run.phase === 'event' && run.event?.result)) {
+    // el «Listo» dado en la tienda o el evento vale también para el mapa que sigue
+    run.note = run.phase === 'event' ? (run.event?.result ?? '') : 'Dejáis atrás al mercader de reliquias.';
     const relic = !!run.event?.id.startsWith('reliquia_');
     run.shop = null;
     run.event = null;
@@ -811,17 +752,13 @@ export function finishFight(run: RunState): void {
     const reward = needsEarly(h) ? 'boon' : rewardOf(run);
     if (reward === 'boon') offerBoon(run, h);
     else if (reward === 'up') { h.upPending++; ensureUpOffer(run, h); }
-    if (!h.boonOffer && !h.upOffer) offerLoot(run, h, run.ambush ? 4 : 3, run.ambush ? 2 : run.kind === 'boss' ? 2 : 0);
+    if (!h.boonOffer && !h.upOffer) offerLoot(run, h, dropKindOf(run));
     const max = heroMaxHp(h);
     // los caídos vuelven con el 30%; los demás recuperan un 35% entre combates
     const healPct = (0.35 + perkLevel(h.perks, 'aid') * 0.08) * (run.asc >= 3 ? 0.7 : 1);
     h.hp = left <= 0 ? Math.ceil(max * 0.3) : Math.min(max, left + Math.ceil(max * healPct));
     h.gold += gold + (h.relics.includes('bolsa') ? 15 : 0);
     h.stats.maxGold = Math.max(h.stats.maxGold, h.gold);
-    // runas: rara tras el jefe; a veces tras un élite o un combate normal
-    if (run.kind === 'boss') h.runes.push(randomRune(run, true));
-    else if (rand(run) < (run.kind === 'elite' ? 0.5 : 0.25)) h.runes.push(randomRune(run, false));
-    if (run.omen === 'tormenta') h.runes.push(randomRune(run));
     // reliquias: siempre tras el jefe, a veces tras un élite; y la promesa cumplida
     const relicHere = run.kind === 'boss' || (run.kind === 'elite' && rand(run) < 0.35);
     if (relicHere) { const r = giveRelic(run, h, run.kind === 'boss' ? undefined : false); if (r) extra.push(`${h.name}: ${RELICS[r]!.icon} ${RELICS[r]!.name}`); }
@@ -830,7 +767,7 @@ export function finishFight(run: RunState): void {
   if (run.cage) { addAlly(run, run.cage); extra.push(`Liberáis al prisionero: ${makeEnemy(run.cage, { x: 0, y: 0 }).name} os acompaña hasta el final de la zona`); run.cage = null; }
   run.stamp++;
   const what = { loot: 'un objeto', up: 'una mejora de hechizo', boon: 'una bendición de clase' }[rewardOf(run)];
-  run.note = `Victoria: cada uno gana ${gold} de oro y elige ${what}.${run.kind === 'boss' ? ' Además, una runa rara para cada uno.' : ''}${run.omen === 'tormenta' ? ' La tormenta rúnica os deja una runa extra.' : ''}${extra.length ? ` También: ${extra.join(' · ')}.` : ''}`;
+  run.note = `Victoria: cada uno gana ${gold} de oro y elige ${what}.${extra.length ? ` También: ${extra.join(' · ')}.` : ''}`;
   run.omen = null;
   run.ambush = false;
   run.fight++;
@@ -862,6 +799,13 @@ export function finishFight(run: RunState): void {
 }
 
 /** Mete un objeto en el equipo si la ranura está libre; si no, en la mochila. Devuelve false si no cabe. */
+/** Da un objeto nuevo a un héroe (a la ranura libre o a la mochila; si no cabe, se pierde). */
+export function giveItem(run: RunState, h: HeroSave, kind: DropKind = 'combat', min: Rarity = 0): Item {
+  const it = genLoot(run, kind, min);
+  receive(h, it);
+  return it;
+}
+
 function receive(h: HeroSave, item: Item): boolean {
   if (!h.equip[item.slot]) h.equip[item.slot] = item;
   else if (h.bag.length < BAG_SIZE) h.bag.push(item);
@@ -878,16 +822,11 @@ export type MetaAction =
   | { a: 'sell'; idx: number }
   | { a: 'drop'; idx: number }
   | { a: 'buy'; idx: number }
-  | { a: 'socket'; spell: string; idx: number }
-  | { a: 'unsocket'; spell: string }
   | { a: 'potion' }
   | { a: 'reroll' }
   | { a: 'upgrade'; idx: number }
-  | { a: 'forge'; slot?: Slot; bag?: number }
   | { a: 'boon'; idx: number }
-  | { a: 'ready' }
-  | { a: 'altar'; opt: number }
-  | { a: 'gamble'; opt: number };
+  | { a: 'ready' };
 
 /** Acciones de un jugador fuera del combate. Devuelve un mensaje de error o null si se aplicó. */
 export function metaAction(run: RunState, owner: string, a: MetaAction): string | null {
@@ -956,27 +895,9 @@ export function metaAction(run: RunState, owner: string, a: MetaAction): string 
       if (h.gold < slot.price) return 'No tienes oro suficiente';
       if (slot.consumable) { if ((h.bag2[slot.consumable] ?? 0) >= MAX_CONSUMABLE) return `Llevas el máximo (${MAX_CONSUMABLE})`; h.bag2[slot.consumable] = (h.bag2[slot.consumable] ?? 0) + 1; h.gold -= slot.price; break; }
       if (slot.relic) { if (h.relics.includes(slot.relic)) return 'Ya tienes esa reliquia'; h.relics.push(slot.relic); }
-      else if (slot.rune) h.runes.push(slot.rune);
       else if (!slot.item || !receive(h, slot.item)) return 'Mochila llena';
       h.gold -= slot.price;
       slot.sold = true;
-      break;
-    }
-    case 'socket': {
-      const rune = h.runes[a.idx];
-      if (!rune || !RUNES[rune]) return 'Runa no encontrada';
-      if (!heroSpec({ ...h, level: MAX_LEVEL }).spells.some((sp) => sp.id === a.spell)) return 'No tienes ese hechizo';
-      h.runes.splice(a.idx, 1);
-      const old = h.sockets[a.spell];
-      if (old) h.runes.push(old);
-      h.sockets[a.spell] = rune;
-      break;
-    }
-    case 'unsocket': {
-      const old = h.sockets[a.spell];
-      if (!old) return 'Ese hechizo no tiene runa';
-      delete h.sockets[a.spell];
-      h.runes.push(old);
       break;
     }
     case 'upgrade': {
@@ -994,22 +915,7 @@ export function metaAction(run: RunState, owner: string, a: MetaAction): string 
       if (h.rerolls <= 0) return 'No te quedan re-tiradas en esta zona';
       h.rerolls--;
       const min = Math.min(...list.map((x) => x.rarity)) as Rarity;
-      run.offers[owner] = list.map(() => genLoot(run, h, min));
-      break;
-    }
-    case 'forge': {
-      if (run.camp?.kind !== 'forge') return 'No hay forja aquí';
-      const it = a.slot ? h.equip[a.slot] : a.bag !== undefined ? h.bag[a.bag] : undefined;
-      if (!it) return 'Objeto no encontrado';
-      if ((it.lvl ?? 0) >= FORGE_MAX) return 'Ese objeto ya está al máximo';
-      const cost = forgeCost(run, it);
-      if (h.gold < cost) return 'No tienes oro suficiente';
-      const before = heroMaxHp(h);
-      h.gold -= cost;
-      const up = forged(it);
-      if (a.slot) h.equip[a.slot] = up; else h.bag[a.bag!] = up;
-      if (a.slot) h.hp += Math.max(0, heroMaxHp(h) - before);
-      run.camp.done[owner] = `${h.name} forja ${up.name}.`;
+      run.offers[owner] = list.map(() => genLoot(run, dropKindOf(run), min));
       break;
     }
     case 'boon': {
@@ -1023,33 +929,6 @@ export function metaAction(run: RunState, owner: string, a: MetaAction): string 
       const p = pendingOf(run, h);
       if (p.length) return `Antes elige: ${p.join(', ')}`;
       run.ready[owner] = run.ready[owner] === run.stamp ? -1 : run.stamp;
-      break;
-    }
-    case 'altar': {
-      if (run.camp?.kind !== 'altar' || run.camp.done[owner]) return 'Ya has hecho tu ofrenda';
-      const cost = Math.ceil(heroMaxHp(h) * 0.25);
-      if (a.opt === 0 || a.opt === 1) {
-        if (h.hp <= cost) return 'No tienes vida suficiente para la ofrenda';
-        h.hp -= cost;
-        if (a.opt === 0) { giveRune(run, h, true); run.camp.done[owner] = `${h.name} ofrece sangre y recibe una runa rara.`; }
-        else { h.upPending++; ensureUpOffer(run, h); run.camp.done[owner] = `${h.name} ofrece sangre y aprende una mejora de hechizo.`; }
-      } else if (a.opt === 2) {
-        if (h.gold < 40) return 'No tienes oro suficiente';
-        h.gold -= 40;
-        h.hp = Math.min(heroMaxHp(h), h.hp + Math.ceil(heroMaxHp(h) * 0.6));
-        run.camp.done[owner] = `${h.name} ofrece oro y recupera vida.`;
-      } else return 'Ofrenda desconocida';
-      break;
-    }
-    case 'gamble': {
-      if (run.camp?.kind !== 'gamble' || run.camp.done[owner]) return 'Ya has apostado';
-      const cost = a.opt === 1 ? 100 : 40;
-      if (h.gold < cost) return 'No tienes oro suficiente';
-      h.gold -= cost;
-      const wins = a.opt === 1 ? 1 + (rand(run) < 0.3 ? 1 : 0) : rand(run) < 0.55 ? 1 : 0;
-      const got: string[] = [];
-      for (let i = 0; i < wins; i++) { const r = giveRelic(run, h); if (r) got.push(`${RELICS[r]!.icon} ${RELICS[r]!.name}`); }
-      run.camp.done[owner] = got.length ? `${h.name} gana: ${got.join(' y ')}.` : `${h.name} pierde la apuesta.`;
       break;
     }
     case 'potion': {

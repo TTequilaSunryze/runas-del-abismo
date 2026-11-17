@@ -4,10 +4,8 @@ import { SPELLS } from '../src/core/classes/spells';
 import { cast, createCombat, current, endTurn, move, type UnitSpec } from '../src/core/combat/engine';
 import { makeHero } from '../src/core/classes/factory';
 import { makeEnemy } from '../src/content/enemies';
-import { SETS, setBonus } from '../src/core/items/sets';
-import { SLOTS, type Item } from '../src/core/items/items';
 import { tuned, UPGRADES } from '../src/core/upgrades';
-import { championOf, cleanChampion, finishFight, genLoot, heroSpec, metaAction, newArena, newRun, type Champion } from '../src/game/run';
+import { championOf, cleanChampion, finishFight, heroSpec, metaAction, newArena, newRun, type Champion } from '../src/game/run';
 import { autoplay } from './helpers';
 
 const hero = (cls: 'arquero' | 'guerrero', routes: string[], pos = { x: 1, y: 3 }): UnitSpec => makeHero({ cls, name: 'H', owner: 'p0', routes, pos, level: 3 });
@@ -55,34 +53,6 @@ describe('arquero', () => {
     while (current(s)!.id !== me.id) endTurn(s, current(s)!.id);
     const r = cast(s, me.id, 'perforante', { x: 6, y: 3 });
     expect(r.ok && r.events.filter((e) => e.t === 'damage').length).toBe(2);
-  });
-});
-
-describe('sets', () => {
-  const piece = (set: string, slot: string): Item => ({ slot: slot as Item['slot'], name: 'x', rarity: 1, stats: {}, set });
-  it('cada set tiene 3 piezas en ranuras válidas', () => {
-    for (const s of Object.values(SETS)) { expect(Object.keys(s.pieces)).toHaveLength(3); for (const sl of Object.keys(s.pieces)) expect(SLOTS).toContain(sl); }
-  });
-  it('2 piezas dan el primer bonus y 3 el rasgo', () => {
-    const two = setBonus({ peto: piece('bastion', 'peto'), casco: piece('bastion', 'casco') });
-    expect(two.stats).toHaveLength(1); expect(two.traits).toEqual([]);
-    const three = setBonus({ peto: piece('bastion', 'peto'), casco: piece('bastion', 'casco'), botas: piece('bastion', 'botas') });
-    expect(three.traits).toEqual(['guard']);
-  });
-  it('el set cambia las estadísticas del héroe', () => {
-    const run = newRun('T', 3, [{ owner: 'a', name: 'A', cls: 'guerrero', routes: ['baluarte'] }]);
-    const h = run.heroes[0]!;
-    const before = heroSpec(h).armor;
-    h.equip = { peto: piece('bastion', 'peto'), casco: piece('bastion', 'casco') };
-    expect(heroSpec(h).armor).toBe(before + 2);
-  });
-  it('el botín favorece el set empezado', () => {
-    const run = newRun('T', 3, [{ owner: 'a', name: 'A', cls: 'guerrero', routes: ['baluarte'] }]);
-    const h = run.heroes[0]!;
-    h.equip = { peto: piece('bastion', 'peto') };
-    let n = 0;
-    for (let i = 0; i < 200; i++) if (genLoot(run, h, 0).set === 'bastion') n++;
-    expect(n).toBeGreaterThan(20);
   });
 });
 

@@ -27,7 +27,7 @@ export interface SpellSlot {
   id: string;
   cd: number;
   /** runa engarzada */
-  rune?: string;
+  imbue?: 'fuego' | 'vampiro' | 'veneno';
   /** mejoras elegidas al subir de nivel (ids de UPGRADES) */
   ups?: string[];
   /** consumibles: usos que quedan (sin definir = hechizo normal) */
@@ -55,6 +55,9 @@ export interface Unit {
   armor: number;
   /** % de daño extra */
   power: number;
+  /** % de daño extra con hechizos físicos o mágicos (equipo) */
+  powerPhys?: number;
+  powerMagic?: number;
   /** % de crítico */
   crit: number;
   ap: number;

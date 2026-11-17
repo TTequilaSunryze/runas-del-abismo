@@ -1,7 +1,7 @@
 // Zona 2: El Bosque Corrompido. Equipo y eventos de grupo.
 import type { ItemTheme } from '../../core/items/items';
 import { boon, healPct, losePct, type EventDef } from '../zona1/events';
-import { addAlly, giveRelic, giveRune } from '../../game/run';
+import { addAlly, giveItem, giveRelic } from '../../game/run';
 
 export const ZONA2_ITEMS: ItemTheme = {
   names: {
@@ -64,9 +64,9 @@ export const ZONA2_EVENTS: EventDef[] = [
     id: 'semillas', title: 'Las Semillas Susurrantes',
     text: 'Tres semillas negras laten en un tocón. Cada una promete algo distinto.',
     options: [
-      { label: 'La semilla del fuego', hint: 'Todos ganan una runa de Fuego.', apply: (run) => { for (const h of run.heroes) h.runes.push('fuego'); return 'La semilla arde y deja una runa en cada mano.'; } },
-      { label: 'La semilla del veneno', hint: 'Todos ganan una runa de Veneno.', apply: (run) => { for (const h of run.heroes) h.runes.push('veneno'); return 'La semilla se pudre y deja una runa en cada mano.'; } },
-      { label: 'La semilla del eco', hint: 'Todos ganan una runa rara al azar, pero pierden el 20% de la vida actual.', apply: (run) => { for (const h of run.heroes) { losePct(h, 0.2); giveRune(run, h, true); } return 'La semilla grita. Os zumban los oídos un buen rato.'; } },
+      { label: 'La semilla del fuego', hint: 'Todos ganan un objeto Uncommon o mejor.', apply: (run) => { for (const h of run.heroes) giveItem(run, h, 'combat', 1); return 'La semilla arde y deja algo en cada mano.'; } },
+      { label: 'La semilla del veneno', hint: 'Todos ganan un objeto.', apply: (run) => { for (const h of run.heroes) giveItem(run, h); return 'La semilla se pudre y deja algo en cada mano.'; } },
+      { label: 'La semilla del eco', hint: 'Todos ganan un objeto Rare o mejor, pero pierden el 20% de la vida actual.', apply: (run) => { for (const h of run.heroes) { losePct(h, 0.2); giveItem(run, h, 'combat', 2); } return 'La semilla grita. Os zumban los oídos un buen rato.'; } },
     ],
   },
   {

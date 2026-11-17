@@ -17,7 +17,7 @@ export interface LobbyPlayer {
   routes: string[];
   host: boolean;
   perks: Perks;
-  /** runas desbloqueadas por este jugador */
+  /** reservado */
   unlocked: string[];
   /** solo del anfitrión: ascensión elegida y si es el reto diario */
   asc: number;

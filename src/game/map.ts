@@ -1,7 +1,7 @@
 // Mapa de un acto: grafo por capas (estilo Slay the Spire). Cada nodo enlaza con 1-2 nodos de la capa siguiente.
 import { rand, randInt, shuffle, type RngBox } from '../core/rng';
 
-export type MapKind = 'combat' | 'elite' | 'event' | 'rest' | 'shop' | 'treasure' | 'boss' | 'forge' | 'altar' | 'gamble' | 'cage' | 'shrine';
+export type MapKind = 'combat' | 'elite' | 'event' | 'rest' | 'shop' | 'boss' | 'cage' | 'shrine';
 export interface ActMap {
   /** capas de nodos: la última es el jefe */
   layers: MapKind[][];
