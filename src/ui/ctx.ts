@@ -18,7 +18,7 @@ if (!params.get('p')) store.set('rda_id', id);
 export const ui = {
   root: document.getElementById('app')!,
   myId: id,
-  me: { name: store.get('rda_name') ?? 'Héroe', cls: 'guerrero' as ClassId, routes: ['base'] as string[] },
+  me: { name: store.get('rda_name') ?? 'Héroe', cls: 'zorro' as ClassId, routes: ['base'] as string[] },
   session: null as Session | null,
   board: null as Board | null,
   screen: '',

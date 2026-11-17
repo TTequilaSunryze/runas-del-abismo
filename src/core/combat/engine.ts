@@ -39,8 +39,10 @@ const THORNS = 0.3;
 const ENRAGE_POWER = 40;
 const BOMB_DMG = 8;
 const BOMB_PCT = 0.15;
-/** Cosecha de almas: armadura fija por enemigo muerto con el Carcelero vivo, hasta este tope por combate. */
-export const SOUL_ARMOR_CAP = 6;
+/** Cosecha de almas: cada tantas almas de la partida, +1 de armadura permanente. */
+export const SOULS_PER_ARMOR = 5;
+/** Cosecha (hechizo): tope de escudo. */
+const SOUL_SHIELD_CAP = 20;
 /** Élites y jefes: cada punto de PA/PM (o casilla de empuje) se tira dos veces y solo entra si salen las dos. */
 export const RANK_ROLL = 0.7;
 /** Placaje: proporción de PM que conservas al salir de casillas pegadas a enemigos. */
@@ -106,7 +108,7 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
       for (const k of s.units) {
         if (k.souls === undefined || !alive(k) || k.team === u.team) continue;
         k.souls++;
-        const gain = k.souls <= SOUL_ARMOR_CAP ? 1 : 0;
+        const gain = k.souls % SOULS_PER_ARMOR === 0 ? 1 : 0;
         k.armor += gain;
         ev.push({ t: 'soul', unit: k.id, armor: gain });
       }
@@ -178,7 +180,7 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
       u.shield = Math.min(GUARD_CAP, Math.round(u.maxHp * GUARD_SHIELD));
       ev.push({ t: 'shield', unit: u.id, amount: u.shield });
     }
-    for (const sp of u.spells) if (sp.cd > 0) sp.cd--;
+    for (const sp of u.spells) { if (sp.cd > 0) sp.cd--; delete sp.uses; delete sp.free; }
     if (hasTrait(u, 'regen') && !late) heal(u, u.maxHp * REGEN, ev);
     // muerte súbita: desde la ronda 30 el Abismo consume a todos, cada vez más
     if (s.round >= SUDDEN_ROUND && u.ai !== 'pillar') hurt(s, u, u.maxHp * 0.05 * (s.round - SUDDEN_ROUND + 1), ev, 'abismo', { pierce: true });
@@ -321,7 +323,8 @@ export function castProblem(s: CombatState, u: Unit, base: SpellDef, at: Pos): s
   const def = tuned(SPELLS[base.id] ?? base, slot);
   if (slot.cd > 0) return 'Hechizo en enfriamiento';
   if (slot.charges !== undefined && slot.charges <= 0) return 'No te quedan';
-  if (u.ap < def.ap) return 'No tienes PA suficientes';
+  if (def.perTurn && (slot.uses ?? 0) >= def.perTurn) return def.perTurn === 1 ? 'Ya lo usaste este turno' : `Máximo ${def.perTurn} veces por turno`;
+  if (u.ap < (slot.free ? 0 : def.ap)) return 'No tienes PA suficientes';
   if (def.swapShadow) {
     const sh = marksOf(s, 'shadow', u.id)[0];
     if (!sh) return 'No tienes Sombra';
@@ -360,6 +363,12 @@ export function castProblem(s: CombatState, u: Unit, base: SpellDef, at: Pos): s
   if (def.hookOnly && t?.id !== u.hooked) return 'Solo sobre el enemigo enganchado';
   if (def.dash && !dashCell(s, u, at)) return 'No hay hueco junto al objetivo';
   return null;
+}
+
+/** PA que le cuesta ahora a `u` lanzar el hechizo (0 si lo tiene gratis tras rematar). */
+export function apCost(u: Unit, id: string): number {
+  const slot = u.spells.find((x) => x.id === id);
+  return slot?.free ? 0 : spellOf(u, id)?.ap ?? 99;
 }
 
 /** Linterna de tu bando pegada a ti (también en diagonal). */
@@ -411,8 +420,10 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
   const def = spellOf(u, spellId)!;
 
   const ev: GameEvent[] = [{ t: 'cast', unit: u.id, spell: def.id, at: { ...at }, element: def.element }];
-  u.ap -= def.ap;
   const slotUsed = u.spells.find((x) => x.id === def.id)!;
+  u.ap -= slotUsed.free ? 0 : def.ap;
+  delete slotUsed.free;
+  slotUsed.uses = (slotUsed.uses ?? 0) + 1;
   slotUsed.cd = def.cd > 0 ? def.cd + 1 : 0;
   if (slotUsed.charges !== undefined) slotUsed.charges--;
   // atacar rompe la invisibilidad
@@ -438,7 +449,7 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
   if (def.selfBuff2) addStatus(u, def.selfBuff2.kind, def.selfBuff2.turns, def.selfBuff2.stacks ?? 1, ev);
   if (def.selfMp) { u.mp += def.selfMp; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: def.selfMp }); }
   if (def.hookOnly) { delete u.hooked; u.spells = u.spells.filter((sp) => sp.id !== def.id); }
-  if (def.soulShield) { const sh = def.soulShield * (u.souls ?? 0); if (sh > 0) { u.shield += sh; ev.push({ t: 'shield', unit: u.id, amount: sh }); } }
+  if (def.soulShield) { const sh = Math.min(SOUL_SHIELD_CAP, def.soulShield * (u.souls ?? 0)); if (sh > 0) { u.shield += sh; ev.push({ t: 'shield', unit: u.id, amount: sh }); } }
   if (def.swapShadow) {
     // intercambio con la Sombra: ignora el placaje
     const sh = marksOf(s, 'shadow', u.id)[0]!;
@@ -477,6 +488,8 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
         const raw = randInt(s, fu.dmg[0], fu.dmg[1]) * (1 + (u.power + (u.statuses.empower?.stacks ?? 0)) / 100) * (foe.statuses.mark ? MARK_MULT : 1);
         hurt(s, foe, raw, ev, def.id, { element: fu.element });
         if (u.essence !== undefined && !essenceSpent) u.essence = Math.min(3, u.essence + 1);
+        // remate: se puede volver a usar gratis este turno
+        if (def.resetOnKill && !alive(foe) && !s.over) { slotUsed.uses = 0; slotUsed.free = true; ev.push({ t: 'reset', unit: u.id, spell: def.id }); }
       }
     }
     if (def.shadow) {
@@ -509,7 +522,7 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
   }
   const wantTeam = def.target === 'enemy' || def.target === 'ground' ? (u.team === 'hero' ? 'enemy' : 'hero') : u.team;
   // gancho: se lleva al primer enemigo que encuentre la cadena
-  const main = def.cone ? undefined : def.hook || def.firstHit ? firstFoeTo(s, u, at) : unitAt(s, at);
+  const main = def.cone ? undefined : def.hook || def.firstHit || def.pull ? firstFoeTo(s, u, at) : unitAt(s, at);
   const lane = def.line ? lineCells(u.pos, at) : def.cone ? coneCells(u.pos, at, def.cone) : [];
   const inArea = (p: Pos): boolean => !!def.area && (def.square ? Math.max(Math.abs(p.x - at.x), Math.abs(p.y - at.y)) : dist(p, at)) <= def.area;
   const targets = s.units.filter((t) => alive(t) && t.team === wantTeam && (t === main || inArea(t.pos) || lane.some((p) => same(p, t.pos))));
@@ -536,7 +549,7 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
   let hits = 0;
   // el orbe rebota: recorre la línea dos veces
   for (let pass = 0; pass < (def.bounce ?? 1); pass++)
-  for (const t of targets) {
+  for (const t of pass ? [...targets].reverse() : targets) {
     if (s.over || !alive(t)) continue;
     if (def.dmg) {
       const crit = rand(s) * 100 < u.crit + (def.crit ?? 0);
@@ -548,8 +561,10 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
       hits++;
       // espinas: devuelven parte del daño cuerpo a cuerpo
       if (got > 0 && hasTrait(t, 'thorns') && dist(t.pos, u.pos) <= 1 && alive(u)) hurt(s, u, got * THORNS, ev, 'thorns', { pierce: true });
-      if (hasTrait(u, 'ignite') && alive(t)) addStatus(t, 'burn', 2, 1, ev);
+      if (hasTrait(u, 'ignite') && alive(t) && !pass) addStatus(t, 'burn', 2, 1, ev);
     }
+    // a la vuelta del orbe solo se repite el daño: los efectos se aplican una vez
+    if (pass) continue;
     if (def.heal) heal(t, def.heal * mend, ev);
     if (def.healPct) heal(t, t.maxHp * def.healPct * mend, ev);
     if (def.shield && alive(t)) {
@@ -578,10 +593,11 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
   }
   if (def.dmg && slotUsed.charges === undefined && alive(u)) shadowEcho(s, u, def, main, targets, ev);
   if (def.cone && def.push) coneBlast(s, u, def, at, targets, ev);
-  if (def.hook && main && alive(main) && alive(u)) {
+  const pullN = def.hook?.pull ?? def.pull ?? 0;
+  if (pullN && main && alive(main) && alive(u) && main.team !== u.team) {
     // arrastra al enganchado hacia ti (élites y jefes: dos tiradas por casilla)
-    const n = landed(s, main, def.hook.pull);
-    if (n < def.hook.pull) ev.push({ t: 'resist', unit: main.id, what: n ? 'Resiste parte del arrastre' : 'Resiste el arrastre' });
+    const n = landed(s, main, pullN);
+    if (n < pullN) ev.push({ t: 'resist', unit: main.id, what: n ? 'Resiste parte del arrastre' : 'Resiste el arrastre' });
     const [dx, dy] = dirOf(main.pos, u.pos);
     for (let i = 0; i < n && dist(main.pos, u.pos) > 1; i++) {
       const p = { x: main.pos.x + dx, y: main.pos.y + dy };
@@ -590,8 +606,14 @@ export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): 
       ev.push({ t: 'push', unit: main.id, to: { ...p } });
       springSnare(s, main, ev);
     }
-    u.hooked = main.id;
-    if (!u.spells.some((sp) => sp.id === 'k_viaje')) u.spells.push({ id: 'k_viaje', cd: 0, temp: true });
+    if (def.hook) {
+      u.hooked = main.id;
+      if (!u.spells.some((sp) => sp.id === 'k_viaje')) u.spells.push({ id: 'k_viaje', cd: 0, temp: true });
+    }
+  }
+  if (def.sphereShield && alive(u)) {
+    const sh = def.sphereShield * marksOf(s, 'sphere', u.id).length;
+    if (sh > 0) { u.shield += sh; ev.push({ t: 'shield', unit: u.id, amount: sh }); }
   }
   if (def.sphere && alive(u)) {
     // el máximo sale de la mejor versión que tengas de un hechizo de esferas (las bendiciones lo suben)

@@ -93,3 +93,20 @@ Tres clases con mecánica propia (nombres y diseños originales). Cada una tiene
 - **Acechador de Sombras** (60 PV, 7 PA, 5 PM, crítico 12). Shuriken sombrío (línea recta, primer enemigo), Tajo de sombra (a los pegados a ti y a tu Sombra, −1 PM una sola vez) y Sombra viviente (2 PA: la Sombra dura 2 turnos; mientras exista, Intercambiar por 1 PA te cambia de sitio con ella ignorando el placaje). *La Sombra* es un marcador fantasma: sin vida, sin turno y sin bloquear; los enemigos no pueden atacarla. Replica cada hechizo de daño al **50%** (también contra el mismo enemigo) y no repite los efectos de control. Bendiciones *Filos* (shuriken, tajo de 2 PM, Marca mortal) y *Umbra* (Sombra de 3 turnos, réplica al 75%, Ocaso).
 
 **Modelos animados** (`src/render/models.ts`): las cuatro clases nuevas tienen modelos de 32×32 pintados por código con contorno automático, con animaciones de reposo, andar, ataque, lanzamiento, especial (encanto, dispersión, sombra) y muerte. Llevan sus colores propios; el color del jugador va en el anillo de debajo. Las clases antiguas siguen con sus sprites de 16×16.
+
+## v8 · Equilibrio, ritmo de mejoras y clases jugables
+
+- **Clases jugables**: Hechicera Zorro, Tejedora de Esferas, Acechador de Sombras, Carcelero de Almas y Arquero. Guerrero, Mago, Pícaro y Clérigo quedan ocultos (`hidden` en `classes.ts`); sus hechizos y bendiciones se conservan.
+- **Estadísticas iguales**: todas empiezan con 60 PV, 6 PA y 3 PM, sin bonus de daño.
+- **Usos por turno** (`perTurn`): Orbe, Pulso, Shuriken y Tajo de sombra, 2; Impulso, Descarga y Sentencia, 1. *Impulso espiritual* se puede repetir gratis (0 PA) si su proyectil remata.
+- **Zorro**: el orbe hace daño a la ida y a la vuelta, pero sus efectos se aplican una vez. Encanto (alcance 1-7) atrae 2 casillas.
+- **Tejedora**: esferas de 2 turnos, Pulso 1-5; Dispersión 3 PA, cono de 2, recarga 1; Descarga 5 PA, 1-5, sin recarga y a un solo objetivo.
+- **Acechador**: Shuriken 3 PA, 1-5 en línea; Tajo sin recarga, −1 PM. Animación de giro del personaje y de su Sombra.
+- **Carcelero**: Sentencia 3 PA, 1-5, sin recarga; Linterna recarga 2; Despellejar 3 PA. *Almas*: cuentan en toda la partida (indicador en el HUD y en Grupo); cada 5, +1 de armadura permanente. Cosecha: 2 de escudo por alma (máx. 20).
+- **Una recompensa por sala**: combate normal, un objeto y una mejora de hechizo alternos; élite, una bendición; jefe, un objeto, una runa rara y una reliquia. El tesoro ya no da runa.
+- **Tope de mejoras**: un hechizo se mejora como mucho 2 veces por partida (bendiciones incluidas) y solo con una mejora elemental. Nunca se ofrece mejorar un hechizo que no tienes: se ofrece antes el hechizo.
+- **Mejoras elementales**: Ígneo (fuego + quemadura), Gélido (hielo + −1 PM), Tóxico (veneno x2) y Umbrío (sombra + 20% de robo de vida). Potenciado baja a +20%.
+- **6 hechizos nuevos por clase** en 3 estilos por clase; los rasgos de 3 piezas ya no se repiten entre estilos.
+- **Dificultad**: `DIFF` en `run.ts` (zona 1 −50%, +45% por zona; grupos de 1-2 jugadores, un poco más fácil). Simulación con la IA de campeón (30 partidas): tríos 40-60%, 4 jugadores ~63%, dúos 17-37%.
+- **El Abismo (zona 4)** ya no es opcional: no se muestra hasta ganar por primera vez y desde entonces se juega siempre.
+- **Interfaz**: ficha de hechizo en lista (coste, daño, alcance, zona, usos, recarga y efectos); retrato del personaje en la selección; barra de maestría con lo que falta para el siguiente nivel.

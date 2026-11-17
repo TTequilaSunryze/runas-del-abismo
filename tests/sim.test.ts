@@ -2,7 +2,7 @@
 // Larga: solo corre con SIMN=<partidas> (p. ej. `SIMN=60 npx vitest run tests/sim.test.ts`).
 // La versión corta comprueba siempre que las clases nuevas no atascan los combates.
 import { expect, it } from 'vitest';
-import { bossInfo, chooseNode, finishFight, leaveNode, metaAction, newRun, resolveEvent, type RunState } from '../src/game/run';
+import { DIFF, bossInfo, chooseNode, finishFight, leaveNode, metaAction, newRun, resolveEvent, type RunState } from '../src/game/run';
 import { autoplay } from './helpers';
 import type { ClassId } from '../src/core/state';
 
@@ -40,14 +40,21 @@ function play(classes: ClassId[], seed: number): { run: RunState; stalls: number
 
 it.skipIf(!(globalThis as unknown as { process?: { env: Record<string, string | undefined> } }).process?.env.SIMN)('simulación de equilibrio (3 y 4 jugadores)', () => {
   const comps: Record<string, ClassId[][]> = {
-    '3 base': [['guerrero', 'mago', 'clerigo']],
-    '3 +zorro': [['guerrero', 'zorro', 'clerigo']],
-    '3 +esferas': [['guerrero', 'esferas', 'clerigo']],
-    '3 +carcelero': [['carcelero', 'mago', 'clerigo']],
-    '3 +acechador': [['acechador', 'mago', 'clerigo']],
-    '4 base': [['guerrero', 'mago', 'clerigo', 'arquero']],
+    '3 arq+carc+arq': [['arquero', 'carcelero', 'arquero']],
+    '3 arq+carc+zorro': [['arquero', 'carcelero', 'zorro']],
+    '3 arq+carc+esferas': [['arquero', 'carcelero', 'esferas']],
+    '3 arq+carc+acechador': [['arquero', 'carcelero', 'acechador']],
+    '3 arq+zorro+arq': [['arquero', 'zorro', 'arquero']],
+    '2 zorro+carc': [['zorro', 'carcelero']],
+    '2 arq+carc': [['arquero', 'carcelero']],
+    '1 carc': [['carcelero']],
     '4 nuevas': [['carcelero', 'esferas', 'zorro', 'acechador']],
   };
+  const env = (globalThis as unknown as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
+  if (env.DBASE) DIFF.base = Number(env.DBASE);
+  if (env.DZONE) DIFF.perZone = Number(env.DZONE);
+  const only = (globalThis as unknown as { process?: { env: Record<string, string | undefined> } }).process?.env.SIMONLY;
+  if (only) for (const k of Object.keys(comps)) if (!k.includes(only)) delete comps[k];
   const N = Number((globalThis as unknown as { process?: { env: Record<string, string | undefined> } }).process?.env.SIMN ?? 30);
   for (const [name, list] of Object.entries(comps)) {
     let wins = 0, stalls = 0; const zones = [0, 0, 0, 0, 0];
@@ -61,7 +68,7 @@ it.skipIf(!(globalThis as unknown as { process?: { env: Record<string, string | 
 }, 600000);
 
 it('partidas con las clases nuevas terminan sin atascos (3 y 4 jugadores)', () => {
-  for (const [list, seed] of [[['esferas', 'zorro', 'clerigo'], 101], [['carcelero', 'esferas', 'zorro', 'acechador'], 202]] as const) {
+  for (const [list, seed] of [[['esferas', 'zorro', 'arquero'], 101], [['carcelero', 'esferas', 'zorro', 'acechador'], 202]] as const) {
     const { run, stalls } = play([...list] as ClassId[], seed);
     expect(['won', 'lost']).toContain(run.phase);
     expect(stalls).toBe(0);

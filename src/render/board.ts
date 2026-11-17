@@ -14,7 +14,12 @@ const STATUS_COLOR: Record<string, string> = { burn: '#ff8a30', poison: '#7fe05a
 export const STATUS_NAME: Record<string, string> = { burn: 'Quemadura', poison: 'Veneno', slow: 'Ralentizado', stun: 'Aturdido', mark: 'Marcado', empower: 'Potenciado', reach: 'Alcance+', invis: 'Invisible', exposed: 'Expuesto', charm: 'Encantado' };
 
 interface Float { x: number; y: number; text: string; color: string; t0: number }
-interface Shot { x0: number; y0: number; x1: number; y1: number; color: string; t0: number; dur: number }
+interface Shot { x0: number; y0: number; x1: number; y1: number; color: string; t0: number; dur: number; orb?: boolean }
+/** Onda expansiva (esfera nueva, golpe giratorio) */
+interface Ring { x: number; y: number; color: string; t0: number; dur: number; r: number; spin?: boolean }
+/** golpes giratorios: el personaje (y su Sombra) dan una vuelta */
+const SPIN_SPELLS = ['s_tajo', 'k_despellejar', 'z_colas', 'g_remolino', 'torbellino'];
+const SPIN_MS = 420;
 interface Ghost { kind: string; team: string; idx: number; x: number; y: number; t0: number }
 const ELEMENT_COLOR: Record<string, string> = { fire: '#ff8a30', ice: '#8ae0ff', poison: '#7fe05a', shadow: '#b07cff', holy: '#ffe9a0' };
 const ELEMENT_NAME: Record<string, string> = { fire: 'fuego', ice: 'hielo', poison: 'veneno', shadow: 'sombra', holy: 'sagrado' };
@@ -42,6 +47,8 @@ export class Board {
   private flash = new Map<number, number>();
   private floats: Float[] = [];
   private shots: Shot[] = [];
+  private rings: Ring[] = [];
+  private spins = new Map<number, number>();
   private ghosts: Ghost[] = [];
   private lunge = new Map<number, { t0: number; dx: number; dy: number }>();
   /** animación de hechizo en curso (modelos animados) */
@@ -106,6 +113,18 @@ export class Board {
       const u = 'unit' in e ? c.units.find((x) => x.id === e.unit) : undefined;
       const from = u ? this.shown.get(u.id) ?? u.pos : undefined;
       if (e.t === 'cast' && u) this.acts.set(u.id, { t0: now, anim: animFor(e.spell, !!SPELLS[e.spell]?.dmg) });
+      if (e.t === 'cast' && u && from && SPIN_SPELLS.includes(e.spell)) {
+        // giro: el personaje da una vuelta y un tajo circular le rodea (también a su Sombra)
+        this.spins.set(u.id, now);
+        const sh = c.marks?.find((m) => m.kind === 'shadow' && m.owner === u.id);
+        for (const p of [from, ...(sh ? [sh.pos] : [])]) this.rings.push({ x: (p.x + 0.5) * TILE, y: (p.y + 0.55) * TILE, color: e.element ? ELEMENT_COLOR[e.element] ?? '#e8e0ff' : '#e8e0ff', t0: now, dur: SPIN_MS, r: TILE * 0.85, spin: true });
+      }
+      if (e.t === 'markAdd' && e.kind === 'sphere') {
+        // la esfera aparece con una pequeña explosión
+        const x = (e.at.x + 0.5) * TILE, y = (e.at.y + 0.45) * TILE;
+        this.rings.push({ x, y, color: '#c9a0ff', t0: now + 150, dur: 380, r: TILE * 0.55 });
+        for (let i = 0; i < 8; i++) this.shots.push({ x0: x, y0: y, x1: x + Math.cos(i * 0.785) * TILE * 0.6, y1: y + Math.sin(i * 0.785) * TILE * 0.6, color: '#a070ff', t0: now + 150, dur: 300 });
+      }
       if (e.t === 'echo') {
         // la Sombra replica el golpe: un proyectil sale de su casilla
         const dx = e.at.x - e.from.x, dy = e.at.y - e.from.y, len = Math.hypot(dx, dy);
@@ -116,7 +135,13 @@ export class Board {
         if (len > 0) {
           this.lunge.set(u.id, { t0: now, dx: dx / len, dy: dy / len });
           if (dx !== 0) this.faceLeft.set(u.id, dx < 0);
-          if (len > 1.5) this.shots.push({ x0: (from.x + 0.5) * TILE, y0: (from.y + 0.4) * TILE, x1: (e.at.x + 0.5) * TILE, y1: (e.at.y + 0.4) * TILE, color: ELEMENT_COLOR[e.element ?? ''] ?? '#ffe08a', t0: now, dur: Math.min(320, 90 + len * 35) });
+          const bounce = SPELLS[e.spell]?.bounce;
+          if (bounce) {
+            // el orbe va hasta el final de la línea y vuelve a la mano
+            const dur = Math.min(380, 120 + len * 40), x0 = (from.x + 0.5) * TILE, y0 = (from.y + 0.4) * TILE, x1 = (e.at.x + 0.5) * TILE, y1 = (e.at.y + 0.4) * TILE;
+            const col = e.spell === 'z_orbe' ? '#4ad0ff' : ELEMENT_COLOR[e.element ?? ''] ?? '#ffe08a';
+            this.shots.push({ x0, y0, x1, y1, color: col, t0: now, dur, orb: true }, { x0: x1, y0: y1, x1: x0, y1: y0, color: col, t0: now + dur, dur, orb: true });
+          } else if (len > 1.5) this.shots.push({ x0: (from.x + 0.5) * TILE, y0: (from.y + 0.4) * TILE, x1: (e.at.x + 0.5) * TILE, y1: (e.at.y + 0.4) * TILE, color: ELEMENT_COLOR[e.element ?? ''] ?? '#ffe08a', t0: now, dur: Math.min(320, 90 + len * 35) });
         }
       } else if (e.t === 'move' && u && e.path.length) {
         const last = e.path[e.path.length - 1]!;
@@ -146,6 +171,7 @@ export class Board {
       else if (e.t === 'raise') float(e.unit, 'Alza muertos', '#c9a0ff');
       else if (e.t === 'summon') float(e.unit, 'Invocado', '#c77dff');
       else if (e.t === 'phase') float(e.unit, '¡FASE 2!', '#ff3060');
+      else if (e.t === 'reset') float(e.unit, `¡Remate! ${SPELLS[e.spell]?.name ?? ''} gratis`, '#4ad0ff');
     }
   }
 
@@ -192,14 +218,20 @@ export class Board {
     for (const m of c.marks ?? []) {
       const cx = (m.pos.x + 0.5) * TILE, cy = (m.pos.y + 0.45) * TILE, pulse = 1 + Math.sin(performance.now() / 260 + m.id) * 0.06;
       if (m.kind === 'sphere') {
-        g.fillStyle = 'rgba(122,63,192,.25)'; g.beginPath(); g.arc(cx, cy, TILE * 0.32 * pulse, 0, 6.3); g.fill();
-        g.fillStyle = '#3a1a5a'; g.beginPath(); g.arc(cx, cy, TILE * 0.2 * pulse, 0, 6.3); g.fill();
-        g.fillStyle = '#7a3fc0'; g.beginPath(); g.arc(cx - 2, cy - 2, TILE * 0.13, 0, 6.3); g.fill();
-        g.fillStyle = '#f0d8ff'; g.fillRect(cx - TILE * 0.09, cy - TILE * 0.1, 4, 4);
+        // esfera oscura como en la ficha: halo violeta, anillo claro y núcleo brillante que flota
+        const fy = cy + Math.sin(now / 300 + m.id) * 3;
+        const gl = g.createRadialGradient(cx, fy, 2, cx, fy, TILE * 0.42 * pulse);
+        gl.addColorStop(0, 'rgba(200,150,255,.55)'); gl.addColorStop(1, 'rgba(122,63,192,0)');
+        g.fillStyle = gl; g.beginPath(); g.arc(cx, fy, TILE * 0.42 * pulse, 0, 6.3); g.fill();
+        g.fillStyle = '#2a1050'; g.beginPath(); g.arc(cx, fy, TILE * 0.19, 0, 6.3); g.fill();
+        g.strokeStyle = '#b07cff'; g.lineWidth = 2; g.beginPath(); g.arc(cx, fy, TILE * 0.19, 0, 6.3); g.stroke();
+        g.fillStyle = '#9a5cf0'; g.beginPath(); g.arc(cx, fy, TILE * 0.11 * pulse, 0, 6.3); g.fill();
+        g.fillStyle = '#f6eaff'; g.beginPath(); g.arc(cx - 2, fy - 2, TILE * 0.05, 0, 6.3); g.fill();
       } else if (m.kind === 'shadow') {
         // la Sombra: un clon oscuro del Acechador, quieto en su casilla
         const o = c.units.find((x) => x.id === m.owner);
-        if (o) drawUnit(g, o.kind, o.team, 0, cx, (m.pos.y + 1) * TILE - 6, TILE, { anim: 'idle', frame: Math.floor(now / 260) % ANIM_FRAMES.idle, tint: 'shadow', alpha: 0.85, flip: this.faceLeft.get(o.id) ?? false });
+        const sk = o && this.spins.has(o.id) ? (now - this.spins.get(o.id)!) / SPIN_MS : 1;
+        if (o) drawUnit(g, o.kind, o.team, 0, cx, (m.pos.y + 1) * TILE - 6, TILE, { anim: sk < 1 ? 'attack' : 'idle', frame: sk < 1 ? Math.floor(sk * ANIM_FRAMES.attack) : Math.floor(now / 260) % ANIM_FRAMES.idle, tint: 'shadow', alpha: 0.85, flip: sk < 1 ? Math.floor(sk * 6) % 2 === 0 : this.faceLeft.get(o.id) ?? false });
       } else if (m.kind === 'lantern') {
         g.fillStyle = 'rgba(127,224,90,.18)'; g.beginPath(); g.arc(cx, cy + 4, TILE * 0.45 * pulse, 0, 6.3); g.fill();
         g.fillStyle = '#6a6a78'; g.fillRect(cx - 1, cy - TILE * 0.3, 2, TILE * 0.12);
@@ -281,7 +313,9 @@ export class Board {
       const lk = lg ? (now - lg.t0) / LUNGE_MS : 1;
       const swing = lk < 1 ? Math.sin(lk * Math.PI) : 0;
       const def0 = u.team === 'hero';
-      const left = this.faceLeft.get(u.id) ?? !def0;
+      const sp0 = this.spins.get(u.id), spk = sp0 === undefined ? 1 : (now - sp0) / SPIN_MS;
+      // durante el giro mira alternativamente a cada lado
+      const left = spk < 1 ? Math.floor(spk * 6) % 2 === 0 : this.faceLeft.get(u.id) ?? !def0;
       drawUnit(g, u.kind, u.team, heroIdx.get(u.id) ?? 0, cx + (lg ? lg.dx * swing * TILE * 0.3 : 0), by + bob + (lg ? lg.dy * swing * TILE * 0.3 : 0), TILE,
         { flash: (this.flash.get(u.id) ?? 0) > now, swing, flip: def0 ? left : !left, alpha: u.statuses.invis ? 0.4 : 1, anim, frame });
       this.bars(u, cx, s.y * TILE + 2, heroIdx.get(u.id));
@@ -298,9 +332,31 @@ export class Board {
       const k = (now - d.t0) / 600;
       drawUnit(g, d.kind, d.team, d.idx, (d.x + 0.5) * TILE, (d.y + 1) * TILE - 6 - k * 14, TILE, { alpha: 1 - k, flash: k < 0.3 });
     }
+    // ondas: un aro que se abre; los giros, un tajo en arco que da la vuelta
+    this.rings = this.rings.filter((r) => now - r.t0 < r.dur);
+    for (const r of this.rings) {
+      if (now < r.t0) continue;
+      const k = (now - r.t0) / r.dur;
+      g.globalAlpha = 1 - k; g.strokeStyle = r.color;
+      if (r.spin) {
+        const a0 = -Math.PI / 2 + k * Math.PI * 2;
+        for (let i = 0; i < 3; i++) { g.lineWidth = 6 - i * 2; g.beginPath(); g.ellipse(r.x, r.y, r.r * (0.7 + i * 0.12), r.r * (0.45 + i * 0.08), 0, a0 - 1.6 + i * 0.3, a0); g.stroke(); }
+      } else { g.lineWidth = 4 * (1 - k) + 1; g.beginPath(); g.arc(r.x, r.y, r.r * (0.2 + k * 0.8), 0, 6.3); g.stroke(); }
+      g.globalAlpha = 1;
+    }
     // proyectiles con estela
     this.shots = this.shots.filter((p) => now - p.t0 < p.dur);
     for (const p of this.shots) {
+      if (now < p.t0) continue;
+      if (p.orb) {
+        // orbe brillante: halo, núcleo blanco y una estela de chispas
+        const k = (now - p.t0) / p.dur, x = p.x0 + (p.x1 - p.x0) * k, y = p.y0 + (p.y1 - p.y0) * k;
+        for (let i = 1; i <= 4; i++) { const kk = Math.max(0, k - i * 0.06); g.globalAlpha = 0.5 - i * 0.1; g.fillStyle = p.color; g.beginPath(); g.arc(p.x0 + (p.x1 - p.x0) * kk, p.y0 + (p.y1 - p.y0) * kk, 7 - i, 0, 6.3); g.fill(); }
+        g.globalAlpha = 0.35; g.fillStyle = p.color; g.beginPath(); g.arc(x, y, 14, 0, 6.3); g.fill();
+        g.globalAlpha = 1; g.fillStyle = p.color; g.beginPath(); g.arc(x, y, 8, 0, 6.3); g.fill();
+        g.fillStyle = '#ffffff'; g.beginPath(); g.arc(x - 1, y - 1, 4, 0, 6.3); g.fill();
+        continue;
+      }
       for (let i = 4; i >= 0; i--) {
         const k = Math.max(0, (now - p.t0) / p.dur - i * 0.05);
         g.globalAlpha = 1 - i * 0.2; g.fillStyle = i ? p.color : '#fff';

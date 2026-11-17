@@ -109,6 +109,11 @@ const LOOK: Record<string, [string, string]> = {
   k_sentencia: ['link', 'shadow'], k_viaje: ['dash', 'shadow'], k_linterna: ['lantern', 'poison'], k_farol: ['lantern', 'holy'], k_despellejar: ['whirl', 'steel'], k_cosecha: ['skull', 'arcane'],
   t_pulso: ['orbs', 'shadow'], t_dispersion: ['wind', 'shadow'], t_descarga: ['storm', 'shadow'], t_semilla: ['orbs', 'arcane'], t_implosion: ['whirl', 'shadow'],
   z_orbe: ['fireball', 'shadow'], z_encanto: ['eye', 'shadow'], z_impulso: ['dash', 'arcane'], z_drenaje: ['heart', 'shadow'], z_velo: ['cloud', 'shadow'],
+  z_fuego: ['flame', 'ice'], z_espejismo: ['twin', 'arcane'], z_colas: ['whirl', 'arcane'], z_maldicion: ['eye', 'blood'],
+  t_orbita: ['orbs', 'holy'], t_pozo: ['circle', 'shadow'], t_vacio: ['bolt', 'shadow'], t_eclipse: ['sun', 'shadow'],
+  s_kunai: ['rain', 'steel'], s_paso: ['leap', 'shadow'], s_hoja: ['dagger', 'poison'], s_ejecucion: ['skull', 'blood'],
+  k_grilletes: ['link', 'steel'], k_condena: ['gavel', 'shadow'], k_azote: ['whip', 'shadow'], k_huesos: ['hexshield', 'steel'], k_alma: ['skull', 'shadow'],
+  a_ignea: ['arrow', 'fire'], a_conmocion: ['bolt', 'gold'],
 };
 
 const EL_PAL: Record<string, string> = { fire: 'fire', ice: 'ice', poison: 'poison', holy: 'holy', shadow: 'shadow' };
@@ -212,6 +217,62 @@ export function spellSummary(d: SpellDef): string {
   if (d.detonate) parts.push(`Detona tus esferas: ${d.detonate.dmg[0]}-${d.detonate.dmg[1]} alrededor de cada una`);
   const s = parts.join(', ');
   return (s.charAt(0).toUpperCase() + s.slice(1)) + ` (${spellShape(d)}).`;
+}
+
+/** Efectos de un hechizo, uno por línea (sin el daño, la cura ni el escudo, que van aparte). */
+export function spellEffects(d: SpellDef): string[] {
+  const out: string[] = [];
+  if (d.dash) out.push('Saltas junto al objetivo antes de golpear');
+  if (d.teleport) out.push('Te desplazas a la casilla, ignorando el placaje');
+  if (d.followUp) out.push(`Al llegar, un proyectil daña ${d.followUp.dmg[0]}-${d.followUp.dmg[1]}${d.followUp.element ? ` ${EL[d.followUp.element]}` : ''} al enemigo más cercano (a ${d.followUp.radius} casillas)`);
+  if (d.resetOnKill) out.push('Si remata, puedes volver a usarlo gratis (0 PA)');
+  for (const st of [d.status, d.extraStatus]) if (st) out.push(st.kind === 'exposed' ? `Expuesto: −${st.stacks ?? 1} de armadura ${st.turns} t.` : st.kind === 'slow' ? `Quita ${st.stacks ?? 1} PM (${st.turns} t.)` : st.kind === 'mark' ? `Marca: +30% de daño recibido ${st.turns} t.` : `${ST[st.kind] ?? st.kind}${st.stacks && st.stacks > 1 ? ` x${st.stacks}` : ''} ${st.turns} t.`.replace(/^./, (c) => c.toUpperCase()));
+  if (d.drainAp) out.push(`Quita ${d.drainAp} PA en su próximo turno`);
+  if (d.giveAp) out.push(`Da ${d.giveAp} PA`);
+  if (d.giveMp) out.push(`Da ${d.giveMp} PM`);
+  if (d.selfMp) out.push(`Ganas ${d.selfMp} PM`);
+  if (d.buff?.kind === 'invis') out.push(`Invisible ${d.buff.turns} t.`);
+  else if (d.buff?.kind === 'empower') out.push(`+${d.buff.stacks}% de daño ${d.buff.turns} t.`);
+  else if (d.buff?.kind === 'reach') out.push(`+${d.buff.stacks} de alcance ${d.buff.turns} t.`);
+  if (d.push) out.push(`Empuja ${d.push} casilla${d.push > 1 ? 's' : ''}${d.pushAll ? ' a todos' : ''}`);
+  if (d.pull) out.push(`Atrae ${d.pull} casillas hacia ti`);
+  if (d.hook) out.push(`Engancha y arrastra ${d.hook.pull} casillas hacia ti`);
+  if (d.pierce) out.push('Ignora la armadura');
+  if (d.retreat) out.push(`Retrocedes ${d.retreat} casillas`);
+  if (d.lifesteal) out.push(`Te cura el ${Math.round(d.lifesteal * 100)}% del daño`);
+  if (d.selfShield) out.push(`Ganas escudo ${d.selfShield}`);
+  if (d.selfDmg) out.push(`Te cuesta ${d.selfDmg} PV`);
+  if (d.selfDmgPct) out.push(`Te cuesta el ${Math.round(d.selfDmgPct * 100)}% de tu vida actual`);
+  if (d.crit) out.push(`+${d.crit}% de crítico`);
+  if (d.snare) out.push(`Cepo oculto: ${d.snare.dmg} de daño y detiene`);
+  if (d.summon) out.push(`Invoca: ${d.summon.name}`);
+  if (d.shadow) out.push(`Sombra ${d.shadow.turns} t.: replica tu daño al ${Math.round(d.shadow.echo * 100)}%`);
+  if (d.swapShadow) out.push('Te cambias con tu Sombra');
+  if (d.lantern) out.push(`Linterna ${d.lantern.turns} t.: escudo ${d.lantern.shield}${d.lantern.heal ? ` y cura ${d.lantern.heal}` : ''} a los aliados pegados`);
+  if (d.lanternJump) out.push('Apareces junto al Carcelero');
+  if (d.soulShield) out.push(`Escudo ${d.soulShield} por alma (máx. 20)`);
+  if (d.sphere) out.push(`Deja una esfera ${d.sphere.turns} t. (máx. ${d.sphere.max})`);
+  if (d.sphereShield) out.push(`+${d.sphereShield} de escudo por cada esfera tuya`);
+  if (d.consume) out.push(`Consume tus esferas: +${d.consume.per} de daño por cada una`);
+  if (d.sphereHit) out.push(`Cada esfera que choca daña ${d.sphereHit.dmg[0]}-${d.sphereHit.dmg[1]} y aturde`);
+  if (d.detonate) out.push(`Detona tus esferas: ${d.detonate.dmg[0]}-${d.detonate.dmg[1]} alrededor de cada una`);
+  if (d.revive) out.push(`Resucita con el ${Math.round(d.revive * 100)}% de vida`);
+  if (d.healPct) out.push(`Cura el ${Math.round(d.healPct * 100)}% de la vida`);
+  return out;
+}
+
+/** Ficha de un hechizo en filas (etiqueta, valor): lo que se muestra al pasar el ratón. */
+export function spellRows(d: SpellDef): Array<[string, string]> {
+  const rows: Array<[string, string]> = [['Coste', `${d.ap} PA`]];
+  if (d.dmg) rows.push(['Daño', `${d.dmg[0]}-${d.dmg[1]}${d.element ? ` ${EL[d.element]}` : ''}${d.bounce ? ` ×${d.bounce} (ida y vuelta)` : ''}${d.area && d.range[1] > 0 && !d.line ? ' · 50% al resto del área' : ''}`]);
+  if (d.heal) rows.push(['Curación', `${d.heal}`]);
+  if (d.shield) rows.push(['Escudo', `${d.shield}`]);
+  const where = [d.range[1] === 0 ? 'sin alcance (desde tu casilla)' : `${d.range[0] === d.range[1] ? d.range[1] : `${d.range[0]}-${d.range[1]}`} casillas`, d.straight ? 'en línea recta' : '', d.los && d.range[1] > 1 ? 'necesita visión' : '', d.range[0] >= 2 ? 'no a pegados' : ''].filter(Boolean).join(' · ');
+  rows.push(['Alcance', where.charAt(0).toUpperCase() + where.slice(1)]);
+  rows.push(['Zona', spellShape(d).replace(/^./, (c) => c.toUpperCase())]);
+  rows.push(['Usos', d.perTurn ? `${d.perTurn} por turno` : 'Sin límite por turno']);
+  rows.push(['Recarga', d.cd ? `${d.cd} turno${d.cd > 1 ? 's' : ''}` : 'Ninguna']);
+  return rows;
 }
 
 export function rangeText(d: SpellDef): string {

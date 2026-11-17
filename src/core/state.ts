@@ -31,6 +31,10 @@ export interface SpellSlot {
   charges?: number;
   /** acción temporal (Recorrer la cadena, Tomar la linterna): desaparece cuando deja de servir */
   temp?: boolean;
+  /** veces que se ha lanzado en este turno */
+  uses?: number;
+  /** el próximo lanzamiento no cuesta PA (Impulso espiritual tras rematar) */
+  free?: boolean;
 }
 
 export interface Unit {
@@ -169,6 +173,7 @@ export type GameEvent =
   | { t: 'soul'; unit: number; armor: number }
   /** la Sombra replica un hechizo desde su casilla */
   | { t: 'echo'; unit: number; from: Pos; at: Pos; element?: Element }
+  | { t: 'reset'; unit: number; spell: string }
   | { t: 'markAdd'; kind: string; at: Pos }
   | { t: 'markGone'; kind: string; at: Pos }
   | { t: 'markMove'; kind: string; from: Pos; to: Pos }

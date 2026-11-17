@@ -209,3 +209,19 @@ span.cell { display: inline-flex; align-items: center; justify-content: center; 
 @media (max-width: 760px) { .vol input[type=range] { width: 56px; } }
 .advance.callout { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 50% { box-shadow: 0 0 10px 1px rgba(242,193,78,.35) inset; } }
+/* ficha de hechizo en lista */
+#tip { max-width: 320px; }
+.slist { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 6px 0 4px; font-size: 12px; }
+.slist dt { color: var(--dim, #9a8fb5); }
+.slist dd { margin: 0; color: #f0e8ff; font-weight: 600; }
+.sfx { margin: 2px 0 6px; padding-left: 16px; font-size: 12px; }
+.sfx li { margin: 1px 0; }
+/* selección de personaje: retrato y barra de maestría */
+.pick .portrait { image-rendering: pixelated; width: 96px; height: 96px; margin: 4px auto; display: block; }
+.mbar { display: block; position: relative; height: 14px; width: 100%; background: #1a1426; border: 1px solid #3b2f57; border-radius: 6px; overflow: hidden; margin-top: 4px; }
+.mbar i { display: block; height: 100%; background: linear-gradient(90deg, #7a3fc0, #c9a0ff); }
+.mbar b { position: absolute; inset: 0; font-size: 10px; line-height: 14px; text-align: center; color: #fff; text-shadow: 0 0 2px #000; }
+.souls { color: #9ad0e8; }
+.sbtn .uses { position: absolute; right: 3px; top: 22px; font-size: 10px; background: #2a1d44; color: #e8d8ff; border-radius: 4px; padding: 0 3px; }
+.sbtn .cost.free { background: #1f6a8a; }
+.mnext { display: block; font-size: 10px; margin-top: 2px; }

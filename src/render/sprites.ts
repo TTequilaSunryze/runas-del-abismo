@@ -237,6 +237,20 @@ export function drawUnit(g: CanvasRenderingContext2D, kind: string, team: string
   g.restore();
 }
 
+const portraits = new Map<string, string>();
+/** Retrato de una clase (para la selección de personaje), como imagen. */
+export function classPortraitUrl(cls: string): string {
+  let url = portraits.get(cls);
+  if (url) return url;
+  const c = document.createElement('canvas');
+  c.width = c.height = 96;
+  const g = c.getContext('2d')!;
+  drawUnit(g, cls, 'hero', 0, 48, 94, 96, { anim: 'idle', frame: 0 });
+  url = c.toDataURL();
+  portraits.set(cls, url);
+  return url;
+}
+
 /** Para comprobaciones: todas las filas de cada sprite miden lo mismo que su alto. */
 export function spriteErrors(): string[] {
   return Object.entries(SPR).flatMap(([k, rows]) => rows.filter((r) => r.length !== rows.length).map((r) => `${k}: "${r}" mide ${r.length}`));

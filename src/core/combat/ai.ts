@@ -2,7 +2,7 @@
 // El jefe tiene dos fases, invoca refuerzos y pilares que lo curan.
 import { SPELLS, type SpellDef } from '../classes/spells';
 import type { CombatState, GameEvent, Pos, Unit } from '../state';
-import { LATE_ROUND, cast, castProblem, current, endTurn, hasTrait, heal, move, spellOf, summon, type UnitSpec } from './engine';
+import { LATE_ROUND, apCost, cast, castProblem, current, endTurn, hasTrait, heal, move, spellOf, summon, type UnitSpec } from './engine';
 import { alive, dist, hasLineOfSight, isFree, reachable, same } from './grid';
 import { coneCells, marksOf } from './marks';
 
@@ -53,7 +53,7 @@ function fight(s: CombatState, u: Unit, def: SpellDef, keepAway: boolean, ev: Ga
     for (const f of foes) {
       const d = walk.get(`${f.pos.x},${f.pos.y}`) ?? 99;
       const flat = dist(p, f.pos);
-      const canHit = flat >= def.range[0] && flat <= def.range[1] && (!def.los || flat <= 1 || hasLineOfSight(s, p, f.pos));
+      const canHit = flat >= def.range[0] && flat <= def.range[1] && (!def.straight || p.x === f.pos.x || p.y === f.pos.y) && (!def.los || flat <= 1 || hasLineOfSight(s, p, f.pos));
       const v = canHit ? (keepAway ? -flat : 0) : d + 10;
       if (v < score) score = v;
     }
@@ -194,7 +194,7 @@ function pillarTurn(s: CombatState, ev: GameEvent[]): void {
 
 /** Lanza lo mejor que tenga a mano: primero ayuda a un aliado malherido, luego el hechizo que más daño haga. */
 function champCast(s: CombatState, u: Unit, ev: GameEvent[]): boolean {
-  const defs = u.spells.filter((sp) => sp.cd === 0).map((sp) => spellOf(u, sp.id)!).filter((d) => d && d.ap <= u.ap);
+  const defs = u.spells.filter((sp) => sp.cd === 0).map((sp) => spellOf(u, sp.id)!).filter((d) => d && apCost(u, d.id) <= u.ap);
   const allies = s.units.filter((a) => a.team === u.team && alive(a));
   const foes = s.units.filter((f) => f.team !== u.team && alive(f) && !f.statuses.invis);
   let best: { d: SpellDef; at: Pos; score: number } | null = null;
@@ -237,10 +237,19 @@ function champCast(s: CombatState, u: Unit, ev: GameEvent[]): boolean {
       for (const f of foes) consider(d, f.pos, avg + (spheres.length < (d.sphere?.max ?? 0) ? 3 : 0));
     } else if (d.target === 'cell') {
       if (d.summon) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) consider(d, { x: u.pos.x + dx, y: u.pos.y + dy }, 30);
+      else if (d.followUp && d.teleport) {
+        // Impulso: salta en línea recta a una casilla desde la que el proyectil alcance a alguien
+        const fu = d.followUp, avg = (fu.dmg[0] + fu.dmg[1]) / 2;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) for (let i = d.range[0]; i <= d.range[1]; i++) {
+          const at = { x: u.pos.x + dx * i, y: u.pos.y + dy * i };
+          const prey = foes.filter((f) => dist(f.pos, at) <= fu.radius).sort((a, b) => dist(a.pos, at) - dist(b.pos, at))[0];
+          if (prey) consider(d, at, avg + (avg >= prey.hp ? 12 : 0) - (dist(prey.pos, at) <= 1 ? 2 : 0));
+        }
+      }
     } else if (d.target === 'enemy') {
       // Descarga: vale más cuantas más esferas tengas (si tienes pocas, mejor esperar)
       const avg = (d.dmg ? (d.dmg[0] + d.dmg[1]) / 2 : 0) + (d.consume ? d.consume.per * spheres.length - (spheres.length < 2 ? 6 : 0) : 0);
-      const value = (f: Unit): number => avg * (f.statuses.mark ? 1.3 : 1) + (d.status && !f.statuses[d.status.kind] ? (d.status.kind === 'stun' ? 14 : 6) : 0) + (d.drainAp ?? 0) * 3 + (avg >= f.hp ? 10 : 0);
+      const value = (f: Unit): number => avg * (f.statuses.mark ? 1.3 : 1) + (d.status && !f.statuses[d.status.kind] ? (d.status.kind === 'stun' ? 14 : 6) : 0) + (d.extraStatus && !f.statuses[d.extraStatus.kind] ? 4 : 0) + (d.drainAp ?? 0) * 3 + (avg >= f.hp ? 10 : 0);
       if (around) consider(d, u.pos, near(foes, u.pos).reduce((a, f) => a + value(f), 0));
       else for (const f of foes) consider(d, f.pos, value(f) + near(foes, f.pos).filter((x) => x !== f).length * avg * 0.5);
     } else {

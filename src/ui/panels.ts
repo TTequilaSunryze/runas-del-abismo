@@ -8,8 +8,9 @@ import { RELICS } from '../content/relics';
 import { MAX_BOONS, PATRONS, patronBonus, patronOf } from '../content/boons';
 import { BOON_MODS } from '../core/boonmods';
 import { RUNES } from '../core/runes';
-import { UPGRADES, tuned } from '../core/upgrades';
-import { heroMaxHp, heroSpec, pendingOf, statBreakdown, zoneOf, type HeroSave, type RunState } from '../game/run';
+import { MAX_SPELL_UPS, UPGRADES, tuned } from '../core/upgrades';
+import { SOULS_PER_ARMOR } from '../core/combat/engine';
+import { heroMaxHp, heroSpec, pendingOf, statBreakdown, upCount, zoneOf, type HeroSave, type RunState } from '../game/run';
 import { esc, mine, tip, ui } from './ctx';
 import { itemIcon, spellIcon, spellTip } from './icons';
 import { rangeText, spellSummary } from './spellicons';
@@ -113,8 +114,15 @@ function runeTab(h: HeroSave): string {
       : cur ? `<button class="chip ${cur.rare ? 'r2' : 'r1'}" data-act="unsocket" data-id="${sp.id}" ${tip(`<b>${cur.icon} ${esc(cur.name)}</b><div class="sm">${esc(cur.text)}</div><div class="dim sm">Clic para quitarla</div>`)}>${cur.icon} ${esc(cur.name)} ✕</button>` : '<span class="dim sm">sin runa</span>'}</div>`; }).join('')}</div>`;
 }
 
+/** Indicador de almas del Carcelero (cuentan en toda la partida). */
+export function soulsHtml(h: HeroSave): string {
+  if (h.cls !== 'carcelero') return '';
+  const n = h.souls ?? 0;
+  return `<div class="sm souls" ${tip(`Cosecha de almas: cada ${SOULS_PER_ARMOR} almas de la partida, +1 de armadura permanente.`)}>💀 ${n} almas · +${Math.floor(n / SOULS_PER_ARMOR)} armadura · próxima en ${SOULS_PER_ARMOR - (n % SOULS_PER_ARMOR)}</div>`;
+}
+
 function groupTab(run: RunState): string {
-  return run.heroes.map((h, i) => `<div class="member"><div class="row"><b class="p${i % 4}">${esc(h.name)}</b><span class="dim sm">${CLASSES[h.cls].name}</span><span class="grow"></span><span class="pill sm">💰 ${h.gold}</span></div>
+  return run.heroes.map((h, i) => `<div class="member"><div class="row"><b class="p${i % 4}">${esc(h.name)}</b><span class="dim sm">${CLASSES[h.cls].name}</span><span class="grow"></span><span class="pill sm">💰 ${h.gold}</span></div>${soulsHtml(h)}
     <div class="dim sm">${h.routes.map((r) => findRoute(h.cls, r)?.name).join(' + ')}${h.relics.length ? ` · ${h.relics.map((r) => RELICS[r]?.icon ?? '').join('')}` : ''}</div>${hpBar(h.hp, heroMaxHp(h))}
     <div class="cells tiny">${SLOTS.map((sl) => cell(h.equip[sl], 'disabled', undefined, sl)).join('')}</div></div>`).join('');
 }
@@ -135,7 +143,8 @@ export function upgradeRow(run: RunState): string {
   return `<div class="panel loot"><div class="row"><h3>✨ Mejora de hechizo: elige una</h3><span class="grow"></span><span class="dim sm">${h.upPending > 1 ? `Te quedan ${h.upPending} elecciones` : 'Dura toda la partida'}</span></div>
   <div class="cards">${h.upOffer.map((o, i) => { const d = SPELLS[o.spell]!, up = UPGRADES[o.up]!; const now = tuned(d, { ups: h.ups[o.spell] }), next = tuned(d, { ups: [...(h.ups[o.spell] ?? []), o.up] });
     const ch = [now.ap !== next.ap ? `PA ${now.ap} → ${next.ap}` : '', now.dmg && next.dmg && now.dmg[1] !== next.dmg[1] ? `daño ${now.dmg[0]}-${now.dmg[1]} → ${next.dmg[0]}-${next.dmg[1]}` : '', now.heal !== next.heal ? `cura ${now.heal} → ${next.heal}` : '', now.shield !== next.shield ? `escudo ${now.shield} → ${next.shield}` : '', now.cd !== next.cd ? `espera ${now.cd} → ${next.cd}` : '', now.range[1] !== next.range[1] ? `alcance ${now.range[1]} → ${next.range[1]}` : '', (now.area ?? 0) !== (next.area ?? 0) ? `área ${now.area ?? 0} → ${next.area}` : ''].filter(Boolean).join(' · ');
-    return `<div class="lootcard r2"><div class="row">${spellIcon(d)}<div><b>${esc(d.name)}</b><div class="pill sm">${up.icon} ${esc(up.name)}</div><div class="sm">${esc(up.text)}</div>${ch ? `<div class="good sm">${ch}</div>` : ''}</div></div><button class="pri" data-act="upgrade" data-id="${i}">Elegir</button></div>`; }).join('')}</div></div>`;
+    const n = upCount(h, o.spell);
+    return `<div class="lootcard r2"><div class="row">${spellIcon(d)}<div><b>${esc(d.name)}</b><div class="pill sm">${up.icon} ${esc(up.name)}</div><div class="sm">${esc(up.text)}</div>${ch ? `<div class="good sm">${ch}</div>` : ''}<div class="dim sm">Mejoras de este hechizo: ${n} → ${n + 1} de ${MAX_SPELL_UPS}</div></div></div><button class="pri" data-act="upgrade" data-id="${i}">Elegir</button></div>`; }).join('')}</div></div>`;
 }
 
 /** Bendición pendiente: 3 habilidades de un patrón (las del mismo patrón se potencian entre sí). */

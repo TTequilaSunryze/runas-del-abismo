@@ -26,13 +26,15 @@ export interface ClassDef {
   tackle: number;
   dodge: number;
   routes: RouteDef[];
+  /** retirada de la selección (sus hechizos se conservan para el futuro) */
+  hidden?: boolean;
 }
 
 const R = (id: string, name: string, opposite: string, spells: string[], text: string): RouteDef => ({ id, name, opposite, spells, text });
 
 export const CLASSES: Record<ClassId, ClassDef> = {
   guerrero: {
-    id: 'guerrero', name: 'Guerrero', hp: 64, armor: 2, power: 0, crit: 5, ap: 6, mp: 3, initiative: 10, base: ['tajo', 'hachazo', 'sed_sangre'], tackle: 8, dodge: 2,
+    hidden: true, id: 'guerrero', name: 'Guerrero', hp: 64, armor: 2, power: 0, crit: 5, ap: 6, mp: 3, initiative: 10, base: ['tajo', 'hachazo', 'sed_sangre'], tackle: 8, dodge: 2,
     routes: [
       R('base', 'Clásico', '', ['tajo', 'hachazo', 'sed_sangre'], 'El kit inicial: dos ataques y una potenciación propia.'),
       R('baluarte', 'Baluarte', '', ['tajo', 'embate', 'muro'], 'Tanque: escudos y protección de aliados.'),
@@ -42,7 +44,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     ],
   },
   mago: {
-    id: 'mago', name: 'Mago', hp: 42, armor: 0, power: 8, crit: 5, ap: 6, mp: 3, initiative: 14, base: ['dardo', 'chispa', 'escudo_arcano'], tackle: 2, dodge: 4,
+    hidden: true, id: 'mago', name: 'Mago', hp: 42, armor: 0, power: 8, crit: 5, ap: 6, mp: 3, initiative: 14, base: ['dardo', 'chispa', 'escudo_arcano'], tackle: 2, dodge: 4,
     routes: [
       R('base', 'Clásico', '', ['dardo', 'chispa', 'escudo_arcano'], 'El kit inicial: dos ataques y una potenciación propia.'),
       R('fuego', 'Fuego', '', ['ignicion', 'bola', 'lluvia'], 'Daño en área y Quemadura.'),
@@ -52,7 +54,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     ],
   },
   picaro: {
-    id: 'picaro', name: 'Pícaro', hp: 50, armor: 1, power: 0, crit: 15, ap: 7, mp: 4, initiative: 16, base: ['punalada', 'cuchillo', 'desvanecer'], tackle: 3, dodge: 9,
+    hidden: true, id: 'picaro', name: 'Pícaro', hp: 50, armor: 1, power: 0, crit: 15, ap: 7, mp: 4, initiative: 16, base: ['punalada', 'cuchillo', 'desvanecer'], tackle: 3, dodge: 9,
     routes: [
       R('base', 'Clásico', '', ['punalada', 'cuchillo', 'desvanecer'], 'El kit inicial: dos ataques y una potenciación propia.'),
       R('veneno', 'Veneno', '', ['daga_ven', 'nube', 'toxina'], 'Daño por turno que se acumula.'),
@@ -62,7 +64,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     ],
   },
   clerigo: {
-    id: 'clerigo', name: 'Clérigo', hp: 56, armor: 1, power: 4, crit: 5, ap: 6, mp: 3, initiative: 8, base: ['maza', 'castigo', 'fervor'], tackle: 4, dodge: 3,
+    hidden: true, id: 'clerigo', name: 'Clérigo', hp: 56, armor: 1, power: 4, crit: 5, ap: 6, mp: 3, initiative: 8, base: ['maza', 'castigo', 'fervor'], tackle: 4, dodge: 3,
     routes: [
       R('base', 'Clásico', '', ['maza', 'castigo', 'fervor'], 'El kit inicial: dos ataques y una potenciación propia.'),
       R('luz', 'Luz', '', ['maza', 'sanar', 'aura'], 'Curación directa y en área.'),
@@ -72,7 +74,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     ],
   },
   arquero: {
-    id: 'arquero', name: 'Arquero', hp: 46, armor: 0, power: 4, crit: 10, ap: 6, mp: 4, initiative: 15, base: ['flecha', 'tiro_rasante', 'ojo_halcon'], tackle: 2, dodge: 6,
+    id: 'arquero', name: 'Arquero', hp: 60, armor: 0, power: 0, crit: 10, ap: 6, mp: 3, initiative: 15, base: ['flecha', 'tiro_rasante', 'ojo_halcon'], tackle: 2, dodge: 6,
     routes: [
       R('base', 'Clásico', '', ['flecha', 'tiro_rasante', 'ojo_halcon'], 'El kit inicial: dos ataques y una potenciación propia.'),
       R('francotirador', 'Francotirador', '', ['certero', 'marca_caza', 'perforante'], 'Un disparo lejano y devastador.'),
@@ -82,25 +84,25 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     ],
   },
   zorro: {
-    id: 'zorro', name: 'Hechicera Zorro', hp: 44, armor: 0, power: 6, crit: 8, ap: 7, mp: 5, initiative: 15, base: ['z_orbe', 'z_encanto', 'z_impulso'], tackle: 1, dodge: 11,
+    id: 'zorro', name: 'Hechicera Zorro', hp: 60, armor: 0, power: 0, crit: 8, ap: 6, mp: 3, initiative: 15, base: ['z_orbe', 'z_encanto', 'z_impulso'], tackle: 1, dodge: 7,
     routes: [
       R('base', 'Clásico', '', ['z_orbe', 'z_encanto', 'z_impulso'], 'El kit inicial: un orbe que rebota, un encanto y un salto espiritual.'),
     ],
   },
   esferas: {
-    id: 'esferas', name: 'Tejedora de Esferas', hp: 40, armor: 0, power: 4, crit: 5, ap: 8, mp: 4, initiative: 12, base: ['t_pulso', 't_dispersion', 't_descarga'], tackle: 1, dodge: 5,
+    id: 'esferas', name: 'Tejedora de Esferas', hp: 60, armor: 0, power: 0, crit: 5, ap: 6, mp: 3, initiative: 12, base: ['t_pulso', 't_dispersion', 't_descarga'], tackle: 1, dodge: 5,
     routes: [
       R('base', 'Clásico', '', ['t_pulso', 't_dispersion', 't_descarga'], 'El kit inicial: siembra esferas, dispérsalas contra el enemigo y descárgalas todas de golpe.'),
     ],
   },
   acechador: {
-    id: 'acechador', name: 'Acechador de Sombras', hp: 60, armor: 1, power: 10, crit: 12, ap: 7, mp: 5, initiative: 16, base: ['s_shuriken', 's_tajo', 's_sombra'], tackle: 3, dodge: 9,
+    id: 'acechador', name: 'Acechador de Sombras', hp: 60, armor: 0, power: 0, crit: 8, ap: 6, mp: 3, initiative: 16, base: ['s_shuriken', 's_tajo', 's_sombra'], tackle: 3, dodge: 6,
     routes: [
       R('base', 'Clásico', '', ['s_shuriken', 's_tajo', 's_sombra'], 'El kit inicial: un shuriken, un tajo a tu alrededor y una Sombra que repite tus golpes.'),
     ],
   },
   carcelero: {
-    id: 'carcelero', name: 'Carcelero de Almas', hp: 68, armor: 2, power: 0, crit: 5, ap: 6, mp: 3, initiative: 9, base: ['k_sentencia', 'k_linterna', 'k_despellejar'], tackle: 12, dodge: 2,
+    id: 'carcelero', name: 'Carcelero de Almas', hp: 60, armor: 1, power: 0, crit: 5, ap: 6, mp: 3, initiative: 9, base: ['k_sentencia', 'k_linterna', 'k_despellejar'], tackle: 6, dodge: 2,
     routes: [
       R('base', 'Clásico', '', ['k_sentencia', 'k_linterna', 'k_despellejar'], 'El kit inicial: un gancho, una linterna salvavidas y un barrido a tu alrededor.'),
     ],
@@ -130,3 +132,6 @@ export function spellsFor(cls: ClassId, chosen: readonly string[], _level = 1): 
   const c = CLASSES[cls];
   return [...(chosen.map((r) => findRoute(cls, r)).find((r) => r)?.spells ?? c.base)];
 }
+
+/** Clases que se pueden elegir. */
+export const PLAYABLE: ClassId[] = (['zorro', 'esferas', 'acechador', 'carcelero', 'arquero'] as ClassId[]).filter((c) => !CLASSES[c].hidden);

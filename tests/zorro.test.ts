@@ -48,19 +48,12 @@ describe('Hechicera Zorro', () => {
     expect(h.essence).toBe(0);
   });
 
-  it('el encanto hace que el enemigo se acerque en línea recta sin atacar', () => {
-    const e = foe({ x: 6, y: 3 }, 60);
-    const s = board([zorro(), e]);
+  it('el encanto atrae 2 casillas al primer enemigo de la línea (alcance 1-7)', () => {
+    const s = board([zorro(), foe({ x: 8, y: 3 }, 60)]);
     const [h, en] = s.units;
-    cast(s, h!.id, 'z_encanto', { x: 6, y: 3 });
-    expect(en!.statuses.charm?.from).toBe(h!.id);
-    const d0 = dist(en!.pos, h!.pos);
-    endTurn(s, h!.id);
-    expect(current(s)!.id).toBe(en!.id);
-    expect(dist(en!.pos, h!.pos)).toBeLessThan(d0);
-    expect(en!.ap).toBe(0);
-    expect(en!.mp).toBe(0);
-    expect(en!.statuses.charm).toBeUndefined();
+    expect(cast(s, h!.id, 'z_encanto', { x: 8, y: 3 }).ok).toBe(true);
+    expect(en!.pos).toEqual({ x: 6, y: 3 });
+    expect(dist(en!.pos, h!.pos)).toBe(5);
   });
 
   it('el salto espiritual se desplaza en línea recta y golpea al enemigo más cercano', () => {

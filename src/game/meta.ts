@@ -89,6 +89,19 @@ export function mergeMeta(a: Meta, b: Partial<Meta>): Meta {
 /** Experiencia necesaria para cada nivel de maestría (1 a 5). */
 export const MASTERY_XP = [40, 110, 220, 380, 600];
 export const MASTERY_TEXT = ['Desbloquea un 2.º kit inicial', 'Desbloquea un 3.er kit inicial', 'Desbloquea un 4.º kit inicial', 'Desbloquea un 5.º kit inicial', 'Maestro: empiezas cada partida con una bendición de clase'];
+/** Oro inicial extra por cada nivel de maestría que no abre un kit nuevo. */
+export const MASTERY_GOLD = 25;
+/** Lo que da el nivel `i + 1` de maestría de una clase. */
+export function masteryText(cls: ClassId, i: number): string {
+  if (i >= 4) return MASTERY_TEXT[4]!;
+  const r = CLASSES[cls].routes[i + 1];
+  return r ? `Desbloquea el kit ${r.name}` : `Empiezas cada partida con +${MASTERY_GOLD} de oro`;
+}
+/** Progreso de maestría de una clase: nivel, experiencia y lo que falta para el siguiente. */
+export function masteryProgress(cls: string): { lv: number; xp: number; prev: number; next: number | undefined; pct: number } {
+  const xp = meta().mastery[cls] ?? 0, lv = masteryLevel(xp), next = MASTERY_XP[lv], prev = lv ? MASTERY_XP[lv - 1]! : 0;
+  return { lv, xp, prev, next, pct: next ? Math.round(((xp - prev) / (next - prev)) * 100) : 100 };
+}
 export const masteryLevel = (xp: number): number => MASTERY_XP.filter((n) => xp >= n).length;
 export const masteryOf = (cls: string): number => masteryLevel(meta().mastery[cls] ?? 0);
 /** Rutas que se pueden elegir con ese nivel de maestría: al principio la 1.ª y la 3.ª (no opuestas). */

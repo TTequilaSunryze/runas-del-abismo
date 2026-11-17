@@ -25,7 +25,7 @@ function publish(): void {
   const m = meta();
   ui.session?.announce({ name: ui.me.name, cls: ui.me.cls, routes: ui.me.routes, host: ui.session.isHost, perks: m.perks, unlocked: m.unlocked, asc: Math.min(ui.asc, m.maxAsc, MAX_ASC), daily: ui.daily ? today() : null,
     mastery: masteryOf(ui.me.cls), nem: myNemesis(), hasTeam: myTeam().length > 0,
-    mods: ui.daily ? [] : ui.mods, abyss: !ui.daily && ui.abyss && m.stats.wins > 0 });
+    mods: ui.daily ? [] : ui.mods, abyss: !ui.daily && m.stats.wins > 0 });
 }
 
 function home(msg = ''): void {

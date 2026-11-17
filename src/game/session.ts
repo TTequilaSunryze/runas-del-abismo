@@ -1,5 +1,5 @@
 // Sesión de juego: el anfitrión ejecuta el motor y reparte el estado; los demás envían acciones.
-import { canPickRoute } from '../core/classes/classes';
+import { PLAYABLE, canPickRoute } from '../core/classes/classes';
 import { runAiTurn } from '../core/combat/ai';
 import { cast, current, endTurn, move, type ActionResult } from '../core/combat/engine';
 import type { ClassId, GameEvent, Pos } from '../core/state';
@@ -139,7 +139,7 @@ export class Session {
     return this.everyone()
       .filter((p: Peer) => typeof p.data.name === 'string')
       .map((p) => ({
-        id: p.id, name: String(p.data.name).slice(0, 14), cls: p.data.cls as ClassId,
+        id: p.id, name: String(p.data.name).slice(0, 14), cls: (PLAYABLE.includes(p.data.cls as ClassId) ? p.data.cls : 'zorro') as ClassId,
         routes: Array.isArray(p.data.routes) ? (p.data.routes as string[]) : [], host: !!p.data.host,
         perks: (p.data.perks && typeof p.data.perks === 'object' ? p.data.perks : {}) as Perks,
         unlocked: Array.isArray(p.data.unlocked) ? (p.data.unlocked as string[]).slice(0, 20).map(String) : [],

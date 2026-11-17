@@ -68,17 +68,17 @@ describe('Tejedora de Esferas', () => {
   it('máximo 3 esferas: la cuarta borra la más antigua', () => {
     const s = board([tej()]);
     const h = s.units[0]!;
-    for (const x of [3, 4, 5, 6]) { h.ap = 9; cast(s, h.id, 't_pulso', { x, y: 3 }); }
+    for (const x of [3, 4, 5, 6]) { h.ap = 9; h.spells.forEach((sp) => delete sp.uses); cast(s, h.id, 't_pulso', { x, y: 3 }); }
     const m = marksOf(s, 'sphere', h.id);
     expect(m).toHaveLength(3);
     expect(m.map((x) => x.pos.x)).toEqual([4, 5, 6]);
   });
-  it('con Constelación caben 5', () => {
+  it('con Constelación caben 4', () => {
     const s = board([tej()]);
     const h = s.units[0]!;
     h.spells.find((sp) => sp.id === 't_pulso')!.ups = ['tm_cinco'];
-    for (const at of [{ x: 3, y: 3 }, { x: 4, y: 3 }, { x: 5, y: 3 }, { x: 6, y: 3 }, { x: 3, y: 5 }, { x: 4, y: 4 }]) { h.ap = 9; expect(cast(s, h.id, 't_pulso', at).ok).toBe(true); }
-    expect(marksOf(s, 'sphere', h.id)).toHaveLength(5);
+    for (const at of [{ x: 3, y: 3 }, { x: 4, y: 3 }, { x: 5, y: 3 }, { x: 6, y: 3 }, { x: 3, y: 5 }]) { h.ap = 9; h.spells.forEach((sp) => delete sp.uses); expect(cast(s, h.id, 't_pulso', at).ok).toBe(true); }
+    expect(marksOf(s, 'sphere', h.id)).toHaveLength(4);
   });
   it('Descarga consume las esferas y suma daño por cada una', () => {
     const dmgWith = (n: number): number => {

@@ -1,11 +1,12 @@
 // Pantallas fuera del combate: inicio, sala, mapa, tienda, evento y final.
-import { CLASSES, findRoute } from '../core/classes/classes';
+import { CLASSES, PLAYABLE, findRoute } from '../core/classes/classes';
+import { classPortraitUrl } from '../render/sprites';
 import { SPELLS } from '../core/classes/spells';
 import { RUNES } from '../core/runes';
 import type { ClassId } from '../core/state';
 import { NODE_HINT, NODE_NAME, POTION_HEAL, POTION_PRICE, eventDef, heroMaxHp, type RunState } from '../game/run';
 import { TURN_SECONDS } from '../game/session';
-import { ACHIEVEMENTS, HALL_SIZE, MASTERY_TEXT, MASTERY_XP, ecosFor, masteryLevel, masteryOf, meta, myTeam, openRoutes, routeNeeds, settle } from '../game/meta';
+import { ACHIEVEMENTS, HALL_SIZE, MASTERY_XP, ecosFor, masteryOf, masteryProgress, masteryText, meta, myTeam, openRoutes, routeNeeds, settle } from '../game/meta';
 import { currentAccount } from '../net/account';
 import { friendsStatus } from '../net/social';
 import { setCounts, SETS } from '../core/items/sets';
@@ -42,11 +43,11 @@ function metaPanel(): string {
   }
   if (ui.homeTab === 'clases') {
     return `<div class="panel"><h3>Maestría de clase</h3><div class="dim sm">Jugar con una clase le da experiencia de maestría (más cuanto más lejos llegues y más alta sea la ascensión). Cada nivel abre rutas y ventajas de esa clase.</div>
-    <div class="cards c2">${(Object.keys(CLASSES) as ClassId[]).map((id) => { const c = CLASSES[id], xp = m.mastery[id] ?? 0, lv = masteryLevel(xp), next = MASTERY_XP[lv], prev = lv ? MASTERY_XP[lv - 1]! : 0;
+    <div class="cards c2">${PLAYABLE.map((id) => { const c = CLASSES[id], { lv } = masteryProgress(id);
       return `<div class="lootcard ${lv >= 5 ? 'r3' : lv ? 'r1' : ''}"><div class="row"><b>${c.name}</b><span class="grow"></span><b class="pill">Maestría ${lv}/5</b></div>
-      <span class="hp xp"><i style="width:${next ? Math.round(((xp - prev) / (next - prev)) * 100) : 100}%"></i><b>${next ? `${xp}/${next}` : 'Máxima'}</b></span>
-      <div class="sm">${c.routes.map((r) => { const need = routeNeeds(id, r.id); return `<span class="${lv >= need ? 'good' : 'dim'}">${lv >= need ? '✔' : '🔒'} ${esc(r.name)}${lv < need ? ` (maestría ${need})` : ''}</span>`; }).join(' · ')}</div>
-      <div class="sm">${MASTERY_TEXT.map((t, i) => `<div class="${lv > i ? 'good' : 'dim'}">${lv > i ? '✔' : '○'} ${i + 1}. ${esc(t)}</div>`).join('')}</div></div>`; }).join('')}</div></div>`;
+      ${masteryBar(id)}
+      ${c.routes.length > 1 ? `<div class="sm">${c.routes.map((r) => { const need = routeNeeds(id, r.id); return `<span class="${lv >= need ? 'good' : 'dim'}">${lv >= need ? '✔' : '🔒'} ${esc(r.name)}${lv < need ? ` (maestría ${need})` : ''}</span>`; }).join(' · ')}</div>` : ''}
+      <div class="sm">${[0, 1, 2, 3, 4].map((i) => `<div class="${lv > i ? 'good' : 'dim'}">${lv > i ? '✔' : '○'} ${i + 1}. ${esc(masteryText(id, i))}</div>`).join('')}</div></div>`; }).join('')}</div></div>`;
   }
   if (ui.homeTab === 'salon') {
     const team = m.team;
@@ -124,6 +125,12 @@ export function tutorialHtml(): string {
   <div class="row"><button class="mini" data-act="tutoskip">Saltar</button><span class="grow"></span><button class="pri" data-act="tutonext">${ui.tutorial + 1 >= TUTORIAL.length ? '¡A jugar!' : 'Siguiente →'}</button></div></div></div>`;
 }
 
+/** Barra de maestría: nivel, experiencia y cuánto falta para el siguiente nivel. */
+function masteryBar(cls: ClassId): string {
+  const p = masteryProgress(cls);
+  return `<span class="mbar" ${tip(p.next ? `<b>Maestría ${p.lv}/5</b><div class="sm">${p.xp}/${p.next} de experiencia: faltan ${p.next - p.xp} para el nivel ${p.lv + 1}.</div><div class="sm good">Nivel ${p.lv + 1}: ${esc(masteryText(cls, p.lv))}</div>` : '<b>Maestría máxima</b>')}><i style="width:${p.pct}%"></i><b>Maestría ${p.lv}/5${p.next ? ` · ${p.pct}%` : ''}</b></span><span class="dim sm mnext">${p.next ? `Faltan ${p.next - p.xp} exp para el nivel ${p.lv + 1}` : 'Maestría máxima'}</span>`;
+}
+
 export function lobbyScreen(): void {
   const s = ui.session!, me = ui.me;
   const players = s.lobby();
@@ -139,12 +146,11 @@ export function lobbyScreen(): void {
   <div class="cols"><section class="main">
     ${s.isHost ? `<div class="panel"><div class="row"><b>Dificultad</b><span class="grow"></span><button class="mini" data-act="ascdown" ${ui.asc <= 0 || ui.daily ? 'disabled' : ''}>−</button><b class="pill">Ascensión ${ui.daily ? 3 : ui.asc}</b><button class="mini" data-act="ascup" ${ui.asc >= meta().maxAsc || ui.daily ? 'disabled' : ''}>+</button><label class="sm"><input type="checkbox" data-act="dailytoggle" ${ui.daily ? 'checked' : ''}> Reto diario</label></div>
       <div class="dim sm">${ui.daily ? dailyOf(today()).mods.map((id) => esc(DAILY_MODS.find((x) => x.id === id)!.name)).join(' + ') + ' · ranking compartido' : esc(ASCENSION.slice(0, ui.asc + 1).slice(-2).join(' '))}${meta().maxAsc < 1 && !ui.daily ? ' · Gana una partida para desbloquear la ascensión 1.' : ''}</div>
-      ${ui.daily ? '' : `<div class="row sm"><label ${tip(meta().stats.wins > 0 ? 'Una cuarta zona tras las Ruinas de Ceniza, con enemigos y jefes propios.' : 'Se desbloquea al ganar una partida.')}><input type="checkbox" data-act="abysstoggle" ${ui.abyss && meta().stats.wins > 0 ? 'checked' : ''} ${meta().stats.wins > 0 ? '' : 'disabled'}> 🌀 Incluir El Abismo (zona 4)${meta().stats.wins > 0 ? '' : ' 🔒'}</label></div>
-      <div class="lbl">Modificadores <span class="dim">· hasta 3, +${Math.round(MOD_ECOS * 100)}% de ecos cada uno</span></div>
+      ${ui.daily ? '' : `<div class="lbl">Modificadores <span class="dim">· hasta 3, +${Math.round(MOD_ECOS * 100)}% de ecos cada uno</span></div>
       <div class="chips">${DAILY_MODS.map((m) => `<button class="chip ${ui.mods.includes(m.id) ? 'r2 sel' : ''}" data-act="mod" data-id="${m.id}" ${tip(`<b>${esc(m.name)}</b><div class="sm">${esc(m.text)}</div>`)}>${ui.mods.includes(m.id) ? '✔ ' : ''}${esc(m.name)}</button>`).join('')}</div>`}</div>` : players.find((p) => p.host) ? (() => { const hp = players.find((p) => p.host)!; return `<div class="panel dim sm">Dificultad del anfitrión: ${hp.daily ? 'Reto diario' : `Ascensión ${hp.asc}${hp.abyss ? ' · con El Abismo' : ''}${hp.mods.length ? ` · ${hp.mods.map((id) => esc(DAILY_MODS.find((d) => d.id === id)?.name ?? id)).join(', ')}` : ''}`}</div>`; })() : ''}
     ${currentAccount() && s.t.kind === 'online' ? (() => { const fr = friendsStatus().filter((f) => f.online && f.room !== s.code); return fr.length ? `<div class="panel sm"><b>👥 Invitar:</b> ${fr.map((f) => `<button class="mini" data-act="invite" data-id="${esc(f.name)}">✉ ${esc(f.name)}</button>`).join(' ')}</div>` : ''; })() : ''}
     <div class="lbl">Tu clase <span class="dim">· maestría ${mlv}/5 con ${cls.name}</span></div>
-    <div class="cards c5">${(Object.keys(CLASSES) as ClassId[]).map((id) => { const c = CLASSES[id]; return `<button class="pick ${id === me.cls ? 'on' : ''}" data-act="cls" data-id="${id}"><b>${c.name}</b><span class="dim sm">❤️ ${c.hp} · PA ${c.ap} · PM ${c.mp} · ⏱️ ${c.initiative}</span><span class="dim sm"><i>${esc(CLASS_STORY[id] ?? '')}</i></span><span class="pill sm">Maestría ${masteryOf(id)}</span></button>`; }).join('')}</div>
+    <div class="cards c5">${PLAYABLE.map((id) => { const c = CLASSES[id]; return `<button class="pick ${id === me.cls ? 'on' : ''}" data-act="cls" data-id="${id}"><b>${c.name}</b><img class="portrait" src="${classPortraitUrl(id)}" alt="${esc(c.name)}"><span class="dim sm">❤️ ${c.hp} · PA ${c.ap} · PM ${c.mp} · ⏱️ ${c.initiative}</span><span class="dim sm"><i>${esc(CLASS_STORY[id] ?? '')}</i></span>${masteryBar(id)}</button>`; }).join('')}</div>
     <div class="lbl">Tu kit inicial <span class="dim">· 3 habilidades; durante la partida las mejoras con bendiciones. Más kits con maestría.</span></div>
     <div class="cards c2">${cls.routes.map((r) => {
       const locked = !open.includes(r.id);
@@ -262,7 +268,7 @@ export function endScreen(): void {
   <div class="panel"><div class="row"><h3>Tu recompensa</h3><span class="grow"></span><b class="pill">+${res?.ecos ?? ecosFor(run)} ✨ ecos</b><span class="dim sm">(tienes ${m.ecos})</span></div>
     ${res?.asc ? `<div class="good">🔓 Ascensión ${res.asc} desbloqueada: la próxima partida puede ser más difícil y dar más ecos.</div>` : ''}
     ${res?.achievements.length ? res.achievements.map((a) => `<div class="lootcard r3"><b>🏆 ${esc(a.name)}</b> <span class="sm">${esc(a.text)}</span><div class="sm good">${[a.ecos ? `+${a.ecos} ✨` : '', a.rune && RUNES[a.rune] ? `Runa desbloqueada: ${RUNES[a.rune]!.icon} ${esc(RUNES[a.rune]!.name)}` : ''].filter(Boolean).join(' · ')}</div></div>`).join('') : ''}
-    ${res ? `<div class="row sm"><b>🎓 Maestría de ${CLASSES[res.mastery.cls].name}</b><span class="good">+${res.mastery.xp} exp</span><span class="grow"></span><span class="pill">Nivel ${res.mastery.after}/5</span></div>${res.mastery.after > res.mastery.before ? MASTERY_TEXT.slice(res.mastery.before, res.mastery.after).map((t) => `<div class="good">🔓 ${esc(t)}</div>`).join('') : `<div class="dim sm">${MASTERY_XP[res.mastery.after] ? `Faltan ${MASTERY_XP[res.mastery.after]! - res.mastery.total} de experiencia para el nivel ${res.mastery.after + 1}: ${esc(MASTERY_TEXT[res.mastery.after]!)}` : 'Maestría máxima.'}</div>`}` : ''}
+    ${res ? `<div class="row sm"><b>🎓 Maestría de ${CLASSES[res.mastery.cls].name}</b><span class="good">+${res.mastery.xp} exp</span><span class="grow"></span><span class="pill">Nivel ${res.mastery.after}/5</span></div>${res.mastery.after > res.mastery.before ? Array.from({ length: res.mastery.after - res.mastery.before }, (_, k) => res.mastery.before + k).map((i) => `<div class="good">🔓 ${esc(masteryText(res.mastery.cls, i))}</div>`).join('') : `<div class="dim sm">${MASTERY_XP[res.mastery.after] ? `Faltan ${MASTERY_XP[res.mastery.after]! - res.mastery.total} de experiencia para el nivel ${res.mastery.after + 1}: ${esc(masteryText(res.mastery.cls, res.mastery.after))}` : 'Maestría máxima.'}</div>`}${masteryBar(res.mastery.cls)}` : ''}
     <div class="dim sm">Gasta tus ecos en <b>Mejoras</b> (pantalla de inicio): vida, oro, runas y re-tiradas permanentes.</div></div>
   <div class="panel"><h3>Resumen del grupo</h3>${run.heroes.map((h, i) => `<div class="row sm"><b class="p${i % 4}">${esc(h.name)}</b><span class="dim">${CLASSES[h.cls].name}</span><span class="grow"></span><span>⚔️ ${h.stats.dmg} (${Math.round((h.stats.dmg / total) * 100)}%)</span><span>☠️ ${h.stats.kills}</span><span>✚ ${h.stats.heal}</span><span class="${h.stats.falls ? 'bad' : 'good'}">💀 ${h.stats.falls}</span></div>`).join('')}</div>
   ${myHero ? `<div class="panel"><div class="row"><div><b>🏟️ Salón de héroes</b><div class="dim sm">Guarda a ${esc(myHero.name)} tal como está para tus duelos 3 contra 3 y para que vuelva como Némesis.</div></div><span class="grow"></span><button data-act="champsave" ${saved ? 'disabled' : ''}>${saved ? '✔ Guardado' : 'Guardar en el Salón'}</button></div></div>` : ''}

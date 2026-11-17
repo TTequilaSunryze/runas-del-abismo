@@ -3,10 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { makeEnemy } from '../src/content/enemies';
 import { makeHero } from '../src/core/classes/factory';
 import { SPELLS } from '../src/core/classes/spells';
-import { cast, castProblem, createCombat, current, endTurn, SOUL_ARMOR_CAP, type UnitSpec } from '../src/core/combat/engine';
+import { cast, castProblem, createCombat, current, endTurn, SOULS_PER_ARMOR, type UnitSpec } from '../src/core/combat/engine';
 import { marksOf } from '../src/core/combat/marks';
 import { runAiTurn } from '../src/core/combat/ai';
-import { finishFight, newRun } from '../src/game/run';
+import { finishFight, heroSpec, newRun } from '../src/game/run';
 
 const carc = (pos = { x: 1, y: 3 }): UnitSpec => makeHero({ cls: 'carcelero', name: 'K', owner: 'p0', routes: [], pos, level: 1 });
 const ally = (pos: { x: number; y: number }): UnitSpec => makeHero({ cls: 'mago', name: 'M', owner: 'p1', routes: [], pos, level: 1 });
@@ -89,25 +89,24 @@ describe('Carcelero de Almas', () => {
     expect(b!.pos).toEqual({ x: 3, y: 3 });
     expect(a!.statuses.slow?.stacks).toBe(2);
   });
-  it('cada enemigo que muere con él vivo le da +1 de armadura fija', () => {
-    const s = board([carc({ x: 3, y: 4 }), foe({ x: 2, y: 4 }, 1), foe({ x: 3, y: 3 }, 1)]);
-    const k = s.units[0]!;
-    turnOf(s, k.id);
-    const before = k.armor;
-    cast(s, k.id, 'k_despellejar', k.pos);
-    expect(k.souls).toBe(2);
-    expect(k.armor).toBe(before + 2);
-  });
-  it(`la armadura de las almas tiene un tope de +${SOUL_ARMOR_CAP} por combate`, () => {
+  it(`cada ${SOULS_PER_ARMOR} almas, +1 de armadura en el acto`, () => {
     const s = board([carc({ x: 3, y: 3 }), ...Array.from({ length: 8 }, (_, i) => foe({ x: 2 + (i % 3), y: 2 + Math.floor(i / 3) }, 1)).filter((_, i) => i !== 4)]);
     const k = s.units[0]!;
     const before = k.armor;
     turnOf(s, k.id);
     cast(s, k.id, 'k_despellejar', k.pos);
     expect(k.souls).toBe(7);
-    expect(k.armor).toBe(before + SOUL_ARMOR_CAP);
+    expect(k.armor).toBe(before + 1);
   });
-  it('las almas se acumulan entre salas: cada 3, una mejora de hechizo', () => {
+  it('las almas cuentan en toda la partida y dan armadura permanente', () => {
+    const run = newRun('T', 1, [{ owner: 'p0', name: 'K', cls: 'carcelero', routes: ['base'] }]);
+    const h = run.heroes[0]!;
+    const base = heroSpec(h).armor;
+    h.souls = 11;
+    expect(heroSpec(h).armor).toBe(base + 2);
+    expect(heroSpec(h).souls).toBe(11);
+  });
+  it('las almas del combate se guardan en la partida', () => {
     const run = newRun('T', 1, [{ owner: 'p0', name: 'K', cls: 'carcelero', routes: ['base'] }]);
     const h = run.heroes[0]!;
     run.phase = 'combat' as never;
@@ -119,9 +118,8 @@ describe('Carcelero de Almas', () => {
     run.combat = s;
     const pend = h.upPending;
     finishFight(run);
-    expect(h.souls).toBe(1);
-    // +1 por las almas (la recompensa normal de esta sala también puede sumar)
-    expect(h.upPending + (h.upOffer ? 1 : 0)).toBeGreaterThanOrEqual(pend + 1);
+    expect(h.souls).toBe(4);
+    expect(pend).toBe(0);
   });
   it('la IA lo juega sin errores ni bucles', () => {
     const s = board([{ ...carc(), ai: 'champ' }, { ...ally({ x: 1, y: 5 }), ai: 'champ' }, foe({ x: 6, y: 3 }, 60), foe({ x: 8, y: 2 }, 60)]);

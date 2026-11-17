@@ -1,6 +1,6 @@
 // Iconos: objetos en pixel art (12×12, dibujados por código) y símbolos para hechizos y nodos.
 import type { SpellDef } from '../core/classes/spells';
-import { KIND_NAME, rangeText, spellIconUrl, spellKind, spellSummary } from './spellicons';
+import { KIND_NAME, spellEffects, spellIconUrl, spellKind, spellRows } from './spellicons';
 
 const esc = (s: unknown): string => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 import type { Item, Slot } from '../core/items/items';
@@ -62,13 +62,14 @@ export function spellIcon(d: SpellDef, cost = true): string {
   return `<span class="sicon k-${k}"><img src="${spellIconUrl(d)}" alt="">${cost ? `<i class="apc">${d.ap}</i>` : ''}</span>`;
 }
 
-/** Ayuda flotante de un hechizo, siempre con el mismo formato. */
+/** Ayuda flotante de un hechizo, siempre con el mismo formato: una lista con coste, daño, alcance, usos, recarga y efectos. */
 export function spellTip(d: SpellDef, extra = ''): string {
   const k = spellKind(d);
+  const fx = spellEffects(d);
   return `<div class="row"><b>${esc(d.name)}</b><span class="grow"></span><span class="kt k-${k}">${KIND_NAME[k]}</span></div>
-  <div class="sm">${esc(spellSummary(d))}</div>
-  <div class="sm dim">${d.ap} PA · ${rangeText(d)}${d.cd ? ` · espera ${d.cd} t.` : ''}${d.los && d.range[1] > 1 ? ' · necesita visión' : ''}${d.range[0] >= 2 ? ' · no a pegados' : ''}</div>
-  ${d.text && d.text !== spellSummary(d) ? `<i class="sm dim">${esc(d.text)}</i>` : ''}${extra}`;
+  <dl class="slist">${spellRows(d).map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join('')}</dl>
+  ${fx.length ? `<div class="lbl">Efectos</div><ul class="sfx">${fx.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+  ${d.text ? `<i class="sm dim">${esc(d.text)}</i>` : ''}${extra}`;
 }
 
 export const NODE_ICON: Record<NodeKind, string> = { combat: '⚔️', elite: '☠️', event: '❓', rest: '🔥', shop: '💰', treasure: '🎁', boss: '👑', forge: '🔨', altar: '🕯️', gamble: '🎲', cage: '⛓️', shrine: '✨' };

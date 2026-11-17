@@ -26,7 +26,7 @@ describe('kit inicial', () => {
   it('la Hechicera Zorro: orbe y salto espiritual dañan, encanto controla', () => {
     const k = CLASSES.zorro.base.map((id) => SPELLS[id]!);
     expect(k[0]!.line && k[0]!.bounce).toBe(2);
-    expect(k[1]!.status?.kind).toBe('charm');
+    expect(k[1]!.pull).toBe(2);
     expect(k[2]!.followUp).toBeTruthy();
   });
   it('Sed de sangre cuesta vida y potencia el daño', () => {
@@ -140,12 +140,13 @@ describe('consumibles, bendiciones y botín', () => {
     const { PATRONS, patronsOf } = await import('../src/content/boons');
     const { BOON_MODS } = await import('../src/core/boonmods');
     const { spellOf } = await import('../src/core/combat/engine');
-    for (const cls of ['guerrero', 'mago', 'clerigo', 'arquero', 'picaro'] as const) {
-      expect(patronsOf(cls)).toHaveLength(4);
-      for (const p of patronsOf(cls)) for (const o of p.spells) {
+    for (const cls of ['guerrero', 'mago', 'clerigo', 'arquero', 'picaro', 'zorro', 'esferas', 'acechador', 'carcelero'] as const) {
+      expect(patronsOf(cls).length).toBeGreaterThanOrEqual(3);
+      const own = patronsOf(cls).flatMap((p) => p.spells);
+      for (const o of own) {
         expect(!!BOON_MODS[o] || !!SPELLS[o], o).toBe(true);
-        // las mejoras apuntan a hechizos que la clase tiene siempre
-        if (BOON_MODS[o]) expect(CLASSES[cls].base).toContain(BOON_MODS[o]!.target);
+        // las mejoras apuntan a hechizos de la clase: los iniciales o uno de sus hechizos de bendición
+        if (BOON_MODS[o]) expect([...CLASSES[cls].base, ...own]).toContain(BOON_MODS[o]!.target);
       }
     }
     const run = newRun('T', 3, [{ owner: 'a', name: 'A', cls: 'mago', routes: [] }]);
