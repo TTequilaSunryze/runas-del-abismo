@@ -33,7 +33,9 @@ export interface FightReport {
   gold: number;
   /** daño infligido por cada héroe en este combate */
   damage: Array<{ owner: string; name: string; dmg: number }>;
-  /** botín que no se elige: reliquias, consumibles, aliados */
+  /** objetos que ha soltado el combate, por jugador */
+  items: Array<{ owner: string; item: Item }>;
+  /** otro botín: reliquias y consumibles */
   loot: Array<{ owner: string; icon: string; name: string; text: string; rare?: boolean }>;
 }
 
@@ -622,11 +624,21 @@ export function genLoot(run: RunState, kind: DropKind = dropKindOf(run), min: Ra
   return genItem(run, zoneOf(run).items, run.zone, kind, min);
 }
 
-/** Botín de objetos de un héroe: 1 opción en combate normal, 2 en élite, 3 en jefe (más las del perk y la lupa). */
-function offerLoot(run: RunState, h: HeroSave, kind: DropKind): void {
+/**
+ * Botín de objetos de un héroe: es un drop, no se elige. 1 objeto en combate normal y élite, 2 en jefe
+ * (más 1 con el perk o la lupa en élites y jefes). Va a la ranura libre o a la mochila; si no cabe, se vende.
+ */
+function dropLoot(run: RunState, h: HeroSave, kind: DropKind, report: Item[]): void {
   if (!(rand(run) < dropChance(run.zone, kind))) return;
-  const n = { combat: 1, elite: 2, boss: 3, shop: 1 }[kind] + perkLevel(h.perks, 'loot') + (h.relics.includes('lupa') ? 1 : 0);
-  run.offers[h.owner] = Array.from({ length: n }, () => genLoot(run, kind));
+  const extra = kind === 'combat' ? 0 : perkLevel(h.perks, 'loot') + (h.relics.includes('lupa') ? 1 : 0);
+  const n = { combat: 1, elite: 1, boss: 2, shop: 1 }[kind] + extra;
+  for (let i = 0; i < n; i++) {
+    const it = genLoot(run, kind);
+    const before = heroMaxHp(h);
+    if (receive(h, it)) h.hp += Math.max(0, heroMaxHp(h) - before);
+    else h.gold += Math.floor(PRICE[it.rarity] / 3);
+    report.push(it);
+  }
 }
 
 /** El anfitrión elige uno de los nodos de la sala actual. */
@@ -736,6 +748,7 @@ export function finishFight(run: RunState): void {
   const flawless = c.units.every((u) => u.team !== 'hero' || u.summoner !== undefined || u.hp > 0);
   const extra: string[] = [];
   const loot: FightReport['loot'] = [];
+  const found: Record<string, Item[]> = {};
   if (run.kind === 'boss' && flawless) run.flags.push(`flawless_${run.zone}`);
   if (run.kind === 'boss') run.flags.push(`boss_${run.zone}`);
   for (const h of run.heroes) {
@@ -757,7 +770,7 @@ export function finishFight(run: RunState): void {
       if (gained > 0) extra.push(`${h.name}: ${h.souls} almas, +${gained} de armadura`);
     }
     // objetos según la sala; los hechizos solo llegan al vencer al jefe de la zona
-    offerLoot(run, h, dropKindOf(run));
+    dropLoot(run, h, dropKindOf(run), (found[h.owner] ??= []));
     if (run.kind === 'boss' && run.zone < lastZone(run)) h.bossOffer = buildBossOffer(run, h);
     const max = heroMaxHp(h);
     // los caídos vuelven con el 30%; los demás recuperan un 35% entre combates
@@ -773,7 +786,7 @@ export function finishFight(run: RunState): void {
   if (run.cage) { addAlly(run, run.cage); extra.push(`Liberáis al prisionero: ${makeEnemy(run.cage, { x: 0, y: 0 }).name} os acompaña hasta el final de la zona`); run.cage = null; }
   run.stamp++;
   run.note = `Victoria: cada uno gana ${gold} de oro.${extra.length ? ` También: ${extra.join(' · ')}.` : ''}`;
-  run.report = { stamp: run.stamp, kind: run.kind, turns: c.round, gold, loot, damage: run.heroes.map((h) => ({ owner: h.owner, name: h.name, dmg: Math.max(0, h.stats.dmg - (run.dmg0?.[h.owner] ?? h.stats.dmg)) })) };
+  run.report = { stamp: run.stamp, kind: run.kind, turns: c.round, gold, loot, items: Object.entries(found).flatMap(([owner, list]) => list.map((item) => ({ owner, item }))), damage: run.heroes.map((h) => ({ owner: h.owner, name: h.name, dmg: Math.max(0, h.stats.dmg - (run.dmg0?.[h.owner] ?? h.stats.dmg)) })) };
   run.omen = null;
   run.ambush = false;
   run.fight++;

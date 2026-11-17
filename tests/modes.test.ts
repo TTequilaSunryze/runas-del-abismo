@@ -32,9 +32,9 @@ describe('reto diario', () => {
 });
 
 describe('mejoras permanentes', () => {
-  it('dan vida, oro, runas, opciones de botín y re-tiradas', () => {
+  it('dan vida, oro y objetos extra en el botín', () => {
     const base = newRun('T', 3, P);
-    const boosted = newRun('T', 3, [{ ...P[0]!, perks: { vit: 5, gold: 2, loot: 1, reroll: 1, hack: 99 } }]);
+    const boosted = newRun('T', 3, [{ ...P[0]!, perks: { vit: 5, gold: 2, loot: 1, hack: 99 } }]);
     const h = boosted.heroes[0]!;
     expect(heroMaxHp(h)).toBeGreaterThan(heroMaxHp(base.heroes[0]!));
     expect(h.gold).toBe(50);
@@ -42,12 +42,10 @@ describe('mejoras permanentes', () => {
     boosted.combat = createCombat({ seed: 1, w: 8, h: 5, obstacles: [], units: [heroSpec(h, { x: 1, y: 1 })] }).state;
     boosted.combat.over = 'win'; boosted.phase = 'combat'; boosted.kind = 'elite';
     finishFight(boosted);
-    expect(boosted.offers.p0).toHaveLength(3);
-    const first = boosted.offers.p0!.map((i) => i.name).join();
-    expect(metaAction(boosted, 'p0', { a: 'reroll' })).toBeNull();
-    expect(metaAction(boosted, 'p0', { a: 'reroll' })).toBe('No te quedan re-tiradas en esta zona');
-    expect(boosted.offers.p0).toHaveLength(3);
-    void first;
+    // el botín es un drop: va directo al equipo o la mochila, y queda en el informe
+    expect(boosted.report!.items.length).toBeGreaterThanOrEqual(2);
+    expect(Object.keys(h.equip).length + h.bag.length).toBeGreaterThanOrEqual(1);
+    expect(boosted.offers.p0).toBeUndefined();
   });
   it('los niveles fuera de rango se recortan', () => {
     const r = newRun('T', 3, [{ ...P[0]!, perks: { vit: 999, gold: -5 } }]);

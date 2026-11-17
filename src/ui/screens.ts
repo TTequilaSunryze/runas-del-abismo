@@ -3,7 +3,7 @@ import { CLASSES, PLAYABLE, findRoute } from '../core/classes/classes';
 import { classPortraitUrl } from '../render/sprites';
 import { SPELLS } from '../core/classes/spells';
 import type { ClassId } from '../core/state';
-import { NODE_HINT, NODE_NAME, POTION_HEAL, availableNodes, POTION_PRICE, eventDef, heroMaxHp, type RunState } from '../game/run';
+import { POTION_HEAL, POTION_PRICE, eventDef, heroMaxHp, type RunState } from '../game/run';
 import { TURN_SECONDS } from '../game/session';
 import { ACHIEVEMENTS, HALL_SIZE, MASTERY_XP, ecosFor, masteryOf, masteryProgress, masteryText, meta, myTeam, openRoutes, routeNeeds, settle } from '../game/meta';
 import { currentAccount } from '../net/account';
@@ -15,8 +15,8 @@ import { RELICS } from '../content/relics';
 import { championOf, dailyOf, dailyScore, lastZone } from '../game/run';
 import { CLASS_STORY, ENDING_LOST, ENDING_WON, TUTORIAL, ZONE_STORY } from '../content/story';
 import { esc, mine, store, tip, today, ui } from './ctx';
-import { NODE_ICON, itemIcon, spellIcon, spellTip } from './icons';
-import { advanceBar, diffHtml, itemHtml, pendingRows, sidePanel, topBar, volumeControl } from './panels';
+import { itemIcon, spellIcon, spellTip } from './icons';
+import { advanceBar, diffHtml, itemHtml, mapLegend, mapSvg, pendingRows, sidePanel, topBar, volumeControl } from './panels';
 import { CONSUMABLES, MAX_CONSUMABLE } from '../content/boons';
 
 const RAR = ['ir0', 'ir1', 'ir2', 'ir3'];
@@ -170,9 +170,10 @@ export function mapScreen(): void {
   frame(run, `${run.step === 0 && ZONE_STORY[run.zone] ? `<div class="panel note story"><i>${esc(ZONE_STORY[run.zone]!)}</i></div>` : ''}${run.note ? `<div class="panel note">${esc(run.note)}</div>` : ''}
   ${run.allies.length ? `<div class="panel sm">🤝 Os acompañan: ${run.allies.map((a) => `<b>${esc(ALLIES[a]?.name ?? a)}</b>`).join(', ')} <span class="dim">(hasta el final de la zona)</span></div>` : ''}
   ${run.nextOmen ? `<div class="panel sm">Próximo combate: ${OMENS.find((o) => o.id === run.nextOmen)?.icon} <b>${esc(OMENS.find((o) => o.id === run.nextOmen)?.name ?? '')}</b></div>` : ''}
-  <div class="lbl">Zona ${run.zone + 1}/${lastZone(run) + 1} · Sala ${run.step + 1} de ${run.map.length} · ${s.isHost ? 'elige el camino' : 'el anfitrión elige el camino'}</div>
+  <div class="lbl">Zona ${run.zone + 1}/${lastZone(run) + 1} · Sala ${run.step + 1} de ${run.map.length} · ${s.isHost ? 'pulsa en el mapa a dónde vais' : 'el anfitrión elige el camino'}</div>
   ${advanceBar(run, '', '')}
-  <div class="cards c2">${availableNodes(run).map((i) => { const n = run.map[run.step]![i]!; return `<button class="pick node" data-act="node" data-id="${i}" ${s.isHost && !s.waiting().length ? '' : 'disabled'}><span class="nico">${NODE_ICON[n]}</span><span><b>${NODE_NAME[n].replace(/^\S+\s/, '')}</b><br><span class="dim sm">${NODE_HINT[n]}</span></span></button>`; }).join('')}</div>
+  <div class="chips">${mapLegend()}</div>
+  ${mapSvg(run, true)}
   ${s.isHost && pending ? `<div class="dim sm">${pending} jugador${pending > 1 ? 'es' : ''} aún eligiendo botín: los caminos se desbloquean cuando todos estén listos.</div>` : ''}
   ${pendingRows(run)}`);
 }

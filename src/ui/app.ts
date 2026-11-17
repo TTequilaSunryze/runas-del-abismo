@@ -137,6 +137,10 @@ function pickSpell(id: string): void {
 }
 
 document.addEventListener('click', (e) => {
+  // clic en el fondo de un cartel: lo cierra
+  const bg = e.target as HTMLElement;
+  if (bg.id === 'mapmodal') { ui.mapOpen = false; lastKey = ''; render([]); return; }
+  if (bg.id === 'statsmodal') { ui.statsOpen = false; lastKey = ''; render([]); return; }
   const el = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');
   if (!el || (el as HTMLButtonElement).disabled) return;
   const id = el.dataset.id ?? '';

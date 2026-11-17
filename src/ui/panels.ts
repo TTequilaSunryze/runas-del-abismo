@@ -147,14 +147,14 @@ export function victoryModal(run: RunState): string {
   if (!r) return '';
   const chip = (icon: string, tipHtml: string, cls = ''): string => `<span class="cell big ${cls}" ${tip(tipHtml)}><span class="emo">${icon}</span></span>`;
   const mineLoot = r.loot.filter((l) => !h || l.owner === h.owner);
-  const offer = h ? run.offers[h.owner] : undefined;
-  const items = offer && h ? `<div class="lbl">Elige un objeto <span class="dim sm">(o ninguno)</span></div><div class="cells loot-icons">${offer.map((it, i) => `<button class="cell big ${RAR[it.rarity]}" data-act="pick" data-id="${i}" ${tip(itemHtml(it, true) + diffHtml(it, h) + '<div class="dim sm">Clic para quedártelo</div>')}>${itemIcon(it)}</button>`).join('')}<button class="mini" data-act="pick" data-id="-1">Ninguno</button></div>` : '';
+  const found = r.items.filter((x) => !h || x.owner === h.owner).map((x) => x.item);
+  const items = found.map((it) => `<span class="cell big ${RAR[it.rarity]}" ${tip(itemHtml(it, true))}>${itemIcon(it)}</span>`).join('');
   const total = Math.max(1, ...r.damage.map((x) => x.dmg));
   return `<div class="modal victory" id="victorymodal"><div class="panel wide" onclick="event.stopPropagation()">
   <h2 class="vtitle">FIN DEL COMBATE - ¡HAS GANADO!</h2>
-  <div class="lbl">Botín</div>
-  <div class="cells loot-icons">${chip('💰', `<b>Oro</b><div class="sm">+${r.gold} de oro para cada uno.</div>`)}${mineLoot.map((l) => chip(l.icon, `<b>${esc(l.name)}</b><div class="sm">${esc(l.text)}</div>`, l.rare ? 'ir3' : 'ir1')).join('')}</div>
-  ${items}
+  <div class="lbl">Has encontrado…</div>
+  <div class="cells loot-icons">${chip('💰', `<b>Oro</b><div class="sm">+${r.gold} de oro para cada uno.</div>`)}${items}${mineLoot.map((l) => chip(l.icon, `<b>${esc(l.name)}</b><div class="sm">${esc(l.text)}</div>`, l.rare ? 'ir3' : 'ir1')).join('')}</div>
+  ${found.length ? '<div class="dim sm">Los objetos ya están en tu equipo o en tu mochila (si no cabían, se han vendido).</div>' : ''}
   ${bossRow(run)}
   <div class="lbl">Resumen</div>
   <div class="vsum sm"><span>⏱️ ${r.turns} ronda${r.turns === 1 ? '' : 's'}</span><span>⚔️ ${r.damage.reduce((a, x) => a + x.dmg, 0)} de daño</span></div>
@@ -226,7 +226,7 @@ export function statsModal(run: RunState): string {
   const rows = statBreakdown(h);
   const spec = heroSpec(h);
   const pat = patronBonus(h.boons);
-  return `<div class="modal" id="statsmodal" data-act="stats"><div class="panel wide" onclick="event.stopPropagation()">
+  return `<div class="modal" id="statsmodal"><div class="panel wide">
   <div class="row"><h2>📊 ${esc(h.name)}</h2><span class="dim">${esc(findRoute(h.cls, h.routes[0] ?? '')?.name ?? '')}</span><span class="grow"></span><button class="mini" data-act="stats">Cerrar ✕</button></div>
   <table class="stattab"><tr><th>Estadística</th><th>Base</th><th>Modificadores</th><th>Total</th></tr>
   ${rows.map((r) => `<tr><td>${esc(r.name)}</td><td class="dim">${r.base}</td><td class="sm">${r.parts.map(([n, v]) => `<span class="${v > 0 ? 'good' : 'bad'}">${v > 0 ? '+' : ''}${v} ${esc(n)}</span>`).join(' · ') || '<span class="dim">—</span>'}</td><td><b>${r.key === 'hp' ? `${h.hp}/${r.total}` : r.total}</b></td></tr>`).join('')}
@@ -243,13 +243,14 @@ export function statsModal(run: RunState): string {
 }
 const TRAIT_LABEL: Record<string, string> = { venom: 'Tus venenos aplican 1 carga más', ignite: 'Todo tu daño quema', execute: 'Tus críticos hacen el doble', mender: 'Curas y escudos +30%', guard: 'Empiezas cada turno con escudo', thorns: 'Devuelves el 30% del daño cuerpo a cuerpo', regen: 'Te regeneras cada turno', enrage: '+40% de daño con poca vida' };
 
-/** Mapa del acto como overlay: capas de abajo (inicio) a arriba (jefe), con las rutas posibles. */
-export function mapModal(run: RunState): string {
-  const L = run.map.length, W = 520, rowH = 58, H = L * rowH + 20;
+/** Dibujo del mapa: capas de abajo (inicio) a arriba (jefe). Con `pick`, los nodos disponibles se pulsan para ir a ellos. */
+export function mapSvg(run: RunState, pick = false): string {
+  const L = run.map.length, W = 520, rowH = 62, H = L * rowH + 20;
   const pos = (l: number, i: number): [number, number] => [((i + 0.5) / run.map[l]!.length) * W, H - 30 - l * rowH];
   const avail = run.phase === 'map' ? availableNodes(run) : [];
   const here = (l: number, i: number): boolean => run.trail[l] === i && l < run.step;
   const current = (l: number, i: number): boolean => run.phase !== 'map' && l === run.step && run.trail[l] === i;
+  const canPick = pick && ui.session?.isHost && !ui.session.waiting().length;
   const lines = run.links.map((rows, l) => rows.map((to, i) => to.map((j) => {
     const [x1, y1] = pos(l, i), [x2, y2] = pos(l + 1, j);
     const walked = run.trail[l] === i && (run.trail[l + 1] === j && l + 1 < run.step || (l + 1 === run.step && avail.includes(j)));
@@ -259,12 +260,23 @@ export function mapModal(run: RunState): string {
     const [x, y] = pos(l, i);
     const can = l === run.step && avail.includes(i), done = here(l, i) || current(l, i);
     const stroke = can ? '#f2c14e' : done ? '#6fcf6f' : '#5a4a6e';
-    return `<g opacity="${l < run.step && !done ? 0.35 : 1}"><title>${esc(NODE_NAME[k])}</title><circle cx="${x}" cy="${y}" r="20" fill="#241a33" stroke="${stroke}" stroke-width="${can || done ? 3 : 2}"/><text x="${x}" y="${y + 7}" text-anchor="middle" font-size="20">${NODE_ICON[k]}</text></g>`;
+    const click = pick && can ? `data-act="node" data-id="${i}" style="cursor:${canPick ? 'pointer' : 'not-allowed'}"` : '';
+    const label = can ? `<text x="${x}" y="${y + 36}" text-anchor="middle" font-size="12" fill="#f2c14e">${esc(NODE_NAME[k].replace(/^\S+\s/, ''))}</text>` : '';
+    return `<g ${click} opacity="${l < run.step && !done ? 0.35 : 1}"><title>${esc(NODE_NAME[k])}</title><circle cx="${x}" cy="${y}" r="${can ? 24 : 20}" fill="${can ? '#3a2c1a' : '#241a33'}" stroke="${stroke}" stroke-width="${can || done ? 3 : 2}"/><text x="${x}" y="${y + 7}" text-anchor="middle" font-size="20" pointer-events="none">${NODE_ICON[k]}</text>${label}</g>`;
   }).join('')).join('');
-  const legend = (['combat', 'elite', 'event', 'shrine', 'shop', 'rest', 'boss'] as const).map((k) => `<span class="chip">${NODE_ICON[k]} ${esc(NODE_NAME[k].replace(/^\S+\s/, ''))}</span>`).join('');
-  return `<div class="modal" id="mapmodal" data-act="map"><div class="panel wide" onclick="event.stopPropagation()">
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;display:block;margin:6px auto">${lines}${nodes}</svg>`;
+}
+
+const mapLegend = (): string => (['combat', 'elite', 'event', 'shrine', 'shop', 'rest', 'boss'] as const).map((k) => `<span class="chip">${NODE_ICON[k]} ${esc(NODE_NAME[k].replace(/^\S+\s/, ''))}</span>`).join('');
+
+/** Mapa del acto como cartel (para consultarlo desde cualquier pantalla). */
+export function mapModal(run: RunState): string {
+  const L = run.map.length;
+  return `<div class="modal" id="mapmodal"><div class="panel wide">
   <div class="row"><h2>🗺️ Mapa · Zona ${run.zone + 1}</h2><span class="dim sm">Sala ${Math.min(run.step + 1, L)} de ${L}</span><span class="grow"></span><button class="mini" data-act="map">Cerrar ✕</button></div>
-  <div class="chips">${legend}</div>
-  <svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;display:block;margin:6px auto">${lines}${nodes}</svg>
+  <div class="chips">${mapLegend()}</div>
+  ${mapSvg(run)}
   <div class="dim sm">Dorado: caminos disponibles · Verde: ruta recorrida. El jefe está arriba.</div></div></div>`;
 }
+
+export { mapLegend };

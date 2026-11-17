@@ -90,7 +90,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     ],
   },
   esferas: {
-    id: 'esferas', name: 'Tejedora de Esferas', hp: 60, armor: 0, power: 0, crit: 5, ap: 6, mp: 3, initiative: 12, base: ['t_pulso', 't_dispersion', 't_descarga'], tackle: 1, dodge: 5,
+    id: 'esferas', name: 'Tejedora de Esferas', hp: 60, armor: 0, power: 0, crit: 5, ap: 6, mp: 4, initiative: 12, base: ['t_pulso', 't_dispersion', 't_descarga'], tackle: 1, dodge: 5,
     routes: [
       R('base', 'Clásico', '', ['t_pulso', 't_dispersion', 't_descarga'], 'El kit inicial: siembra esferas, dispérsalas contra el enemigo y descárgalas todas de golpe.'),
     ],
@@ -108,7 +108,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     ],
   },
   carcelero: {
-    id: 'carcelero', name: 'Carcelero de Almas', hp: 60, armor: 1, power: 0, crit: 5, ap: 6, mp: 3, initiative: 9, base: ['k_sentencia', 'k_linterna', 'k_despellejar'], tackle: 6, dodge: 2,
+    id: 'carcelero', name: 'Carcelero de Almas', hp: 60, armor: 1, power: 0, crit: 5, ap: 6, mp: 4, initiative: 9, base: ['k_sentencia', 'k_linterna', 'k_despellejar'], tackle: 6, dodge: 2,
     routes: [
       R('base', 'Clásico', '', ['k_sentencia', 'k_linterna', 'k_despellejar'], 'El kit inicial: un gancho, una linterna salvavidas y un barrido a tu alrededor.'),
     ],

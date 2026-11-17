@@ -74,8 +74,7 @@ export interface PerkDef {
 export const PERKS: PerkDef[] = [
   { id: 'vit', name: 'Vitalidad', icon: '❤️', text: (l) => `+${l * 6}% de vida máxima`, max: 5, cost: (l) => 30 + l * 25 },
   { id: 'gold', name: 'Bolsa heredada', icon: '💰', text: (l) => `Empiezas con ${l * 25} de oro`, max: 4, cost: (l) => 25 + l * 20 },
-  { id: 'loot', name: 'Ojo del saqueador', icon: '🎁', text: (l) => `+${l} opción en cada botín`, max: 1, cost: () => 120 },
-  { id: 'reroll', name: 'Segunda oportunidad', icon: '🎲', text: (l) => `${l} re-tirada(s) de botín por zona`, max: 2, cost: (l) => 70 + l * 60 },
+  { id: 'loot', name: 'Ojo del saqueador', icon: '🎁', text: (l) => `+${l} objeto en los botines de élites y jefes`, max: 1, cost: () => 120 },
   { id: 'aid', name: 'Primeros auxilios', icon: '🩹', text: (l) => `+${l * 8}% de curación entre combates`, max: 3, cost: (l) => 40 + l * 30 },
 ];
 
