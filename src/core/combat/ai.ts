@@ -197,7 +197,7 @@ function pillarTurn(s: CombatState, ev: GameEvent[]): void {
 
 /** Lanza lo mejor que tenga a mano: primero ayuda a un aliado malherido, luego el hechizo que más daño haga. */
 function champCast(s: CombatState, u: Unit, ev: GameEvent[]): boolean {
-  const defs = u.spells.filter((sp) => sp.cd === 0).map((sp) => spellOf(u, sp.id)!).filter((d) => d && apCost(u, d.id) <= u.ap);
+  const defs = u.spells.filter((sp) => sp.cd === 0).map((sp) => spellOf(u, sp.id)!).filter((d) => d && apCost(u, d.id, s) <= u.ap);
   const allies = s.units.filter((a) => a.team === u.team && alive(a));
   const foes = s.units.filter((f) => f.team !== u.team && alive(f) && !f.statuses.invis);
   let best: { d: SpellDef; at: Pos; score: number } | null = null;

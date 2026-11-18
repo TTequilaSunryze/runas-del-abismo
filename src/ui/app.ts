@@ -273,7 +273,7 @@ document.addEventListener('keydown', (e) => {
   const n = Number(e.key);
   if (u && n >= 1 && n <= u.spells.length) {
     const sp = u.spells[n - 1]!;
-    if (sp.cd === 0 && (sp.charges === undefined || sp.charges > 0) && u.ap >= apCost(u, sp.id)) pickSpell(sp.id);
+    if (sp.cd === 0 && (sp.charges === undefined || sp.charges > 0) && u.ap >= apCost(u, sp.id, s.run?.combat ?? undefined)) pickSpell(sp.id);
   } else if (e.key === 'e' || e.key === 'E' || e.key === ' ') { e.preventDefault(); s.act({ a: 'end' }); }
   else if (e.key === 'Escape') ui.board?.select(null);
 });

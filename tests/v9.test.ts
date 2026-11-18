@@ -1,4 +1,4 @@
-// v9: 6 hechizos únicos y 3 bendiciones por clase, y el Bárbaro Desatado con su Furia.
+// v9: 6 hechizos únicos y bendiciones por clase, y el Bárbaro Desatado con su Furia.
 import { describe, expect, it } from 'vitest';
 import { makeEnemy } from '../src/content/enemies';
 import { PATRONS, patronsOf } from '../src/content/boons';
@@ -25,13 +25,13 @@ const me = (s: CombatState): Unit => { const u = s.units[0]!; for (let i = 0; i 
 const ok = (s: CombatState, u: Unit, id: string, at: { x: number; y: number }) => { const r = cast(s, u.id, id, at); expect(r.ok, r.ok ? id : `${id}: ${r.reason}`).toBe(true); return r.ok ? r.events : []; };
 
 describe('pool de cada clase', () => {
-  it('6 hechizos únicos y 3 bendiciones por clase, solo suyos', () => {
+  it('6 hechizos únicos y 10 bendiciones por clase, solo suyos', () => {
     const seen = new Set<string>();
     for (const c of NEW) {
       const pool = patronsOf(c).flatMap((p) => p.spells);
       const spells = pool.filter((id) => SPELLS[id]), bless = pool.filter((id) => BLESSINGS[id]);
       expect(spells, c).toHaveLength(6);
-      expect(bless, c).toHaveLength(3);
+      expect(bless, c).toHaveLength(10);
       for (const id of pool) { expect(seen.has(id), id).toBe(false); seen.add(id); }
       for (const id of bless) expect(BLESSINGS[id]!.cls).toBe(c);
     }

@@ -104,6 +104,16 @@ export interface Unit {
   soulsFight?: number;
   /** Guadaña segadora: el próximo ataque de este turno pega más */
   reaper?: boolean;
+  /** v11 bendiciones: banderas de turno o de combate */
+  reflexRound?: number;
+  mistWalk?: boolean;
+  symphony?: boolean;
+  gravHit?: boolean;
+  twinBlades?: boolean;
+  huntUsed?: boolean;
+  shadowSaved?: boolean;
+  bloodUsed?: boolean;
+  behindNow?: boolean;
   /** Furia del Bárbaro (0 a 100) */
   fury?: number;
   /** ha atacado o recibido daño desde su último turno (si no, pierde Furia) */

@@ -159,22 +159,38 @@ function checkOver(s: CombatState, ev: GameEvent[]): void {
 }
 
 /** Aplica daño ya calculado (antes de armadura). Devuelve la vida perdida. */
-function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: string, opts: { pierce?: boolean; crit?: boolean; element?: Element } = {}): number {
+function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: string, opts: { pierce?: boolean; crit?: boolean; element?: Element; armorPen?: number } = {}): number {
   if (!alive(u)) return 0;
   // Sacrificio del guardián: parte del daño lo recibe el Carcelero (con su armadura)
   const gd = u.statuses.guarded;
   if (gd && source !== 'guardian') {
     const g = gd.from === undefined ? undefined : s.units.find((x) => x.id === gd.from);
-    if (g && alive(g) && g !== u) { hurt(s, g, raw * GUARD_SHARE, ev, 'guardian', { ...opts, crit: false }); raw *= 1 - GUARD_SHARE; }
+    if (g && alive(g) && g !== u) { hurt(s, g, raw * GUARD_SHARE * (hasTrait(g, 'custodia') ? 0.85 : 1), ev, 'guardian', { ...opts, crit: false }); raw *= 1 - GUARD_SHARE; }
   }
   // GANCHO DAÑOS CON EFECTO (FEATURES.effectDamage): el tipo de daño llegará en opts.element; las resistencias se reactivan con FEATURES.resistances
   const res = FEATURES.resistances && opts.element ? Math.min(75, u.resist[opts.element] ?? 0) : 0;
   raw *= 1 - res / 100;
-  const armor = Math.max(0, u.armor - (u.statuses.exposed?.stacks ?? 0));
+  // Resiliencia salvaje: cada 20 de Furia, −2% de daño físico (máx. 10%)
+  if (hasTrait(u, 'resiliencia') && !opts.element) raw *= 1 - Math.min(10, 2 * Math.floor((u.fury ?? 0) / 20)) / 100;
+  // Armadura de los condenados: +1 de armadura cada 2 almas sin gastar (máx. +6)
+  const souls = hasTrait(u, 'condenados') ? Math.min(6, Math.floor((u.soulBank ?? 0) / 2)) : 0;
+  const armor = Math.floor(Math.max(0, u.armor + souls - (u.statuses.exposed?.stacks ?? 0)) * (1 - (opts.armorPen ?? 0)));
   let dmg = opts.pierce ? Math.max(1, Math.round(raw)) : Math.max(1, Math.round(raw) - armor);
   const absorbed = Math.min(u.shield, dmg);
   u.shield -= absorbed;
   dmg -= absorbed;
+  // Reflejo oscuro: una vez por combate, la Sombra recibe el golpe letal y estalla en humo
+  if (dmg >= u.hp && hasTrait(u, 'reflejoscuro') && !u.shadowSaved) {
+    const sh = marksOf(s, 'shadow', u.id).at(-1);
+    if (sh) {
+      u.shadowSaved = true;
+      removeMark(s, sh, ev);
+      dmg = 0;
+      ev.push({ t: 'resist', unit: u.id, what: '¡Reflejo oscuro!' });
+      const atk = casting !== null ? getUnit(s, casting) : undefined;
+      if (atk && alive(atk) && atk.team !== u.team) { addStatus(atk, 'vuln', 1, 1, ev); atk.ap = Math.max(0, atk.ap - 1); ev.push({ t: 'drain', unit: atk.id, ap: -1, mp: 0 }); }
+    }
+  }
   // Negarse a morir: con 60 de Furia o más, sobrevive una vez con 1 de vida
   if (dmg >= u.hp && hasTrait(u, 'negarse') && !u.undying && (u.fury ?? 0) >= 60) {
     dmg = Math.max(0, u.hp - 1);
@@ -185,6 +201,8 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
   u.hp = Math.max(0, u.hp - dmg);
   ev.push({ t: 'damage', unit: u.id, amount: dmg, absorbed, crit: !!opts.crit, source });
   if (dmg > 0 && u.fury !== undefined) { u.furyHot = true; addFury(u, 10, ev); }
+  // Reacción visceral: un crítico recibido da +15 de Furia
+  if (opts.crit && u.fury !== undefined && hasTrait(u, 'visceral')) addFury(u, 15, ev);
   // Marca de la muerte: guarda el 35% del daño que le hacen el Acechador y sus sombras
   const dm = u.statuses.deathmark;
   if (dm && dmg > 0 && casting !== null && dm.from === casting && source !== 'marca') dm.stacks += Math.round(dmg * DEATHMARK_PCT);
@@ -196,6 +214,8 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
       for (const k of s.units) {
         if (k.souls === undefined || !alive(k) || k.team === u.team) continue;
         gainSoul(s, k, u.pos, ev);
+        // Eco de los caídos: por debajo de la mitad, el alma de un enemigo cercano te cura el 8%
+        if (hasTrait(k, 'ecocaidos') && k.hp < k.maxHp / 2 && dist(k.pos, u.pos) <= 3) heal(k, k.maxHp * 0.08, ev);
       }
     }
     if (hasTrait(u, 'puddle') && !s.puddles.includes(key(u.pos))) s.puddles.push(key(u.pos));
@@ -271,6 +291,7 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     u.discount = 0;
     u.reaper = false;
     u.syncHit = false;
+    u.mistWalk = false; u.gravHit = false; u.twinBlades = false; u.huntUsed = false; u.bloodUsed = false; u.behindNow = false;
     // el señuelo dura hasta su turno
     if (u.ai === 'decoy') { u.hp = 0; ev.push({ t: 'death', unit: u.id }); continue; }
     // Furia: si pasa un turno entero sin atacar ni recibir daño, pierde 20
@@ -315,6 +336,7 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     for (const k of ['charm', 'vuln', 'hobble', 'guarded', 'verdugo', 'frenzy', 'orbita', 'chained'] as const) tick(u, k);
     // Mirada del verdugo: si su presa sigue marcada, el Bárbaro gana 1 PM para ir a por ella
     if (s.units.some((x) => alive(x) && x.statuses.verdugo?.from === u.id)) { u.mp++; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: 1 }); }
+    turnStartBlessings(s, u, ev);
     if (u.statuses.stun) {
       tick(u, 'stun');
       ev.push({ t: 'skip', unit: u.id, reason: 'stun' });
@@ -342,7 +364,7 @@ export function move(s: CombatState, unitId: number, to: Pos): ActionResult {
   const walked: Pos[] = [];
   for (const p of path) {
     // placaje: al salir de una casilla pegada a enemigos se pierden PM
-    const keep = Math.floor(u.mp * tackleKeep(dodgeOf(u), tacklersOf(s, u)));
+    const keep = Math.floor(u.mp * tackleKeep(dodgeOf(s, u), tacklersOf(s, u)));
     if (keep < u.mp) {
       ev.push({ t: 'tackle', unit: u.id, lost: u.mp - keep });
       u.mp = keep;
@@ -351,6 +373,7 @@ export function move(s: CombatState, unitId: number, to: Pos): ActionResult {
     u.pos = { ...p };
     u.mp--;
     walked.push(p);
+    stepBlessings(s, u, ev);
     if (s.traps.includes(key(p))) {
       ev.push({ t: 'trap', unit: u.id });
       hurt(s, u, TRAP_DMG, ev, 'trap', { pierce: true });
@@ -372,14 +395,18 @@ export function move(s: CombatState, unitId: number, to: Pos): ActionResult {
 
 /** Placaje total de los enemigos pegados a `u` (los espectros y los invisibles no se dejan placar). */
 export function tacklersOf(s: CombatState, u: Unit): number {
-  if (hasTrait(u, 'ghost') || u.statuses.invis || u.statuses.frenzy) return 0;
-  return s.units.filter((o) => o.team !== u.team && alive(o) && o.ai !== 'pillar' && !o.statuses.invis && dist(o.pos, u.pos) === 1).reduce((a, o) => a + (o.tackle ?? 0), 0);
+  return tacklersAt(s, u, u.pos);
 }
+
+/** El placaje no le afecta: espectros, invisibles, Frenesí, Caminante de la niebla, Golpe titánico. */
+const untackleable = (u: Unit): boolean => hasTrait(u, 'ghost') || !!u.statuses.invis || !!u.statuses.frenzy || !!u.mistWalk || (hasTrait(u, 'titanico') && (u.fury ?? 0) > 80);
+/** Placaje de `o` sobre `u` (Cadenas pesadas: +2 contra ralentizados, encadenados o con la Huida reducida). */
+const tackleOf = (o: Unit, u: Unit): number => (o.tackle ?? 0) + (hasTrait(o, 'pesadas') && (u.statuses.slow || u.statuses.chained || u.statuses.hobble) ? 2 : 0);
 
 /** Placaje que sufriría `u` si estuviera en `pos`. */
 function tacklersAt(s: CombatState, u: Unit, pos: Pos): number {
-  if (hasTrait(u, 'ghost') || u.statuses.invis || u.statuses.frenzy) return 0;
-  return s.units.filter((o) => o.team !== u.team && alive(o) && o.ai !== 'pillar' && !o.statuses.invis && o !== u && dist(o.pos, pos) === 1).reduce((a, o) => a + (o.tackle ?? 0), 0);
+  if (untackleable(u)) return 0;
+  return s.units.filter((o) => o.team !== u.team && alive(o) && o.ai !== 'pillar' && !o.statuses.invis && o !== u && dist(o.pos, pos) === 1).reduce((a, o) => a + tackleOf(o, u), 0);
 }
 
 /**
@@ -393,7 +420,7 @@ export function movePreview(s: CombatState, u: Unit, to: Pos): { path: Pos[]; ta
   const tackled: Pos[] = [];
   let mp = u.mp, pos = u.pos, stop = path.length;
   for (let i = 0; i < path.length; i++) {
-    const keep = Math.floor(mp * tackleKeep(dodgeOf(u), tacklersAt(s, u, pos)));
+    const keep = Math.floor(mp * tackleKeep(dodgeOf(s, u), tacklersAt(s, u, pos)));
     if (keep < mp) { tackled.push({ ...pos }); mp = keep; if (mp <= 0) { stop = i; break; } }
     pos = path[i]!;
     mp--;
@@ -403,11 +430,15 @@ export function movePreview(s: CombatState, u: Unit, to: Pos): { path: Pos[]; ta
 
 /** PM con los que `u` puede moverse desde donde está, contando el placaje. */
 export function usableMp(s: CombatState, u: Unit): number {
-  return Math.floor(u.mp * tackleKeep(dodgeOf(u), tacklersOf(s, u)));
+  return Math.floor(u.mp * tackleKeep(dodgeOf(s, u), tacklersOf(s, u)));
 }
 
 /** Huida efectiva (Tormento espectral la reduce a la mitad). */
-const dodgeOf = (u: Unit): number => (u.dodge ?? 0) * (u.statuses.hobble ? 0.5 : 1);
+const dodgeOf = (s: CombatState, u: Unit): number => {
+  // Manto de la noche: sin aliados a 3 casillas, +3 de Huida
+  const alone = hasTrait(u, 'manto') && !s.units.some((o) => o !== u && alive(o) && o.team === u.team && o.ai !== 'pillar' && dist(o.pos, u.pos) <= 3);
+  return ((u.dodge ?? 0) + (alone ? 3 : 0)) * (u.statuses.hobble ? 0.5 : 1);
+};
 
 /**
  * Al entrar en una casilla (andando, empujado o arrastrado): La caja y Cadenas vinculantes.
@@ -471,7 +502,7 @@ export function castProblem(s: CombatState, u: Unit, base: SpellDef, at: Pos): s
   if (slot.cd > 0) return 'Hechizo en enfriamiento';
   if (slot.charges !== undefined && slot.charges <= 0) return 'No te quedan';
   if (def.perTurn && (slot.uses ?? 0) >= def.perTurn) return def.perTurn === 1 ? 'Ya lo usaste este turno' : `Máximo ${def.perTurn} veces por turno`;
-  if (u.ap < apCost(u, base.id)) return 'No tienes PA suficientes';
+  if (u.ap < apCost(u, base.id, s)) return 'No tienes PA suficientes';
   if (def.furyCost && (u.fury ?? 0) < def.furyCost) return `Necesitas ${def.furyCost} de Furia`;
   if (def.needSphere && !marksOf(s, 'sphere', u.id).length) return 'Necesitas una esfera en el tablero';
   if (def.special === 'soulburst' && !(u.soulBank ?? 0)) return 'No tienes almas que gastar';
@@ -522,13 +553,22 @@ export function castProblem(s: CombatState, u: Unit, base: SpellDef, at: Pos): s
 }
 
 /** PA que le cuesta ahora a `u` lanzar el hechizo (0 si lo tiene gratis tras rematar; con descuento de Danza de las nueve colas). */
-export function apCost(u: Unit, id: string): number {
+export function apCost(u: Unit, id: string, s?: CombatState): number {
   const slot = u.spells.find((x) => x.id === id);
   if (slot?.free) return 0;
   // los consumibles (objetos con cargas) no gastan PA
   if (slot?.charges !== undefined) return 0;
-  return Math.max(0, (spellOf(u, id)?.ap ?? 99) - (u.discount ?? 0));
+  const d = spellOf(u, id);
+  const base = d?.ap ?? 99;
+  // Sinfonía mística: el próximo hechizo de 3 PA o más cuesta 1 menos
+  const sym = u.symphony && base >= 3 ? 1 : 0;
+  // Dominio esférico: hechizos de esferas a 2 casillas o menos de una esfera tuya
+  const dom = s && d && hasTrait(u, 'dominio') && isSphereSpell(d) && marksOf(s, 'sphere', u.id).some((m) => dist(m.pos, u.pos) <= 2) ? 1 : 0;
+  return Math.max(0, base - Math.max(u.discount ?? 0, sym) - dom);
 }
+
+/** Hechizos que crean, mueven, consumen o usan esferas. */
+const isSphereSpell = (d: SpellDef): boolean => !!(d.sphere || d.consume || d.detonate || d.needSphere || d.atSphere || d.sphereHit || d.sphereShield) || ['throwsphere', 'gravity', 'orbit', 'transfuse', 'singularity'].includes(d.special ?? '');
 
 /** Casilla a la espalda de `t` vista desde `u` (libre), o null. */
 function behindCell(s: CombatState, u: Unit, t: Unit): Pos | null {
@@ -614,8 +654,9 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
 
   const ev: GameEvent[] = [{ t: 'cast', unit: u.id, spell: def.id, at: { ...at }, element: def.element }];
   const slotUsed = u.spells.find((x) => x.id === def.id)!;
-  const cost = apCost(u, def.id);
+  const cost = apCost(u, def.id, s);
   if (!slotUsed.free && (u.discount ?? 0) > 0) u.discount = 0;
+  if (!slotUsed.free && u.symphony && def.ap >= 3 && slotUsed.charges === undefined) u.symphony = false;
   u.ap -= cost;
   delete slotUsed.free;
   // Danza de las nueve colas: tras Impulso espiritual, el siguiente hechizo cuesta 1 PA menos
@@ -641,7 +682,14 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
     const cell = behindCell(s, u, t0)!;
     u.pos = cell;
     ev.push({ t: 'blink', unit: u.id, to: { ...cell } });
+    u.behindNow = true;
+    // Cuchillas gemelas: el siguiente ataque cuerpo a cuerpo de este turno hace sangrar
+    if (hasTrait(u, 'gemelas')) u.twinBlades = true;
   }
+  // Caminante de la niebla: tras desplazarte, el placaje no te afecta este turno
+  if (hasTrait(u, 'niebla') && (def.teleport || def.behind || def.dash || def.retreat || def.special === 'decoy')) u.mistWalk = true;
+  // Paso de medianoche: volverte invisible te cura el 5%
+  if (hasTrait(u, 'medianoche') && def.buff?.kind === 'invis') heal(u, u.maxHp * 0.05, ev);
   if (def.dash) {
     const cell = dashCell(s, u, at)!;
     if (!same(cell, u.pos)) {
@@ -697,7 +745,7 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
       if (foe) {
         const raw = randInt(s, fu.dmg[0], fu.dmg[1]) * dmgScale(u, foe);
         hurt(s, foe, raw, ev, def.id, { element: fu.element });
-        if (u.essence !== undefined && !essenceSpent) u.essence = Math.min(essenceNeed(u), u.essence + 1);
+        if (u.essence !== undefined && !essenceSpent) gainEssence(u, 1, ev);
         // remate: se puede volver a usar gratis este turno
         if (def.resetOnKill && !alive(foe) && !s.over) { slotUsed.uses = 0; slotUsed.free = true; ev.push({ t: 'reset', unit: u.id, spell: def.id }); }
       }
@@ -740,6 +788,8 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
   }
   // Gravedad inversa: atrae hacia la esfera a los enemigos a 2 casillas (antes de dañarlos)
   if (def.special === 'gravity') for (const t of s.units.filter((x) => alive(x) && x.team !== u.team && dist(x.pos, at) <= 2 && dist(x.pos, at) > 0).sort((a, b) => dist(a.pos, at) - dist(b.pos, at))) stepToward(s, t, at, ev);
+  // Singularidad perfecta: atrae hacia el centro a los enemigos a 2 casillas antes del daño
+  if (def.special === 'singularity' && hasTrait(u, 'singperfecta')) for (const t of s.units.filter((x) => alive(x) && x.team !== u.team && x.ai !== 'pillar' && dist(x.pos, at) <= 2 && dist(x.pos, at) > 0).sort((a, b) => dist(a.pos, at) - dist(b.pos, at))) stepToward(s, t, at, ev);
   // Singularidad: cuadrado de 2×2
   const square2 = def.special === 'singularity' ? [at, { x: at.x + 1, y: at.y }, { x: at.x, y: at.y + 1 }, { x: at.x + 1, y: at.y + 1 }] : [];
   const lane = def.line ? lineCells(u.pos, at) : def.cone ? coneCells(u.pos, at, def.cone) : [];
@@ -767,7 +817,7 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
   if (def.consume) {
     const mine = marksOf(s, 'sphere', u.id);
     flat = mine.length * def.consume.per;
-    for (const m of mine) removeMark(s, m, ev);
+    for (const m of mine) { removeMark(s, m, ev); sphereBurst(s, u, m.pos, ev); }
   }
   // Implosión: cada esfera daña a los enemigos pegados a ella
   if (def.detonate) {
@@ -789,11 +839,32 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
   for (const t of pass ? [...targets].reverse() : targets) {
     if (s.over || !alive(t)) continue;
     if (def.dmg) {
-      const crit = flank || rand(s) * 100 < u.crit + furyCrit(u) + (def.crit ?? 0);
+      // Aura de astucia: los enemigos pegados a quien la tiene pierden un 10% de crítico
+      const astute = s.units.some((z) => alive(z) && z.team !== u.team && hasTrait(z, 'astucia') && dist(z.pos, u.pos) <= 1) ? 10 : 0;
+      const crit = flank || rand(s) * 100 < u.crit + furyCrit(u) + (def.crit ?? 0) - astute;
+      const melee = dist(u.pos, t.pos) <= 1;
+      const furyBefore = u.fury ?? 0;
+      // Doble filo letal: con una Sombra al otro lado, los críticos ignoran la armadura
+      const opposite = hasTrait(u, 'doblefilo') && marksOf(s, 'shadow', u.id).some((m) => { const [ax, ay] = dirOf(t.pos, u.pos), [bx, by] = dirOf(t.pos, m.pos); return ax === -bx && ay === -by && (ax || ay); });
+      const pen = hasTrait(u, 'titanico') && furyBefore > 80 && melee ? 0.2 : 0;
       const pack = hasTrait(u, 'pack') ? s.units.filter((o) => o !== u && o.team === u.team && alive(o) && hasTrait(o, 'pack')).length * PACK_BONUS : 0;
       const fury = hasTrait(u, 'enrage') && u.hp < u.maxHp / 2 ? ENRAGE_POWER : 0;
       const raw = (randInt(s, def.dmg[0], def.dmg[1]) + (t === main ? flat : 0) + flatAll) * dmgScale(u, t, pack + fury) * (crit ? (hasTrait(u, 'execute') ? EXECUTE_MULT : CRIT_MULT) : 1) * (t === main || def.range[1] === 0 || def.line || def.cone || def.fullArea || square2.length ? 1 : 0.5);
-      const got = hurt(s, t, raw, ev, def.id, { crit, element: def.element, pierce: def.pierce });
+      const got = hurt(s, t, raw, ev, def.id, { crit, element: def.element, pierce: def.pierce || (crit && opposite), armorPen: pen });
+      if (!pass) {
+        // Zorro de fuego: lo que golpea en línea recta quema 2 turnos
+        if (hasTrait(u, 'zfuego') && alive(t) && (def.line || def.straight || def.firstHit)) addStatus(t, 'burn', 2, 1, ev);
+        // Cuchillas gemelas: tras aparecer a su espalda, el golpe cuerpo a cuerpo hace sangrar
+        if (u.twinBlades && melee && alive(t)) addStatus(t, 'bleed', 2, 1, ev);
+        // Reflejo ilusorio: golpe cuerpo a cuerpo recibido → señuelo y empujón (1 vez por ronda)
+        if (alive(t) && melee && hasTrait(t, 'reflejo') && t.reflexRound !== s.round && alive(u)) { t.reflexRound = s.round; illusion(s, t, u, ev); }
+        if (!alive(t) && melee) {
+          // Ejecución sigilosa: remate cuerpo a cuerpo siendo invisible o tras aparecer a su espalda
+          if (hasTrait(u, 'ejecsig') && (u.statuses.invis || u.behindNow)) { u.mp++; u.mistWalk = true; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: 1 }); }
+          // Matasangre: remate cuerpo a cuerpo con la Furia al máximo
+          if (hasTrait(u, 'matasangre') && furyBefore >= FURY_MAX && !u.bloodUsed) { u.bloodUsed = true; u.ap += 2; ev.push({ t: 'drain', unit: u.id, ap: 2, mp: 0 }); }
+        }
+      }
       dealt += got;
       hits++;
       // Órbita defensiva: el primer enemigo que la golpea cuerpo a cuerpo sale despedido
@@ -830,14 +901,22 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
       if (n) push(s, u.pos, t, n, ev);
     }
   }
+  if (u.twinBlades && def.dmg && targets.some((t) => dist(t.pos, u.pos) <= 1)) u.twinBlades = false;
+  // Juicio del inframundo: tu hechizo más caro da 1 alma extra si alcanza a un élite o jefe
+  if (hasTrait(u, 'juicio') && u.souls !== undefined && hits > 0 && def.ap >= Math.max(...u.spells.filter((sp) => !sp.temp && sp.charges === undefined).map((sp) => SPELLS[sp.id]?.ap ?? 0))) {
+    const big = targets.find((t) => t.rank && t.team !== u.team);
+    if (big) gainSoul(s, u, big.pos, ev);
+  }
+  // Prisión ineludible: enganchados y aturdidos quedan con la Huida a la mitad
+  if (hasTrait(u, 'prision')) for (const t of targets) if (alive(t) && t.team !== u.team && (def.hook || t.statuses.stun)) addStatus(t, 'hobble', 1, 1, ev);
   if (def.dmg && slotUsed.charges === undefined && alive(u) && !def.noEcho) shadowEcho(s, u, def, main, targets, ev);
   // Convergencia: la Sombra golpea con todo su daño (crítico si flanquea)
-  if (def.special === 'converge' && main && alive(main) && def.dmg) hurt(s, main, randInt(s, def.dmg[0], def.dmg[1]) * dmgScale(u, main) * (flank ? CRIT_MULT : 1), ev, 'sombra', { crit: flank, element: def.element });
+  if (def.special === 'converge' && main && alive(main) && def.dmg) { hurt(s, main, randInt(s, def.dmg[0], def.dmg[1]) * dmgScale(u, main) * (flank ? CRIT_MULT : 1), ev, 'sombra', { crit: flank, element: def.element, pierce: flank && hasTrait(u, 'doblefilo') }); if (!alive(main)) huntKill(u, ev); }
   if (def.special && TARGET_SPECIALS[def.special]) TARGET_SPECIALS[def.special]!(s, u, def, at, main, targets, hits, ev);
   // Furia: +20 por lanzamiento que golpea (o por enemigo); el doble contra la presa de Mirada del verdugo
   if (u.fury !== undefined && hits > 0) {
     const prey = targets.some((t) => t.statuses.verdugo?.from === u.id) ? 2 : 1;
-    addFury(u, (def.furyPer ? def.furyPer * targets.length : 20) * prey, ev);
+    addFury(u, furyGain(u, (def.furyPer ? def.furyPer * targets.length : 20) * prey), ev);
   }
   // Condenación eterna: los enemigos controlados pueden soltar un alma sin morir
   if (hasTrait(u, 'condena') && u.souls !== undefined && (def.hook || def.push || def.pull || def.status?.kind === 'stun'))
@@ -869,8 +948,8 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
   }
   if (def.sphere && alive(u)) addSphere(s, u, at, def.sphere.turns, def.sphere.max, ev);
   if (def.special === 'singularity' && alive(u)) for (const p of [at, square2[3]!]) if (p.x < s.w && p.y < s.h && !s.obstacles.includes(key(p))) addSphere(s, u, p, 2, 3, ev);
-  if (u.essence !== undefined && hits > 0 && !essenceSpent) u.essence = Math.min(essenceNeed(u), u.essence + 1);
-  if (u.essence !== undefined && def.pull && hasTrait(u, 'mirada') && main && !essenceSpent) u.essence = Math.min(essenceNeed(u), u.essence + 1);
+  if (u.essence !== undefined && hits > 0 && !essenceSpent) gainEssence(u, 1, ev);
+  if (u.essence !== undefined && def.pull && hasTrait(u, 'mirada') && main && !essenceSpent) gainEssence(u, 1, ev);
   if (def.lifesteal && dealt > 0) heal(u, dealt * def.lifesteal, ev);
   if (def.retreat && main && alive(u)) {
     const dx = Math.abs(u.pos.x - main.pos.x) >= Math.abs(u.pos.y - main.pos.y) ? Math.sign(u.pos.x - main.pos.x) || 1 : 0;
@@ -919,7 +998,7 @@ function coneBlast(s: CombatState, u: Unit, def: SpellDef, at: Pos, targets: Uni
       m.pos = n;
       strike(m, hitBy);
     }
-    if (!same(from, m.pos)) ev.push({ t: 'markMove', kind: m.kind, from, to: { ...m.pos } });
+    if (!same(from, m.pos)) { ev.push({ t: 'markMove', kind: m.kind, from, to: { ...m.pos } }); if (hasTrait(u, 'resonante') && marksOf(s, 'sphere', u.id).some((o) => o !== m && dist(o.pos, m.pos) <= 1)) resonate(s, u, m.pos, ev); }
   }
   // 2) la onda empuja a los enemigos alcanzados, primero los más lejanos para que no se bloqueen
   for (const t of [...targets].sort((a, b) => far(a.pos) - far(b.pos))) {
@@ -973,6 +1052,7 @@ function echoFrom(s: CombatState, u: Unit, def: SpellDef, main: Unit | undefined
     if (t === main) u.syncHit = true;
     const raw = randInt(s, def.dmg![0], def.dmg![1]) * dmgScale(u, t) * pct;
     hurt(s, t, raw, ev, 'sombra', { element: def.element });
+    if (!alive(t)) huntKill(u, ev);
     if (!already.includes(t)) applyStatuses(s, u, t, def, ev);
   }
 }
@@ -1028,7 +1108,9 @@ function addSphere(s: CombatState, u: Unit, at: Pos, turns: number, max: number,
   // el máximo sale de la mejor versión que tengas de un hechizo de esferas (las bendiciones lo suben)
   let cap = Math.max(max, ...u.spells.map((sp) => spellOf(u, sp.id)?.sphere?.max ?? 0));
   if (hasTrait(u, 'poder')) { cap = Math.max(cap, 5); turns++; }
+  const touching = hasTrait(u, 'resonante') && marksOf(s, 'sphere', u.id).some((m) => dist(m.pos, at) <= 1);
   addMark(s, { kind: 'sphere', pos: at, team: u.team, turns, owner: u.id, max: cap }, ev);
+  if (touching) resonate(s, u, at, ev);
 }
 
 /** Pone una Sombra del Acechador (Maestro de las sombras: hasta 2; Sombra persistente: 1 turno más). */
@@ -1114,6 +1196,7 @@ const SELF_SPECIALS: Record<string, SelfSpecial> = {
   orbit: (s, u, d, _at, ev) => {
     const m = marksOf(s, 'sphere', u.id).sort((a, b) => dist(a.pos, u.pos) - dist(b.pos, u.pos))[0]!;
     removeMark(s, m, ev);
+    sphereBurst(s, u, m.pos, ev);
     const sh = Math.round((d.shield ?? 10) * (hasTrait(u, 'mender') ? MENDER_MULT : 1));
     u.shield += sh;
     ev.push({ t: 'shield', unit: u.id, amount: sh });
@@ -1121,7 +1204,12 @@ const SELF_SPECIALS: Record<string, SelfSpecial> = {
   },
   // Transfusión de vacío: consume la esfera más antigua y recupera 2 PA
   transfuse: (s, u, _d, _at, ev) => {
-    removeMark(s, marksOf(s, 'sphere', u.id)[0]!, ev);
+    const m = marksOf(s, 'sphere', u.id)[0]!;
+    const at = { ...m.pos };
+    removeMark(s, m, ev);
+    sphereBurst(s, u, at, ev);
+    // Tracción astral: atrae hacia allí al enemigo más cercano
+    if (hasTrait(u, 'traccion')) { const t = s.units.filter((x) => alive(x) && x.team !== u.team && x.ai !== 'pillar').sort((a, b) => dist(a.pos, at) - dist(b.pos, at))[0]; if (t && dist(t.pos, at) > 0) stepToward(s, t, at, ev); }
     u.ap += 2;
     ev.push({ t: 'drain', unit: u.id, ap: 2, mp: 0 });
   },
@@ -1133,6 +1221,8 @@ const SELF_SPECIALS: Record<string, SelfSpecial> = {
     for (const m of list) { removeMark(s, m, ev); ev.push({ t: 'flame', unit: u.id, from: { ...m.pos }, at: { ...u.pos } }); }
     const sh = Math.round(5 * list.length * (hasTrait(u, 'mender') ? MENDER_MULT : 1));
     if (sh) { u.shield += sh; ev.push({ t: 'shield', unit: u.id, amount: sh }); }
+    // Cosecha voraz: +5% de daño por alma absorbida, hasta el final del combate
+    if (hasTrait(u, 'voraz') && list.length) u.power += 5 * list.length;
   },
   // Sed de batalla: consume la Furia (la mitad con Furia inagotable) para curarse
   thirst: (_s, u, _d, _at, ev) => {
@@ -1141,7 +1231,7 @@ const SELF_SPECIALS: Record<string, SelfSpecial> = {
     addFury(u, -(hasTrait(u, 'inagotable') ? Math.ceil(f / 2) : f), ev);
   },
   // Pacto de sangre: (la vida ya se pagó) +40 de Furia y +1 PM
-  pact: (_s, u, _d, _at, ev) => { addFury(u, 40, ev); u.mp++; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: 1 }); },
+  pact: (_s, u, _d, _at, ev) => { addFury(u, furyGain(u, 40), ev); u.mp++; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: 1 }); },
   // Velo de penumbra: (ya es invisible) deja una Sombra en su casilla
   veil: (s, u, _d, _at, ev) => placeShadow(s, u, u.pos, 1, ev),
   // La caja: muros espectrales en el anillo alrededor de la casilla, hasta su próximo turno
@@ -1160,7 +1250,7 @@ const SELF_SPECIALS: Record<string, SelfSpecial> = {
       const n = landed(s, t, 2);
       if (n < 2) ev.push({ t: 'resist', unit: t.id, what: `Resiste ${2 - n} PA` });
       if (n) { t.apMod -= n; ev.push({ t: 'drain', unit: t.id, ap: -n, mp: 0 }); }
-      addFury(u, 15 * (t.statuses.verdugo?.from === u.id ? 2 : 1), ev);
+      addFury(u, furyGain(u, 15 * (t.statuses.verdugo?.from === u.id ? 2 : 1)), ev);
     }
   },
 };
@@ -1218,3 +1308,75 @@ const TARGET_SPECIALS: Record<string, TargetSpecial> = {
   // Explosión de almas: se cura por cada alma gastada (el daño extra ya se sumó)
   soulburst: (_s, u, _d, _at, _m, _t, _h, ev) => { const n = u.spentSouls ?? 0; if (n) heal(u, 5 * n, ev); delete u.spentSouls; },
 };
+
+// ---------------------------------------------------------------------------
+// Bendiciones v11
+// ---------------------------------------------------------------------------
+
+/** Furia ganada por habilidades (Sangre caliente: el doble por debajo de la mitad de vida). */
+function furyGain(u: Unit, n: number): number {
+  return hasTrait(u, 'sangrecal') && u.hp < u.maxHp / 2 ? n * 2 : n;
+}
+
+/** Suma cargas de Esencia (Sinfonía mística: al llenarla, el próximo hechizo caro cuesta 1 PA menos). */
+function gainEssence(u: Unit, n: number, _ev: GameEvent[]): void {
+  if (u.essence === undefined) return;
+  const before = u.essence;
+  u.essence = Math.min(essenceNeed(u), u.essence + n);
+  if (hasTrait(u, 'sinfonia') && before < essenceNeed(u) && u.essence >= essenceNeed(u)) u.symphony = true;
+}
+
+/** Núcleo inestable: una esfera consumida estalla contra los enemigos pegados a ella. */
+function sphereBurst(s: CombatState, u: Unit, at: Pos, ev: GameEvent[]): void {
+  if (!hasTrait(u, 'nucleo')) return;
+  ev.push({ t: 'markAdd', kind: 'pulse', at: { ...at } });
+  for (const t of s.units.filter((x) => alive(x) && x.team !== u.team && dist(x.pos, at) <= 1)) {
+    if (s.over) break;
+    hurt(s, t, randInt(s, 3, 4) * dmgScale(u, t), ev, 'nucleo');
+  }
+}
+
+/** Vórtice resonante: dos esferas pegadas estallan (radio 1). */
+function resonate(s: CombatState, u: Unit, at: Pos, ev: GameEvent[]): void {
+  ev.push({ t: 'markAdd', kind: 'pulse', at: { ...at } });
+  for (const t of s.units.filter((x) => alive(x) && x.team !== u.team && dist(x.pos, at) <= 1)) {
+    if (s.over) break;
+    hurt(s, t, randInt(s, 4, 6) * dmgScale(u, t), ev, 'resonancia');
+  }
+}
+
+/** Cacería coordinada: una Sombra remata → +2 PA (1 vez por turno). */
+function huntKill(u: Unit, ev: GameEvent[]): void {
+  if (!hasTrait(u, 'caceria') || u.huntUsed) return;
+  u.huntUsed = true;
+  u.ap += 2;
+  ev.push({ t: 'drain', unit: u.id, ap: 2, mp: 0 });
+}
+
+/** Reflejo ilusorio: deja un señuelo junto a la Zorra y empuja 1 casilla al atacante. */
+function illusion(s: CombatState, z: Unit, atk: Unit, ev: GameEvent[]): void {
+  const cell = around(s, z.pos).find((p) => isFree(s, p));
+  if (cell) summon(s, { ...z, name: 'Reflejo', owner: null, hp: 1, maxHp: 1, shield: 0, armor: 0, statuses: {}, spells: [], ai: 'decoy', summoner: z.id, traits: ['taunt'], essence: undefined, initiative: 0 }, cell, ev);
+  if (!atk.rank) push(s, z.pos, atk, 1, ev);
+}
+
+/** Efectos de bendición al empezar el turno (después de reponer PA y PM). */
+function turnStartBlessings(s: CombatState, u: Unit, ev: GameEvent[]): void {
+  // Voluntad indómita: por debajo del 25%, +1 carga de Esencia
+  if (hasTrait(u, 'indomita') && u.hp < u.maxHp * 0.25) gainEssence(u, 1, ev);
+  // Órbita protectora: con 2+ esferas, escudo del 10% de la vida máxima
+  if (hasTrait(u, 'orbitaprot') && marksOf(s, 'sphere', u.id).length >= 2) { const sh = Math.round(u.maxHp * 0.1); u.shield += sh; ev.push({ t: 'shield', unit: u.id, amount: sh }); }
+  // Carga berserker: enemigo visible en línea recta → +1 PM
+  if (hasTrait(u, 'carga') && s.units.some((t) => alive(t) && t.team !== u.team && !t.statuses.invis && (t.pos.x === u.pos.x || t.pos.y === u.pos.y) && hasLineOfSight(s, u.pos, t.pos))) { u.mp++; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: 1 }); }
+}
+
+/** Efectos al dar un paso: Gravedad alterada (enemigos junto a una esfera) e Imparable (Bárbaro en Frenesí). */
+function stepBlessings(s: CombatState, u: Unit, ev: GameEvent[]): void {
+  if (!u.gravHit && u.mp > 0 && s.units.some((w) => alive(w) && w.team !== u.team && hasTrait(w, 'gravedad') && marksOf(s, 'sphere', w.id).some((m) => dist(m.pos, u.pos) <= 1))) {
+    u.gravHit = true;
+    u.mp--;
+    ev.push({ t: 'drain', unit: u.id, ap: 0, mp: -1 });
+  }
+  if (u.statuses.frenzy && hasTrait(u, 'imparable'))
+    for (const t of s.units.filter((x) => alive(x) && x.team !== u.team && !x.rank && x.ai !== 'pillar' && dist(x.pos, u.pos) === 1 && !x.statuses.slow)) addStatus(t, 'slow', 1, 1, ev);
+}
