@@ -24,7 +24,7 @@ export const ZONA3_EVENTS: EventDef[] = [
     id: 'forja', title: 'La Forja que Aún Arde',
     text: 'Entre los escombros, una fragua sigue encendida sin nadie que la alimente. El yunque espera.',
     options: [
-      { label: 'Templar las armas', hint: 'Todos: +15% de daño. El calor cuesta el 20% de la vida actual.', apply: (run) => { for (const h of run.heroes) { boon(h, 'power', 15); losePct(h, 0.2); } return 'El acero canta. Vuestra piel, también.'; } },
+      { label: 'Templar las armas', hint: 'Todos: +15% de daño (físico y mágico). El calor cuesta el 20% de la vida actual.', apply: (run) => { for (const h of run.heroes) { boon(h, 'power', 15); losePct(h, 0.2); } return 'El acero canta. Vuestra piel, también.'; } },
       { label: 'Reforzar las armaduras', hint: 'Todos: +2 de armadura y +15% de resistencia al fuego.', apply: (run) => { for (const h of run.heroes) { boon(h, 'armor', 2); boon(h, 'resFire', 15); } return 'Salís de la forja más pesados y más seguros.'; } },
     ],
   },
@@ -48,7 +48,7 @@ export const ZONA3_EVENTS: EventDef[] = [
     id: 'herrero', title: 'El Último Herrero',
     text: 'Un enano de ceniza sigue trabajando aunque su reino ya no exista. Os ofrece afilar algo.',
     options: [
-      { label: 'Afilar las armas', hint: 'Todos: +8% de daño y +6% de crítico.', apply: (run) => { for (const h of run.heroes) { boon(h, 'power', 8); boon(h, 'crit', 6); } return 'Os devuelve las armas sin mirarlas. Sabe lo que hace.'; } },
+      { label: 'Afilar las armas', hint: 'Todos: +8% de daño (físico y mágico) y +6% de crítico.', apply: (run) => { for (const h of run.heroes) { boon(h, 'power', 8); boon(h, 'crit', 6); } return 'Os devuelve las armas sin mirarlas. Sabe lo que hace.'; } },
       { label: 'Contratarlo', hint: 'Un guardia de forja lucha con vosotros hasta el final de la zona.', apply: (run) => { addAlly(run, 'guardia_forja'); return 'Coge su martillo y os sigue sin decir palabra.'; } },
     ],
   },

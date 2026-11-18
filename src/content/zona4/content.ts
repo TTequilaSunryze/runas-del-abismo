@@ -64,7 +64,7 @@ export const ZONA4_EVENTS: EventDef[] = [
     id: 'trono', title: 'El Trono Vacío',
     text: 'Un trono hecho de runas apagadas. Quien se siente en él verá el final del camino.',
     options: [
-      { label: 'Sentarse por turnos', hint: 'Todos: +15% de daño y -15 de vida máxima.', apply: (run) => { for (const h of run.heroes) { boon(h, 'power', 15); boon(h, 'hp', -15); } return 'Habéis visto el final. No os gusta, pero sabéis cómo llegar.'; } },
+      { label: 'Sentarse por turnos', hint: 'Todos: +15% de daño (físico y mágico) y -15 de vida máxima.', apply: (run) => { for (const h of run.heroes) { boon(h, 'power', 15); boon(h, 'hp', -15); } return 'Habéis visto el final. No os gusta, pero sabéis cómo llegar.'; } },
       { label: 'Destruirlo', hint: 'Cada uno gana una reliquia común.', apply: (run) => { for (const h of run.heroes) giveRelic(run, h, false); return 'Entre los restos brillan objetos olvidados.'; } },
     ],
   },

@@ -1,4 +1,5 @@
 // Piezas comunes: barra superior, celdas de objeto con icono, ficha lateral (equipo, hechizos, grupo) y botín.
+import { FEATURES, schoolOf } from '../core/tuning';
 import { isMuted, musicVolume } from '../audio/sfx';
 import { CLASSES, findRoute } from '../core/classes/classes';
 import { SPELLS } from '../core/classes/spells';
@@ -64,8 +65,8 @@ export function cell(it: Item | undefined, attrs: string, h?: HeroSave, slot?: S
 
 function statsLine(h: HeroSave): string {
   const u = heroSpec(h);
-  const res = (Object.entries(u.resist) as Array<[string, number]>).filter(([, v]) => v).map(([k, v]) => `${{ fire: 'fuego', ice: 'hielo', poison: 'veneno', shadow: 'sombra', holy: 'sagrado' }[k]} ${v}%`).join(', ');
-  return `<div class="stats sm"><span>❤️ ${u.maxHp}</span><span>🛡️ ${u.armor}</span><span>⚔️ +${u.power}%</span><span>🎯 ${u.crit}%</span><span class="pill">PA ${u.maxAp}</span><span class="blu">PM ${u.maxMp}</span><span>⏱️ ${u.initiative}</span></div>${res ? `<div class="sm dim">Resistencias: ${res}</div>` : ''}`;
+  const res = !FEATURES.resistances ? '' : (Object.entries(u.resist) as Array<[string, number]>).filter(([, v]) => v).map(([k, v]) => `${{ fire: 'fuego', ice: 'hielo', poison: 'veneno', shadow: 'sombra', holy: 'sagrado' }[k]} ${v}%`).join(', ');
+  return `<div class="stats sm"><span>❤️ ${u.maxHp}</span><span>🛡️ ${u.armor}</span><span ${tip(schoolOf(h.cls) === 'magic' ? 'Clase mágica: escala con % Daño mágico y % Daño (físico y mágico)' : 'Clase física: escala con % Daño físico y % Daño (físico y mágico)')}>⚔️ +${u.power + ((schoolOf(h.cls) === 'magic' ? u.powerMagic : u.powerPhys) ?? 0)}% ${schoolOf(h.cls) === 'magic' ? 'mág.' : 'fís.'}</span><span>🎯 ${u.crit}%</span><span class="pill">PA ${u.maxAp}</span><span class="blu">PM ${u.maxMp}</span><span>⏱️ ${u.initiative}</span></div>${res ? `<div class="sm dim">Resistencias: ${res}</div>` : ''}`;
 }
 
 function gearTab(run: RunState, h: HeroSave, selling: boolean): string {

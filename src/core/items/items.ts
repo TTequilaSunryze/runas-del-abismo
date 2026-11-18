@@ -1,4 +1,5 @@
 // Equipo: 8 ranuras, 4 rarezas. Los nombres y la temática vienen de cada zona (content/).
+import { FEATURES } from '../tuning';
 import { pick, rand, randInt, shuffle, type RngBox } from '../rng';
 
 export const SLOTS = ['casco', 'capa', 'arma', 'peto', 'anillo', 'amuleto', 'botas', 'guantes'] as const;
@@ -7,7 +8,7 @@ export const SLOT_NAME: Record<Slot, string> = { casco: 'Casco', capa: 'Capa', a
 
 export type StatKey = 'hp' | 'armor' | 'power' | 'powerPhys' | 'powerMagic' | 'crit' | 'ap' | 'mp' | 'initiative' | 'resFire' | 'resIce' | 'resPoison' | 'resShadow' | 'status' | 'tackle' | 'dodge';
 export type Stats = Partial<Record<StatKey, number>>;
-export const STAT_NAME: Record<StatKey, string> = { hp: 'Vida', armor: 'Armadura', power: '% Daño', powerPhys: '% Daño físico', powerMagic: '% Daño mágico', crit: '% Crítico', ap: 'PA', mp: 'PM', initiative: 'Iniciativa', resFire: '% Res. fuego', resIce: '% Res. hielo', resPoison: '% Res. veneno', resShadow: '% Res. sombra', status: 'turno(s) a tus estados', tackle: 'Placaje', dodge: 'Huida' };
+export const STAT_NAME: Record<StatKey, string> = { hp: 'Vida', armor: 'Armadura', power: '% Daño (físico y mágico)', powerPhys: '% Daño físico', powerMagic: '% Daño mágico', crit: '% Crítico', ap: 'PA', mp: 'PM', initiative: 'Iniciativa', resFire: '% Res. fuego', resIce: '% Res. hielo', resPoison: '% Res. veneno', resShadow: '% Res. sombra', status: 'turno(s) a tus estados', tackle: 'Placaje', dodge: 'Huida' };
 
 /** 0 Common, 1 Uncommon, 2 Rare, 3 Legendary */
 export type Rarity = 0 | 1 | 2 | 3;
@@ -42,14 +43,14 @@ export interface ItemTheme {
 
 /** Estadísticas que puede dar cada ranura. */
 const POOL: Record<Slot, StatKey[]> = {
-  casco: ['hp', 'resFire', 'resIce', 'resPoison', 'resShadow', 'tackle'],
-  capa: ['hp', 'dodge', 'resIce', 'resShadow', 'crit', 'mp'],
-  arma: ['powerPhys', 'powerMagic', 'crit', 'ap'],
-  peto: ['hp', 'resFire', 'resPoison', 'tackle', 'dodge'],
-  anillo: ['powerPhys', 'powerMagic', 'crit', 'ap', 'resPoison', 'hp'],
-  amuleto: ['powerMagic', 'powerPhys', 'hp', 'ap', 'resFire', 'resShadow'],
-  botas: ['mp', 'dodge', 'hp', 'resIce', 'tackle'],
-  guantes: ['crit', 'powerPhys', 'powerMagic', 'tackle', 'resPoison', 'ap'],
+  casco: ['hp', 'tackle', 'armor', 'initiative', 'crit', 'resFire', 'resIce', 'resPoison', 'resShadow'],
+  capa: ['hp', 'dodge', 'crit', 'mp', 'initiative', 'resIce', 'resShadow'],
+  arma: ['powerPhys', 'powerMagic', 'crit', 'ap', 'power'],
+  peto: ['hp', 'tackle', 'dodge', 'armor', 'initiative', 'resFire', 'resPoison'],
+  anillo: ['powerPhys', 'powerMagic', 'crit', 'ap', 'hp', 'resPoison'],
+  amuleto: ['powerMagic', 'powerPhys', 'hp', 'ap', 'power', 'resFire', 'resShadow'],
+  botas: ['mp', 'dodge', 'hp', 'tackle', 'initiative', 'resIce'],
+  guantes: ['crit', 'powerPhys', 'powerMagic', 'tackle', 'ap', 'resPoison'],
 };
 
 /** Nombre de cada estadística como prefijo y como sufijo. */
@@ -120,11 +121,14 @@ export function affixLayout(box: RngBox, rarity: Rarity): { prefixes: number; su
 }
 
 /** Genera un objeto: rareza según acto y sala, y sus prefijos y sufijos al azar. */
-export function genItem(box: RngBox, theme: ItemTheme, act: number, kind: DropKind = 'combat', min: Rarity = 0, slot?: Slot): Item {
+export function genItem(box: RngBox, theme: ItemTheme, act: number, kind: DropKind = 'combat', min: Rarity = 0, slot?: Slot, school?: 'phys' | 'magic'): Item {
   const rarity = rollRarity(box, act, kind, min);
   const s = slot ?? pick(box, SLOTS);
   const { prefixes, suffixes } = affixLayout(box, rarity);
-  const keys = shuffle(box, POOL[s]).filter((k) => rarity >= 2 || !RARE_ONLY.includes(k));
+  const keys = shuffle(box, POOL[s]).filter((k) => (rarity >= 2 || !RARE_ONLY.includes(k))
+    // sin resistencias mientras el sistema esté apagado; y solo el tipo de daño de quien lo encuentra
+    && (FEATURES.resistances || !k.startsWith('res'))
+    && !(school === 'magic' && k === 'powerPhys') && !(school === 'phys' && k === 'powerMagic'));
   const affixes: Affix[] = [];
   const stats: Stats = {};
   const kinds: Array<'prefix' | 'suffix'> = [...Array(prefixes).fill('prefix'), ...Array(suffixes).fill('suffix')];

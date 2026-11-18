@@ -32,7 +32,7 @@ export const ZONA2_EVENTS: EventDef[] = [
     id: 'savia', title: 'La Fuente de Savia Negra',
     text: 'Del tronco de un árbol colosal mana una savia oscura y tibia. Huele a fuerza y a enfermedad.',
     options: [
-      { label: 'Beber todos', hint: 'Todos: +18 de vida máxima y +10% de daño, pero pierden el 30% de la vida actual.', apply: (run) => { for (const h of run.heroes) { boon(h, 'hp', 18); boon(h, 'power', 10); losePct(h, 0.3); } return 'Arde por dentro. Después, os sentís enormes.'; } },
+      { label: 'Beber todos', hint: 'Todos: +18 de vida máxima y +10% de daño (físico y mágico), pero pierden el 30% de la vida actual.', apply: (run) => { for (const h of run.heroes) { boon(h, 'hp', 18); boon(h, 'power', 10); losePct(h, 0.3); } return 'Arde por dentro. Después, os sentís enormes.'; } },
       { label: 'Llenar los odres', hint: 'Cada uno gana 30 de oro vendiéndola más tarde.', apply: (run) => { for (const h of run.heroes) h.gold += 30; return 'Alguien pagará bien por esto.'; } },
     ],
   },
@@ -49,7 +49,7 @@ export const ZONA2_EVENTS: EventDef[] = [
     text: 'Un nido enorme cuelga entre dos árboles. Dentro brilla el ajuar de alguien que no tuvo suerte.',
     options: [
       { label: 'Saquearlo', hint: 'Cada uno gana una reliquia común; el próximo combate tiene presagio de Ciénaga.', apply: (run) => { for (const h of run.heroes) giveRelic(run, h, false); run.nextOmen = 'pantano'; return 'Salís pegajosos y con los bolsillos llenos.'; } },
-      { label: 'Quemarlo', hint: 'Todos: +15% de resistencia al veneno y +5% de daño.', apply: (run) => { for (const h of run.heroes) { boon(h, 'resPoison', 15); boon(h, 'power', 5); } return 'Arde rápido. Las arañas, también.'; } },
+      { label: 'Quemarlo', hint: 'Todos: +15% de resistencia al veneno y +5% de daño (físico y mágico).', apply: (run) => { for (const h of run.heroes) { boon(h, 'resPoison', 15); boon(h, 'power', 5); } return 'Arde rápido. Las arañas, también.'; } },
     ],
   },
   {

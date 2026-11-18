@@ -1,4 +1,5 @@
 // Registro de enemigos de todas las zonas y su construcción.
+import { ENEMY_SCALING } from '../core/tuning';
 import type { UnitSpec } from '../core/combat/engine';
 import type { Element, Pos } from '../core/state';
 import { ZONA1_ENEMIES } from './zona1/enemies';
@@ -73,10 +74,11 @@ export interface EnemyOpts {
 export function makeEnemy(id: string, pos: Pos, depth = 0, players = 1, opts: EnemyOpts = {}): UnitSpec {
   const e = ENEMIES[id];
   if (!e) throw new Error(`Enemigo desconocido: ${id}`);
-  const hp = Math.round(e.hp * (1 + depth * 0.17) * (e.scales || e.ai === 'pillar' ? 1 + 0.35 * (players - 1) : 1) * (opts.hpMul ?? 1));
+  const common = e.ai !== 'boss' && e.ai !== 'pillar' && !opts.affixes?.length ? ENEMY_SCALING.commonHp : 1;
+  const hp = Math.round(e.hp * common * (1 + depth * ENEMY_SCALING.hpPerDepth) * (e.scales || e.ai === 'pillar' ? 1 + 0.35 * (players - 1) : 1) * (opts.hpMul ?? 1));
   const u: UnitSpec = {
     team: 'enemy', kind: e.id, name: e.name, owner: null, pos,
-    hp, maxHp: hp, shield: 0, armor: e.armor, power: depth * 12 + (opts.power ?? 0), crit: 0,
+    hp, maxHp: hp, shield: 0, armor: e.armor, power: depth * ENEMY_SCALING.powerPerDepth + (opts.power ?? 0), crit: 0,
     ap: e.ap, maxAp: e.ap, mp: e.mp, maxMp: e.mp, initiative: e.initiative, apMod: 0, mpMod: 0, resist: { ...e.resist }, statusBonus: 0,
     statuses: {}, spells: [e.spell, ...(e.more ?? [])].map((sid) => ({ id: sid, cd: 0 })), ai: e.ai, traits: e.traits ? [...e.traits] : undefined,
     // placaje según su forma de luchar; los jefes retienen mucho

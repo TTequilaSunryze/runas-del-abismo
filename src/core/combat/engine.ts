@@ -1,5 +1,6 @@
 // Motor de combate por iniciativa: una unidad juega, las demás esperan.
 // Todas las funciones modifican el estado y devuelven los eventos ocurridos.
+import { FEATURES, schoolOf } from '../tuning';
 import { SPELLS, type SpellDef } from '../classes/spells';
 import { rand, randInt } from '../rng';
 import { tuned } from '../upgrades';
@@ -67,7 +68,7 @@ const GUARD_SHARE = 0.4;
 let casting: number | null = null;
 /** escuela del hechizo en curso: lo mágico usa el % de daño mágico del equipo y lo demás el físico */
 let castingSchool: 'phys' | 'magic' | null = null;
-export const isMagicSpell = (d: Pick<SpellDef, 'id' | 'element'>): boolean => !!d.element || /^[ztk]_/.test(d.id);
+
 
 /** Multiplicador de daño de `u` contra `t`: poder, potenciado, Furia, Marcado, Vulnerable, Frenesí y Desprecio. */
 export function dmgScale(u: Unit, t: Unit, extraPower = 0): number {
@@ -129,7 +130,7 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
     const g = gd.from === undefined ? undefined : s.units.find((x) => x.id === gd.from);
     if (g && alive(g) && g !== u) { hurt(s, g, raw * GUARD_SHARE, ev, 'guardian', { ...opts, crit: false }); raw *= 1 - GUARD_SHARE; }
   }
-  const res = opts.element ? Math.min(75, u.resist[opts.element] ?? 0) : 0;
+  const res = FEATURES.resistances && opts.element ? Math.min(75, u.resist[opts.element] ?? 0) : 0;
   raw *= 1 - res / 100;
   const armor = Math.max(0, u.armor - (u.statuses.exposed?.stacks ?? 0));
   let dmg = opts.pierce ? Math.max(1, Math.round(raw)) : Math.max(1, Math.round(raw) - armor);
@@ -558,8 +559,9 @@ function pushDir(s: CombatState, u: Unit, dx: number, dy: number, cells: number,
 
 export function cast(s: CombatState, unitId: number, spellId: string, at: Pos): ActionResult {
   casting = unitId;
-  const sd = SPELLS[spellId];
-  castingSchool = sd ? (isMagicSpell(sd) ? 'magic' : 'phys') : null;
+  // el tipo de daño lo marca la clase: las mágicas escalan con daño mágico y las físicas con daño físico
+  const caster = getUnit(s, unitId);
+  castingSchool = caster && caster.team === 'hero' ? schoolOf(caster.kind) : null;
   try { return castInner(s, unitId, spellId, at); } finally { casting = null; castingSchool = null; }
 }
 
@@ -1013,7 +1015,7 @@ function flamesFly(s: CombatState, u: Unit, ev: GameEvent[]): void {
   if (!flames.length) return;
   const def = spellOf(u, 'z_fuego');
   const dmg = def?.dmg ?? [3, 4];
-  const resSum = (t: Unit): number => Object.values(t.resist ?? {}).reduce((a, b) => a + (b ?? 0), 0);
+  const resSum = (t: Unit): number => !FEATURES.resistances ? 0 : Object.values(t.resist ?? {}).reduce((a, b) => a + (b ?? 0), 0);
   for (const f of flames) {
     removeMark(s, f, ev);
     if (s.over || !alive(u)) continue;

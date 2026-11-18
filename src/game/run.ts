@@ -1,5 +1,6 @@
 // Estado de una partida (run): mapa, combates, botín, tienda y eventos de grupo.
 // Es lo que se sincroniza entre jugadores y lo que se guarda.
+import { FEATURES, schoolOf } from '../core/tuning';
 import { AFFIXES, CAGE_ALLY, makeEnemy } from '../content/enemies';
 import { DAILY_ASC, DAILY_MODS, DAILY_POOL, MAX_MODS, OMENS, perkLevel, type Perks } from '../content/modes';
 import { BASE_ZONES, ZONES, type BossDef, type ZoneDef } from '../content/zones';
@@ -193,7 +194,7 @@ export interface RunState extends RngBox {
 }
 
 /** Dificultad base de los enemigos: ajuste de vida y daño en la zona 1 y cuánto sube por zona. */
-export const DIFF = { base: -0.45, perZone: 0.45 };
+export const DIFF = { base: -0.4, perZone: 0.45 };
 export const POTION_PRICE = 25;
 export const POTION_HEAL = 0.3;
 
@@ -363,9 +364,9 @@ export function statBreakdown(h: HeroSave): Array<{ key: string; name: string; b
   const base = makeHero({ cls: h.cls, name: h.name, owner: h.owner, routes: h.routes, pos: { x: 0, y: 0 }, level: h.level });
   const rows: Array<[string, string, number, number]> = [
     ['hp', 'Vida', base.maxHp, spec.maxHp], ['ap', 'PA', base.maxAp, spec.maxAp], ['mp', 'PM', base.maxMp, spec.maxMp],
-    ['power', '% Daño', base.power, spec.power], ['crit', '% Crítico', base.crit, spec.crit], ['armor', 'Armadura', base.armor, spec.armor],
+    ['power', '% Daño (físico y mágico)', base.power, spec.power], [schoolOf(h.cls) === 'magic' ? 'powerMagic' : 'powerPhys', schoolOf(h.cls) === 'magic' ? '% Daño mágico' : '% Daño físico', 0, (schoolOf(h.cls) === 'magic' ? spec.powerMagic : spec.powerPhys) ?? 0], ['crit', '% Crítico', base.crit, spec.crit], ['armor', 'Armadura', base.armor, spec.armor],
     ['initiative', 'Iniciativa', base.initiative, spec.initiative], ['tackle', 'Placaje', base.tackle ?? 0, spec.tackle ?? 0], ['dodge', 'Huida', base.dodge ?? 0, spec.dodge ?? 0],
-    ['resFire', '% Res. fuego', 0, spec.resist.fire ?? 0], ['resIce', '% Res. hielo', 0, spec.resist.ice ?? 0], ['resPoison', '% Res. veneno', 0, spec.resist.poison ?? 0], ['resShadow', '% Res. sombra', 0, spec.resist.shadow ?? 0],
+    ...(FEATURES.resistances ? [['resFire', '% Res. fuego', 0, spec.resist.fire ?? 0], ['resIce', '% Res. hielo', 0, spec.resist.ice ?? 0], ['resPoison', '% Res. veneno', 0, spec.resist.poison ?? 0], ['resShadow', '% Res. sombra', 0, spec.resist.shadow ?? 0]] as Array<[string, string, number, number]> : []),
   ];
   return rows.map(([key, name, b, total]) => {
     const k = key as StatKey;
@@ -624,8 +625,8 @@ export const dropKindOf = (run: Pick<RunState, 'kind' | 'ambush'>): DropKind => 
 export const dropChance = (act: number, kind: DropKind): number => (kind === 'combat' ? Math.min(0.85, 0.5 + 0.1 * act) : 1);
 
 /** Un objeto de botín según el acto y la sala. */
-export function genLoot(run: RunState, kind: DropKind = dropKindOf(run), min: Rarity = 0): Item {
-  return genItem(run, zoneOf(run).items, run.zone, kind, min);
+export function genLoot(run: RunState, kind: DropKind = dropKindOf(run), min: Rarity = 0, h?: Pick<HeroSave, 'cls'>): Item {
+  return genItem(run, zoneOf(run).items, run.zone, kind, min, undefined, h ? schoolOf(h.cls) : undefined);
 }
 
 /**
@@ -637,7 +638,7 @@ function dropLoot(run: RunState, h: HeroSave, kind: DropKind, report: Item[]): v
   const extra = kind === 'combat' ? 0 : perkLevel(h.perks, 'loot') + (h.relics.includes('lupa') ? 1 : 0);
   const n = { combat: 1, elite: 1, boss: 2, shop: 1 }[kind] + extra;
   for (let i = 0; i < n; i++) {
-    const it = genLoot(run, kind);
+    const it = genLoot(run, kind, 0, h);
     const before = heroMaxHp(h);
     if (receive(h, it)) h.hp += Math.max(0, heroMaxHp(h) - before);
     else h.gold += Math.floor(PRICE[it.rarity] / 3);
@@ -830,7 +831,7 @@ export function finishFight(run: RunState): void {
 /** Mete un objeto en el equipo si la ranura está libre; si no, en la mochila. Devuelve false si no cabe. */
 /** Da un objeto nuevo a un héroe (a la ranura libre o a la mochila; si no cabe, se pierde). */
 export function giveItem(run: RunState, h: HeroSave, kind: DropKind = 'combat', min: Rarity = 0): Item {
-  const it = genLoot(run, kind, min);
+  const it = genLoot(run, kind, min, h);
   receive(h, it);
   return it;
 }

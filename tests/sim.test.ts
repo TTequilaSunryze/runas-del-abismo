@@ -2,7 +2,7 @@
 // Larga: solo corre con SIMN=<partidas> (p. ej. `SIMN=60 npx vitest run tests/sim.test.ts`).
 // La versión corta comprueba siempre que las clases nuevas no atascan los combates.
 import { expect, it } from 'vitest';
-import { availableNodes, DIFF, bossInfo, chooseNode, finishFight, leaveNode, metaAction, newRun, resolveEvent, type RunState } from '../src/game/run';
+import { availableNodes, heroMaxHp, DIFF, bossInfo, chooseNode, finishFight, leaveNode, metaAction, newRun, resolveEvent, type RunState } from '../src/game/run';
 import { autoplay } from './helpers';
 import type { ClassId } from '../src/core/state';
 
@@ -17,7 +17,9 @@ function play(classes: ClassId[], seed: number): { run: RunState; stalls: number
     if (run.phase === 'map') {
       for (const h of run.heroes) { if (run.offers[h.owner]) metaAction(run, h.owner, { a: 'pick', idx: 0 }); if (h.bag.length) metaAction(run, h.owner, { a: 'equip', idx: 0 }); }
       const nodes = run.map[run.step]!, av = availableNodes(run);
-      chooseNode(run, av.find((i) => nodes[i] === 'combat') ?? av[0]!);
+      const low = run.heroes.reduce((a, h) => a + h.hp / heroMaxHp(h), 0) / run.heroes.length < 0.7;
+      const pref = low ? ['rest', 'treasure', 'shrine', 'event', 'shop', 'combat', 'elite'] : ['treasure', 'shrine', 'combat', 'event', 'rest', 'shop', 'elite'];
+      chooseNode(run, av.slice().sort((a, b) => pref.indexOf(nodes[a]!) - pref.indexOf(nodes[b]!))[0]!);
     } else if (run.phase === 'event') {
       for (const h of run.heroes) metaAction(run, h.owner, { a: 'vote', idx: 0 });
       resolveEvent(run, 'p0'); leaveNode(run);
