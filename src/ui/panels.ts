@@ -23,7 +23,7 @@ export function volumeControl(): string {
 export function sysButtons(): string {
   const s = ui.session;
   const warn = s?.isHost && s.t.kind === 'online' ? '¿Seguro? Termina para todos' : '¿Seguro? Pulsa otra vez';
-  return `${ui.session?.run && !ui.session.run.arena ? `<button class="sq" data-act="map" ${tip('Mapa del acto (M)')}>🗺️ Mapa</button>` : ''}${ui.session?.run && !ui.session.run.arena ? `<button class="sq" data-act="stats" ${tip('Ficha del personaje: estadísticas totales (S)')}>📊</button>` : ''}${volumeControl()}<button data-act="leave" class="${ui.leaveArmed ? 'danger' : ''}">${ui.leaveArmed ? warn : 'Abandonar'}</button>`;
+  return `${ui.screen === 'combat' ? `<button class="sq ${ui.hpBars ? '' : 'off'}" data-act="bars" ${tip('Mostrar u ocultar las barras de vida (V)')}>❤️</button>` : ''}${ui.session?.run && !ui.session.run.arena ? `<button class="sq" data-act="map" ${tip('Mapa del acto (M)')}>🗺️ Mapa</button>` : ''}${ui.session?.run && !ui.session.run.arena ? `<button class="sq" data-act="stats" ${tip('Ficha del personaje: estadísticas totales (S)')}>📊</button>` : ''}${volumeControl()}<button data-act="leave" class="${ui.leaveArmed ? 'danger' : ''}">${ui.leaveArmed ? warn : 'Abandonar'}</button>`;
 }
 
 export function hpBar(hp: number, max: number, shield = 0): string {
@@ -281,3 +281,13 @@ export function mapModal(run: RunState): string {
 }
 
 export { mapLegend };
+
+/** Iconos de las bendiciones activas de cada héroe (esquina superior izquierda). */
+export function blessingBar(run: RunState): string {
+  const rows = run.heroes.map((h, i) => {
+    const bl = h.boons.filter((b) => BLESSINGS[b]).map((b) => BLESSINGS[b]!);
+    if (!bl.length) return '';
+    return `<span class="bless p${i % 4}"><span class="sm">${esc(h.name)}</span>${bl.map((b) => `<span class="bicon" ${tip(`<b>${b.icon} ${esc(b.name)}</b><div class="sm">${esc(b.text)}</div>`)}>${b.icon}</span>`).join('')}</span>`;
+  }).join('');
+  return rows ? `<div class="blessbar">${rows}</div>` : '';
+}

@@ -337,6 +337,31 @@ export function tacklersOf(s: CombatState, u: Unit): number {
   return s.units.filter((o) => o.team !== u.team && alive(o) && o.ai !== 'pillar' && !o.statuses.invis && dist(o.pos, u.pos) === 1).reduce((a, o) => a + (o.tackle ?? 0), 0);
 }
 
+/** Placaje que sufriría `u` si estuviera en `pos`. */
+function tacklersAt(s: CombatState, u: Unit, pos: Pos): number {
+  if (hasTrait(u, 'ghost') || u.statuses.invis || u.statuses.frenzy) return 0;
+  return s.units.filter((o) => o.team !== u.team && alive(o) && o.ai !== 'pillar' && !o.statuses.invis && o !== u && dist(o.pos, pos) === 1).reduce((a, o) => a + (o.tackle ?? 0), 0);
+}
+
+/**
+ * Previsualización de un movimiento: el camino que seguiría `u` hasta `to`, las casillas al salir de las cuales
+ * perdería PM por placaje (`tackled`) y hasta dónde llegaría de verdad (`stop`).
+ */
+export function movePreview(s: CombatState, u: Unit, to: Pos): { path: Pos[]; tackled: Pos[]; stop: number } | null {
+  const reach = reachable(s, u.pos, u.mp, false, hasTrait(u, 'ghost'));
+  if (!reach.cost.get(key(to))) return null;
+  const path = pathTo(reach, u.pos, to);
+  const tackled: Pos[] = [];
+  let mp = u.mp, pos = u.pos, stop = path.length;
+  for (let i = 0; i < path.length; i++) {
+    const keep = Math.floor(mp * tackleKeep(dodgeOf(u), tacklersAt(s, u, pos)));
+    if (keep < mp) { tackled.push({ ...pos }); mp = keep; if (mp <= 0) { stop = i; break; } }
+    pos = path[i]!;
+    mp--;
+  }
+  return { path, tackled, stop };
+}
+
 /** PM con los que `u` puede moverse desde donde está, contando el placaje. */
 export function usableMp(s: CombatState, u: Unit): number {
   return Math.floor(u.mp * tackleKeep(dodgeOf(u), tacklersOf(s, u)));

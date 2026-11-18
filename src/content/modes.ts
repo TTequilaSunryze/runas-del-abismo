@@ -57,7 +57,7 @@ export const OMENS: OmenDef[] = [
   { id: 'oro', name: 'Botín maldito', icon: '💰', text: 'Enemigos con +25% de vida, pero el doble de oro.' },
   { id: 'eclipse', name: 'Eclipse', icon: '🌑', text: 'Los enemigos se regeneran cada turno.' },
   { id: 'calma', name: 'Calma antes de la tormenta', icon: '🍃', text: 'Los héroes tienen +1 PA en este combate.' },
-  { id: 'tormenta', name: 'Tormenta rúnica', icon: '⚡', text: 'Enemigos con +1 PM; si ganáis, una runa para cada uno.' },
+  { id: 'tormenta', name: 'Tormenta rúnica', icon: '⚡', text: 'Enemigos con +1 PM.' },
 ];
 export const DAILY_ASC = 3;
 

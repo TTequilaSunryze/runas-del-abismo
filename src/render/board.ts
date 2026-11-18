@@ -1,7 +1,7 @@
 import { SPELLS } from '../core/classes/spells';
 // Tablero de combate: dibuja el estado y convierte clics en acciones.
 import { ZONES } from '../content/zones';
-import { castProblem, current, essenceNeed, furyCrit, furyPower, spellOf, usableMp } from '../core/combat/engine';
+import { castProblem, current, essenceNeed, furyCrit, furyPower, movePreview, spellOf, usableMp } from '../core/combat/engine';
 import { coneCells } from '../core/combat/marks';
 import { alive, dist, hasLineOfSight, reachable } from '../core/combat/grid';
 import type { CombatState, GameEvent, Pos, Unit } from '../core/state';
@@ -295,8 +295,10 @@ export class Board {
             // el alcance extra (Ojo de halcón y similares) cuenta en cuanto se aplica
             const reach = def.range[1] + (def.range[1] > 1 ? me.statuses.reach?.stacks ?? 0 : 0);
             if (d < def.range[0] || d > reach || c.obstacles.includes(`${x},${y}`)) continue;
-            const seen = !def.los || d <= 1 || hasLineOfSight(c, me.pos, p);
-            fill(p, seen ? 'rgba(255,150,60,.16)' : 'rgba(120,120,140,.10)');
+            // solo las casillas que respetan la geometría del hechizo: línea recta y línea de visión
+            if (def.straight && d > 0 && x !== me.pos.x && y !== me.pos.y) continue;
+            if (def.los && d > 1 && !hasLineOfSight(c, me.pos, p)) continue;
+            fill(p, 'rgba(255,150,60,.18)');
             if (!castProblem(c, me, SPELLS[def.id]!, p)) { g.strokeStyle = '#f2c14e'; g.lineWidth = 3; g.strokeRect(x * TILE + 4, y * TILE + 4, TILE - 8, TILE - 8); }
           }
         if (this.hover && def.cone && !castProblem(c, me, SPELLS[def.id]!, this.hover)) for (const p of coneCells(me.pos, this.hover, def.cone)) if (!c.obstacles.includes(`${p.x},${p.y}`)) fill(p, 'rgba(255,60,60,.25)');
@@ -308,6 +310,20 @@ export class Board {
           if (!cost) continue;
           const [x, y] = k.split(',').map(Number) as [number, number];
           fill({ x, y }, 'rgba(88,166,255,.2)');
+        }
+        // previsualización del camino: en rojo las casillas en las que el placaje te quitará PM al salir
+        const pv = this.hover ? movePreview(c, me, this.hover) : null;
+        if (pv) {
+          for (const t of pv.tackled) { fill(t, 'rgba(230,50,50,.45)'); g.strokeStyle = '#ff4a4a'; g.lineWidth = 2; g.strokeRect(t.x * TILE + 4, t.y * TILE + 4, TILE - 8, TILE - 8); }
+          const pts = [me.pos, ...pv.path];
+          for (let i = 1; i < pts.length; i++) {
+            const a = pts[i - 1]!, b = pts[i]!, cut = i > pv.stop;
+            g.strokeStyle = cut ? 'rgba(255,74,74,.7)' : pv.tackled.length ? '#ff7a5a' : '#8fd0ff';
+            g.lineWidth = 4; g.setLineDash(cut ? [6, 6] : []);
+            g.beginPath(); g.moveTo(a.x * TILE + TILE / 2, a.y * TILE + TILE / 2); g.lineTo(b.x * TILE + TILE / 2, b.y * TILE + TILE / 2); g.stroke();
+          }
+          g.setLineDash([]);
+          if (pv.stop < pv.path.length) { const e = pv.path[Math.max(0, pv.stop - 1)] ?? me.pos; g.fillStyle = '#ff4a4a'; g.font = 'bold 14px ui-monospace, monospace'; g.textAlign = 'center'; g.fillText('✋', e.x * TILE + TILE / 2, e.y * TILE + 16); }
         }
       }
     }
@@ -430,13 +446,18 @@ export class Board {
     if (this.hover) this.tooltip(c);
   }
 
+  /** se pueden ocultar las barras de vida (botón ❤️ o tecla V) */
+  showBars = true;
+
   private bars(u: Unit, cx: number, top: number, heroIdx: number | undefined): void {
     const g = this.g, w = TILE - 14, x = cx - w / 2;
+    if (this.showBars) {
     g.fillStyle = '#000'; g.fillRect(x - 1, top - 1, w + 2, 7);
     g.fillStyle = u.team === 'hero' ? '#4cb85a' : '#e0475b'; g.fillRect(x, top, (w * u.hp) / u.maxHp, 5);
     if (u.shield > 0) { g.fillStyle = '#58a6ff'; g.fillRect(x, top + 5, Math.min(w, (w * u.shield) / u.maxHp), 3); }
     if (u.fury !== undefined) { g.fillStyle = '#000'; g.fillRect(x - 1, top - 6, w + 2, 5); g.fillStyle = '#ff6a20'; g.fillRect(x, top - 5, (w * u.fury) / 100, 3); }
     if (u.essence !== undefined) for (let i = 0; i < essenceNeed(u); i++) { g.fillStyle = i < u.essence ? '#ff8ad0' : '#3a2040'; g.fillRect(x + i * 7, top - 6, 5, 4); }
+    }
     let ix = x;
     for (const k of Object.keys(u.statuses)) { g.fillStyle = STATUS_COLOR[k] ?? '#fff'; g.fillRect(ix, top + 9, 6, 6); ix += 8; }
     if (heroIdx !== undefined) {

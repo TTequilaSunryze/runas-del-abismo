@@ -16,7 +16,7 @@ import { championOf, dailyOf, dailyScore, lastZone } from '../game/run';
 import { CLASS_STORY, ENDING_LOST, ENDING_WON, TUTORIAL, ZONE_STORY } from '../content/story';
 import { esc, mine, store, tip, today, ui } from './ctx';
 import { itemIcon, spellIcon, spellTip } from './icons';
-import { advanceBar, diffHtml, itemHtml, mapLegend, mapSvg, pendingRows, sidePanel, topBar, volumeControl } from './panels';
+import { advanceBar, blessingBar, diffHtml, itemHtml, mapLegend, mapSvg, pendingRows, sidePanel, topBar, volumeControl } from './panels';
 import { CONSUMABLES, MAX_CONSUMABLE } from '../content/boons';
 
 const RAR = ['ir0', 'ir1', 'ir2', 'ir3'];
@@ -170,6 +170,7 @@ export function mapScreen(): void {
   frame(run, `${run.step === 0 && ZONE_STORY[run.zone] ? `<div class="panel note story"><i>${esc(ZONE_STORY[run.zone]!)}</i></div>` : ''}${run.note ? `<div class="panel note">${esc(run.note)}</div>` : ''}
   ${run.allies.length ? `<div class="panel sm">🤝 Os acompañan: ${run.allies.map((a) => `<b>${esc(ALLIES[a]?.name ?? a)}</b>`).join(', ')} <span class="dim">(hasta el final de la zona)</span></div>` : ''}
   ${run.nextOmen ? `<div class="panel sm">Próximo combate: ${OMENS.find((o) => o.id === run.nextOmen)?.icon} <b>${esc(OMENS.find((o) => o.id === run.nextOmen)?.name ?? '')}</b></div>` : ''}
+  ${blessingBar(run)}
   <div class="lbl">Zona ${run.zone + 1}/${lastZone(run) + 1} · Sala ${run.step + 1} de ${run.map.length} · ${s.isHost ? 'pulsa en el mapa a dónde vais' : 'el anfitrión elige el camino'}</div>
   ${advanceBar(run, '', '')}
   <div class="chips">${mapLegend()}</div>

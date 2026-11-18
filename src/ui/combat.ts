@@ -8,7 +8,7 @@ import type { GameEvent } from '../core/state';
 import { Board, STATUS_NAME } from '../render/board';
 import { esc, tip, ui } from './ctx';
 import { spellIcon, spellTip } from './icons';
-import { hpBar, sysButtons } from './panels';
+import { blessingBar, hpBar, sysButtons } from './panels';
 
 export function addLog(events: GameEvent[]): void {
   const c = ui.session?.run?.combat;
@@ -60,6 +60,7 @@ export function combatScreen(events: GameEvent[]): void {
     ui.board.onSelect = () => ui.rerender();
   }
   const board = ui.board!;
+  board.showBars = ui.hpBars;
   board.applyEvents(events);
   (document.getElementById('cv') as HTMLCanvasElement).style.setProperty('--ar', String(c.w / c.h));
   const cur = current(c), me = s.myUnit(), myTurn = s.isMyTurn();
@@ -67,7 +68,7 @@ export function combatScreen(events: GameEvent[]): void {
   if (!myTurn && board.sel) board.sel = null;
   const left = s.turnEndsAt ? Math.max(0, Math.ceil((s.turnEndsAt - Date.now()) / 1000)) : 0;
   const kind = run.arena ? `🏟️ Duelo: ${esc(run.arena.nameA)} contra ${esc(run.arena.nameB)}` : run.kind === 'boss' ? '👑 JEFE' : run.kind === 'elite' ? '☠️ Élite' : '⚔️ Combate';
-  document.getElementById('info')!.innerHTML = `<b>${kind}</b><span class="dim sm">${run.arena ? '' : `Zona ${run.zone + 1} · sala ${run.step + 1}/${run.map.length} · `}ronda ${c.round}</span>${c.round >= 30 ? `<span class="bad sm" ${tip('Muerte súbita: el Abismo consume a todos al empezar su turno (5% de la vida máxima por cada ronda desde la 30).')}>☠ El Abismo consume</span>` : c.round >= 26 ? `<span class="bad sm">☠ ronda 30: muerte súbita</span>` : ''}${c.round >= 20 ? `<span class="bad sm" ${tip('Desde la ronda 20 nadie se regenera ni recibe escudos automáticos, y los pilares dejan de curar.')}>⌛ Sin regeneración</span>` : c.round >= 16 ? `<span class="dim sm">⌛ ronda 20: fin de regeneración</span>` : ''}${omenDef ? `<span class="pill sm omen" ${tip(`<b>${omenDef.icon} ${esc(omenDef.name)}</b><div class="sm">${esc(omenDef.text)}</div>`)}>${omenDef.icon} ${esc(omenDef.name)}</span>` : ''}
+  document.getElementById('info')!.innerHTML = `${run.arena ? '' : blessingBar(run)}<b>${kind}</b><span class="dim sm">${run.arena ? '' : `Zona ${run.zone + 1} · sala ${run.step + 1}/${run.map.length} · `}ronda ${c.round}</span>${c.round >= 30 ? `<span class="bad sm" ${tip('Muerte súbita: el Abismo consume a todos al empezar su turno (5% de la vida máxima por cada ronda desde la 30).')}>☠ El Abismo consume</span>` : c.round >= 26 ? `<span class="bad sm">☠ ronda 30: muerte súbita</span>` : ''}${c.round >= 20 ? `<span class="bad sm" ${tip('Desde la ronda 20 nadie se regenera ni recibe escudos automáticos, y los pilares dejan de curar.')}>⌛ Sin regeneración</span>` : c.round >= 16 ? `<span class="dim sm">⌛ ronda 20: fin de regeneración</span>` : ''}${omenDef ? `<span class="pill sm omen" ${tip(`<b>${omenDef.icon} ${esc(omenDef.name)}</b><div class="sm">${esc(omenDef.text)}</div>`)}>${omenDef.icon} ${esc(omenDef.name)}</span>` : ''}
     <span class="turn ${myTurn ? 'mine' : ''}">${c.over ? (c.over === 'win' ? '¡Victoria!' : 'Derrota') : myTurn ? 'TU TURNO' : cur ? `Turno de ${esc(cur.name)}` : ''}</span><span id="clock" class="dim">${left && !c.over ? `${left}s` : ''}</span>
     ${ui.notice ? `<span class="bad">${esc(ui.notice)}</span>` : ''}${!s.t.connected() ? '<span class="bad">⚠ Conexión perdida: reconectando…</span>' : !s.hostPresent() ? '<span class="bad">Anfitrión desconectado: partida en pausa</span>' : ''}
     ${s.isHost && cur && !cur.ai && !myTurn && !c.over ? '<button class="mini" data-act="skip">Pasar su turno</button>' : ''}<span class="grow"></span>${sysButtons()}`;
