@@ -274,7 +274,7 @@ export function spellEffects(d: SpellDef): string[] {
 
 /** Ficha de un hechizo en filas (etiqueta, valor): lo que se muestra al pasar el ratón. */
 export function spellRows(d: SpellDef): Array<[string, string]> {
-  const rows: Array<[string, string]> = [['Coste', `${d.ap} PA`]];
+  const rows: Array<[string, string]> = [['Coste', d.route === 'item' ? 'Gratis (consumible)' : `${d.ap} PA`]];
   if (d.dmg) rows.push(['Daño', `${d.dmg[0]}-${d.dmg[1]}${d.element ? ` ${EL[d.element]}` : ''}${d.bounce ? ` ×${d.bounce} (ida y vuelta)` : ''}${d.area && d.range[1] > 0 && !d.line ? ' · 50% al resto del área' : ''}`]);
   if (d.heal) rows.push(['Curación', `${d.heal}`]);
   if (d.shield) rows.push(['Escudo', `${d.shield}`]);

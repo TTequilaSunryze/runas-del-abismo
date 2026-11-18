@@ -17,6 +17,10 @@ describe('mapa ramificado', () => {
       expect(m.layers[0]!.every((k) => k === 'combat')).toBe(true);
       expect(m.layers[1]).toContain('shrine');
       expect(m.layers[1]).not.toContain('event');
+      const n = (k: string) => m.layers.flat().filter((x) => x === k).length;
+      expect(n('shop')).toBe(2); expect(n('treasure')).toBe(1);
+      expect(n('event')).toBeGreaterThanOrEqual(1); expect(n('event')).toBeLessThanOrEqual(2);
+      expect(m.layers[Math.floor(m.layers.length / 2)]).toContain('treasure');
     }
   });
   it('todos los nodos son alcanzables y tienen salida; hay ramas distintas', () => {

@@ -106,9 +106,10 @@ export interface GroupEvent {
   result?: string;
 }
 
-export type NodeKind = 'combat' | 'elite' | 'event' | 'rest' | 'shop' | 'boss' | 'cage' | 'shrine';
-export const NODE_NAME: Record<NodeKind, string> = { combat: '⚔️ Combate', elite: '☠️ Élite', event: '❓ Evento de grupo', rest: '🔥 Descanso', shop: '💰 Tienda', boss: '👑 Jefe', cage: '⛓️ Jaula', shrine: '✨ Santuario' };
+export type NodeKind = 'combat' | 'elite' | 'event' | 'rest' | 'shop' | 'boss' | 'cage' | 'shrine' | 'treasure';
+export const NODE_NAME: Record<NodeKind, string> = { combat: '⚔️ Combate', elite: '☠️ Élite', event: '❓ Evento de grupo', rest: '🔥 Descanso', shop: '💰 Tienda', boss: '👑 Jefe', cage: '⛓️ Jaula', shrine: '✨ Santuario', treasure: '🎁 Botín' };
 export const NODE_HINT: Record<NodeKind, string> = {
+  treasure: 'Sin combate: cada uno se lleva un objeto Uncommon o mejor.',
   combat: 'Enemigos normales. Oro y, a veces, un objeto.', elite: 'El campeón de la zona, con modificadores. Oro y objetos mejores.',
   event: 'Una decisión que se vota y afecta a todos.', rest: 'Todos recuperan el 40% de su vida.',
   shop: 'Gastad vuestro oro en objetos y pociones.', boss: 'El guardián de la zona. Dos fases. Objetos, una reliquia y una mejora o un hechizo nuevo.',
@@ -374,6 +375,9 @@ export function statBreakdown(h: HeroSave): Array<{ key: string; name: string; b
 }
 
 /** Precio con los recargos de la ascensión y del reto diario. */
+/** Curación de jefe y hogueras: base + 8% por nivel de Primeros auxilios, −30% desde la ascensión 3. */
+export const healOf = (run: RunState, h: HeroSave, base: number): number => (base + perkLevel(h.perks, 'aid') * 0.08) * (run.asc >= 3 ? 0.7 : 1);
+
 export const priceOf = (run: RunState, base: number): number => Math.round(base * (run.asc >= 4 ? 1.25 : 1) * (run.mods.includes('codicia') ? 2 : 1));
 
 type Build = Pick<HeroSave, 'cls' | 'name' | 'owner' | 'routes' | 'level' | 'equip'> & { boon?: Stats; ups?: Record<string, string[]>; relics?: string[]; boons?: string[]; bag2?: Record<string, number>; souls?: number; soulBank?: number };
@@ -685,8 +689,13 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
     for (const id of ['c_vida', 'c_fuego', 'c_humo', 'c_resu']) run.shop.push({ consumable: id, price: priceOf(run, CONSUMABLES[id]!.price), sold: false });
     run.phase = 'shop';
   } else if (node === 'rest') {
-    for (const h of run.heroes) h.hp = Math.min(heroMaxHp(h), h.hp + Math.ceil(heroMaxHp(h) * 0.4));
+    for (const h of run.heroes) h.hp = Math.min(heroMaxHp(h), h.hp + Math.ceil(heroMaxHp(h) * healOf(run, h, 0.4)));
     run.note = 'Descansáis junto a una hoguera: todos recuperáis el 40% de la vida.';
+    run.step++;
+  } else if (node === 'treasure') {
+    const got: string[] = [];
+    for (const h of run.heroes) { const it = giveItem(run, h, 'elite', 1); got.push(`${h.name}: ${it.name}`); }
+    run.note = `Sala del botín: cada uno encuentra un objeto Uncommon o mejor (${got.join(' · ')}).`;
     run.step++;
   } else if (node === 'shrine') {
     for (const h of run.heroes) offerBoon(run, h);
@@ -773,9 +782,10 @@ export function finishFight(run: RunState): void {
     dropLoot(run, h, dropKindOf(run), (found[h.owner] ??= []));
     if (run.kind === 'boss' && run.zone < lastZone(run)) h.bossOffer = buildBossOffer(run, h);
     const max = heroMaxHp(h);
-    // los caídos vuelven con el 30%; los demás recuperan un 35% entre combates
-    const healPct = (0.35 + perkLevel(h.perks, 'aid') * 0.08) * (run.asc >= 3 ? 0.7 : 1);
-    h.hp = left <= 0 ? Math.ceil(max * 0.3) : Math.min(max, left + Math.ceil(max * healPct));
+    // no hay curación gratis tras un combate: solo tras vencer al jefe (o en hogueras, eventos y habilidades).
+    // Los caídos se levantan con el 30% de la vida para poder seguir jugando.
+    const healPct = run.kind === 'boss' ? healOf(run, h, 0.5) : 0;
+    h.hp = left <= 0 ? Math.max(Math.ceil(max * 0.3), Math.ceil(max * healPct)) : Math.min(max, left + Math.ceil(max * healPct));
     h.gold += gold + (h.relics.includes('bolsa') ? 15 : 0);
     h.stats.maxGold = Math.max(h.stats.maxGold, h.gold);
     // reliquias: siempre tras el jefe, a veces tras un élite; y la promesa cumplida

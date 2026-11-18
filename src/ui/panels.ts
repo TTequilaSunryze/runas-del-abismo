@@ -268,7 +268,7 @@ export function mapSvg(run: RunState, pick = false): string {
   return `<svg class="actmap" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${lines}${nodes}</svg>`;
 }
 
-const mapLegend = (): string => (['combat', 'elite', 'event', 'shrine', 'shop', 'rest', 'boss'] as const).map((k) => `<span class="chip">${NODE_ICON[k]} ${esc(NODE_NAME[k].replace(/^\S+\s/, ''))}</span>`).join('');
+const mapLegend = (): string => (['combat', 'elite', 'event', 'shrine', 'shop', 'treasure', 'rest', 'boss'] as const).map((k) => `<span class="chip">${NODE_ICON[k]} ${esc(NODE_NAME[k].replace(/^\S+\s/, ''))}</span>`).join('');
 
 /** Mapa del acto como cartel (para consultarlo desde cualquier pantalla). */
 export function mapModal(run: RunState): string {

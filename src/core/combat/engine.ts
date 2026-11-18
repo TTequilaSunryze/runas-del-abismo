@@ -486,6 +486,8 @@ export function castProblem(s: CombatState, u: Unit, base: SpellDef, at: Pos): s
 export function apCost(u: Unit, id: string): number {
   const slot = u.spells.find((x) => x.id === id);
   if (slot?.free) return 0;
+  // los consumibles (objetos con cargas) no gastan PA
+  if (slot?.charges !== undefined) return 0;
   return Math.max(0, (spellOf(u, id)?.ap ?? 99) - (u.discount ?? 0));
 }
 

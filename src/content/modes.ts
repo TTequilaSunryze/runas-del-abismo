@@ -7,7 +7,7 @@ export const ASCENSION: string[] = [
   'Dificultad normal.',
   'Enemigos +10% de vida y daño.',
   'Los élites tienen 2 modificadores.',
-  'Un 30% menos de curación entre combates.',
+  'Un 30% menos de curación tras el jefe y en las hogueras.',
   'Precios de la tienda +25%.',
   'Más enemigos normales con modificadores.',
   'Jefes +20% de vida.',
@@ -75,7 +75,7 @@ export const PERKS: PerkDef[] = [
   { id: 'vit', name: 'Vitalidad', icon: '❤️', text: (l) => `+${l * 6}% de vida máxima`, max: 5, cost: (l) => 30 + l * 25 },
   { id: 'gold', name: 'Bolsa heredada', icon: '💰', text: (l) => `Empiezas con ${l * 25} de oro`, max: 4, cost: (l) => 25 + l * 20 },
   { id: 'loot', name: 'Ojo del saqueador', icon: '🎁', text: (l) => `+${l} objeto en los botines de élites y jefes`, max: 1, cost: () => 120 },
-  { id: 'aid', name: 'Primeros auxilios', icon: '🩹', text: (l) => `+${l * 8}% de curación entre combates`, max: 3, cost: (l) => 40 + l * 30 },
+  { id: 'aid', name: 'Primeros auxilios', icon: '🩹', text: (l) => `+${l * 8}% de curación tras el jefe y en las hogueras`, max: 3, cost: (l) => 40 + l * 30 },
 ];
 
 export type Perks = Partial<Record<string, number>>;

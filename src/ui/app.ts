@@ -1,7 +1,7 @@
 // Arranque de la interfaz: conexión a la sala, redibujado y entrada del usuario.
 import { isMuted, playEvents, sfx, toggleMute } from '../audio/sfx';
 import { canPickRoute } from '../core/classes/classes';
-import { spellOf } from '../core/combat/engine';
+import { apCost, spellOf } from '../core/combat/engine';
 import type { Slot } from '../core/items/items';
 import type { ClassId, GameEvent } from '../core/state';
 import type { RunState } from '../game/run';
@@ -271,7 +271,7 @@ document.addEventListener('keydown', (e) => {
   const n = Number(e.key);
   if (u && n >= 1 && n <= u.spells.length) {
     const sp = u.spells[n - 1]!;
-    if (sp.cd === 0 && (sp.charges === undefined || sp.charges > 0) && u.ap >= spellOf(u, sp.id)!.ap) pickSpell(sp.id);
+    if (sp.cd === 0 && (sp.charges === undefined || sp.charges > 0) && u.ap >= apCost(u, sp.id)) pickSpell(sp.id);
   } else if (e.key === 'e' || e.key === 'E' || e.key === ' ') { e.preventDefault(); s.act({ a: 'end' }); }
   else if (e.key === 'Escape') ui.board?.select(null);
 });
