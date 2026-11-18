@@ -179,6 +179,8 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
   const absorbed = Math.min(u.shield, dmg);
   u.shield -= absorbed;
   dmg -= absorbed;
+  // Égida de Obsidiana: el primer golpe de cada ronda, a la mitad
+  if (dmg > 0 && hasTrait(u, 'egida') && u.egidaRound !== s.round && source !== 'burn' && source !== 'poison' && source !== 'bleed') { u.egidaRound = s.round; dmg = Math.ceil(dmg / 2); }
   // Reflejo oscuro: una vez por combate, la Sombra recibe el golpe letal y estalla en humo
   if (dmg >= u.hp && hasTrait(u, 'reflejoscuro') && !u.shadowSaved) {
     const sh = marksOf(s, 'shadow', u.id).at(-1);
@@ -201,6 +203,8 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
   u.hp = Math.max(0, u.hp - dmg);
   ev.push({ t: 'damage', unit: u.id, amount: dmg, absorbed, crit: !!opts.crit, source });
   if (dmg > 0 && u.fury !== undefined) { u.furyHot = true; addFury(u, 10, ev); }
+  // Lágrima del Eco: una vez por combate, al bajar del 30% se cura el 25%
+  if (alive(u) && hasTrait(u, 'lagrima') && !u.tearUsed && u.hp < u.maxHp * 0.3) { u.tearUsed = true; heal(u, u.maxHp * 0.25, ev); }
   // Reacción visceral: un crítico recibido da +15 de Furia
   if (opts.crit && u.fury !== undefined && hasTrait(u, 'visceral')) addFury(u, 15, ev);
   // Marca de la muerte: guarda el 35% del daño que le hacen el Acechador y sus sombras
@@ -218,6 +222,15 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
         if (hasTrait(k, 'ecocaidos') && k.hp < k.maxHp / 2 && dist(k.pos, u.pos) <= 3) heal(k, k.maxHp * 0.08, ev);
       }
     }
+    const killer = casting !== null ? getUnit(s, casting) : undefined;
+    if (killer && alive(killer) && killer.team !== u.team) {
+      // Piel del Devorador: rematar cura el 5%
+      if (hasTrait(killer, 'devorador')) heal(killer, killer.maxHp * 0.05, ev);
+      // Ojo del Volcán: el rematado estalla
+      if (hasTrait(killer, 'volcan')) for (const o of s.units.filter((x) => alive(x) && x.team === u.team && dist(x.pos, u.pos) <= 1)) hurt(s, o, 5, ev, 'volcan', { pierce: true });
+    }
+    // Alianza de la Viuda Eterna: si cae un aliado, +20% de daño
+    if (u.summoner === undefined) for (const a of s.units) if (a !== u && alive(a) && a.team === u.team && hasTrait(a, 'viuda')) a.power += 20;
     if (hasTrait(u, 'puddle') && !s.puddles.includes(key(u.pos))) s.puddles.push(key(u.pos));
     if (hasTrait(u, 'split') && u.maxHp >= 16) splitUnit(s, u, ev);
     if (hasTrait(u, 'bomb')) {
@@ -291,7 +304,7 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     u.discount = 0;
     u.reaper = false;
     u.syncHit = false;
-    u.mistWalk = false; u.gravHit = false; u.twinBlades = false; u.huntUsed = false; u.bloodUsed = false; u.behindNow = false;
+    u.mistWalk = false; u.gravHit = false; u.twinBlades = false; u.huntUsed = false; u.bloodUsed = false; u.behindNow = false; u.firstCast = false;
     // el señuelo dura hasta su turno
     if (u.ai === 'decoy') { u.hp = 0; ev.push({ t: 'death', unit: u.id }); continue; }
     // Furia: si pasa un turno entero sin atacar ni recibir daño, pierde 20
@@ -399,7 +412,7 @@ export function tacklersOf(s: CombatState, u: Unit): number {
 }
 
 /** El placaje no le afecta: espectros, invisibles, Frenesí, Caminante de la niebla, Golpe titánico. */
-const untackleable = (u: Unit): boolean => hasTrait(u, 'ghost') || !!u.statuses.invis || !!u.statuses.frenzy || !!u.mistWalk || (hasTrait(u, 'titanico') && (u.fury ?? 0) > 80);
+const untackleable = (u: Unit): boolean => hasTrait(u, 'ghost') || !!u.statuses.invis || !!u.statuses.frenzy || !!u.mistWalk || (hasTrait(u, 'titanico') && (u.fury ?? 0) > 80) || hasTrait(u, 'entremundos');
 /** Placaje de `o` sobre `u` (Cadenas pesadas: +2 contra ralentizados, encadenados o con la Huida reducida). */
 const tackleOf = (o: Unit, u: Unit): number => (o.tackle ?? 0) + (hasTrait(o, 'pesadas') && (u.statuses.slow || u.statuses.chained || u.statuses.hobble) ? 2 : 0);
 
@@ -564,7 +577,9 @@ export function apCost(u: Unit, id: string, s?: CombatState): number {
   const sym = u.symphony && base >= 3 ? 1 : 0;
   // Dominio esférico: hechizos de esferas a 2 casillas o menos de una esfera tuya
   const dom = s && d && hasTrait(u, 'dominio') && isSphereSpell(d) && marksOf(s, 'sphere', u.id).some((m) => dist(m.pos, u.pos) <= 2) ? 1 : 0;
-  return Math.max(0, base - Math.max(u.discount ?? 0, sym) - dom);
+  // Primera Runa: el primer hechizo del turno cuesta 1 PA menos
+  const first = hasTrait(u, 'primera') && !u.firstCast ? 1 : 0;
+  return Math.max(0, base - Math.max(u.discount ?? 0, sym) - dom - first);
 }
 
 /** Hechizos que crean, mueven, consumen o usan esferas. */
@@ -656,6 +671,7 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
   const slotUsed = u.spells.find((x) => x.id === def.id)!;
   const cost = apCost(u, def.id, s);
   if (!slotUsed.free && (u.discount ?? 0) > 0) u.discount = 0;
+  if (slotUsed.charges === undefined) u.firstCast = true;
   if (!slotUsed.free && u.symphony && def.ap >= 3 && slotUsed.charges === undefined) u.symphony = false;
   u.ap -= cost;
   delete slotUsed.free;
@@ -854,6 +870,12 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
       if (!pass) {
         // Zorro de fuego: lo que golpea en línea recta quema 2 turnos
         if (hasTrait(u, 'zfuego') && alive(t) && (def.line || def.straight || def.firstHit)) addStatus(t, 'burn', 2, 1, ev);
+        // Espina de la Madre Raíz: los golpes envenenan
+        if (hasTrait(u, 'espina') && alive(t)) addStatus(t, 'poison', 2, 1, ev);
+        // Velo de Mil Esporas: quien te golpea cuerpo a cuerpo queda ralentizado
+        if (hasTrait(t, 'esporas') && melee && alive(u) && alive(t)) addStatus(u, 'slow', 1, 1, ev);
+        // Zarpas del Alfa: los críticos curan 4
+        if (crit && got > 0 && hasTrait(u, 'alfa')) heal(u, 4, ev);
         // Cuchillas gemelas: tras aparecer a su espalda, el golpe cuerpo a cuerpo hace sangrar
         if (u.twinBlades && melee && alive(t)) addStatus(t, 'bleed', 2, 1, ev);
         // Reflejo ilusorio: golpe cuerpo a cuerpo recibido → señuelo y empujón (1 vez por ronda)
@@ -1366,6 +1388,10 @@ function turnStartBlessings(s: CombatState, u: Unit, ev: GameEvent[]): void {
   if (hasTrait(u, 'indomita') && u.hp < u.maxHp * 0.25) gainEssence(u, 1, ev);
   // Órbita protectora: con 2+ esferas, escudo del 10% de la vida máxima
   if (hasTrait(u, 'orbitaprot') && marksOf(s, 'sphere', u.id).length >= 2) { const sh = Math.round(u.maxHp * 0.1); u.shield += sh; ev.push({ t: 'shield', unit: u.id, amount: sh }); }
+  // Pasos del Que No Descansa: pegado a un enemigo → +1 PM
+  if (hasTrait(u, 'incansable') && s.units.some((t) => alive(t) && t.team !== u.team && t.ai !== 'pillar' && dist(t.pos, u.pos) === 1)) { u.mp++; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: 1 }); }
+  // Huellas de Pavesa: los enemigos pegados se queman
+  if (hasTrait(u, 'pavesa')) for (const t of s.units.filter((x) => alive(x) && x.team !== u.team && dist(x.pos, u.pos) === 1)) addStatus(t, 'burn', 1, 1, ev);
   // Carga berserker: enemigo visible en línea recta → +1 PM
   if (hasTrait(u, 'carga') && s.units.some((t) => alive(t) && t.team !== u.team && !t.statuses.invis && (t.pos.x === u.pos.x || t.pos.y === u.pos.y) && hasLineOfSight(s, u.pos, t.pos))) { u.mp++; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: 1 }); }
 }

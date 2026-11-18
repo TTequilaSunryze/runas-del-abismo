@@ -12,10 +12,10 @@ export const ZONA4_ITEMS: ItemTheme = {
   },
   suffixes: ['del Abismo', 'del Vacío', 'de las Runas Primeras', 'del Último Eco', 'sin Fondo'],
   legendaries: [
-    { slot: 'arma', name: 'Primera Runa', rarity: 3, stats: { power: 45, crit: 15, status: 1, ap: 1 }, lore: 'De ella nacieron todas las demás.' },
-    { slot: 'peto', name: 'Piel del Devorador', rarity: 3, stats: { hp: 65, armor: 5, resShadow: 35 }, lore: 'Aún tiene hambre.' },
-    { slot: 'amuleto', name: 'Lágrima del Eco', rarity: 3, stats: { hp: 30, power: 25, ap: 1, resShadow: 20 }, lore: 'Lloran por ti los que cayeron antes.' },
-    { slot: 'botas', name: 'Pasos entre Mundos', rarity: 3, stats: { mp: 1, initiative: 18, crit: 10 }, lore: 'Nunca pisan el mismo suelo dos veces.' },
+    { slot: 'arma', name: 'Primera Runa', rarity: 3, stats: { power: 45, crit: 15, status: 1, ap: 1 }, lore: 'De ella nacieron todas las demás.', passive: { trait: 'primera', text: 'El primer hechizo de cada turno cuesta 1 PA menos.' } },
+    { slot: 'peto', name: 'Piel del Devorador', rarity: 3, stats: { hp: 65, armor: 5, resShadow: 35 }, lore: 'Aún tiene hambre.', passive: { trait: 'devorador', text: 'Cada enemigo que rematas te cura el 5% de tu vida máxima.' } },
+    { slot: 'amuleto', name: 'Lágrima del Eco', rarity: 3, stats: { hp: 30, power: 25, ap: 1, resShadow: 20 }, lore: 'Lloran por ti los que cayeron antes.', passive: { trait: 'lagrima', text: 'Una vez por combate, al bajar del 30% de vida te curas el 25%.' } },
+    { slot: 'botas', name: 'Pasos entre Mundos', rarity: 3, stats: { mp: 1, initiative: 18, crit: 10 }, lore: 'Nunca pisan el mismo suelo dos veces.', passive: { trait: 'entremundos', text: 'El placaje no te afecta.' } },
   ],
 };
 

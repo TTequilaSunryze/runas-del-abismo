@@ -1,5 +1,4 @@
 // Equipo: 8 ranuras, 4 rarezas. Los nombres y la temática vienen de cada zona (content/).
-import { FEATURES } from '../tuning';
 import { pick, rand, randInt, shuffle, type RngBox } from '../rng';
 
 export const SLOTS = ['casco', 'capa', 'arma', 'peto', 'anillo', 'amuleto', 'botas', 'guantes'] as const;
@@ -32,6 +31,8 @@ export interface Item {
   stats: Stats;
   affixes?: Affix[];
   lore?: string;
+  /** pasiva propia de los legendarios con nombre */
+  passive?: { trait: string; text: string };
 }
 
 /** Temática de una zona: nombres por ranura y legendarios con nombre propio. */
@@ -42,16 +43,21 @@ export interface ItemTheme {
 }
 
 /** Estadísticas que puede dar cada ranura. */
-const POOL: Record<Slot, StatKey[]> = {
-  casco: ['hp', 'tackle', 'armor', 'initiative', 'crit', 'resFire', 'resIce', 'resPoison', 'resShadow'],
-  capa: ['hp', 'dodge', 'crit', 'mp', 'initiative', 'resIce', 'resShadow'],
-  arma: ['powerPhys', 'powerMagic', 'crit', 'ap', 'power'],
-  peto: ['hp', 'tackle', 'dodge', 'armor', 'initiative', 'resFire', 'resPoison'],
-  anillo: ['powerPhys', 'powerMagic', 'crit', 'ap', 'hp', 'resPoison'],
-  amuleto: ['powerMagic', 'powerPhys', 'hp', 'ap', 'power', 'resFire', 'resShadow'],
-  botas: ['mp', 'dodge', 'hp', 'tackle', 'initiative', 'resIce'],
-  guantes: ['crit', 'powerPhys', 'powerMagic', 'tackle', 'ap', 'resPoison'],
+/**
+ * Estadísticas que puede dar cada ranura (rework v11: roles claros, sin resistencias ni % Daño genérico).
+ * `dmg` = el % de daño del tipo de quien lo encuentra (físico o mágico).
+ */
+const POOL: Record<Slot, Array<StatKey | 'dmg'>> = {
+  arma: ['dmg', 'crit', 'ap'],
+  casco: ['hp', 'armor', 'tackle'],
+  capa: ['hp', 'dodge', 'crit', 'mp'],
+  peto: ['hp', 'armor', 'tackle', 'dodge'],
+  anillo: ['dmg', 'crit', 'ap', 'hp'],
+  amuleto: ['dmg', 'ap', 'hp'],
+  botas: ['mp', 'dodge', 'hp', 'tackle'],
+  guantes: ['crit', 'dmg', 'tackle', 'ap'],
 };
+export const SLOT_POOL = POOL;
 
 /** Nombre de cada estadística como prefijo y como sufijo. */
 export const AFFIX_NAMES: Record<StatKey, { prefix: string; suffix: string }> = {
@@ -73,7 +79,8 @@ export const AFFIX_NAMES: Record<StatKey, { prefix: string; suffix: string }> = 
   status: { prefix: 'Duradero', suffix: 'de la Condena' },
 };
 
-const MULT = [1, 1.15, 1.3, 1.5];
+/** Multiplicador de valor por rareza (v11: más fuerte para compensar el fin de la curación gratis). */
+const MULT = [1, 1.2, 1.45, 1.75];
 /** Cuánto crece cada estadística con el acto (por zona superada). */
 const ACT_GROWTH = 0.25;
 
@@ -125,13 +132,28 @@ export function genItem(box: RngBox, theme: ItemTheme, act: number, kind: DropKi
   const rarity = rollRarity(box, act, kind, min);
   const s = slot ?? pick(box, SLOTS);
   const { prefixes, suffixes } = affixLayout(box, rarity);
-  const keys = shuffle(box, POOL[s]).filter((k) => (rarity >= 2 || !RARE_ONLY.includes(k))
-    // sin resistencias mientras el sistema esté apagado; y solo el tipo de daño de quien lo encuentra
-    && (FEATURES.resistances || !k.startsWith('res'))
-    && !(school === 'magic' && k === 'powerPhys') && !(school === 'phys' && k === 'powerMagic'));
+  // el daño es siempre del tipo de quien lo encuentra (sin tipo: al azar)
+  const dmgKey: StatKey = school === 'magic' ? 'powerMagic' : school === 'phys' ? 'powerPhys' : rand(box) < 0.5 ? 'powerPhys' : 'powerMagic';
+  const pool = POOL[s].map((k) => (k === 'dmg' ? dmgKey : k)).filter((k) => rarity >= 2 || !RARE_ONLY.includes(k));
+  let keys = shuffle(box, pool);
+  // Rare: al menos un afijo de la estadística principal (daño de la clase o, si la ranura no lo da, vida)
+  if (rarity === 2) {
+    const main = pool.includes(dmgKey) ? dmgKey : 'hp';
+    if (pool.includes(main)) keys = [main, ...keys.filter((k) => k !== main)];
+  }
+  // si la ranura no tiene bastantes estadísticas, un prefijo y un sufijo pueden repetir una (nunca PA ni PM)
+  const n = prefixes + suffixes;
+  const reuse = shuffle(box, keys.filter((k) => !RARE_ONLY.includes(k)));
+  while (keys.length < n && reuse.length) keys = [...keys, reuse.shift()!];
   const affixes: Affix[] = [];
   const stats: Stats = {};
   const kinds: Array<'prefix' | 'suffix'> = [...Array(prefixes).fill('prefix'), ...Array(suffixes).fill('suffix')];
+  // la estadística repetida va como prefijo en un afijo y como sufijo en el otro
+  if (keys.length >= n && new Set(keys.slice(0, n)).size < n) {
+    const dup = keys.slice(0, n).find((k, i, arr) => arr.indexOf(k) !== i)!;
+    const i1 = keys.indexOf(dup), i2 = keys.lastIndexOf(dup);
+    if (kinds[i1] === kinds[i2]) { const j = kinds.findIndex((k, idx) => k !== kinds[i1] && idx !== i1); if (j >= 0) [keys[i2], keys[j]] = [keys[j]!, keys[i2]!]; }
+  }
   kinds.forEach((kind2, i) => {
     const stat = keys[i];
     if (!stat) return;
@@ -143,7 +165,7 @@ export function genItem(box: RngBox, theme: ItemTheme, act: number, kind: DropKi
   const base = named.length ? pick(box, named) : undefined;
   const firstSuffix = affixes.find((a) => a.kind === 'suffix');
   const name = base ? base.name : pick(box, theme.names[s]) + (firstSuffix ? ' ' + firstSuffix.name : '');
-  return { slot: s, name, rarity, stats, affixes, ...(base?.lore ? { lore: base.lore } : {}) };
+  return { slot: s, name, rarity, stats, affixes, ...(base?.lore ? { lore: base.lore } : {}), ...(base?.passive ? { passive: { ...base.passive } } : {}) };
 }
 
 /** Precio de compra en la tienda. */

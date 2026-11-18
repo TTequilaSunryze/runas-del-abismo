@@ -12,10 +12,10 @@ export const ZONA3_ITEMS: ItemTheme = {
   },
   suffixes: ['de las Ruinas', 'de la Pira', 'del Rey Calcinado', 'de Ceniza Viva', 'del Último Incendio'],
   legendaries: [
-    { slot: 'arma', name: 'Corona Rota del Rey Calcinado', rarity: 3, stats: { power: 40, crit: 14, ap: 1 }, lore: 'Dejó de ser corona el día que ardió el reino.' },
-    { slot: 'peto', name: 'Égida de Obsidiana', rarity: 3, stats: { hp: 55, armor: 5, resFire: 35 }, lore: 'Nació de un incendio y no teme a otro.' },
-    { slot: 'botas', name: 'Huellas de Pavesa', rarity: 3, stats: { mp: 1, initiative: 14, resFire: 25 }, lore: 'Quien las calza no deja de moverse.' },
-    { slot: 'amuleto', name: 'Ojo del Volcán', rarity: 3, stats: { power: 26, hp: 26, status: 1, ap: 1 }, lore: 'Mira hacia dentro.' },
+    { slot: 'arma', name: 'Corona Rota del Rey Calcinado', rarity: 3, stats: { power: 40, crit: 14, ap: 1 }, lore: 'Dejó de ser corona el día que ardió el reino.', passive: { trait: 'enrage', text: 'Por debajo de la mitad de vida haces un 40% más de daño.' } },
+    { slot: 'peto', name: 'Égida de Obsidiana', rarity: 3, stats: { hp: 55, armor: 5, resFire: 35 }, lore: 'Nació de un incendio y no teme a otro.', passive: { trait: 'egida', text: 'El primer golpe que recibes cada ronda hace la mitad de daño.' } },
+    { slot: 'botas', name: 'Huellas de Pavesa', rarity: 3, stats: { mp: 1, initiative: 14, resFire: 25 }, lore: 'Quien las calza no deja de moverse.', passive: { trait: 'pavesa', text: 'Al empezar tu turno, los enemigos pegados a ti se queman 1 turno.' } },
+    { slot: 'amuleto', name: 'Ojo del Volcán', rarity: 3, stats: { power: 26, hp: 26, status: 1, ap: 1 }, lore: 'Mira hacia dentro.', passive: { trait: 'volcan', text: 'Los enemigos que rematas estallan: 5 de daño a los enemigos pegados a ellos.' } },
   ],
 };
 

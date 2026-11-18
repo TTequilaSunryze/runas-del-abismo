@@ -20,7 +20,10 @@ describe('equipamiento con afijos', () => {
         if (want === 1) expect([p, s]).toEqual([1, 1]);
         if (want === 2) expect([[2, 1], [1, 2]]).toContainEqual([p, s]);
         if (want === 3) expect([p, s]).toEqual([2, 2]);
-        expect(new Set(it.affixes!.map((a) => a.stat)).size).toBe(it.affixes!.length);
+        // un mismo prefijo/sufijo no se repite; PA y PM nunca dos veces
+        expect(new Set(it.affixes!.map((a) => a.id)).size).toBe(it.affixes!.length);
+        expect(it.affixes!.filter((a) => a.stat === 'ap' || a.stat === 'mp').length).toBeLessThanOrEqual(2);
+        expect(it.stats.ap ?? 0).toBeLessThanOrEqual(1); expect(it.stats.mp ?? 0).toBeLessThanOrEqual(1);
       }
     }
   });
@@ -81,5 +84,47 @@ describe('equipamiento con afijos', () => {
     const after = heroSpec(h);
     expect(after.powerPhys).toBe(10);
     expect(after.maxHp).toBe(before.maxHp + 8);
+  });
+});
+
+describe('rework de equipo v11', () => {
+  const allowed: Record<string, string[]> = { arma: ['dmg', 'crit', 'ap'], casco: ['hp', 'armor', 'tackle'], capa: ['hp', 'dodge', 'crit', 'mp'], peto: ['hp', 'armor', 'tackle', 'dodge'], anillo: ['dmg', 'crit', 'ap', 'hp'], amuleto: ['dmg', 'ap', 'hp'], botas: ['mp', 'dodge', 'hp', 'tackle'], guantes: ['crit', 'dmg', 'tackle', 'ap'] };
+  it('cada ranura solo da sus estadísticas y el daño es del tipo de la clase', () => {
+    for (let n = 1; n <= 500; n++) for (const school of ['phys', 'magic'] as const) {
+      const it = genItem(box(n * 13), ZONA1_ITEMS, 1, 'elite', (n % 4) as Rarity, SLOTS[n % SLOTS.length], school);
+      for (const k of Object.keys(it.stats)) {
+        const kk = k === 'powerPhys' || k === 'powerMagic' ? 'dmg' : k;
+        expect(allowed[it.slot], `${it.slot} ${k}`).toContain(kk);
+        expect(k).not.toBe(school === 'phys' ? 'powerMagic' : 'powerPhys');
+        expect(k.startsWith('res') || k === 'power').toBe(false);
+      }
+    }
+  });
+  it('Rare garantiza la estadística principal y los legendarios traen su pasiva', () => {
+    for (let n = 1; n <= 300; n++) {
+      const it = genItem(box(n * 7), ZONA1_ITEMS, 0, 'combat', 2, SLOTS[n % SLOTS.length], 'magic');
+      if (it.rarity !== 2) continue;
+      expect((it.stats.powerMagic ?? 0) + (it.stats.hp ?? 0), it.slot).toBeGreaterThan(0);
+    }
+    const leg = genItem(box(5), ZONA1_ITEMS, 0, 'boss', 3, 'arma', 'phys');
+    expect(leg.passive?.trait).toBeTruthy();
+  });
+  it('alijo de grupo: equipar, mochila y repartir al 50%; vender en tienda al 50%', async () => {
+    const { metaAction } = await import('../src/game/run');
+    const r = newRun('T', 3, [{ owner: 'a', name: 'A', cls: 'barbaro', routes: [] }, { owner: 'b', name: 'B', cls: 'zorro', routes: [] }]);
+    r.phase = 'map';
+    const mk = (rarity: Rarity) => ({ slot: 'arma' as const, name: 'X', rarity, stats: { crit: 3 } });
+    r.stash = [mk(0), mk(1), mk(3)];
+    const [a, b] = r.heroes as [typeof r.heroes[0], typeof r.heroes[0]];
+    const g0 = a.gold, gb = b.gold;
+    expect(metaAction(r, 'a', { a: 'stash', idx: 2, op: 'split' })).toBeNull();
+    expect(a.gold - g0).toBe(50); expect(b.gold - gb).toBe(50);
+    expect(metaAction(r, 'b', { a: 'stash', idx: 0, op: 'equip' })).toBeNull();
+    expect(b.equip.arma?.rarity).toBe(0);
+    expect(metaAction(r, 'a', { a: 'stash', idx: 0, op: 'bag' })).toBeNull();
+    expect(a.bag).toHaveLength(1); expect(r.stash).toHaveLength(0);
+    r.phase = 'shop'; const g1 = a.gold;
+    expect(metaAction(r, 'a', { a: 'sell', idx: 0 })).toBeNull();
+    expect(a.gold - g1).toBe(30);
   });
 });

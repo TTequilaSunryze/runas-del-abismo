@@ -44,6 +44,7 @@ export function addLog(events: GameEvent[]): void {
 }
 
 const TRAIT_TEXT: Record<string, string> = {
+  incansable: 'Pegado a un enemigo al empezar el turno: +1 PM.', viuda: 'Si cae un aliado: +20% de daño.', espina: 'Sus golpes envenenan.', esporas: 'Quien le golpea cuerpo a cuerpo queda ralentizado.', alfa: 'Sus críticos le curan 4.', egida: 'El primer golpe de cada ronda le hace la mitad.', pavesa: 'Quema a los enemigos pegados al empezar su turno.', volcan: 'Los enemigos que remata estallan.', primera: 'Su primer hechizo del turno cuesta 1 PA menos.', devorador: 'Rematar le cura el 5%.', lagrima: 'Una vez, al bajar del 30% se cura el 25%.', entremundos: 'El placaje no le afecta.',
   bomb: 'Explota al morir: daña a todo lo que tenga pegado.', split: 'Al morir se divide en dos copias menores.', regen: 'Recupera el 8% de su vida cada turno.', thorns: 'Devuelve el 30% del daño cuerpo a cuerpo.', enrage: '+40% de daño por debajo de la mitad de vida.', trapper: 'Esconde cepos junto a los héroes.', blink: 'Aparece junto a su presa más frágil.',
   venom: 'Sus venenos aplican una carga más.', ignite: 'Su daño quema.', execute: 'Sus críticos hacen el doble.', mender: 'Cura y protege un 30% más.',
   puddle: 'Al morir deja un charco que inmoviliza.', guard: 'Empieza su turno con escudo (15% de su vida, máx. 24).', devour: 'Se cura devorando cadáveres.',

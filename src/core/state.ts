@@ -114,6 +114,9 @@ export interface Unit {
   shadowSaved?: boolean;
   bloodUsed?: boolean;
   behindNow?: boolean;
+  egidaRound?: number;
+  firstCast?: boolean;
+  tearUsed?: boolean;
   /** Furia del Bárbaro (0 a 100) */
   fury?: number;
   /** ha atacado o recibido daño desde su último turno (si no, pierde Furia) */

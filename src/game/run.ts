@@ -165,6 +165,8 @@ export interface RunState extends RngBox {
   combat: CombatState | null;
   /** botín a elegir por jugador (uno de la lista) */
   offers: Record<string, Item[]>;
+  /** Alijo de grupo: objetos encontrados que nadie se ha quedado aún */
+  stash?: Item[];
   event: GroupEvent | null;
   eventsSeen: string[];
   shop: ShopSlot[] | null;
@@ -407,6 +409,8 @@ export function heroSpec(h: Build, pos: Pos = { x: 0, y: 0 }): UnitSpec {
   }
   for (const [id, n] of Object.entries(h.bag2 ?? {})) if (n > 0 && SPELLS[id]) u.spells.push({ id, cd: 0, charges: n });
   for (const r of relics) if (r!.trait && !traits.includes(r!.trait)) traits.push(r!.trait);
+  // pasivas de los legendarios equipados
+  for (const it of Object.values(h.equip)) if (it.passive && !traits.includes(it.passive.trait)) traits.push(it.passive.trait);
   for (const sp of u.spells) {
     if (h.ups?.[sp.id]?.length) sp.ups = [...(sp.ups ?? []), ...h.ups[sp.id]!];
   }
@@ -630,8 +634,8 @@ export function genLoot(run: RunState, kind: DropKind = dropKindOf(run), min: Ra
 }
 
 /**
- * Botín de objetos de un héroe: es un drop, no se elige. 1 objeto en combate normal y élite, 2 en jefe
- * (más 1 con el perk o la lupa en élites y jefes). Va a la ranura libre o a la mochila; si no cabe, se vende.
+ * Botín de objetos: 1 objeto por héroe en combate normal y élite, 2 en jefe (más 1 con el perk o la lupa en élites
+ * y jefes), con el tipo de daño de ese héroe. Todo va al Alijo de grupo y el grupo decide quién se lo queda.
  */
 function dropLoot(run: RunState, h: HeroSave, kind: DropKind, report: Item[]): void {
   if (!(rand(run) < dropChance(run.zone, kind))) return;
@@ -639,9 +643,7 @@ function dropLoot(run: RunState, h: HeroSave, kind: DropKind, report: Item[]): v
   const n = { combat: 1, elite: 1, boss: 2, shop: 1 }[kind] + extra;
   for (let i = 0; i < n; i++) {
     const it = genLoot(run, kind, 0, h);
-    const before = heroMaxHp(h);
-    if (receive(h, it)) h.hp += Math.max(0, heroMaxHp(h) - before);
-    else h.gold += Math.floor(PRICE[it.rarity] / 3);
+    (run.stash ??= []).push(it);
     report.push(it);
   }
 }
@@ -681,7 +683,7 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
     run.phase = 'event';
   } else if (node === 'shop') {
     run.shop = Array.from({ length: 6 }, (): ShopSlot => {
-      const item = genLoot(run, 'shop');
+      const item = genLoot(run, 'shop', 0, pick(run, run.heroes));
       return { item, price: priceOf(run, PRICE[item.rarity]), sold: false };
     });
     const rel = pick(run, Object.values(RELICS));
@@ -832,7 +834,8 @@ export function finishFight(run: RunState): void {
 /** Da un objeto nuevo a un héroe (a la ranura libre o a la mochila; si no cabe, se pierde). */
 export function giveItem(run: RunState, h: HeroSave, kind: DropKind = 'combat', min: Rarity = 0): Item {
   const it = genLoot(run, kind, min, h);
-  receive(h, it);
+  // si no le cabe, va al Alijo de grupo (nunca se pierde ni se vende solo)
+  if (!receive(h, it)) (run.stash ??= []).push(it);
   return it;
 }
 
@@ -850,6 +853,7 @@ export type MetaAction =
   | { a: 'unequip'; slot: Slot }
   | { a: 'give'; idx: number; to: string }
   | { a: 'sell'; idx: number }
+  | { a: 'stash'; idx: number; op: 'equip' | 'bag' | 'split' }
   | { a: 'drop'; idx: number }
   | { a: 'buy'; idx: number }
   | { a: 'potion' }
@@ -872,6 +876,27 @@ export function metaAction(run: RunState, owner: string, a: MetaAction): string 
       if (item && !receive(h, item)) return 'Mochila llena: tira, da o vende algo antes';
       h.hp += Math.max(0, heroMaxHp(h) - before);
       delete run.offers[owner];
+      break;
+    }
+    case 'stash': {
+      const item = run.stash?.[a.idx];
+      if (!item) return 'Ese objeto ya no está en el alijo';
+      const before = heroMaxHp(h);
+      if (a.op === 'equip') {
+        const old = h.equip[item.slot];
+        if (old && h.bag.length >= BAG_SIZE) return 'Mochila llena: no cabe lo que llevas puesto';
+        if (old) h.bag.push(old);
+        h.equip[item.slot] = item;
+      } else if (a.op === 'bag') {
+        if (h.bag.length >= BAG_SIZE) return `Mochila llena (${BAG_SIZE})`;
+        h.bag.push(item);
+      } else {
+        // repartir: se vende al 50% y el oro se reparte a partes iguales
+        const each = Math.floor(Math.floor(PRICE[item.rarity] / 2) / run.heroes.length);
+        for (const x of run.heroes) x.gold += each;
+      }
+      run.stash!.splice(a.idx, 1);
+      h.hp = Math.max(1, Math.min(heroMaxHp(h), h.hp + Math.max(0, heroMaxHp(h) - before)));
       break;
     }
     case 'vote':
@@ -916,7 +941,7 @@ export function metaAction(run: RunState, owner: string, a: MetaAction): string 
       const item = h.bag[a.idx];
       if (run.phase !== 'shop' || !item) return 'Solo se vende en la tienda';
       h.bag.splice(a.idx, 1);
-      h.gold += Math.floor(PRICE[item.rarity] / 3);
+      h.gold += Math.floor(PRICE[item.rarity] / 2);
       break;
     }
     case 'buy': {

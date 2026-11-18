@@ -248,3 +248,7 @@ span.cell { display: inline-flex; align-items: center; justify-content: center; 
 .bless { display: inline-flex; gap: 3px; align-items: center; padding: 2px 6px; border: 1px solid var(--edge); border-radius: 6px; background: rgba(0,0,0,.25); }
 .bless .bicon { font-size: 18px; cursor: help; }
 .sq.off { opacity: .45; }
+/* alijo de grupo */
+.stash { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.stashitem { display: flex; align-items: center; gap: 6px; }
+.stashitem .cell { width: 40px; height: 40px; aspect-ratio: auto; }

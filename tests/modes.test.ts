@@ -42,9 +42,9 @@ describe('mejoras permanentes', () => {
     boosted.combat = createCombat({ seed: 1, w: 8, h: 5, obstacles: [], units: [heroSpec(h, { x: 1, y: 1 })] }).state;
     boosted.combat.over = 'win'; boosted.phase = 'combat'; boosted.kind = 'elite';
     finishFight(boosted);
-    // el botín es un drop: va directo al equipo o la mochila, y queda en el informe
+    // el botín va al Alijo de grupo y queda en el informe
     expect(boosted.report!.items.length).toBeGreaterThanOrEqual(2);
-    expect(Object.keys(h.equip).length + h.bag.length).toBeGreaterThanOrEqual(1);
+    expect(boosted.stash!.length).toBeGreaterThanOrEqual(2);
     expect(boosted.offers.p0).toBeUndefined();
   });
   it('los niveles fuera de rango se recortan', () => {

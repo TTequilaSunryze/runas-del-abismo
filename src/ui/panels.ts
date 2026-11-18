@@ -54,7 +54,7 @@ export function itemHtml(it: Item, withIcon = false): string {
   const aff = it.affixes?.length
     ? it.affixes.map((x) => `<div class="sm affix"><span class="dim">${x.kind === 'prefix' ? 'Prefijo' : 'Sufijo'} · ${esc(x.name)}:</span> <span class="good">+${x.value} ${STAT_NAME[x.stat]}</span></div>`).join('')
     : `<div class="sm">${statsText(it.stats).split(' · ').join('<br>')}</div>`;
-  return `<div class="row">${withIcon ? `<span class="cell ${RAR[it.rarity]}" style="width:44px;height:44px">${itemIcon(it)}</span>` : ''}<div><b class="${RAR[it.rarity]}">${esc(it.name)}</b><div class="dim sm">${SLOT_NAME[it.slot]} · <span class="${RAR[it.rarity]}">${RARITY_NAME[it.rarity]}</span></div></div></div>${aff}${it.lore ? `<i class="dim sm">${esc(it.lore)}</i>` : ''}`;
+  return `<div class="row">${withIcon ? `<span class="cell ${RAR[it.rarity]}" style="width:44px;height:44px">${itemIcon(it)}</span>` : ''}<div><b class="${RAR[it.rarity]}">${esc(it.name)}</b><div class="dim sm">${SLOT_NAME[it.slot]} · <span class="${RAR[it.rarity]}">${RARITY_NAME[it.rarity]}</span></div></div></div>${aff}${it.passive ? `<div class="sm ir3">★ ${esc(it.passive.text)}</div>` : ''}${it.lore ? `<i class="dim sm">${esc(it.lore)}</i>` : ''}`;
 }
 
 /** Casilla con el icono del objeto; al pasar el ratón muestra sus datos y la comparación. */
@@ -83,7 +83,7 @@ function gearTab(run: RunState, h: HeroSave, selling: boolean): string {
   <div class="cells">${Array.from({ length: BAG_SIZE }, (_, i) => cell(h.bag[i], h.bag[i] ? `data-act="selitem" data-id="bag:${i}"` : 'disabled', h, undefined, bagIdx === i)).join('')}</div>
   ${selIt ? `<div class="detail"><div class="row"><div class="cell ${RAR[selIt.rarity]} big">${itemIcon(selIt)}</div><div>${itemHtml(selIt)}</div></div>${kind === 'bag' ? diffHtml(selIt, h) : ''}
     <div class="acts">${kind === 'bag'
-      ? `<button class="pri" data-act="equip" data-id="${bagIdx}">Equipar</button>${others.map((o) => `<button data-act="give" data-id="${bagIdx}" data-to="${esc(o.owner)}">Dar a ${esc(o.name)}</button>`).join('')}${selling ? `<button data-act="sell" data-id="${bagIdx}">Vender +${Math.floor(PRICE[selIt.rarity] / 3)} 💰</button>` : ''}<button data-act="drop" data-id="${bagIdx}">Tirar</button>`
+      ? `<button class="pri" data-act="equip" data-id="${bagIdx}">Equipar</button>${others.map((o) => `<button data-act="give" data-id="${bagIdx}" data-to="${esc(o.owner)}">Dar a ${esc(o.name)}</button>`).join('')}${selling ? `<button data-act="sell" data-id="${bagIdx}">Vender +${Math.floor(PRICE[selIt.rarity] / 2)} 💰</button>` : ''}<button data-act="drop" data-id="${bagIdx}">Tirar</button>`
       : `<button data-act="unequip" data-id="${key}">Quitar (a la mochila)</button>`}</div></div>`
     : '<div class="dim sm hint">Pasa el ratón por un objeto para ver sus datos. Haz clic para equiparlo, quitarlo, dárselo a un compañero o venderlo (en la tienda).</div>'}`;
 }
@@ -148,14 +148,14 @@ export function victoryModal(run: RunState): string {
   if (!r) return '';
   const chip = (icon: string, tipHtml: string, cls = ''): string => `<span class="cell big ${cls}" ${tip(tipHtml)}><span class="emo">${icon}</span></span>`;
   const mineLoot = r.loot.filter((l) => !h || l.owner === h.owner);
-  const found = r.items.filter((x) => !h || x.owner === h.owner).map((x) => x.item);
+  const found = r.items.map((x) => x.item);
   const items = found.map((it) => `<span class="cell big ${RAR[it.rarity]}" ${tip(itemHtml(it, true))}>${itemIcon(it)}</span>`).join('');
   const total = Math.max(1, ...r.damage.map((x) => x.dmg));
   return `<div class="modal victory" id="victorymodal"><div class="panel wide">
   <h2 class="vtitle">FIN DEL COMBATE - ¡HAS GANADO!</h2>
   <div class="lbl">Has encontrado…</div>
   <div class="cells loot-icons">${chip('💰', `<b>Oro</b><div class="sm">+${r.gold} de oro para cada uno.</div>`)}${items}${mineLoot.map((l) => chip(l.icon, `<b>${esc(l.name)}</b><div class="sm">${esc(l.text)}</div>`, l.rare ? 'ir3' : 'ir1')).join('')}</div>
-  ${found.length ? '<div class="dim sm">Los objetos ya están en tu equipo o en tu mochila (si no cabían, se han vendido).</div>' : ''}
+  ${stashRow(run)}
   ${bossRow(run)}
   <div class="lbl">Resumen</div>
   <div class="vsum sm"><span>⏱️ ${r.turns} ronda${r.turns === 1 ? '' : 's'}</span><span>⚔️ ${r.damage.reduce((a, x) => a + x.dmg, 0)} de daño</span></div>
@@ -190,7 +190,7 @@ export function boonRow(run: RunState): string {
 }
 
 /** Todo lo que el jugador tiene pendiente de elegir. */
-export const pendingRows = (run: RunState): string => `${boonRow(run)}${bossRow(run)}${lootRow(run)}`;
+export const pendingRows = (run: RunState): string => `${boonRow(run)}${bossRow(run)}${stashRow(run)}${lootRow(run)}`;
 
 /** Control para cambiar de sala: el anfitrión espera a que todos estén listos; los demás pulsan «Listo». */
 export function advanceBar(run: RunState, label: string, act = 'leavenode'): string {
@@ -211,6 +211,17 @@ export function advanceBar(run: RunState, label: string, act = 'leavenode'): str
 }
 
 /** Botín pendiente: tarjetas grandes con icono, datos y comparación. */
+/** Alijo de grupo: cada uno puede equipárselo, guardarlo o venderlo para repartir el oro. */
+export function stashRow(run: RunState): string {
+  const h = mine(run);
+  const list = run.stash ?? [];
+  if (!list.length || !h) return '';
+  return `<div class="panel loot"><div class="row"><h3>🧰 Alijo de grupo (${list.length})</h3><span class="grow"></span><span class="dim sm">Mochila ${h.bag.length}/${BAG_SIZE}</span></div>
+  <div class="dim sm">Lo que encontráis cae aquí. Decidid entre todos quién se lo queda; «Repartir» lo vende al 50% y el oro se divide entre el grupo.</div>
+  <div class="stash">${list.map((it, i) => `<div class="stashitem"><span class="cell ${RAR[it.rarity]}" ${tip(itemHtml(it, true) + diffHtml(it, h))}>${itemIcon(it)}</span><div class="sm"><b class="${RAR[it.rarity]}">${esc(it.name)}</b><div class="dim">${SLOT_NAME[it.slot]}</div></div>
+    <span class="grow"></span><button class="mini" data-act="stash" data-id="${i}" data-op="equip">Equipar</button><button class="mini" data-act="stash" data-id="${i}" data-op="bag">Mochila</button><button class="mini" data-act="stash" data-id="${i}" data-op="split" ${tip(`Vender por ${Math.floor(PRICE[it.rarity] / 2)} y repartir`)}>Repartir 💰</button></div>`).join('')}</div></div>`;
+}
+
 export function lootRow(run: RunState): string {
   const h = mine(run);
   const offer = h ? run.offers[ui.myId] : undefined;

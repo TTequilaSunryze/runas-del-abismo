@@ -12,10 +12,10 @@ export const ZONA2_ITEMS: ItemTheme = {
   },
   suffixes: ['del Bosque Corrompido', 'de la Espesura', 'de Savia Negra', 'del Claro Marchito', 'de la Madre Raíz'],
   legendaries: [
-    { slot: 'arma', name: 'Espina de la Madre Raíz', rarity: 3, stats: { power: 30, crit: 12, status: 1 }, lore: 'Sigue creciendo en la mano que la empuña.' },
-    { slot: 'capa', name: 'Velo de Mil Esporas', rarity: 3, stats: { hp: 28, resPoison: 30, initiative: 10 }, lore: 'Respira cuando tú no lo haces.' },
-    { slot: 'guantes', name: 'Zarpas del Alfa', rarity: 3, stats: { crit: 16, power: 18, ap: 1 }, lore: 'La manada aún las reconoce.' },
-    { slot: 'peto', name: 'Corazón de Roble Viejo', rarity: 3, stats: { hp: 44, armor: 4, resFire: 15 }, lore: 'Mil inviernos, ni una grieta.' },
+    { slot: 'arma', name: 'Espina de la Madre Raíz', rarity: 3, stats: { power: 30, crit: 12, status: 1 }, lore: 'Sigue creciendo en la mano que la empuña.', passive: { trait: 'espina', text: 'Tus golpes envenenan al objetivo (1 carga, 2 turnos).' } },
+    { slot: 'capa', name: 'Velo de Mil Esporas', rarity: 3, stats: { hp: 28, resPoison: 30, initiative: 10 }, lore: 'Respira cuando tú no lo haces.', passive: { trait: 'esporas', text: 'Quien te golpea cuerpo a cuerpo queda Ralentizado (−1 PM).' } },
+    { slot: 'guantes', name: 'Zarpas del Alfa', rarity: 3, stats: { crit: 16, power: 18, ap: 1 }, lore: 'La manada aún las reconoce.', passive: { trait: 'alfa', text: 'Cada golpe crítico te cura 4 de vida.' } },
+    { slot: 'peto', name: 'Corazón de Roble Viejo', rarity: 3, stats: { hp: 44, armor: 4, resFire: 15 }, lore: 'Mil inviernos, ni una grieta.', passive: { trait: 'thorns', text: 'Devuelves el 30% del daño cuerpo a cuerpo que recibes.' } },
   ],
 };
 
