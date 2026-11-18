@@ -148,6 +148,8 @@ export interface BoardMark {
 
 export interface CombatState extends RngBox {
   version: 1;
+  /** fase de colocación inicial: casillas de despliegue ("x,y") y jugadores listos; mientras exista, no hay turno */
+  deploy?: { cells: string[]; ready: string[] } | null;
   w: number;
   h: number;
   /** casillas bloqueadas, como "x,y" */

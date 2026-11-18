@@ -667,7 +667,7 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
     // presagio: a veces (siempre con el modificador), nunca en el jefe
     run.omen = node === 'boss' ? null : run.nextOmen ?? (run.mods.includes('presagios') || rand(run) < 0.3 ? pick(run, OMENS).id : null);
     run.nextOmen = null;
-    const { state, events } = createCombat(buildFight(run));
+    const { state, events } = createCombat({ ...buildFight(run), deploy: true });
     run.combat = state;
     run.phase = 'combat';
     return events;

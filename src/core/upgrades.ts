@@ -53,6 +53,7 @@ export function tuned(def: SpellDef, slot: Pick<SpellSlot, 'imbue' | 'ups'> | un
     for (const id of slot.ups) { const bm = BOON_MODS[id] ?? BLESSINGS[id]?.mod; if (bm && bm.target === def.id) bm.apply(d); }
     for (const id of slot.ups) { const up = UPGRADES[id]; if (up?.fits(d)) up.apply(d); }
   }
+  // GANCHO RUNAS (FEATURES.runes): aquí se aplicará la runa engarzada en el hechizo, igual que el efecto innato
   return withImbue(d, slot?.imbue);
 }
 

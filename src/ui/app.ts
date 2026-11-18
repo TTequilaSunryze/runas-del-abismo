@@ -201,6 +201,8 @@ document.addEventListener('click', (e) => {
     case 'joinfriend': case 'acceptinv': ui.invites = ui.invites.filter((x) => x.code !== id); drawInvites(); void enter(id, false, false); break;
     case 'dropinv': ui.invites = ui.invites.filter((x) => x.code !== id); drawInvites(); break;
     case 'invite': if (s) { invite(id, s.code); ui.notice = `Invitación enviada a ${id}`; render([]); setTimeout(() => { ui.notice = ''; render([]); }, 2500); } break;
+    case 'deployready': s?.act({ a: 'deployready' }); break;
+    case 'readyall': s?.act({ a: 'deployready', force: true }); break;
     case 'bars': ui.hpBars = !ui.hpBars; if (ui.board) ui.board.showBars = ui.hpBars; lastKey = ''; render([]); break;
     case 'map': ui.mapOpen = !ui.mapOpen; lastKey = ''; render([]); break;
     case 'stats': ui.statsOpen = !ui.statsOpen; lastKey = ''; render([]); break;

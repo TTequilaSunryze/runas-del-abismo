@@ -1,14 +1,14 @@
 // Sesión de juego: el anfitrión ejecuta el motor y reparte el estado; los demás envían acciones.
 import { PLAYABLE, canPickRoute } from '../core/classes/classes';
 import { runAiTurn } from '../core/combat/ai';
-import { cast, current, endTurn, move, type ActionResult } from '../core/combat/engine';
+import { cast, current, deployMove, endTurn, move, startCombat, type ActionResult } from '../core/combat/engine';
 import type { ClassId, GameEvent, Pos } from '../core/state';
 import { saveRun, type Peer, type Transport } from '../net/transport';
 import type { Perks } from '../content/modes';
 import { pendingOf, waitingFor, type HeroSave } from './run';
 import { bossInfo, chooseNode, recordEvents, finishFight, leaveNode, metaAction, newArena, newRun, resolveEvent, type MetaAction, type RunState } from './run';
 
-export type Action = { a: 'move'; to: Pos } | { a: 'cast'; spell: string; at: Pos } | { a: 'end' } | MetaAction;
+export type Action = { a: 'move'; to: Pos } | { a: 'cast'; spell: string; at: Pos } | { a: 'end' } | { a: 'deploy'; to: Pos } | { a: 'deployready'; force?: boolean } | MetaAction;
 
 export interface LobbyPlayer {
   id: string;
@@ -279,6 +279,22 @@ export class Session {
   private apply(from: string, a: Action): void {
     const run = this.run;
     if (!run || !a || typeof a.a !== 'string') return;
+    // fase de colocación: cada jugador mueve su héroe dentro de su zona y marca «listo»
+    if (a.a === 'deploy' || a.a === 'deployready') {
+      const c = run.combat;
+      if (!c?.deploy || run.phase !== 'combat') return;
+      const mine = c.units.find((u) => u.owner === from && u.team === 'hero' && u.hp > 0 && u.summoner === undefined);
+      if (a.a === 'deploy') {
+        if (!mine || !a.to) return;
+        const r = deployMove(c, mine.id, { x: a.to.x | 0, y: a.to.y | 0 });
+        if (!r.ok) return this.reject(from, r.reason);
+        return this.afterChange(r.events);
+      }
+      if (!c.deploy.ready.includes(from)) c.deploy.ready.push(from);
+      const owners = [...new Set(c.units.filter((u) => u.team === 'hero' && u.owner && u.hp > 0).map((u) => u.owner!))];
+      const ev = (a.force && from === this.myId && this.isHost) || owners.every((o) => c.deploy!.ready.includes(o)) ? startCombat(c) : [];
+      return this.afterChange(ev);
+    }
     if (a.a !== 'move' && a.a !== 'cast' && a.a !== 'end') {
       const err = metaAction(run, from, a);
       if (err) return this.reject(from, err);

@@ -18,6 +18,8 @@ export interface CombatSetup {
   traps?: Pos[];
   puddles?: Pos[];
   units: UnitSpec[];
+  /** empieza con una fase de colocación de los héroes */
+  deploy?: boolean;
 }
 
 export type ActionResult = { ok: true; events: GameEvent[] } | { ok: false; reason: string };
@@ -97,8 +99,43 @@ export function createCombat(setup: CombatSetup): { state: CombatState; events: 
     units, order, turn: -1, round: 1, over: null, nextId: units.length + 1,
   };
   const events: GameEvent[] = [];
+  if (setup.deploy) {
+    // zona de despliegue: las 3 primeras columnas, sin obstáculos, trampas ni enemigos
+    const cells: string[] = [];
+    for (let x = 0; x < Math.min(3, state.w); x++) for (let y = 0; y < state.h; y++) {
+      const k = key({ x, y });
+      if (state.obstacles.includes(k) || state.traps.includes(k) || state.puddles.includes(k)) continue;
+      if (units.some((u) => u.team !== 'hero' && same(u.pos, { x, y }))) continue;
+      cells.push(k);
+    }
+    state.deploy = { cells, ready: [] };
+    return { state, events };
+  }
   beginNext(state, events);
   return { state, events };
+}
+
+/** Coloca a un héroe en una casilla de la zona de despliegue (si hay un aliado, se intercambian). */
+export function deployMove(s: CombatState, unitId: number, to: Pos): ActionResult {
+  const d = s.deploy;
+  const u = getUnit(s, unitId);
+  if (!d || !u || u.team !== 'hero') return fail('No es momento de colocarse');
+  if (!d.cells.includes(key(to))) return fail('Elige una casilla verde de tu zona');
+  const other = s.units.find((o) => o !== u && alive(o) && same(o.pos, to));
+  if (other && other.team !== 'hero') return fail('Casilla ocupada');
+  const from = { ...u.pos };
+  if (other) other.pos = from;
+  u.pos = { ...to };
+  return { ok: true, events: [{ t: 'move', unit: u.id, path: [{ ...to }] }] };
+}
+
+/** Termina la colocación y empieza el primer turno. */
+export function startCombat(s: CombatState): GameEvent[] {
+  if (!s.deploy) return [];
+  s.deploy = null;
+  const events: GameEvent[] = [];
+  beginNext(s, events);
+  return events;
 }
 
 export function getUnit(s: CombatState, id: number): Unit | undefined {
@@ -130,6 +167,7 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
     const g = gd.from === undefined ? undefined : s.units.find((x) => x.id === gd.from);
     if (g && alive(g) && g !== u) { hurt(s, g, raw * GUARD_SHARE, ev, 'guardian', { ...opts, crit: false }); raw *= 1 - GUARD_SHARE; }
   }
+  // GANCHO DAÑOS CON EFECTO (FEATURES.effectDamage): el tipo de daño llegará en opts.element; las resistencias se reactivan con FEATURES.resistances
   const res = FEATURES.resistances && opts.element ? Math.min(75, u.resist[opts.element] ?? 0) : 0;
   raw *= 1 - res / 100;
   const armor = Math.max(0, u.armor - (u.statuses.exposed?.stacks ?? 0));

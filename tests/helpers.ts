@@ -1,6 +1,6 @@
 import { SPELLS } from '../src/core/classes/spells';
 import { runAiTurn } from '../src/core/combat/ai';
-import { cast, castProblem, current, endTurn, move } from '../src/core/combat/engine';
+import { cast, castProblem, current, endTurn, move, startCombat } from '../src/core/combat/engine';
 import { alive, dist, reachable } from '../src/core/combat/grid';
 import type { CombatState } from '../src/core/state';
 
@@ -9,6 +9,7 @@ import type { CombatState } from '../src/core/state';
  * (cura a quien lo necesita, rompe pilares, usa primero los hechizos más fuertes y remata).
  */
 export function autoplay(s: CombatState, maxTurns = 600, info?: Parameters<typeof runAiTurn>[1]): void {
+  if (s.deploy) startCombat(s);
   for (let i = 0; i < maxTurns && !s.over; i++) {
     const u = current(s)!;
     if (u.ai) { runAiTurn(s, info); continue; }

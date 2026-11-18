@@ -90,7 +90,9 @@ export class Board {
 
   private click(p: Pos | null): void {
     const c = this.c;
-    if (!c || !p || !this.session.isMyTurn()) return;
+    if (!c || !p) return;
+    if (c.deploy) { this.session.act({ a: 'deploy', to: p }); return; }
+    if (!this.session.isMyTurn()) return;
     if (this.sel) {
       this.session.act({ a: 'cast', spell: this.sel, at: p });
       this.select(null);
@@ -287,6 +289,10 @@ export class Board {
     const me = this.session.myUnit();
     const cur = current(c);
     const fill = (p: Pos, color: string): void => { g.fillStyle = color; g.fillRect(p.x * TILE + 3, p.y * TILE + 3, TILE - 6, TILE - 6); };
+    if (c.deploy) {
+      for (const k of c.deploy.cells) { const [x, y] = k.split(',').map(Number) as [number, number]; fill({ x, y }, 'rgba(95,207,112,.22)'); g.strokeStyle = 'rgba(95,207,112,.6)'; g.lineWidth = 1; g.strokeRect(x * TILE + 3, y * TILE + 3, TILE - 6, TILE - 6); }
+      if (me) { g.strokeStyle = '#5fcf70'; g.lineWidth = 3; g.strokeRect(me.pos.x * TILE + 2, me.pos.y * TILE + 2, TILE - 4, TILE - 4); }
+    }
     if (me && cur?.id === me.id && !c.over) {
       const def = this.sel ? spellOf(me, this.sel) : undefined;
       if (def) {
