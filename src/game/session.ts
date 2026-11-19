@@ -4,6 +4,7 @@ import { runAiTurn } from '../core/combat/ai';
 import { cast, current, deployMove, endTurn, move, startCombat, type ActionResult } from '../core/combat/engine';
 import type { ClassId, GameEvent, Pos } from '../core/state';
 import { saveRun, type Peer, type Transport } from '../net/transport';
+import { clearSnapshot, saveSnapshot } from './snapshot';
 import type { Perks } from '../content/modes';
 import { pendingOf, waitingFor, type HeroSave } from './run';
 import { bossInfo, chooseNode, recordEvents, finishFight, leaveNode, metaAction, newArena, newRun, resolveEvent, type MetaAction, type RunState } from './run';
@@ -55,6 +56,7 @@ export class Session {
   private turnTimer: ReturnType<typeof setTimeout> | null = null;
   private beat: ReturnType<typeof setInterval> | null = null;
   private lastTurnKey = '';
+  private savedAt = 0;
   private savedKey = '';
   private track = { caster: null as number | null };
   /** mi equipo de duelo, cuando el anfitrión lo pide */
@@ -212,6 +214,7 @@ export class Session {
   backToLobby(): void {
     if (!this.isHost) return;
     this.run = null;
+    clearSnapshot();
     if (this.aiTimer) clearTimeout(this.aiTimer);
     for (let i = 0; i < 3; i++) setTimeout(() => this.t.send('reset', null), i * 700);
     this.onChange([]);
@@ -321,11 +324,20 @@ export class Session {
     this.broadcast(events);
     this.noteTurn();
     this.onChange(events);
-    // guardado: en cada sala nueva y, en combate, al empezar cada ronda
+    // guardado ante desconexiones: copia local en cada cambio y copia en la nube en cada sala, ronda o cada 5 s
     const key = `${run.zone}:${run.step}:${run.phase}:${run.combat?.round ?? 0}`;
-    if (this.isHost && !run.arena && key !== this.savedKey && run.phase !== 'won' && run.phase !== 'lost' && !run.combat?.over) {
-      this.savedKey = key;
-      void saveRun(run.code, this.secret, run);
+    const ended = run.phase === 'won' || run.phase === 'lost';
+    if (this.isHost && !run.arena) {
+      if (ended) clearSnapshot();
+      else saveSnapshot({ code: run.code, host: true, local: this.t.kind !== 'online', run });
+      if (!ended && this.t.kind === 'online' && (key !== this.savedKey || Date.now() - this.savedAt > 5000)) {
+        this.savedKey = key;
+        this.savedAt = Date.now();
+        void saveRun(run.code, this.secret, run);
+      }
+    } else if (!this.isHost && !run.arena) {
+      if (ended) clearSnapshot();
+      else saveSnapshot({ code: run.code, host: false, local: false });
     }
     const c = run.combat;
     if (this.aiTimer) clearTimeout(this.aiTimer);

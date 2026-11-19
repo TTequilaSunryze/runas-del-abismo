@@ -303,3 +303,17 @@ export function blessingBar(run: RunState): string {
   }).join('');
   return rows ? `<div class="blessbar">${rows}</div>` : '';
 }
+
+/** Cartel central «Has obtenido…» con el objeto o el hechizo recibido. */
+export function gotModal(g: { title: string; html: string }): string {
+  return `<div class="modal got" id="gotmodal"><div class="panel frame gotcard"><div class="gotglow"></div><h2 class="vtitle">${esc(g.title)}</h2><div class="gotbody">${g.html}</div>
+  <div class="row"><span class="grow"></span><button class="pri" data-act="gotok">Aceptar</button></div></div></div>`;
+}
+
+/** Contenido del cartel para una recompensa de jefe. */
+export function gotFromBoss(o: BossOption): { title: string; html: string } {
+  if (o.kind === 'spell') { const d = SPELLS[o.id]!; return { title: '¡Hechizo aprendido!', html: `<div class="row">${spellIcon(d)}<div><b>${esc(d.name)}</b><div class="sm">${esc(d.text)}</div></div></div>` }; }
+  if (o.kind === 'up') { const d = SPELLS[o.spell]!, g = UPGRADES[o.up] ?? BOON_MODS[o.up]; return { title: '¡Hechizo mejorado!', html: `<div class="row">${spellIcon(d)}<div><b>${esc(d.name)}</b><div class="sm">${esc(g?.name ?? '')}: ${esc(g?.text ?? '')}</div></div></div>` }; }
+  if (o.kind === 'gold') return { title: '¡Has obtenido!', html: `<p class="big">💰 ${o.amount} de oro</p>` };
+  return { title: '¡Te has curado!', html: '<p class="big">❤️ Recuperas el 50% de tu vida.</p>' };
+}

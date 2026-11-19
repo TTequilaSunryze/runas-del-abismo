@@ -8,15 +8,17 @@ import type { RunState } from '../game/run';
 import { Session } from '../game/session';
 import { dailyScore, loadable } from '../game/run';
 import { joinRoom, loadRun, submitDaily, topDaily } from '../net/transport';
+import { readSnapshot } from '../game/snapshot';
 import { addLog, combatScreen } from './combat';
-import { esc, params, randomText, store, today, ui } from './ctx';
+import { esc, mine, params, randomText, store, today, ui } from './ctx';
+import { BAG_SIZE, PRICE } from '../core/items/items';
 import { buyPerk, masteryOf, meta, myNemesis, myTeam, openRoutes, removeChampion, saveChampion, saveMeta, toggleTeam } from '../game/meta';
 import { currentAccount, fetchTeam, restoreAccount, signIn, signOut, signUp } from '../net/account';
 import { addFriend, invite, removeFriend, setRoom, socialHandlers } from '../net/social';
 import { championOf } from '../game/run';
 import { MAX_ASC } from '../content/modes';
 import { setMusicVolume, setZoneMusic } from '../audio/sfx';
-import { mapModal, statsModal, victoryModal } from './panels';
+import { gotFromBoss, gotModal, itemHtml, mapModal, statsModal, victoryModal } from './panels';
 import { endScreen, eventScreen, homeScreen, lobbyScreen, mapScreen, shopScreen } from './screens';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -63,9 +65,12 @@ async function enter(code: string, isHost: boolean, local: boolean, resume = fal
   if (session.t.kind === 'online') setRoom(code);
   ui.saved = null;
   ui.notice = '';
-  if (resume) {
-    const run = (await loadRun(code)) as RunState | null;
-    if (loadable(run) && run.phase === 'map') ui.saved = run;
+  if (resume && isHost) {
+    // primero la copia local (la más reciente); si no, la de la nube
+    const snap = readSnapshot();
+    const localRun = snap?.code === code && snap.run && loadable(snap.run) ? snap.run : null;
+    const run = localRun ?? (local ? null : ((await loadRun(code)) as RunState | null));
+    if (loadable(run) && run.phase !== 'won' && run.phase !== 'lost') ui.saved = run;
     else ui.notice = 'No se encontró una partida guardada que se pueda continuar.';
   }
   let wasMyTurn = false;
@@ -109,6 +114,8 @@ function render(events: GameEvent[]): void {
   // ficha del personaje por encima de cualquier pantalla
   document.getElementById('statsmodal')?.remove();
   if (ui.statsOpen && run) ui.root.insertAdjacentHTML('beforeend', statsModal(run));
+  document.getElementById('gotmodal')?.remove();
+  if (ui.got) ui.root.insertAdjacentHTML('beforeend', gotModal(ui.got));
   document.getElementById('victorymodal')?.remove();
   if (run && run.phase === 'map' && run.report && !run.arena && ui.reportClosed !== run.report.stamp) ui.root.insertAdjacentHTML('beforeend', victoryModal(run));
   document.getElementById('mapmodal')?.remove();
@@ -150,6 +157,12 @@ document.addEventListener('click', (e) => {
     case 'create': void enter(randomText(4, CODE_CHARS), true, false); break;
     case 'solo': void enter(randomText(4, CODE_CHARS), true, true); break;
     case 'join': { const code = (document.getElementById('code') as HTMLInputElement).value.toUpperCase().replace(/[^A-Z]/g, ''); if (code.length === 4) void enter(code, false, false); break; }
+    case 'reconnect': {
+      const snap = readSnapshot();
+      if (!snap) break;
+      void enter(snap.code, snap.host, snap.local, snap.host).then(() => { if (snap.host && ui.saved) { ui.log.length = 0; ui.session?.resume(ui.saved); } });
+      break;
+    }
     case 'resume': { const h = JSON.parse(store.get('rda_host') ?? 'null') as { code: string } | null; if (h) void enter(h.code, true, false, true); break; }
     case 'doresume': if (ui.saved) { ui.log.length = 0; s?.resume(ui.saved); } break;
     case 'home': home(); break;
@@ -186,7 +199,12 @@ document.addEventListener('click', (e) => {
     case 'ascdown': ui.asc = Math.max(0, ui.asc - 1); publish(); render([]); break;
     case 'again': ui.log.length = 0; s?.backToLobby(); break;
     case 'reroll': s?.act({ a: 'reroll' }); break;
-    case 'bossreward': s?.act({ a: 'bossreward', idx: Number(id) }); break;
+    case 'bossreward': {
+      const o = s?.run ? mine(s.run)?.bossOffer?.[Number(id)] : undefined;
+      if (o) ui.got = gotFromBoss(o);
+      s?.act({ a: 'bossreward', idx: Number(id) });
+      break;
+    }
     case 'report': ui.reportClosed = s?.run?.report?.stamp ?? -1; lastKey = ''; render([]); break;
     case 'boon': s?.act({ a: 'boon', idx: Number(id) }); break;
     case 'ready': s?.act({ a: 'ready' }); break;
@@ -201,7 +219,18 @@ document.addEventListener('click', (e) => {
     case 'joinfriend': case 'acceptinv': ui.invites = ui.invites.filter((x) => x.code !== id); drawInvites(); void enter(id, false, false); break;
     case 'dropinv': ui.invites = ui.invites.filter((x) => x.code !== id); drawInvites(); break;
     case 'invite': if (s) { invite(id, s.code); ui.notice = `Invitación enviada a ${id}`; render([]); setTimeout(() => { ui.notice = ''; render([]); }, 2500); } break;
-    case 'stash': s?.act({ a: 'stash', idx: Number(id), op: (el.dataset.op ?? 'bag') as 'equip' | 'bag' | 'split' }); break;
+    case 'stash': {
+      const op = (el.dataset.op ?? 'bag') as 'equip' | 'bag' | 'split';
+      const it = s?.run?.stash?.[Number(id)], me = s?.run ? mine(s.run) : undefined;
+      if (it && me) {
+        const full = me.bag.length >= BAG_SIZE;
+        if (op === 'split') ui.got = { title: 'Botín repartido', html: `${itemHtml(it, true)}<p class="good">Vendido por ${Math.floor(PRICE[it.rarity] / 2)} de oro, repartido entre el grupo.</p>` };
+        else if (!(op === 'bag' ? full : full && me.equip[it.slot])) ui.got = { title: '¡Has obtenido!', html: `${itemHtml(it, true)}<p class="dim sm">${op === 'equip' ? 'Equipado ahora mismo.' : 'Guardado en tu mochila.'}</p>` };
+      }
+      s?.act({ a: 'stash', idx: Number(id), op });
+      break;
+    }
+    case 'gotok': ui.got = null; lastKey = ''; render([]); break;
     case 'deployready': s?.act({ a: 'deployready' }); break;
     case 'readyall': s?.act({ a: 'deployready', force: true }); break;
     case 'bars': ui.hpBars = !ui.hpBars; if (ui.board) ui.board.showBars = ui.hpBars; lastKey = ''; render([]); break;

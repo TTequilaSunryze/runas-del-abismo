@@ -11,6 +11,7 @@ import { friendsStatus } from '../net/social';
 import type { Champion } from '../game/run';
 import { ASCENSION, DAILY_MODS, MOD_ECOS, OMENS, PERKS, perkLevel } from '../content/modes';
 import { ALLIES } from '../content/enemies';
+import { readSnapshot } from '../game/snapshot';
 import { RELICS } from '../content/relics';
 import { championOf, dailyOf, dailyScore, lastZone } from '../game/run';
 import { CLASS_STORY, ENDING_LOST, ENDING_WON, TUTORIAL, ZONE_STORY } from '../content/story';
@@ -94,12 +95,22 @@ export function champCard(c: Champion, inTeam: boolean, actions = true): string 
   ${actions ? `<div class="row"><button class="mini ${inTeam ? 'pri' : ''}" data-act="champteam" data-id="${esc(c.id)}">${inTeam ? '✔ En el equipo' : 'Añadir al equipo'}</button><span class="grow"></span><button class="mini" data-act="champdel" data-id="${esc(c.id)}">Borrar</button></div>` : ''}</div>`;
 }
 
+/** Aviso para volver a una partida interrumpida (desconexión o recarga) de hace menos de 30 minutos. */
+function reconnectBanner(): string {
+  const snap = readSnapshot();
+  if (!snap) return '';
+  const mins = Math.max(0, Math.round((Date.now() - snap.at) / 60000));
+  const where = snap.run ? ` · zona ${snap.run.zone + 1}, sala ${snap.run.step + 1}` : '';
+  return `<div class="panel reconnect"><div class="row"><span class="emo big">🔌</span><div class="grow"><b>Tienes una partida a medias</b><div class="dim sm">Sala ${esc(snap.code)}${where} · hace ${mins} min${snap.host ? '' : ' · el anfitrión debe seguir en la sala'}</div></div><button class="pri" data-act="reconnect">Volver a la partida</button></div></div>`;
+}
+
 export function homeScreen(msg: string): void {
   const host = JSON.parse(store.get('rda_host') ?? 'null') as { code: string } | null;
   const m = meta();
   const tabs: Array<[typeof ui.homeTab, string]> = [['jugar', '⚔️ Jugar'], ['mejoras', `✨ Mejoras (${m.ecos})`], ['clases', '🎓 Maestría'], ['logros', `🏆 Logros ${m.achievements.length}/${ACHIEVEMENTS.length}`], ['salon', `🏟️ Salón y duelos`], ['diario', '📅 Reto diario'], ['amigos', `👥 Amigos${currentAccount() ? ` (${friendsStatus().filter((f) => f.online).length}/${m.friends.length})` : ''}`], ['cuenta', currentAccount() ? `👤 ${esc(currentAccount()!.name)}` : '👤 Cuenta']];
   ui.root.innerHTML = `<div class="home"><div class="row"><span class="grow"></span>${volumeControl()}</div><h1>RUNAS DEL ABISMO</h1><p class="dim">RPG táctico por turnos · cooperativo de 1 a 4 jugadores · 3 zonas</p>
   ${msg ? `<p class="bad">${esc(msg)}</p>` : ''}
+  ${reconnectBanner()}
   <div class="tabs htabs">${tabs.map(([id, n]) => `<button class="${ui.homeTab === id ? 'on' : ''}" data-act="htab" data-id="${id}">${n}</button>`).join('')}</div>
   ${ui.homeTab === 'jugar' ? `<div class="panel"><label>Tu nombre <input id="name" maxlength="14" value="${esc(ui.me.name)}"></label></div>
   <div class="cards">

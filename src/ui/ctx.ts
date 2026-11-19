@@ -44,6 +44,8 @@ export const ui = {
   invites: [] as Array<{ from: string; code: string; at: number }>,
   /** ventana de estadísticas abierta */
   statsOpen: false,
+  /** cartel «Has obtenido…» tras recoger botín o una recompensa */
+  got: null as null | { title: string; html: string },
   mapOpen: false,
   /** barras de vida visibles en el tablero */
   hpBars: true,
