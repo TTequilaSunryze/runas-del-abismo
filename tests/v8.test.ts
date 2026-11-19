@@ -100,7 +100,8 @@ describe('v8', () => {
     const h = run.heroes[0]!;
     for (let i = 0; i < 40; i++) for (const o of buildBossOffer(run, h)) if (o.kind === 'up') expect([...CLASSES.arquero.base, ...h.boons]).toContain(o.spell);
     // con Flecha ígnea ya aprendida, su mejora sí puede salir
-    h.boons = ['a_ignea'];
+    // con todos los hechizos de la clase aprendidos, el jefe ofrece mejoras
+    h.boons = [...new Set(patronsOf('arquero').flatMap((p) => p.spells).filter((id) => SPELLS[id]?.route === 'boon' && !BOON_MODS[id]))];
     let seen = false;
     for (let i = 0; i < 80 && !seen; i++) seen = buildBossOffer(run, h).some((o) => o.kind === 'up' && o.up === 'am_ignea');
     expect(seen).toBe(true);

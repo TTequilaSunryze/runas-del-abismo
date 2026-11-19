@@ -6,7 +6,7 @@ import { DAILY_ASC, DAILY_MODS, DAILY_POOL, MAX_MODS, OMENS, perkLevel, type Per
 import { BASE_ZONES, ZONES, type BossDef, type ZoneDef } from '../content/zones';
 import type { BossInfo } from '../core/combat/ai';
 import { RELIC_EVENTS, RELICS } from '../content/relics';
-import { CONSUMABLES, MAX_BOONS, MAX_CONSUMABLE, patronBonus, patronsOf } from '../content/boons';
+import { CONSUMABLES, MAX_CONSUMABLE, patronBonus, patronsOf } from '../content/boons';
 import { BLESSINGS, BOON_MODS } from '../core/boonmods';
 import { CLASSES, MAX_LEVEL, canPickRoute } from '../core/classes/classes';
 import { SPELLS } from '../core/classes/spells';
@@ -330,14 +330,12 @@ export function buildBossOffer(run: RunState, h: HeroSave): BossOption[] {
     const own = Object.keys(BOON_MODS).filter((m) => BOON_MODS[m]!.target === id && !h.boons.includes(m) && !have.includes(m));
     return [...generic, ...own];
   };
-  const withUps = shuffle(run, spells.filter((id) => choices(id).length));
-  const out: BossOption[] = [];
-  for (const id of withUps.slice(0, 2)) out.push({ kind: 'up', spell: id, up: pick(run, choices(id)) });
-  const pool = h.boons.length >= MAX_BOONS ? [] : shuffle(run, newSpellPool(h));
-  const gold: BossOption = { kind: 'gold', amount: 60 + 40 * run.zone };
-  // huecos 1 y 2 sin mejora: hechizo nuevo si queda alguno, y si no oro u curación
-  while (out.length < 2) out.push(pool.length > 1 ? { kind: 'spell', id: pool.shift()! } : out.some((o) => o.kind === 'gold') ? { kind: 'heal' } : gold);
-  out.push(pool.length ? { kind: 'spell', id: pool.shift()! } : out.some((o) => o.kind === 'heal') ? gold : { kind: 'heal' });
+  // v12: el jefe ofrece 3 hechizos nuevos de la clase. Si ya no quedan, mejoras de los que tienes; y si tampoco, oro o curación.
+  const out: BossOption[] = shuffle(run, newSpellPool(h)).slice(0, 3).map((id) => ({ kind: 'spell', id }));
+  for (const id of shuffle(run, spells.filter((id) => choices(id).length))) { if (out.length >= 3) break; out.push({ kind: 'up', spell: id, up: pick(run, choices(id)) }); }
+  if (out.length < 3) out.push({ kind: 'gold', amount: 60 + 40 * run.zone });
+  if (out.length < 3) out.push({ kind: 'heal' });
+  while (out.length < 3) out.push({ kind: 'gold', amount: 30 + 20 * run.zone });
   return out;
 }
 

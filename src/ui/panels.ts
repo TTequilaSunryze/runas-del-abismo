@@ -138,7 +138,7 @@ export function bossRow(run: RunState): string {
   const h = mine(run);
   if (!h?.bossOffer) return '';
   return `<div class="panel loot boon"><div class="row"><h3>👑 Recompensa del jefe: elige una</h3><span class="grow"></span><span class="dim sm">Aprendidos: ${h.boons.length}/${MAX_BOONS}</span></div>
-  <div class="dim sm">Mejora de un hechizo, mejora de otro y un hechizo nuevo de ${esc(CLASSES[h.cls].name)}. Cada hechizo se mejora como máximo ${MAX_SPELL_UPS} veces.</div>
+  <div class="dim sm">Elige uno de estos hechizos nuevos de ${esc(CLASSES[h.cls].name)}.</div>
   <div class="cards c3">${h.bossOffer.map((o, i) => bossCard(h, o, i)).join('')}</div></div>`;
 }
 

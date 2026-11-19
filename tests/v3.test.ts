@@ -5,7 +5,6 @@ import { cast, createCombat, current, endTurn, move, type UnitSpec } from '../sr
 import { makeHero } from '../src/core/classes/factory';
 import { makeEnemy } from '../src/content/enemies';
 import { tuned, UPGRADES } from '../src/core/upgrades';
-import { upCount } from '../src/game/run';
 import { championOf, cleanChampion, finishFight, heroSpec, metaAction, newArena, newRun, type Champion } from '../src/game/run';
 import { autoplay } from './helpers';
 
@@ -58,7 +57,7 @@ describe('arquero', () => {
 });
 
 describe('mejoras de hechizo', () => {
-  it('los hechizos solo se ofrecen al vencer al jefe, en orden: mejora, mejora, hechizo nuevo', () => {
+  it('los hechizos solo se ofrecen al vencer al jefe: 3 hechizos nuevos', () => {
     const run = newRun('T', 3, [{ owner: 'a', name: 'A', cls: 'zorro', routes: [] }]);
     const h = run.heroes[0]!;
     expect(h.boonOffer).toBeNull(); expect(h.bossOffer).toBeNull();
@@ -74,12 +73,12 @@ describe('mejoras de hechizo', () => {
     finishFight(run);
     const o = h.bossOffer!;
     expect(o).toHaveLength(3);
-    expect(o[0]!.kind).toBe('up'); expect(o[1]!.kind).toBe('up'); expect(o[2]!.kind).toBe('spell');
-    expect((o[0] as { spell: string }).spell).not.toBe((o[1] as { spell: string }).spell);
+    for (const x of o) expect(x.kind).toBe('spell');
+    expect(new Set(o.map((x) => (x as { id: string }).id)).size).toBe(3);
     expect(run.report?.turns).toBeGreaterThan(0);
     expect(metaAction(run, 'a', { a: 'bossreward', idx: 0 })).toBeNull();
     expect(h.bossOffer).toBeNull();
-    expect(upCount(h, (o[0] as { spell: string }).spell)).toBe(1);
+    expect(h.boons).toContain((o[0] as { id: string }).id);
   });
   it('potenciado sube el daño un 20%', () => {
     const d = tuned(SPELLS.tajo!, { ups: ['pot'] });
