@@ -26,20 +26,21 @@ export type ActionResult = { ok: true; events: GameEvent[] } | { ok: false; reas
 
 const BURN_DMG = 3;
 const POISON_DMG = 2;
-const MARK_MULT = 1.3;
-const CRIT_MULT = 1.5;
+/** v12 daño plano: Marcado y crítico suman daño fijo. */
+const MARK_FLAT = 2;
+export const CRIT_FLAT = 5;
 const PUSH_CRASH_DMG = 4;
 const TRAP_DMG = 6;
 const GUARD_SHIELD = 0.15;
 const GUARD_CAP = 24;
 export const LATE_ROUND = 20;
 export const SUDDEN_ROUND = 30;
-const PACK_BONUS = 15;
-const EXECUTE_MULT = 2;
+const PACK_BONUS = 1;
+const EXECUTE_FLAT = 10;
 const MENDER_MULT = 1.3;
 const REGEN = 0.08;
 const THORNS = 0.3;
-const ENRAGE_POWER = 40;
+const ENRAGE_POWER = 3;
 const BOMB_DMG = 8;
 const BOMB_PCT = 0.15;
 /** Cosecha de almas: cada tantas almas de la partida, +1 de armadura permanente. */
@@ -55,14 +56,14 @@ export function tackleKeep(dodge: number, tackle: number): number {
 
 export const hasTrait = (u: Unit, t: string): boolean => !!u.traits?.includes(t);
 
-/** Furia del Bárbaro: cada 20 puntos, +5% de daño y +6% de crítico. */
-export const furyPower = (u: Unit): number => Math.floor((u.fury ?? 0) / 20) * 2;
+/** Furia del Bárbaro: +1 de daño cada 40 puntos (máx. +2) y +6% de crítico cada 20. */
+export const furyPower = (u: Unit): number => Math.floor((u.fury ?? 0) / 40);
 export const furyCrit = (u: Unit): number => Math.floor((u.fury ?? 0) / 20) * 6;
 export const FURY_MAX = 100;
 /** Esencia necesaria para que la siguiente habilidad de daño cure (Esencia desbordante: 2). */
 export const essenceNeed = (u: Unit): number => (hasTrait(u, 'esencia2') ? 2 : 3);
-const VULN_MULT = 1.2;
-const FRENZY_TAKEN = 1.15;
+const VULN_FLAT = 2;
+const FRENZY_FLAT = 1;
 const BLEED_DMG = 3;
 const DEATHMARK_PCT = 0.35;
 const GUARD_SHARE = 0.4;
@@ -72,13 +73,18 @@ let casting: number | null = null;
 let castingSchool: 'phys' | 'magic' | null = null;
 
 
-/** Multiplicador de daño de `u` contra `t`: poder, potenciado, Furia, Marcado, Vulnerable, Frenesí y Desprecio. */
-export function dmgScale(u: Unit, t: Unit, extraPower = 0): number {
+/**
+ * Daño plano extra de `u` contra `t` (v12: sin porcentajes): daño del personaje y de su tipo (físico/mágico),
+ * potenciado, Furia, Marcado, Vulnerable, Frenesí y Desprecio. Se suma al daño fijo del hechizo; luego resta la armadura.
+ */
+export function dmgFlat(u: Unit, t: Unit, extra = 0): number {
   const school = castingSchool === 'magic' ? (u.powerMagic ?? 0) : castingSchool === 'phys' ? (u.powerPhys ?? 0) : 0;
-  return (1 + (u.power + school + extraPower + (u.statuses.empower?.stacks ?? 0) + furyPower(u)) / 100)
-    * (t.statuses.mark ? MARK_MULT : 1) * (t.statuses.vuln ? VULN_MULT : 1) * (t.statuses.frenzy ? FRENZY_TAKEN : 1)
-    * (hasTrait(u, 'desprecio') && t.hp < t.maxHp / 2 ? 1.25 : 1);
+  return u.power + school + extra + (u.statuses.empower?.stacks ?? 0) + furyPower(u)
+    + (t.statuses.mark ? MARK_FLAT : 0) + (t.statuses.vuln ? VULN_FLAT : 0) + (t.statuses.frenzy ? FRENZY_FLAT : 0)
+    + (hasTrait(u, 'desprecio') && t.hp < t.maxHp / 2 ? 3 : 0);
 }
+/** Daño extra de un crítico (Ejecutor: el doble). */
+export const critFlat = (u: Unit): number => (hasTrait(u, 'execute') ? EXECUTE_FLAT : CRIT_FLAT);
 
 /** Suma Furia (0 a 100). */
 export function addFury(u: Unit, n: number, ev: GameEvent[]): void {
@@ -171,7 +177,7 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
   const res = FEATURES.resistances && opts.element ? Math.min(75, u.resist[opts.element] ?? 0) : 0;
   raw *= 1 - res / 100;
   // Resiliencia salvaje: cada 20 de Furia, −2% de daño físico (máx. 10%)
-  if (hasTrait(u, 'resiliencia') && !opts.element) raw *= 1 - Math.min(10, 2 * Math.floor((u.fury ?? 0) / 20)) / 100;
+  if (hasTrait(u, 'resiliencia') && !opts.element) raw = Math.max(0, raw - Math.min(2, Math.floor((u.fury ?? 0) / 40)));
   // Armadura de los condenados: +1 de armadura cada 2 almas sin gastar (máx. +6)
   const souls = hasTrait(u, 'condenados') ? Math.min(6, Math.floor((u.soulBank ?? 0) / 2)) : 0;
   const armor = Math.floor(Math.max(0, u.armor + souls - (u.statuses.exposed?.stacks ?? 0)) * (1 - (opts.armorPen ?? 0)));
@@ -180,7 +186,7 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
   u.shield -= absorbed;
   dmg -= absorbed;
   // Égida de Obsidiana: el primer golpe de cada ronda, a la mitad
-  if (dmg > 0 && hasTrait(u, 'egida') && u.egidaRound !== s.round && source !== 'burn' && source !== 'poison' && source !== 'bleed') { u.egidaRound = s.round; dmg = Math.ceil(dmg / 2); }
+  if (dmg > 0 && hasTrait(u, 'egida') && u.egidaRound !== s.round && source !== 'burn' && source !== 'poison' && source !== 'bleed') { u.egidaRound = s.round; dmg = Math.max(0, dmg - 6); }
   // Reflejo oscuro: una vez por combate, la Sombra recibe el golpe letal y estalla en humo
   if (dmg >= u.hp && hasTrait(u, 'reflejoscuro') && !u.shadowSaved) {
     const sh = marksOf(s, 'shadow', u.id).at(-1);
@@ -230,7 +236,7 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
       if (hasTrait(killer, 'volcan')) for (const o of s.units.filter((x) => alive(x) && x.team === u.team && dist(x.pos, u.pos) <= 1)) hurt(s, o, 5, ev, 'volcan', { pierce: true });
     }
     // Alianza de la Viuda Eterna: si cae un aliado, +20% de daño
-    if (u.summoner === undefined) for (const a of s.units) if (a !== u && alive(a) && a.team === u.team && hasTrait(a, 'viuda')) a.power += 20;
+    if (u.summoner === undefined) for (const a of s.units) if (a !== u && alive(a) && a.team === u.team && hasTrait(a, 'viuda')) a.power += 2;
     if (hasTrait(u, 'puddle') && !s.puddles.includes(key(u.pos))) s.puddles.push(key(u.pos));
     if (hasTrait(u, 'split') && u.maxHp >= 16) splitUnit(s, u, ev);
     if (hasTrait(u, 'bomb')) {
@@ -467,7 +473,7 @@ function stepOn(s: CombatState, u: Unit, ev: GameEvent[]): boolean {
     if (o && alive(o)) {
       delete o.statuses.chained;
       const src = ch.from === undefined ? undefined : getUnit(s, ch.from);
-      hurt(s, o, 6 * (src ? dmgScale(src, o) : 1), ev, 'cadenas', { element: 'shadow' });
+      hurt(s, o, 12 + (src ? dmgFlat(src, o) : 0), ev, 'cadenas', { element: 'shadow' });
       if (alive(o)) { const n = landed(s, o, 2); if (n) { o.mpMod -= n; if (current(s)?.id === o.id) o.mp = Math.max(0, o.mp - n); ev.push({ t: 'drain', unit: o.id, ap: 0, mp: -n }); } }
     }
   }
@@ -476,7 +482,7 @@ function stepOn(s: CombatState, u: Unit, ev: GameEvent[]): boolean {
     // La caja: tocar sus muros duele y deja sin PM
     const src = cage.owner === undefined ? undefined : getUnit(s, cage.owner);
     ev.push({ t: 'caged', unit: u.id });
-    hurt(s, u, 7 * (src ? dmgScale(src, u) : 1), ev, 'caja', { element: 'shadow' });
+    hurt(s, u, 14 + (src ? dmgFlat(src, u) : 0), ev, 'caja', { element: 'shadow' });
     u.mp = 0;
     stop = true;
   }
@@ -759,7 +765,7 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
       const fu = def.followUp;
       const foe = s.units.filter((t) => alive(t) && t.team !== u.team && !t.statuses.invis && dist(t.pos, u.pos) <= fu.radius).sort((a, b) => dist(a.pos, u.pos) - dist(b.pos, u.pos))[0];
       if (foe) {
-        const raw = randInt(s, fu.dmg[0], fu.dmg[1]) * dmgScale(u, foe);
+        const raw = randInt(s, fu.dmg[0], fu.dmg[1]) + dmgFlat(u, foe);
         hurt(s, foe, raw, ev, def.id, { element: fu.element });
         if (u.essence !== undefined && !essenceSpent) gainEssence(u, 1, ev);
         // remate: se puede volver a usar gratis este turno
@@ -829,7 +835,7 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
   if (def.special === 'soulburst') { spent = Math.min(3, u.soulBank ?? 0); u.soulBank = (u.soulBank ?? 0) - spent; u.spentSouls = spent; }
   // Descarga desatada: consume todas tus esferas, +daño por cada una
   let flat = reapBonus + (def.furyScale ? Math.round((u.fury ?? 0) * def.furyScale) : 0);
-  const flatAll = spent * 3;
+  const flatAll = spent * 6;
   if (def.consume) {
     const mine = marksOf(s, 'sphere', u.id);
     flat = mine.length * def.consume.per;
@@ -841,7 +847,7 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
     for (const m of marksOf(s, 'sphere', u.id)) {
       for (const t of s.units.filter((x) => alive(x) && x.team !== u.team && dist(x.pos, m.pos) <= dn.area)) {
         if (s.over) break;
-        hurt(s, t, randInt(s, dn.dmg[0], dn.dmg[1]) * dmgScale(u, t), ev, def.id, { element: def.element });
+        hurt(s, t, randInt(s, dn.dmg[0], dn.dmg[1]) + dmgFlat(u, t), ev, def.id, { element: def.element });
       }
       if (!def.keepSpheres) removeMark(s, m, ev);
       else ev.push({ t: 'markAdd', kind: 'pulse', at: { ...m.pos } });
@@ -865,7 +871,7 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
       const pen = hasTrait(u, 'titanico') && furyBefore > 80 && melee ? 0.2 : 0;
       const pack = hasTrait(u, 'pack') ? s.units.filter((o) => o !== u && o.team === u.team && alive(o) && hasTrait(o, 'pack')).length * PACK_BONUS : 0;
       const fury = hasTrait(u, 'enrage') && u.hp < u.maxHp / 2 ? ENRAGE_POWER : 0;
-      const raw = (randInt(s, def.dmg[0], def.dmg[1]) + (t === main ? flat : 0) + flatAll) * dmgScale(u, t, pack + fury) * (crit ? (hasTrait(u, 'execute') ? EXECUTE_MULT : CRIT_MULT) : 1) * (t === main || def.range[1] === 0 || def.line || def.cone || def.fullArea || square2.length ? 1 : 0.5);
+      const raw = (randInt(s, def.dmg[0], def.dmg[1]) + (t === main ? flat : 0) + flatAll + dmgFlat(u, t, pack + fury) + (crit ? critFlat(u) : 0)) * (t === main || def.range[1] === 0 || def.line || def.cone || def.fullArea || square2.length ? 1 : 0.5);
       const got = hurt(s, t, raw, ev, def.id, { crit, element: def.element, pierce: def.pierce || (crit && opposite), armorPen: pen });
       if (!pass) {
         // Zorro de fuego: lo que golpea en línea recta quema 2 turnos
@@ -933,7 +939,7 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
   if (hasTrait(u, 'prision')) for (const t of targets) if (alive(t) && t.team !== u.team && (def.hook || t.statuses.stun)) addStatus(t, 'hobble', 1, 1, ev);
   if (def.dmg && slotUsed.charges === undefined && alive(u) && !def.noEcho) shadowEcho(s, u, def, main, targets, ev);
   // Convergencia: la Sombra golpea con todo su daño (crítico si flanquea)
-  if (def.special === 'converge' && main && alive(main) && def.dmg) { hurt(s, main, randInt(s, def.dmg[0], def.dmg[1]) * dmgScale(u, main) * (flank ? CRIT_MULT : 1), ev, 'sombra', { crit: flank, element: def.element, pierce: flank && hasTrait(u, 'doblefilo') }); if (!alive(main)) huntKill(u, ev); }
+  if (def.special === 'converge' && main && alive(main) && def.dmg) { hurt(s, main, randInt(s, def.dmg[0], def.dmg[1]) + dmgFlat(u, main) + (flank ? critFlat(u) : 0), ev, 'sombra', { crit: flank, element: def.element, pierce: flank && hasTrait(u, 'doblefilo') }); if (!alive(main)) huntKill(u, ev); }
   if (def.special && TARGET_SPECIALS[def.special]) TARGET_SPECIALS[def.special]!(s, u, def, at, main, targets, hits, ev);
   // Furia: +20 por lanzamiento que golpea (o por enemigo); el doble contra la presa de Mirada del verdugo
   if (u.fury !== undefined && hits > 0) {
@@ -1005,7 +1011,7 @@ function coneBlast(s: CombatState, u: Unit, def: SpellDef, at: Pos, targets: Uni
     if (!foe || !def.sphereHit || s.over) return;
     hitBy.add(foe.id);
     const sh = def.sphereHit;
-    hurt(s, foe, randInt(s, sh.dmg[0], sh.dmg[1]) * dmgScale(u, foe), ev, 'esfera', { element: def.element });
+    hurt(s, foe, randInt(s, sh.dmg[0], sh.dmg[1]) + dmgFlat(u, foe), ev, 'esfera', { element: def.element });
     if (!alive(foe) || stunned.has(foe.id)) return;
     stunned.add(foe.id);
     if (foe.rank) ev.push({ t: 'resist', unit: foe.id, what: 'Inmune a aturdir' });
@@ -1072,7 +1078,7 @@ function echoFrom(s: CombatState, u: Unit, def: SpellDef, main: Unit | undefined
     if (s.over || !alive(t)) continue;
     ev.push({ t: 'echo', unit: u.id, from: { ...sh.pos }, at: { ...t.pos }, element: def.element });
     if (t === main) u.syncHit = true;
-    const raw = randInt(s, def.dmg![0], def.dmg![1]) * dmgScale(u, t) * pct;
+    const raw = (randInt(s, def.dmg![0], def.dmg![1]) + dmgFlat(u, t)) * pct;
     hurt(s, t, raw, ev, 'sombra', { element: def.element });
     if (!alive(t)) huntKill(u, ev);
     if (!already.includes(t)) applyStatuses(s, u, t, def, ev);
@@ -1165,7 +1171,7 @@ function flamesFly(s: CombatState, u: Unit, ev: GameEvent[]): void {
       .sort((a, b) => dist(a.pos, u.pos) - dist(b.pos, u.pos) || a.hp - b.hp || resSum(a) - resSum(b))[0];
     if (!t) continue;
     ev.push({ t: 'flame', unit: u.id, from: { ...f.pos }, at: { ...t.pos } });
-    hurt(s, t, randInt(s, dmg[0], dmg[1]) * dmgScale(u, t), ev, 'z_fuego', { element: def?.element ?? 'fire' });
+    hurt(s, t, randInt(s, dmg[0], dmg[1]) + dmgFlat(u, t), ev, 'z_fuego', { element: def?.element ?? 'fire' });
     if (def?.status && alive(t)) applyStatuses(s, u, t, def, ev);
     if (u.essence !== undefined) u.essence = Math.min(essenceNeed(u), u.essence + 1);
   }
@@ -1184,7 +1190,7 @@ function charge(s: CombatState, u: Unit, def: SpellDef, at: Pos, ev: GameEvent[]
   for (const t of hit) {
     if (s.over || !alive(t) || !def.dmg) continue;
     const crit = rand(s) * 100 < u.crit + furyCrit(u) + (def.crit ?? 0);
-    hurt(s, t, randInt(s, def.dmg[0], def.dmg[1]) * dmgScale(u, t) * (crit ? CRIT_MULT : 1), ev, def.id, { crit });
+    hurt(s, t, randInt(s, def.dmg[0], def.dmg[1]) + dmgFlat(u, t) + (crit ? critFlat(u) : 0), ev, def.id, { crit });
   }
   if (hit.length) { u.furyHot = true; addFury(u, 20 * (hit.some((t) => t.statuses.verdugo?.from === u.id) ? 2 : 1), ev); }
   // Torbellino sangriento: si golpea a 2 o más, cuesta 1 PA menos
@@ -1244,7 +1250,7 @@ const SELF_SPECIALS: Record<string, SelfSpecial> = {
     const sh = Math.round(5 * list.length * (hasTrait(u, 'mender') ? MENDER_MULT : 1));
     if (sh) { u.shield += sh; ev.push({ t: 'shield', unit: u.id, amount: sh }); }
     // Cosecha voraz: +5% de daño por alma absorbida, hasta el final del combate
-    if (hasTrait(u, 'voraz') && list.length) u.power += 5 * list.length;
+    if (hasTrait(u, 'voraz') && list.length) u.power += list.length;
   },
   // Sed de batalla: consume la Furia (la mitad con Furia inagotable) para curarse
   thirst: (_s, u, _d, _at, ev) => {
@@ -1354,7 +1360,7 @@ function sphereBurst(s: CombatState, u: Unit, at: Pos, ev: GameEvent[]): void {
   ev.push({ t: 'markAdd', kind: 'pulse', at: { ...at } });
   for (const t of s.units.filter((x) => alive(x) && x.team !== u.team && dist(x.pos, at) <= 1)) {
     if (s.over) break;
-    hurt(s, t, randInt(s, 3, 4) * dmgScale(u, t), ev, 'nucleo');
+    hurt(s, t, 7 + dmgFlat(u, t), ev, 'nucleo');
   }
 }
 
@@ -1363,7 +1369,7 @@ function resonate(s: CombatState, u: Unit, at: Pos, ev: GameEvent[]): void {
   ev.push({ t: 'markAdd', kind: 'pulse', at: { ...at } });
   for (const t of s.units.filter((x) => alive(x) && x.team !== u.team && dist(x.pos, at) <= 1)) {
     if (s.over) break;
-    hurt(s, t, randInt(s, 4, 6) * dmgScale(u, t), ev, 'resonancia');
+    hurt(s, t, 10 + dmgFlat(u, t), ev, 'resonancia');
   }
 }
 

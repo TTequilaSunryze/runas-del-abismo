@@ -144,11 +144,11 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
     S({ id: 'z_drenaje', name: 'Drenaje de esencia', route: 'boon', ap: 2, cd: 1, range: [1, 3], los: true, target: 'enemy', dmg: [4, 6], element: 'shadow', lifesteal: 1, text: 'Te curas todo el daño que haces.' }),
     S({ id: 'z_velo', name: 'Velo espectral', route: 'boon', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', buff: { kind: 'invis', turns: 1 }, selfMp: 2, text: 'Invisible durante 1 turno y ganas 2 PM.' }),
     S({ id: 'z_colas', name: 'Danza de colas', route: 'boon', ap: 4, cd: 2, range: [0, 0], los: false, target: 'enemy', area: 1, dmg: [6, 8], element: 'shadow', push: 1, pushAll: true, text: 'Giras con tus nueve colas: daña y empuja 1 casilla a los enemigos pegados a ti.' }),
-    S({ id: 'z_maldicion', name: 'Maldición kitsune', route: 'boon', ap: 2, cd: 2, range: [1, 5], los: true, target: 'enemy', dmg: [3, 4], element: 'shadow', status: { kind: 'mark', turns: 2 }, text: 'Marca al objetivo: recibe +30% de daño 2 turnos.' }),
+    S({ id: 'z_maldicion', name: 'Maldición kitsune', route: 'boon', ap: 2, cd: 2, range: [1, 5], los: true, target: 'enemy', dmg: [3, 4], element: 'shadow', status: { kind: 'mark', turns: 2 }, text: 'Marca al objetivo: recibe +2 de daño 2 turnos.' }),
     // ---------- Tejedora de Esferas ----------
     S({ id: 't_pulso', name: 'Pulso oscuro', route: 'base', ap: 3, cd: 0, perTurn: 2, range: [1, 5], los: true, target: 'ground', dmg: [4, 6], element: 'shadow', sphere: { turns: 2, max: 3 }, text: 'Daña al enemigo de la casilla (si lo hay) y deja una Esfera oscura 2 turnos. Máximo 3 esferas: la 4.ª borra la más antigua.' }),
     S({ id: 't_dispersion', name: 'Dispersión', route: 'base', ap: 3, cd: 1, range: [1, 1], los: false, straight: true, target: 'ground', cone: 2, dmg: [4, 6], element: 'shadow', push: 3, sphereHit: { dmg: [9, 11], stun: 1 }, text: 'Onda en cono de 2 casillas: empuja 3 casillas a enemigos y esferas. Una esfera que choca con un enemigo lo daña y lo aturde 1 turno.' }),
-    S({ id: 't_descarga', name: 'Descarga desatada', route: 'base', ap: 4, cd: 0, perTurn: 1, range: [1, 5], los: true, target: 'enemy', dmg: [7, 9], element: 'shadow', consume: { per: 8 }, special: 'descarga', text: 'Golpea a un solo objetivo y consume todas tus esferas: +8 de daño por cada una.' }),
+    S({ id: 't_descarga', name: 'Descarga desatada', route: 'base', ap: 4, cd: 0, perTurn: 1, range: [1, 5], los: true, target: 'enemy', dmg: [7, 9], element: 'shadow', consume: { per: 8 }, special: 'descarga', text: 'Golpea a un solo objetivo y consume todas tus esferas: +16 de daño por cada una.' }),
     S({ id: 't_semilla', name: 'Semilla oscura', route: 'boon', ap: 1, cd: 1, range: [1, 4], los: true, target: 'ground', sphere: { turns: 2, max: 3 }, text: 'Deja una Esfera oscura sin hacer daño.' }),
     S({ id: 't_implosion', name: 'Implosión', route: 'boon', ap: 3, cd: 2, range: [0, 0], los: false, target: 'self', detonate: { dmg: [6, 8], area: 1 }, element: 'shadow', text: 'Detona todas tus esferas: cada una daña a los enemigos pegados a ella.' }),
     S({ id: 't_pozo', name: 'Pozo gravitatorio', route: 'boon', ap: 3, cd: 2, range: [2, 5], los: true, target: 'enemy', area: 1, dmg: [3, 5], element: 'shadow', status: { kind: 'slow', turns: 1, stacks: 2 }, text: 'Un pozo en área 1: daña y quita 2 PM.' }),
@@ -171,7 +171,7 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
     S({ id: 'k_despellejar', name: 'Despellejar', route: 'base', ap: 3, cd: 1, range: [0, 0], los: false, target: 'enemy', area: 1, square: true, pushAll: true, dmg: [6, 8], status: { kind: 'slow', turns: 1, stacks: 2 }, push: 1, text: 'Barrido 3×3 a tu alrededor: daña, quita 2 PM y empuja 1 casilla a todos los enemigos.' }),
     S({ id: 'k_cosecha', name: 'Cosecha', route: 'boon', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', soulShield: 2, text: 'Ganas 2 de escudo por cada alma cosechada en la partida (máx. 20).' }),
     S({ id: 'k_grilletes', name: 'Grilletes', route: 'boon', ap: 3, cd: 2, range: [1, 4], los: true, target: 'enemy', dmg: [4, 6], element: 'shadow', status: { kind: 'slow', turns: 2, stacks: 2 }, text: 'Encadena al objetivo: daña y le quita 2 PM durante 2 turnos.' }),
-    S({ id: 'k_condena', name: 'Condena', route: 'boon', ap: 2, cd: 3, range: [1, 5], los: true, target: 'enemy', status: { kind: 'mark', turns: 2 }, extraStatus: { kind: 'exposed', turns: 2, stacks: 2 }, text: 'Marca al objetivo (+30% de daño recibido) y le quita 2 de armadura durante 2 turnos.' }),
+    S({ id: 'k_condena', name: 'Condena', route: 'boon', ap: 2, cd: 3, range: [1, 5], los: true, target: 'enemy', status: { kind: 'mark', turns: 2 }, extraStatus: { kind: 'exposed', turns: 2, stacks: 2 }, text: 'Marca al objetivo (+2 de daño recibido) y le quita 2 de armadura durante 2 turnos.' }),
     S({ id: 'k_azote', name: 'Azote de cadenas', route: 'boon', ap: 4, cd: 2, range: [1, 4], los: true, straight: true, line: true, target: 'enemy', dmg: [6, 8], element: 'shadow', text: 'Las cadenas barren la línea: dañan a todos los enemigos en ella.' }),
     S({ id: 'k_huesos', name: 'Coraza de huesos', route: 'boon', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', shield: 12, text: 'Ganas 12 de escudo.' }),
     S({ id: 'k_alma', name: 'Alma en pena', route: 'boon', ap: 3, cd: 2, range: [1, 4], los: true, target: 'enemy', dmg: [6, 8], element: 'shadow', lifesteal: 0.5, text: 'Arrancas un trozo de alma: te curas la mitad del daño.' }),
@@ -181,7 +181,7 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
     S({ id: 'z_vortice', name: 'Vórtice espiritual', route: 'boon', ap: 3, cd: 2, range: [2, 5], los: true, target: 'ground', area: 1, fullArea: true, dmg: [4, 6], element: 'shadow', special: 'vortex', text: 'Un remolino daña en cruz y atrae 1 casilla hacia el centro a los enemigos de alrededor. Ideal para alinearlos antes del Orbe.' }),
     S({ id: 'z_seduccion', name: 'Seducción arcana', route: 'boon', ap: 2, cd: 2, range: [1, 4], los: true, target: 'enemy', dmg: [3, 4], element: 'shadow', special: 'seduce', text: 'Si el objetivo está Encantado o por debajo de la mitad de su vida, le robas 1 PA y 1 PM para este turno.' }),
     S({ id: 'z_estallido', name: 'Estallido de colas', route: 'boon', ap: 3, cd: 2, range: [1, 1], los: false, straight: true, target: 'ground', cone: 2, dmg: [5, 7], element: 'shadow', push: 1, special: 'tails', text: 'Cono frontal de 2 casillas: daña y empuja 1. Si alcanza a 2 o más enemigos, te curas al instante como con el Robo de esencia.' }),
-    S({ id: 'z_vinculo', name: 'Vínculo etéreo', route: 'boon', ap: 3, cd: 2, range: [1, 4], los: true, target: 'enemy', behind: true, dmg: [4, 6], element: 'shadow', status: { kind: 'vuln', turns: 1 }, text: 'Apareces a la espalda del enemigo, lo golpeas y lo dejas Vulnerable: +20% de daño recibido hasta su turno.' }),
+    S({ id: 'z_vinculo', name: 'Vínculo etéreo', route: 'boon', ap: 3, cd: 2, range: [1, 4], los: true, target: 'enemy', behind: true, dmg: [4, 6], element: 'shadow', status: { kind: 'vuln', turns: 1 }, text: 'Apareces a la espalda del enemigo, lo golpeas y lo dejas Vulnerable: +2 de daño recibido hasta su turno.' }),
     // ---------- Tejedora de Esferas ----------
     S({ id: 't_voluntad', name: 'Fuerza de voluntad', route: 'boon', ap: 2, cd: 1, range: [1, 5], los: true, target: 'ground', needSphere: true, special: 'throwsphere', area: 1, fullArea: true, dmg: [5, 7], element: 'shadow', status: { kind: 'slow', turns: 1, stacks: 2 }, text: 'Agarras tu esfera más antigua y la arrojas a la casilla: daña en cruz y quita 2 PM.' }),
     S({ id: 't_gravedad', name: 'Gravedad inversa', route: 'boon', ap: 3, cd: 2, range: [0, 9], los: false, target: 'ground', atSphere: true, special: 'gravity', fullArea: true, dmg: [3, 4], element: 'shadow', text: 'Elige una de tus esferas: atrae 1 casilla hacia ella a los enemigos a 2 casillas y les hace daño ligero.' }),
@@ -191,7 +191,7 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
     S({ id: 't_transfusion', name: 'Transfusión de vacío', route: 'boon', ap: 1, cd: 0, perTurn: 1, range: [0, 0], los: false, target: 'self', needSphere: true, special: 'transfuse', text: 'Consumes tu esfera más antigua y recuperas 2 PA. Una vez por turno.' }),
     // ---------- Carcelero de Almas ----------
     S({ id: 'k_caja', name: 'La caja', route: 'boon', ap: 4, cd: 3, range: [2, 5], los: true, target: 'ground', special: 'cage', text: 'Muros espectrales en las 8 casillas alrededor de la elegida, hasta tu próximo turno. El enemigo que entre en ellas sufre daño y pierde todos sus PM.' }),
-    S({ id: 'k_explosion', name: 'Explosión de almas', route: 'boon', ap: 2, cd: 2, range: [0, 0], los: false, target: 'enemy', area: 1, square: true, dmg: [5, 7], element: 'shadow', special: 'soulburst', text: 'Gastas hasta 3 almas: onda 3×3 a tu alrededor con +3 de daño y 5 de curación por cada alma gastada.' }),
+    S({ id: 'k_explosion', name: 'Explosión de almas', route: 'boon', ap: 2, cd: 2, range: [0, 0], los: false, target: 'enemy', area: 1, square: true, dmg: [5, 7], element: 'shadow', special: 'soulburst', text: 'Gastas hasta 3 almas: onda 3×3 a tu alrededor con +6 de daño y 5 de curación por cada alma gastada.' }),
     S({ id: 'k_vinculo', name: 'Cadenas vinculantes', route: 'boon', ap: 3, cd: 2, range: [1, 4], los: true, target: 'enemy', dmg: [3, 4], element: 'shadow', special: 'chainlink', text: 'Encadenas al objetivo con otro enemigo a 2 casillas de él. Si uno de los dos se mueve o lo empujan, el otro sufre daño y pierde 2 PM.' }),
     S({ id: 'k_atraccion', name: 'Atracción del abismo', route: 'boon', ap: 2, cd: 1, range: [0, 0], los: false, target: 'self', special: 'absorb', text: 'Absorbes todas las almas que haya en el tablero, sin caminar hasta ellas: 5 de escudo por cada una.' }),
     S({ id: 'k_tormento', name: 'Tormento espectral', route: 'boon', ap: 3, cd: 1, range: [1, 1], los: false, straight: true, target: 'ground', cone: 3, dmg: [5, 7], element: 'shadow', status: { kind: 'hobble', turns: 2 }, text: 'Arco frontal de 3 casillas con la guadaña: daña y reduce a la mitad la Huida de los golpeados (quedan atrapados por tu placaje).' }),
@@ -201,18 +201,18 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
     S({ id: 's_danza', name: 'Danza de cuchillas', route: 'boon', ap: 3, cd: 2, range: [0, 0], los: false, target: 'enemy', area: 1, dmg: [4, 6], status: { kind: 'bleed', turns: 2, stacks: 1 }, text: 'Tú y todas tus sombras giráis a la vez: corte en cruz que hace sangrar 2 turnos.' }),
     S({ id: 's_paso', name: 'Paso sombrío', route: 'boon', ap: 2, cd: 2, range: [1, 4], los: false, target: 'enemy', behind: true, special: 'isolated', text: 'Te teletransportas a la espalda de un enemigo ignorando el placaje. Si está aislado (sin aliados a 2 casillas), ganas 1 PM.' }),
     S({ id: 's_velo', name: 'Velo de penumbra', route: 'boon', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', buff: { kind: 'invis', turns: 1 }, special: 'veil', text: 'Invisible 1 turno (o hasta que ataques) y dejas una Sombra en tu casilla.' }),
-    S({ id: 's_convergencia', name: 'Convergencia letal', route: 'boon', ap: 3, cd: 2, range: [1, 5], los: true, target: 'enemy', dmg: [6, 8], noEcho: true, special: 'converge', text: 'Tu Sombra se lanza junto al objetivo y lo golpeáis los dos a la vez. Si lo flanqueáis por lados opuestos, ambos golpes son críticos.' }),
+    S({ id: 's_convergencia', name: 'Convergencia letal', route: 'boon', ap: 3, cd: 2, range: [1, 5], los: true, target: 'enemy', dmg: [6, 8], noEcho: true, special: 'converge', text: 'Tu Sombra se lanza junto al objetivo y lo golpeáis los dos a la vez. Si lo flanqueáis por lados opuestos, ambos golpes son críticos (+5 de daño cada uno).' }),
     S({ id: 's_cosecha', name: 'Cosecha oscura', route: 'boon', ap: 1, cd: 0, perTurn: 1, range: [0, 0], los: false, target: 'self', special: 'reap', text: 'Si tu Sombra y tú habéis golpeado al mismo enemigo este turno, recuperas 2 PA. Una vez por turno.' }),
     // ---------- Bárbaro Desatado ----------
     S({ id: 'b_sed', name: 'Sed de batalla', route: 'base', ap: 2, cd: 0, perTurn: 1, range: [0, 0], los: false, target: 'self', special: 'thirst', text: 'Consumes toda tu Furia para curarte: 2 de vida, más 12 por cada 100 de Furia. Reinicia la Furia a 0.' }),
-    S({ id: 'b_tajo', name: 'Tajo despiadado', route: 'base', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [7, 9], furyScale: 0.04, text: 'Golpe cuerpo a cuerpo que pega más cuanta más Furia tengas (+4 con 100). Genera 20 de Furia.' }),
+    S({ id: 'b_tajo', name: 'Tajo despiadado', route: 'base', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [7, 9], furyScale: 0.04, text: 'Golpe cuerpo a cuerpo que pega más cuanta más Furia tengas (+8 con 100). Genera 20 de Furia.' }),
     S({ id: 'b_embiste', name: 'Embiste giratorio', route: 'base', ap: 2, cd: 0, perTurn: 1, range: [1, 3], los: false, straight: true, target: 'cell', dmg: [3, 5], special: 'charge', text: 'Te lanzas en línea recta hasta 3 casillas ignorando el placaje: dañas a los enemigos que atraviesas y a los pegados al aterrizar. Genera 20 de Furia.' }),
     S({ id: 'b_grito', name: 'Grito desmoralizador', route: 'boon', ap: 2, cd: 2, range: [0, 0], los: false, target: 'self', special: 'roar', text: 'Rugido 3×3 a tu alrededor: quita 2 PA a los enemigos y ganas 15 de Furia por cada uno.' }),
     S({ id: 'b_colosal', name: 'Golpe colosal', route: 'boon', ap: 4, cd: 2, range: [1, 1], los: false, target: 'enemy', dmg: [16, 20], furyCost: 50, special: 'colossal', text: 'Consume 50 de Furia: golpe devastador que empuja 2 casillas; si choca contra algo, lo aturde 1 turno.' }),
     S({ id: 'b_pacto', name: 'Pacto de sangre', route: 'boon', ap: 1, cd: 0, perTurn: 1, range: [0, 0], los: false, target: 'self', selfDmgPct: 0.15, special: 'pact', text: 'Sacrificas el 15% de tu vida actual: +40 de Furia y +1 PM este turno.' }),
     S({ id: 'b_cuchillada', name: 'Cuchillada giratoria', route: 'boon', ap: 3, cd: 1, range: [0, 0], los: false, target: 'enemy', area: 1, square: true, dmg: [5, 7], furyPer: 10, text: 'Golpeas las 8 casillas de alrededor: 10 de Furia por cada enemigo golpeado.' }),
     S({ id: 'b_mirada', name: 'Mirada del verdugo', route: 'boon', ap: 2, cd: 3, range: [1, 4], los: true, target: 'enemy', status: { kind: 'verdugo', turns: 2 }, text: 'Marcas a tu presa 2 turnos: empiezas tus turnos con +1 PM y tus ataques contra ella generan el doble de Furia.' }),
-    S({ id: 'b_frenesi', name: 'Frenesí imparable', route: 'boon', ap: 3, cd: 4, range: [0, 0], los: false, target: 'self', buff: { kind: 'frenzy', turns: 2 }, text: 'Durante 2 turnos eres inmune al placaje y al aturdimiento, pero recibes un 15% más de daño.' }),
+    S({ id: 'b_frenesi', name: 'Frenesí imparable', route: 'boon', ap: 3, cd: 4, range: [0, 0], los: false, target: 'self', buff: { kind: 'frenzy', turns: 2 }, text: 'Durante 2 turnos eres inmune al placaje y al aturdimiento, pero recibes +1 de daño de cada golpe.' }),
     // ---------- Guerrero ----------
     S({ id: 'tajo', name: 'Tajo', route: 'base', ap: 3, cd: 0, range: [1, 1], los: false, target: 'enemy', dmg: [8, 11], text: 'Golpe cuerpo a cuerpo.' }),
     S({ id: 'muro', name: 'Muro de escudos', route: 'baluarte', ap: 2, cd: 2, range: [0, 0], los: false, target: 'self', shield: 12, text: 'Ganas 12 de escudo.' }),
@@ -252,7 +252,7 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
     S({ id: 'consagrar', name: 'Consagrar', route: 'egida', ap: 3, cd: 2, range: [0, 0], los: false, target: 'ally', area: 2, shield: 7, text: 'Escudo 7 a todos los aliados en área 2.' }),
     S({ id: 'custodia', name: 'Custodia', route: 'egida', ap: 2, cd: 1, range: [1, 4], los: true, target: 'ally', shield: 11, text: 'Escudo 11 a un aliado.' }),
     S({ id: 'bastion', name: 'Bastión', route: 'egida', ap: 3, cd: 3, range: [0, 4], los: true, target: 'ally', shield: 16, text: 'Escudo 16 a ti o a un aliado.' }),
-    S({ id: 'marca', name: 'Marca del juicio', route: 'juicio', ap: 2, cd: 1, range: [1, 5], los: true, target: 'enemy', status: { kind: 'mark', turns: 2 }, text: 'El objetivo recibe +30% de daño 2 turnos.' }),
+    S({ id: 'marca', name: 'Marca del juicio', route: 'juicio', ap: 2, cd: 1, range: [1, 5], los: true, target: 'enemy', status: { kind: 'mark', turns: 2 }, text: 'El objetivo recibe +2 de daño 2 turnos.' }),
     S({ id: 'sentencia', name: 'Sentencia', route: 'juicio', ap: 4, cd: 3, range: [1, 4], los: true, target: 'enemy', dmg: [6, 8], status: { kind: 'stun', turns: 1 }, text: 'Daña y aturde 1 turno.' }),
     S({ id: 'veredicto', name: 'Veredicto', route: 'juicio', ap: 4, cd: 2, range: [1, 5], los: true, target: 'enemy', dmg: [10, 13], status: { kind: 'slow', turns: 2, stacks: 1 }, text: 'Daño sagrado y -1 PM.' }),
     // ---------- Pícaro ----------
@@ -264,7 +264,7 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
     S({ id: 'emboscada', name: 'Emboscada', route: 'asesino', ap: 3, cd: 2, range: [2, 5], los: true, target: 'enemy', dmg: [9, 12], dash: true, text: 'Saltas junto al enemigo y golpeas.' }),
     S({ id: 'golpe_mortal', name: 'Golpe mortal', route: 'asesino', ap: 5, cd: 3, range: [1, 1], los: false, target: 'enemy', dmg: [18, 24], text: 'El remate.' }),
     S({ id: 'cegar', name: 'Polvo cegador', route: 'sombras', ap: 2, cd: 2, range: [1, 4], los: true, target: 'enemy', dmg: [2, 3], drainAp: 2, text: 'El enemigo pierde 2 PA.' }),
-    S({ id: 'punto_debil', name: 'Punto débil', route: 'sombras', ap: 2, cd: 2, range: [1, 5], los: true, target: 'enemy', dmg: [3, 4], status: { kind: 'mark', turns: 3 }, text: 'El objetivo recibe +30% de daño 3 turnos.' }),
+    S({ id: 'punto_debil', name: 'Punto débil', route: 'sombras', ap: 2, cd: 2, range: [1, 5], los: true, target: 'enemy', dmg: [3, 4], status: { kind: 'mark', turns: 3 }, text: 'El objetivo recibe +2 de daño 3 turnos.' }),
     S({ id: 'golpe_bajo', name: 'Golpe bajo', route: 'sombras', ap: 3, cd: 3, range: [1, 1], los: false, target: 'enemy', dmg: [4, 6], status: { kind: 'stun', turns: 1 }, text: 'Aturde 1 turno.' }),
     S({ id: 'voltereta', name: 'Voltereta', route: 'acrobata', ap: 2, cd: 1, range: [2, 4], los: true, target: 'enemy', dmg: [5, 7], dash: true, text: 'Saltas junto al enemigo y golpeas.' }),
     S({ id: 'evasion', name: 'Evasión', route: 'acrobata', ap: 2, cd: 2, range: [0, 0], los: false, target: 'self', shield: 10, text: 'Ganas 10 de escudo.' }),
@@ -272,7 +272,7 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
     // ---------- Arquero ----------
     S({ id: 'flecha', name: 'Flecha', route: 'base', ap: 3, cd: 0, range: [2, 5], los: true, target: 'enemy', dmg: [6, 9], text: 'Disparo básico. No alcanza a enemigos pegados a ti.' }),
     S({ id: 'certero', name: 'Disparo certero', route: 'francotirador', ap: 4, cd: 1, range: [3, 7], los: true, target: 'enemy', dmg: [12, 16], crit: 10, text: 'Disparo lejano de mucho daño.' }),
-    S({ id: 'marca_caza', name: 'Marca del cazador', route: 'francotirador', ap: 2, cd: 2, range: [1, 7], los: true, target: 'enemy', dmg: [2, 3], status: { kind: 'mark', turns: 3 }, text: 'El objetivo recibe +30% de daño 3 turnos.' }),
+    S({ id: 'marca_caza', name: 'Marca del cazador', route: 'francotirador', ap: 2, cd: 2, range: [1, 7], los: true, target: 'enemy', dmg: [2, 3], status: { kind: 'mark', turns: 3 }, text: 'El objetivo recibe +2 de daño 3 turnos.' }),
     S({ id: 'perforante', name: 'Tiro perforante', route: 'francotirador', ap: 5, cd: 3, range: [2, 7], los: true, target: 'enemy', dmg: [13, 17], pierce: true, line: true, text: 'Atraviesa a todos los enemigos en línea e ignora la armadura.' }),
     S({ id: 'rapido', name: 'Disparo rápido', route: 'rafaga', ap: 2, cd: 0, range: [2, 5], los: true, target: 'enemy', dmg: [4, 6], text: 'Barato: se puede repetir varias veces por turno.' }),
     S({ id: 'andanada', name: 'Lluvia de flechas', route: 'rafaga', ap: 4, cd: 2, range: [3, 6], los: true, target: 'enemy', area: 1, dmg: [7, 10], text: 'Área 1 alrededor del objetivo.' }),
@@ -280,16 +280,16 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
     S({ id: 'cepo', name: 'Cepo', route: 'trampero', ap: 2, cd: 1, range: [1, 4], los: true, target: 'cell', snare: { dmg: 9 }, text: 'Trampa en una casilla libre: daña y detiene al primer enemigo que la pise.' }),
     S({ id: 'flecha_hielo', name: 'Flecha de escarcha', route: 'trampero', ap: 3, cd: 0, range: [2, 6], los: true, target: 'enemy', dmg: [5, 7], status: { kind: 'slow', turns: 2, stacks: 2 }, text: 'Quita 2 PM durante 2 turnos.' }),
     S({ id: 'red', name: 'Red', route: 'trampero', ap: 4, cd: 3, range: [1, 4], los: true, target: 'enemy', dmg: [3, 4], status: { kind: 'stun', turns: 1 }, text: 'Atrapa al objetivo: pierde su próximo turno.' }),
-    S({ id: 'lobo', name: 'Invocar lobo', route: 'bestias', ap: 4, cd: 4, range: [1, 2], los: true, target: 'cell', summon: { kind: 'lobo', name: 'Lobo', hpPct: 0.6, armor: 1, ap: 6, mp: 5, initiative: 12, spell: 'e_mordida' }, text: 'Un lobo lucha a tu lado (uno a la vez). Hereda tu % de daño.' }),
+    S({ id: 'lobo', name: 'Invocar lobo', route: 'bestias', ap: 4, cd: 4, range: [1, 2], los: true, target: 'cell', summon: { kind: 'lobo', name: 'Lobo', hpPct: 0.6, armor: 1, ap: 6, mp: 5, initiative: 12, spell: 'e_mordida' }, text: 'Un lobo lucha a tu lado (uno a la vez). Hereda tu daño extra.' }),
     S({ id: 'orden', name: 'Orden de caza', route: 'bestias', ap: 2, cd: 2, range: [1, 6], los: false, target: 'ally', giveAp: 3, giveMp: 2, text: 'Tu lobo (o un aliado) gana 3 PA y 2 PM en su próximo turno.' }),
     S({ id: 'vinculo', name: 'Vínculo', route: 'bestias', ap: 3, cd: 3, range: [0, 0], los: false, target: 'ally', area: 3, heal: 10, text: 'Cura 10 a ti y a los aliados en área 3.' }),
     // ---------- Kit inicial: segunda habilidad de daño y potenciación propia ----------
     S({ id: 'hachazo', name: 'Hachazo', route: 'base', ap: 4, cd: 1, range: [1, 1], los: false, target: 'enemy', dmg: [11, 15], text: 'Golpe pesado cuerpo a cuerpo.' }),
-    S({ id: 'sed_sangre', name: 'Sed de sangre', route: 'base', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', selfDmgPct: 0.15, buff: { kind: 'empower', turns: 2, stacks: 35 }, text: 'Pierdes el 15% de tu vida actual: +35% de daño este turno y el siguiente.' }),
+    S({ id: 'sed_sangre', name: 'Sed de sangre', route: 'base', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', selfDmgPct: 0.15, buff: { kind: 'empower', turns: 2, stacks: 35 }, text: 'Pierdes el 15% de tu vida actual: +4 de daño este turno y el siguiente.' }),
     S({ id: 'chispa', name: 'Chispa ígnea', route: 'base', ap: 3, cd: 1, range: [1, 4], los: true, target: 'enemy', dmg: [7, 10], status: { kind: 'burn', turns: 1 }, text: 'Daño de fuego que quema 1 turno.' }),
-    S({ id: 'escudo_arcano', name: 'Escudo arcano', route: 'base', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', shield: 14, buff: { kind: 'empower', turns: 2, stacks: 15 }, text: 'Escudo de 14 y +15% de daño este turno y el siguiente.' }),
+    S({ id: 'escudo_arcano', name: 'Escudo arcano', route: 'base', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', shield: 14, buff: { kind: 'empower', turns: 2, stacks: 15 }, text: 'Escudo de 14 y +2 de daño este turno y el siguiente.' }),
     S({ id: 'castigo', name: 'Castigo divino', route: 'base', ap: 3, cd: 1, range: [1, 4], los: true, target: 'enemy', dmg: [7, 10], text: 'Rayo de luz a distancia.' }),
-    S({ id: 'fervor', name: 'Fervor', route: 'base', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', heal: 8, buff: { kind: 'empower', turns: 2, stacks: 20 }, text: 'Te curas 8 y ganas +20% de daño este turno y el siguiente.' }),
+    S({ id: 'fervor', name: 'Fervor', route: 'base', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', heal: 8, buff: { kind: 'empower', turns: 2, stacks: 20 }, text: 'Te curas 8 y ganas +2 de daño este turno y el siguiente.' }),
     S({ id: 'tiro_rasante', name: 'Tiro rasante', route: 'base', ap: 3, cd: 1, range: [1, 4], los: true, target: 'enemy', dmg: [6, 9], push: 1, text: 'Disparo corto que sí alcanza a los pegados y los empuja 1 casilla.' }),
     S({ id: 'ojo_halcon', name: 'Ojo de halcón', route: 'base', ap: 2, cd: 3, range: [0, 0], los: false, target: 'self', buff: { kind: 'reach', turns: 2, stacks: 2 }, text: '+2 de alcance a tus ataques a distancia este turno y el siguiente.' }),
     S({ id: 'cuchillo', name: 'Cuchillo arrojadizo', route: 'base', ap: 3, cd: 1, range: [2, 4], los: true, target: 'enemy', dmg: [6, 9], text: 'Lanzas un cuchillo a media distancia.' }),
@@ -376,3 +376,27 @@ const SPELL_ELEMENT: Record<string, Element> = {
 };
 for (const d of Object.values(SPELLS)) d.element = SPELL_ELEMENT[d.id] ?? ROUTE_ELEMENT[d.route];
 SPELLS.flecha_hielo!.element = 'ice';
+
+// ---------------------------------------------------------------------------
+// v12: daño plano. Sin dados: cada hechizo hace un daño fijo (la media de su antiguo rango).
+// Los hechizos de los héroes (y aliados) hacen el doble; los de los enemigos se quedan igual.
+// El potenciado pasa de % a daño plano (+1 por cada 10% antiguo).
+// ---------------------------------------------------------------------------
+export const HERO_DMG_MULT = 2;
+const fixed = (r: readonly [number, number], m: number): [number, number] => { const v = Math.max(1, Math.round(((r[0] + r[1]) / 2) * m)); return [v, v]; };
+const flatEmpower = (b: SpellDef['buff']): SpellDef['buff'] => (b?.kind === 'empower' && b.stacks ? { ...b, stacks: Math.max(1, Math.round(b.stacks / 10)) } : b);
+for (const d of Object.values(SPELLS)) {
+  const m = d.route === 'enemy' ? 1 : HERO_DMG_MULT;
+  if (d.dmg) d.dmg = fixed(d.dmg, m);
+  if (d.followUp) d.followUp = { ...d.followUp, dmg: fixed(d.followUp.dmg, m) };
+  if (d.detonate) d.detonate = { ...d.detonate, dmg: fixed(d.detonate.dmg, m) };
+  if (d.sphereHit) d.sphereHit = { ...d.sphereHit, dmg: fixed(d.sphereHit.dmg, m) };
+  if (d.consume) d.consume = { ...d.consume, per: d.consume.per * m };
+  if (d.furyScale) d.furyScale *= m;
+  if (d.snare) d.snare = { ...d.snare, dmg: d.snare.dmg * m };
+  d.buff = flatEmpower(d.buff);
+  d.selfBuff2 = flatEmpower(d.selfBuff2);
+}
+
+/** Texto de un daño fijo («12») o de un rango si alguna mejora lo deja desigual («10-12»). */
+export const dmgText = (r: readonly [number, number]): string => (r[0] === r[1] ? `${r[0]}` : `${r[0]}-${r[1]}`);

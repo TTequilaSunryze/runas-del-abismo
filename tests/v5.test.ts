@@ -36,7 +36,7 @@ describe('kit inicial', () => {
     const hp = h.hp;
     expect(cast(s, h.id, 'sed_sangre', h.pos).ok).toBe(true);
     expect(h.hp).toBe(hp - Math.round(hp * 0.15));
-    expect(h.statuses.empower?.stacks).toBe(35);
+    expect(h.statuses.empower?.stacks).toBe(4);
   });
   it('Desvanecerse: no se le puede apuntar y atacar lo revela', () => {
     const s = board([hero('picaro'), makeEnemy('esqueleto', { x: 2, y: 3 })]);

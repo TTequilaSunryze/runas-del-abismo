@@ -2,7 +2,7 @@ import { FEATURES, schoolOf } from '../core/tuning';
 import { SPELLS } from '../core/classes/spells';
 // Tablero de combate: dibuja el estado y convierte clics en acciones.
 import { ZONES } from '../content/zones';
-import { castProblem, current, essenceNeed, furyCrit, furyPower, movePreview, spellOf, usableMp } from '../core/combat/engine';
+import { CRIT_FLAT, castProblem, current, essenceNeed, furyCrit, furyPower, movePreview, spellOf, usableMp } from '../core/combat/engine';
 import { coneCells } from '../core/combat/marks';
 import { alive, dist, hasLineOfSight, reachable } from '../core/combat/grid';
 import type { CombatState, GameEvent, Pos, Unit } from '../core/state';
@@ -488,10 +488,12 @@ export class Board {
     if (me && def?.dmg && u.team !== me.team) {
       const res = FEATURES.resistances && def.element ? Math.min(75, u.resist[def.element] ?? 0) : 0;
       const school = me.team === 'hero' ? (schoolOf(me.kind) === 'magic' ? me.powerMagic ?? 0 : me.powerPhys ?? 0) : 0;
-      const f = (1 + (me.power + school + (me.statuses.empower?.stacks ?? 0)) / 100) * (u.statuses.mark ? 1.3 : 1) * (1 - res / 100);
+      // daño plano: fijo del hechizo + daño del personaje y de su tipo + potenciado + Marcado/Vulnerable − armadura
+      const bonus = me.power + school + (me.statuses.empower?.stacks ?? 0) + (u.statuses.mark ? 2 : 0) + (u.statuses.vuln ? 2 : 0) + (u.statuses.frenzy ? 1 : 0);
       const arm = def.pierce ? 0 : Math.max(0, u.armor - (u.statuses.exposed?.stacks ?? 0));
-      const lo = Math.max(1, Math.round(def.dmg[0] * f) - arm), hi = Math.max(1, Math.round(def.dmg[1] * f) - arm);
-      est = `${def.name}: ${lo}-${hi} de daño${lo >= u.hp + u.shield ? ' · ¡LO MATA!' : hi >= u.hp + u.shield ? ' · puede matarlo' : ''}`;
+      const v = Math.max(1, Math.round((def.dmg[0] + bonus) * (1 - res / 100)) - arm);
+      const crit = Math.max(1, Math.round((def.dmg[0] + bonus + CRIT_FLAT) * (1 - res / 100)) - arm);
+      est = `${def.name}: ${v} de daño (crítico ${crit})${v >= u.hp + u.shield ? ' · ¡LO MATA!' : crit >= u.hp + u.shield ? ' · lo mata con crítico' : ''}`;
     }
     // PA y PM: los de ahora si es su turno; si no, los que tendrá en su próximo turno (con lo que le han quitado)
     const isCur = current(c)?.id === u.id;

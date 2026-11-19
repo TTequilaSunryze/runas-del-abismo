@@ -27,7 +27,7 @@ export const ZONA1_EVENTS: EventDef[] = [
     id: 'pacto', title: 'El Pacto del Osario',
     text: 'Un muro de calaveras susurra al unísono: os ofrece fuerza, a cambio de una parte de vosotros que no volverá.',
     options: [
-      { label: 'Aceptar el pacto', hint: 'Todos: +20% de daño (físico y mágico) y -12 de vida máxima, hasta el final.', apply: (run) => { for (const h of run.heroes) { boon(h, 'power', 20); boon(h, 'hp', -12); } return 'Las calaveras ríen. Os sentís más fuertes y más vacíos.'; } },
+      { label: 'Aceptar el pacto', hint: 'Todos: +2 de daño y -12 de vida máxima, hasta el final.', apply: (run) => { for (const h of run.heroes) { boon(h, 'power', 2); boon(h, 'hp', -12); } return 'Las calaveras ríen. Os sentís más fuertes y más vacíos.'; } },
       { label: 'Rechazarlo', hint: 'Todos recuperan un 15% de vida.', apply: (run) => { for (const h of run.heroes) healPct(h, 0.15); return 'El muro calla. Aprovecháis el silencio para descansar.'; } },
     ],
   },

@@ -12,7 +12,7 @@ export const ZONA4_ITEMS: ItemTheme = {
   },
   suffixes: ['del Abismo', 'del Vacío', 'de las Runas Primeras', 'del Último Eco', 'sin Fondo'],
   legendaries: [
-    { slot: 'arma', name: 'Primera Runa', rarity: 3, stats: { power: 45, crit: 15, status: 1, ap: 1 }, lore: 'De ella nacieron todas las demás.', passive: { trait: 'primera', text: 'El primer hechizo de cada turno cuesta 1 PA menos.' } },
+    { slot: 'arma', name: 'Primera Runa', rarity: 3, stats: { power: 4, crit: 15, status: 1, ap: 1 }, lore: 'De ella nacieron todas las demás.', passive: { trait: 'primera', text: 'El primer hechizo de cada turno cuesta 1 PA menos.' } },
     { slot: 'peto', name: 'Piel del Devorador', rarity: 3, stats: { hp: 65, armor: 5, resShadow: 35 }, lore: 'Aún tiene hambre.', passive: { trait: 'devorador', text: 'Cada enemigo que rematas te cura el 5% de tu vida máxima.' } },
     { slot: 'amuleto', name: 'Lágrima del Eco', rarity: 3, stats: { hp: 30, power: 25, ap: 1, resShadow: 20 }, lore: 'Lloran por ti los que cayeron antes.', passive: { trait: 'lagrima', text: 'Una vez por combate, al bajar del 30% de vida te curas el 25%.' } },
     { slot: 'botas', name: 'Pasos entre Mundos', rarity: 3, stats: { mp: 1, initiative: 18, crit: 10 }, lore: 'Nunca pisan el mismo suelo dos veces.', passive: { trait: 'entremundos', text: 'El placaje no te afecta.' } },
@@ -64,7 +64,7 @@ export const ZONA4_EVENTS: EventDef[] = [
     id: 'trono', title: 'El Trono Vacío',
     text: 'Un trono hecho de runas apagadas. Quien se siente en él verá el final del camino.',
     options: [
-      { label: 'Sentarse por turnos', hint: 'Todos: +15% de daño (físico y mágico) y -15 de vida máxima.', apply: (run) => { for (const h of run.heroes) { boon(h, 'power', 15); boon(h, 'hp', -15); } return 'Habéis visto el final. No os gusta, pero sabéis cómo llegar.'; } },
+      { label: 'Sentarse por turnos', hint: 'Todos: +2 de daño y -15 de vida máxima.', apply: (run) => { for (const h of run.heroes) { boon(h, 'power', 2); boon(h, 'hp', -15); } return 'Habéis visto el final. No os gusta, pero sabéis cómo llegar.'; } },
       { label: 'Destruirlo', hint: 'Cada uno gana una reliquia común.', apply: (run) => { for (const h of run.heroes) giveRelic(run, h, false); return 'Entre los restos brillan objetos olvidados.'; } },
     ],
   },

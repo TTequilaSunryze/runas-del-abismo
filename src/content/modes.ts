@@ -27,8 +27,8 @@ export const DAILY_MODS: DailyMod[] = [
   { id: 'llamas', name: 'Mazmorra en llamas', text: 'Todos los enemigos son Ardientes.' },
   { id: 'horda', name: 'Horda', text: 'Un enemigo más en cada combate.' },
   { id: 'codicia', name: 'Codicia', text: 'Doble oro, pero todo cuesta el doble.' },
-  { id: 'cristal', name: 'Cañón de cristal', text: 'Los héroes tienen un 25% menos de vida y hacen un 25% más de daño.' },
-  { id: 'frenesi', name: 'Frenesí', text: 'Los enemigos hacen un 20% más de daño.' },
+  { id: 'cristal', name: 'Cañón de cristal', text: 'Los héroes tienen un 25% menos de vida y hacen +3 de daño.' },
+  { id: 'frenesi', name: 'Frenesí', text: 'Los enemigos hacen +1 de daño.' },
   { id: 'elites', name: 'Campeones', text: 'Muchos más enemigos con modificadores de élite.' },
   { id: 'presagios', name: 'Tiempos de augurio', text: 'Todos los combates tienen un presagio.' },
   { id: 'veloces', name: 'Cazadores', text: 'Enemigos con +1 PM y +4 de iniciativa.' },
@@ -50,7 +50,7 @@ export interface OmenDef {
   text: string;
 }
 export const OMENS: OmenDef[] = [
-  { id: 'sangre', name: 'Luna de sangre', icon: '🌕', text: 'Todos hacen un 20% más de daño.' },
+  { id: 'sangre', name: 'Luna de sangre', icon: '🌕', text: 'Todos hacen +2 de daño (los enemigos, +1).' },
   { id: 'pantano', name: 'Ciénaga', icon: '🟢', text: 'El suelo está lleno de charcos que atrapan a los héroes.' },
   { id: 'puas', name: 'Suelo de púas', icon: '📌', text: 'Púas por todo el tablero.' },
   { id: 'bendicion', name: 'Bendición', icon: '🕊️', text: 'Los héroes empiezan con un escudo del 20% de su vida.' },

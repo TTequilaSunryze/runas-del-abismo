@@ -7,7 +7,7 @@ export const SLOT_NAME: Record<Slot, string> = { casco: 'Casco', capa: 'Capa', a
 
 export type StatKey = 'hp' | 'armor' | 'power' | 'powerPhys' | 'powerMagic' | 'crit' | 'ap' | 'mp' | 'initiative' | 'resFire' | 'resIce' | 'resPoison' | 'resShadow' | 'status' | 'tackle' | 'dodge';
 export type Stats = Partial<Record<StatKey, number>>;
-export const STAT_NAME: Record<StatKey, string> = { hp: 'Vida', armor: 'Armadura', power: '% Daño (físico y mágico)', powerPhys: '% Daño físico', powerMagic: '% Daño mágico', crit: '% Crítico', ap: 'PA', mp: 'PM', initiative: 'Iniciativa', resFire: '% Res. fuego', resIce: '% Res. hielo', resPoison: '% Res. veneno', resShadow: '% Res. sombra', status: 'turno(s) a tus estados', tackle: 'Placaje', dodge: 'Huida' };
+export const STAT_NAME: Record<StatKey, string> = { hp: 'Vida', armor: 'Armadura', power: 'Daño (físico y mágico)', powerPhys: 'Daño físico', powerMagic: 'Daño mágico', crit: '% Crítico', ap: 'PA', mp: 'PM', initiative: 'Iniciativa', resFire: '% Res. fuego', resIce: '% Res. hielo', resPoison: '% Res. veneno', resShadow: '% Res. sombra', status: 'turno(s) a tus estados', tackle: 'Placaje', dodge: 'Huida' };
 
 /** 0 Common, 1 Uncommon, 2 Rare, 3 Legendary */
 export type Rarity = 0 | 1 | 2 | 3;
@@ -45,7 +45,7 @@ export interface ItemTheme {
 /** Estadísticas que puede dar cada ranura. */
 /**
  * Estadísticas que puede dar cada ranura (rework v11: roles claros, sin resistencias ni % Daño genérico).
- * `dmg` = el % de daño del tipo de quien lo encuentra (físico o mágico).
+ * `dmg` = daño plano del tipo de quien lo encuentra (físico o mágico).
  */
 const POOL: Record<Slot, Array<StatKey | 'dmg'>> = {
   arma: ['dmg', 'crit', 'ap'],
@@ -92,7 +92,8 @@ function roll(box: RngBox, k: StatKey, rarity: Rarity, act: number): number {
   const m = MULT[rarity]! * (1 + ACT_GROWTH * act);
   if (k.startsWith('res')) return Math.round(randInt(box, 8, 13) * m);
   if (k === 'hp') return Math.round(randInt(box, 6, 10) * m);
-  if (k === 'powerPhys' || k === 'powerMagic') return Math.round(randInt(box, 4, 7) * m);
+  // v12: daño plano (+1-2 en Common de la zona 1; crece con rareza y zona)
+  if (k === 'powerPhys' || k === 'powerMagic') return Math.max(1, Math.round(randInt(box, 1, 2) * m));
   if (k === 'crit') return Math.round(randInt(box, 3, 5) * m);
   return Math.max(2, Math.round(randInt(box, 2, 3) * m));
 }

@@ -80,9 +80,9 @@ describe('mejoras de hechizo', () => {
     expect(h.bossOffer).toBeNull();
     expect(h.boons).toContain((o[0] as { id: string }).id);
   });
-  it('potenciado sube el daño un 20%', () => {
+  it('potenciado suma +3 de daño', () => {
     const d = tuned(SPELLS.tajo!, { ups: ['pot'] });
-    expect(d.dmg![0]).toBe(Math.round(SPELLS.tajo!.dmg![0] * 1.2));
+    expect(d.dmg![0]).toBe(SPELLS.tajo!.dmg![0] + 3);
     expect(Object.keys(UPGRADES).length).toBeGreaterThan(5);
   });
 });

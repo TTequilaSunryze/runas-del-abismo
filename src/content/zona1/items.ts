@@ -19,6 +19,6 @@ export const ZONA1_ITEMS: ItemTheme = {
     { slot: 'botas', name: 'Pasos del Que No Descansa', rarity: 3, stats: { mp: 1, initiative: 10, hp: 12 }, lore: 'Nunca dejaron huella.', passive: { trait: 'incansable', text: 'Si empiezas tu turno pegado a un enemigo, ganas +1 PM.' } },
     { slot: 'amuleto', name: 'Corazón Embalsamado', rarity: 3, stats: { hp: 20, power: 14, ap: 1 }, lore: 'Aún late, muy despacio.', passive: { trait: 'regen', text: 'Recuperas el 8% de tu vida máxima al empezar cada turno.' } },
     { slot: 'casco', name: 'Corona de las Mil Velas', rarity: 3, stats: { hp: 18, armor: 2, initiative: 8 }, lore: 'La cera nunca termina de caer.', passive: { trait: 'ignite', text: 'Tus golpes queman al objetivo 2 turnos.' } },
-    { slot: 'anillo', name: 'Alianza de la Viuda Eterna', rarity: 3, stats: { crit: 14, power: 12, ap: 1 }, lore: 'Prometió esperar. Sigue esperando.', passive: { trait: 'viuda', text: 'Si cae un aliado, ganas +20% de daño hasta el final del combate.' } },
+    { slot: 'anillo', name: 'Alianza de la Viuda Eterna', rarity: 3, stats: { crit: 14, power: 12, ap: 1 }, lore: 'Prometió esperar. Sigue esperando.', passive: { trait: 'viuda', text: 'Si cae un aliado, ganas +2 de daño hasta el final del combate.' } },
   ],
 };

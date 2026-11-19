@@ -1,6 +1,6 @@
 // Iconos de hechizo en pixel art (12×12). Cada hechizo tiene su dibujo y la paleta de su elemento o ruta.
 // Letras: a = color principal, b = claro, c = oscuro, w = brillo. '.' = transparente.
-import type { SpellDef } from '../core/classes/spells';
+import { dmgText, type SpellDef } from '../core/classes/spells';
 
 export const GLYPHS: Record<string, string[]> = {
   star: ['............', '.....aa.....', '.....ab.....', '....abba....', '....abba....', '.aabbwwbbaa.', '.aabbwwbbaa.', '....abba....', '....abba....', '.....ba.....', '.....aa.....', '............'],
@@ -200,7 +200,7 @@ export function spellShape(d: SpellDef): string {
 export function spellSummary(d: SpellDef): string {
   const parts: string[] = [];
   if (d.dash) parts.push('Salta junto al objetivo');
-  if (d.dmg) parts.push(`${d.dash ? 'y daña' : 'Daña'} ${d.dmg[0]}-${d.dmg[1]}${d.element ? ` ${EL[d.element]}` : ''}`);
+  if (d.dmg) parts.push(`${d.dash ? 'y daña' : 'Daña'} ${dmgText(d.dmg)}${d.element ? ` ${EL[d.element]}` : ''}`);
   if (d.heal) parts.push(`Cura ${d.heal}`);
   if (d.shield) parts.push(`${parts.length ? 'escudo' : 'Da escudo'} ${d.shield}`);
   for (const st of [d.status, d.extraStatus]) if (st) parts.push(`${ST[st.kind] ?? st.kind}${st.stacks && st.stacks > 1 ? ` x${st.stacks}` : ''} ${st.turns} t.`);
@@ -224,8 +224,8 @@ export function spellSummary(d: SpellDef): string {
   if (d.soulShield) parts.push(`Escudo ${d.soulShield} por alma`);
   if (d.sphere) parts.push(`${parts.length ? 'deja' : 'Deja'} una esfera ${d.sphere.turns} t. (máx. ${d.sphere.max})`);
   if (d.consume) parts.push(`+${d.consume.per} por cada esfera que consume`);
-  if (d.sphereHit) parts.push(`la esfera que choca daña ${d.sphereHit.dmg[0]}-${d.sphereHit.dmg[1]} y aturde`);
-  if (d.detonate) parts.push(`Detona tus esferas: ${d.detonate.dmg[0]}-${d.detonate.dmg[1]} alrededor de cada una`);
+  if (d.sphereHit) parts.push(`la esfera que choca daña ${dmgText(d.sphereHit.dmg)} y aturde`);
+  if (d.detonate) parts.push(`Detona tus esferas: ${dmgText(d.detonate.dmg)} alrededor de cada una`);
   const s = parts.join(', ');
   return (s.charAt(0).toUpperCase() + s.slice(1)) + ` (${spellShape(d)}).`;
 }
@@ -235,15 +235,15 @@ export function spellEffects(d: SpellDef): string[] {
   const out: string[] = [];
   if (d.dash) out.push('Saltas junto al objetivo antes de golpear');
   if (d.teleport) out.push('Te desplazas a la casilla, ignorando el placaje');
-  if (d.followUp) out.push(`Al llegar, un proyectil daña ${d.followUp.dmg[0]}-${d.followUp.dmg[1]}${d.followUp.element ? ` ${EL[d.followUp.element]}` : ''} al enemigo más cercano (a ${d.followUp.radius} casillas)`);
+  if (d.followUp) out.push(`Al llegar, un proyectil daña ${dmgText(d.followUp.dmg)}${d.followUp.element ? ` ${EL[d.followUp.element]}` : ''} al enemigo más cercano (a ${d.followUp.radius} casillas)`);
   if (d.resetOnKill) out.push('Si remata, puedes volver a usarlo gratis (0 PA)');
-  for (const st of [d.status, d.extraStatus]) if (st) out.push(st.kind === 'exposed' ? `Expuesto: −${st.stacks ?? 1} de armadura ${st.turns} t.` : st.kind === 'slow' ? `Quita ${st.stacks ?? 1} PM (${st.turns} t.)` : st.kind === 'mark' ? `Marca: +30% de daño recibido ${st.turns} t.` : `${ST[st.kind] ?? st.kind}${st.stacks && st.stacks > 1 ? ` x${st.stacks}` : ''} ${st.turns} t.`.replace(/^./, (c) => c.toUpperCase()));
+  for (const st of [d.status, d.extraStatus]) if (st) out.push(st.kind === 'exposed' ? `Expuesto: −${st.stacks ?? 1} de armadura ${st.turns} t.` : st.kind === 'slow' ? `Quita ${st.stacks ?? 1} PM (${st.turns} t.)` : st.kind === 'mark' ? `Marca: +2 de daño recibido ${st.turns} t.` : `${ST[st.kind] ?? st.kind}${st.stacks && st.stacks > 1 ? ` x${st.stacks}` : ''} ${st.turns} t.`.replace(/^./, (c) => c.toUpperCase()));
   if (d.drainAp) out.push(`Quita ${d.drainAp} PA en su próximo turno`);
   if (d.giveAp) out.push(`Da ${d.giveAp} PA`);
   if (d.giveMp) out.push(`Da ${d.giveMp} PM`);
   if (d.selfMp) out.push(`Ganas ${d.selfMp} PM`);
   if (d.buff?.kind === 'invis') out.push(`Invisible ${d.buff.turns} t.`);
-  else if (d.buff?.kind === 'empower') out.push(`+${d.buff.stacks}% de daño ${d.buff.turns} t.`);
+  else if (d.buff?.kind === 'empower') out.push(`+${d.buff.stacks} de daño ${d.buff.turns} t.`);
   else if (d.buff?.kind === 'reach') out.push(`+${d.buff.stacks} de alcance ${d.buff.turns} t.`);
   if (d.push) out.push(`Empuja ${d.push} casilla${d.push > 1 ? 's' : ''}${d.pushAll ? ' a todos' : ''}`);
   if (d.pull) out.push(`Atrae ${d.pull} casillas hacia ti`);
@@ -265,8 +265,8 @@ export function spellEffects(d: SpellDef): string[] {
   if (d.sphere) out.push(`Deja una esfera ${d.sphere.turns} t. (máx. ${d.sphere.max})`);
   if (d.sphereShield) out.push(`+${d.sphereShield} de escudo por cada esfera tuya`);
   if (d.consume) out.push(`Consume tus esferas: +${d.consume.per} de daño por cada una`);
-  if (d.sphereHit) out.push(`Cada esfera que choca daña ${d.sphereHit.dmg[0]}-${d.sphereHit.dmg[1]} y aturde`);
-  if (d.detonate) out.push(`Detona tus esferas: ${d.detonate.dmg[0]}-${d.detonate.dmg[1]} alrededor de cada una`);
+  if (d.sphereHit) out.push(`Cada esfera que choca daña ${dmgText(d.sphereHit.dmg)} y aturde`);
+  if (d.detonate) out.push(`Detona tus esferas: ${dmgText(d.detonate.dmg)} alrededor de cada una`);
   if (d.revive) out.push(`Resucita con el ${Math.round(d.revive * 100)}% de vida`);
   if (d.healPct) out.push(`Cura el ${Math.round(d.healPct * 100)}% de la vida`);
   return out;
@@ -275,7 +275,7 @@ export function spellEffects(d: SpellDef): string[] {
 /** Ficha de un hechizo en filas (etiqueta, valor): lo que se muestra al pasar el ratón. */
 export function spellRows(d: SpellDef): Array<[string, string]> {
   const rows: Array<[string, string]> = [['Coste', d.route === 'item' ? 'Gratis (consumible)' : `${d.ap} PA`]];
-  if (d.dmg) rows.push(['Daño', `${d.dmg[0]}-${d.dmg[1]}${d.element ? ` ${EL[d.element]}` : ''}${d.bounce ? ` ×${d.bounce} (ida y vuelta)` : ''}${d.area && d.range[1] > 0 && !d.line ? ' · 50% al resto del área' : ''}`]);
+  if (d.dmg) rows.push(['Daño', `${dmgText(d.dmg)}${d.element ? ` ${EL[d.element]}` : ''}${d.bounce ? ` ×${d.bounce} (ida y vuelta)` : ''}${d.area && d.range[1] > 0 && !d.line ? ' · 50% al resto del área' : ''}`]);
   if (d.heal) rows.push(['Curación', `${d.heal}`]);
   if (d.shield) rows.push(['Escudo', `${d.shield}`]);
   const where = [d.range[1] === 0 ? 'sin alcance (desde tu casilla)' : `${d.range[0] === d.range[1] ? d.range[1] : `${d.range[0]}-${d.range[1]}`} casillas`, d.straight ? 'en línea recta' : '', d.los && d.range[1] > 1 ? 'necesita visión' : '', d.range[0] >= 2 ? 'no a pegados' : ''].filter(Boolean).join(' · ');

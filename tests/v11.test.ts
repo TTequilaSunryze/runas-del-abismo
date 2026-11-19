@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { BLESSINGS } from '../src/core/boonmods';
+import { SPELLS } from '../src/core/classes/spells';
 import { makeHero } from '../src/core/classes/factory';
 import { apCost, cast, createCombat, endTurn, current, move, usableMp, type UnitSpec } from '../src/core/combat/engine';
 import { makeEnemy } from '../src/content/enemies';
@@ -51,5 +52,18 @@ describe('bendiciones v11', () => {
     const e = s.units[1]!;
     expect(current(s)?.id).toBe(e.id);
     { const mp = e.mp; move(s, e.id, { x: 5, y: 4 }); expect(e.mp).toBe(mp - 2); }
+  });
+});
+
+describe('v12 daño plano', () => {
+  it('sin dados: los hechizos hacen un daño fijo y el daño final es fijo + bonos − armadura', () => {
+    for (const d of Object.values(SPELLS)) if (d.dmg) expect(d.dmg[0]).toBe(d.dmg[1]);
+    const s = fight([hero('barbaro', 2, 2), foe(3, 2)]);
+    const b = s.units[0]!, e = s.units[1]!;
+    e.armor = 3; b.powerPhys = 4; b.crit = 0;
+    const before = e.hp;
+    expect(cast(s, b.id, 'b_tajo', { x: 3, y: 2 }).ok).toBe(true);
+    // Tajo despiadado suma además la Furia (0 aquí)
+    expect(before - e.hp).toBe(SPELLS.b_tajo!.dmg![0] + 4 - 3);
   });
 });

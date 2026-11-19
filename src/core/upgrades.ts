@@ -17,7 +17,6 @@ export interface UpgradeDef {
   apply: (d: SpellDef) => void;
 }
 
-const mul = (v: number, m: number): number => Math.round(v * m);
 /** Añade un estado al hechizo sin pisar el que ya tenga. */
 function addEffect(d: SpellDef, st: NonNullable<SpellDef['status']>): void {
   if (!d.status || d.status.kind === st.kind) d.status = st;
@@ -28,8 +27,8 @@ export const MAX_SPELL_UPS = 3;
 
 export const UPGRADES: Record<string, UpgradeDef> = Object.fromEntries(
   ([
-    { id: 'pot', name: 'Potenciado', icon: '💪', text: '+20% de daño, curación y escudo.', max: 1, fits: (d) => !!(d.dmg || d.heal || d.shield || d.snare),
-      apply: (d) => { if (d.dmg) d.dmg = [mul(d.dmg[0], 1.2), mul(d.dmg[1], 1.2)]; if (d.heal) d.heal = mul(d.heal, 1.2); if (d.shield) d.shield = mul(d.shield, 1.2); if (d.snare) d.snare = { ...d.snare, dmg: mul(d.snare.dmg, 1.2) }; } },
+    { id: 'pot', name: 'Potenciado', icon: '💪', text: '+3 de daño, +3 de curación y escudo.', max: 1, fits: (d) => !!(d.dmg || d.heal || d.shield || d.snare),
+      apply: (d) => { if (d.dmg) d.dmg = [d.dmg[0] + 3, d.dmg[1] + 3]; if (d.heal) d.heal = d.heal + 3; if (d.shield) d.shield = d.shield + 3; if (d.snare) d.snare = { ...d.snare, dmg: d.snare.dmg + 3 }; } },
     { id: 'efi', name: 'Eficiente', icon: '⚡', text: 'Cuesta 1 PA menos.', max: 1, fits: (d) => d.ap >= 3, apply: (d) => { d.ap = Math.max(1, d.ap - 1); } },
     { id: 'rap', name: 'Presto', icon: '⏳', text: '1 turno menos de espera.', max: 1, fits: (d) => d.cd >= 1, apply: (d) => { d.cd = Math.max(0, d.cd - 1); } },
     { id: 'alc', name: 'Lejano', icon: '🎯', text: '+1 de alcance.', max: 1, fits: (d) => d.range[1] >= 2, apply: (d) => { d.range = [d.range[0], d.range[1] + 1]; } },

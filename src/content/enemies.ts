@@ -50,13 +50,13 @@ export const AFFIXES: Record<string, { name: string; text: string; apply: (u: Un
   vampirico: { name: 'Vampírico', text: 'Se cura con el daño que hace.', apply: (u) => { u.spells[0]!.imbue = 'vampiro'; } },
   blindado: { name: 'Blindado', text: '+2 de armadura y +20% de vida.', apply: (u) => { u.armor += 2; u.hp = u.maxHp = Math.round(u.maxHp * 1.2); } },
   veloz: { name: 'Veloz', text: '+2 PM y mucha más iniciativa.', apply: (u) => { u.mp += 2; u.maxMp += 2; u.initiative += 10; } },
-  enorme: { name: 'Enorme', text: '+50% de vida y +15% de daño.', apply: (u) => { u.hp = u.maxHp = Math.round(u.maxHp * 1.5); u.power += 15; } },
+  enorme: { name: 'Enorme', text: '+50% de vida y +1 de daño.', apply: (u) => { u.hp = u.maxHp = Math.round(u.maxHp * 1.5); u.power += 1; } },
   venenoso: { name: 'Venenoso', text: 'Sus golpes envenenan.', apply: (u) => { u.spells[0]!.imbue = 'veneno'; } },
   reflejante: { name: 'Reflejante', text: 'Devuelve el 30% del daño cuerpo a cuerpo.', apply: (u) => addTrait(u, 'thorns') },
   regenerador: { name: 'Regenerador', text: 'Recupera el 8% de su vida cada turno.', apply: (u) => addTrait(u, 'regen') },
   explosivo: { name: 'Explosivo', text: 'Al morir explota y daña a todo lo que tenga pegado.', apply: (u) => addTrait(u, 'bomb') },
   fantasmal: { name: 'Fantasmal', text: 'Atraviesa obstáculos y persigue al más frágil.', apply: (u) => { addTrait(u, 'ghost'); addTrait(u, 'hunter'); } },
-  furioso: { name: 'Furioso', text: '+40% de daño por debajo de la mitad de vida.', apply: (u) => addTrait(u, 'enrage') },
+  furioso: { name: 'Furioso', text: '+3 de daño por debajo de la mitad de vida.', apply: (u) => addTrait(u, 'enrage') },
   escindido: { name: 'Escindido', text: 'Al morir se divide en dos copias menores.', apply: (u) => addTrait(u, 'split') },
   trampero: { name: 'Trampero', text: 'Esconde cepos junto a los héroes.', apply: (u) => addTrait(u, 'trapper') },
 };
@@ -66,8 +66,10 @@ export interface EnemyOpts {
   affixes?: string[];
   /** multiplicador de vida (ascensión, jefes) */
   hpMul?: number;
-  /** % de daño extra (ascensión) */
+  /** daño plano extra (dificultad, ascensión, retos) */
   power?: number;
+  /** viene de las listas 2 o 3 de la zona (+15% de vida si es común) */
+  laterList?: boolean;
 }
 
 /** Crea un enemigo, escalado por profundidad dentro de la zona (0 = primera sala) y, si es élite o jefe, por jugadores. */
@@ -75,10 +77,10 @@ export function makeEnemy(id: string, pos: Pos, depth = 0, players = 1, opts: En
   const e = ENEMIES[id];
   if (!e) throw new Error(`Enemigo desconocido: ${id}`);
   const common = e.ai !== 'boss' && e.ai !== 'pillar' && !opts.affixes?.length ? ENEMY_SCALING.commonHp : 1;
-  const hp = Math.round(e.hp * common * (1 + depth * ENEMY_SCALING.hpPerDepth) * (e.scales || e.ai === 'pillar' ? 1 + 0.35 * (players - 1) : 1) * (opts.hpMul ?? 1));
+  const hp = Math.round(e.hp * ENEMY_SCALING.flatHp * common * (opts.laterList && common > 1 ? ENEMY_SCALING.laterListHp : 1) * (1 + depth * ENEMY_SCALING.hpPerDepth) * (e.scales || e.ai === 'pillar' ? 1 + 0.35 * (players - 1) : 1) * (opts.hpMul ?? 1));
   const u: UnitSpec = {
     team: 'enemy', kind: e.id, name: e.name, owner: null, pos,
-    hp, maxHp: hp, shield: 0, armor: e.armor, power: depth * ENEMY_SCALING.powerPerDepth + (opts.power ?? 0), crit: 0,
+    hp, maxHp: hp, shield: 0, armor: e.armor, power: Math.round(depth * ENEMY_SCALING.powerPerDepth + (opts.power ?? 0)), crit: 0,
     ap: e.ap, maxAp: e.ap, mp: e.mp, maxMp: e.mp, initiative: e.initiative, apMod: 0, mpMod: 0, resist: { ...e.resist }, statusBonus: 0,
     statuses: {}, spells: [e.spell, ...(e.more ?? [])].map((sid) => ({ id: sid, cd: 0 })), ai: e.ai, traits: e.traits ? [...e.traits] : undefined,
     // placaje según su forma de luchar; los jefes retienen mucho

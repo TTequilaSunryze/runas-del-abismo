@@ -12,10 +12,10 @@ export const ZONA3_ITEMS: ItemTheme = {
   },
   suffixes: ['de las Ruinas', 'de la Pira', 'del Rey Calcinado', 'de Ceniza Viva', 'del Último Incendio'],
   legendaries: [
-    { slot: 'arma', name: 'Corona Rota del Rey Calcinado', rarity: 3, stats: { power: 40, crit: 14, ap: 1 }, lore: 'Dejó de ser corona el día que ardió el reino.', passive: { trait: 'enrage', text: 'Por debajo de la mitad de vida haces un 40% más de daño.' } },
-    { slot: 'peto', name: 'Égida de Obsidiana', rarity: 3, stats: { hp: 55, armor: 5, resFire: 35 }, lore: 'Nació de un incendio y no teme a otro.', passive: { trait: 'egida', text: 'El primer golpe que recibes cada ronda hace la mitad de daño.' } },
+    { slot: 'arma', name: 'Corona Rota del Rey Calcinado', rarity: 3, stats: { power: 4, crit: 14, ap: 1 }, lore: 'Dejó de ser corona el día que ardió el reino.', passive: { trait: 'enrage', text: 'Por debajo de la mitad de vida haces +3 de daño.' } },
+    { slot: 'peto', name: 'Égida de Obsidiana', rarity: 3, stats: { hp: 55, armor: 5, resFire: 35 }, lore: 'Nació de un incendio y no teme a otro.', passive: { trait: 'egida', text: 'El primer golpe que recibes cada ronda hace 6 de daño menos.' } },
     { slot: 'botas', name: 'Huellas de Pavesa', rarity: 3, stats: { mp: 1, initiative: 14, resFire: 25 }, lore: 'Quien las calza no deja de moverse.', passive: { trait: 'pavesa', text: 'Al empezar tu turno, los enemigos pegados a ti se queman 1 turno.' } },
-    { slot: 'amuleto', name: 'Ojo del Volcán', rarity: 3, stats: { power: 26, hp: 26, status: 1, ap: 1 }, lore: 'Mira hacia dentro.', passive: { trait: 'volcan', text: 'Los enemigos que rematas estallan: 5 de daño a los enemigos pegados a ellos.' } },
+    { slot: 'amuleto', name: 'Ojo del Volcán', rarity: 3, stats: { power: 3, hp: 26, status: 1, ap: 1 }, lore: 'Mira hacia dentro.', passive: { trait: 'volcan', text: 'Los enemigos que rematas estallan: 5 de daño a los enemigos pegados a ellos.' } },
   ],
 };
 
@@ -24,7 +24,7 @@ export const ZONA3_EVENTS: EventDef[] = [
     id: 'forja', title: 'La Forja que Aún Arde',
     text: 'Entre los escombros, una fragua sigue encendida sin nadie que la alimente. El yunque espera.',
     options: [
-      { label: 'Templar las armas', hint: 'Todos: +15% de daño (físico y mágico). El calor cuesta el 20% de la vida actual.', apply: (run) => { for (const h of run.heroes) { boon(h, 'power', 15); losePct(h, 0.2); } return 'El acero canta. Vuestra piel, también.'; } },
+      { label: 'Templar las armas', hint: 'Todos: +2 de daño. El calor cuesta el 20% de la vida actual.', apply: (run) => { for (const h of run.heroes) { boon(h, 'power', 2); losePct(h, 0.2); } return 'El acero canta. Vuestra piel, también.'; } },
       { label: 'Reforzar las armaduras', hint: 'Todos: +2 de armadura y +15% de resistencia al fuego.', apply: (run) => { for (const h of run.heroes) { boon(h, 'armor', 2); boon(h, 'resFire', 15); } return 'Salís de la forja más pesados y más seguros.'; } },
     ],
   },
@@ -48,7 +48,7 @@ export const ZONA3_EVENTS: EventDef[] = [
     id: 'herrero', title: 'El Último Herrero',
     text: 'Un enano de ceniza sigue trabajando aunque su reino ya no exista. Os ofrece afilar algo.',
     options: [
-      { label: 'Afilar las armas', hint: 'Todos: +8% de daño (físico y mágico) y +6% de crítico.', apply: (run) => { for (const h of run.heroes) { boon(h, 'power', 8); boon(h, 'crit', 6); } return 'Os devuelve las armas sin mirarlas. Sabe lo que hace.'; } },
+      { label: 'Afilar las armas', hint: 'Todos: +1 de daño y +6% de crítico.', apply: (run) => { for (const h of run.heroes) { boon(h, 'power', 1); boon(h, 'crit', 6); } return 'Os devuelve las armas sin mirarlas. Sabe lo que hace.'; } },
       { label: 'Contratarlo', hint: 'Un guardia de forja lucha con vosotros hasta el final de la zona.', apply: (run) => { addAlly(run, 'guardia_forja'); return 'Coge su martillo y os sigue sin decir palabra.'; } },
     ],
   },

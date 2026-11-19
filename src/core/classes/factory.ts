@@ -16,7 +16,7 @@ export interface HeroBuild {
   bonus?: Array<Stats | undefined>;
 }
 
-/** Cada nivel por encima del 1 da +8% de vida base y +6% de daño. */
+/** Cada nivel por encima del 1 da +8% de vida base y +1 de daño. */
 export function makeHero(opts: HeroBuild): UnitSpec {
   const c = CLASSES[opts.cls];
   // un solo kit: el primero válido (o el Clásico)
@@ -27,7 +27,7 @@ export function makeHero(opts: HeroBuild): UnitSpec {
   const ap = Math.max(2, c.ap + b.ap), mp = Math.max(1, c.mp + b.mp);
   return {
     team: 'hero', kind: c.id, name: opts.name, owner: opts.owner, pos: opts.pos,
-    hp, maxHp: hp, shield: 0, armor: Math.max(0, c.armor + b.armor), power: c.power + 6 * (level - 1) + b.power, powerPhys: b.powerPhys, powerMagic: b.powerMagic, crit: c.crit + b.crit,
+    hp, maxHp: hp, shield: 0, armor: Math.max(0, c.armor + b.armor), power: c.power + (level - 1) + b.power, powerPhys: b.powerPhys, powerMagic: b.powerMagic, crit: c.crit + b.crit,
     ap, maxAp: ap, mp, maxMp: mp, initiative: c.initiative + b.initiative, apMod: 0, mpMod: 0, tackle: Math.max(0, c.tackle + b.tackle), dodge: Math.max(0, c.dodge + b.dodge),
     resist: { fire: b.resFire, ice: b.resIce, poison: b.resPoison, shadow: b.resShadow }, statusBonus: Math.max(0, Math.min(2, b.status)),
     statuses: {}, spells: spellsFor(opts.cls, chosen, level).map((id) => ({ id, cd: 0 })), ai: null,

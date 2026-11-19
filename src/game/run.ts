@@ -1,6 +1,6 @@
 // Estado de una partida (run): mapa, combates, botín, tienda y eventos de grupo.
 // Es lo que se sincroniza entre jugadores y lo que se guarda.
-import { FEATURES, schoolOf } from '../core/tuning';
+import { ENEMY_SCALING, FEATURES, schoolOf } from '../core/tuning';
 import { AFFIXES, CAGE_ALLY, makeEnemy } from '../content/enemies';
 import { DAILY_ASC, DAILY_MODS, DAILY_POOL, MAX_MODS, OMENS, perkLevel, type Perks } from '../content/modes';
 import { BASE_ZONES, ZONES, type BossDef, type ZoneDef } from '../content/zones';
@@ -264,7 +264,7 @@ export function newRun(code: string, seed: number, players: NewHero[], opts: Run
   for (const h of run.heroes) {
     const base = heroMaxHp(h);
     h.boon.hp = Math.round(base * (perkLevel(h.perks, 'vit') * 0.06 - (run.mods.includes('cristal') ? 0.25 : 0)));
-    if (run.mods.includes('cristal')) h.boon.power = 25;
+    if (run.mods.includes('cristal')) h.boon.power = 3;
     // maestría: los niveles que no abren un kit dan oro inicial
     const noKit = Array.from({ length: Math.min(4, h.mastery) }, (_, i) => i + 1).filter((i) => !CLASSES[h.cls].routes[i]).length;
     h.gold = perkLevel(h.perks, 'gold') * 25 + noKit * 25;
@@ -364,7 +364,7 @@ export function statBreakdown(h: HeroSave): Array<{ key: string; name: string; b
   const base = makeHero({ cls: h.cls, name: h.name, owner: h.owner, routes: h.routes, pos: { x: 0, y: 0 }, level: h.level });
   const rows: Array<[string, string, number, number]> = [
     ['hp', 'Vida', base.maxHp, spec.maxHp], ['ap', 'PA', base.maxAp, spec.maxAp], ['mp', 'PM', base.maxMp, spec.maxMp],
-    ['power', '% Daño (físico y mágico)', base.power, spec.power], [schoolOf(h.cls) === 'magic' ? 'powerMagic' : 'powerPhys', schoolOf(h.cls) === 'magic' ? '% Daño mágico' : '% Daño físico', 0, (schoolOf(h.cls) === 'magic' ? spec.powerMagic : spec.powerPhys) ?? 0], ['crit', '% Crítico', base.crit, spec.crit], ['armor', 'Armadura', base.armor, spec.armor],
+    ['power', 'Daño (físico y mágico)', base.power, spec.power], [schoolOf(h.cls) === 'magic' ? 'powerMagic' : 'powerPhys', schoolOf(h.cls) === 'magic' ? 'Daño mágico' : 'Daño físico', 0, (schoolOf(h.cls) === 'magic' ? spec.powerMagic : spec.powerPhys) ?? 0], ['crit', '% Crítico', base.crit, spec.crit], ['armor', 'Armadura', base.armor, spec.armor],
     ['initiative', 'Iniciativa', base.initiative, spec.initiative], ['tackle', 'Placaje', base.tackle ?? 0, spec.tackle ?? 0], ['dodge', 'Huida', base.dodge ?? 0, spec.dodge ?? 0],
     ...(FEATURES.resistances ? [['resFire', '% Res. fuego', 0, spec.resist.fire ?? 0], ['resIce', '% Res. hielo', 0, spec.resist.ice ?? 0], ['resPoison', '% Res. veneno', 0, spec.resist.poison ?? 0], ['resShadow', '% Res. sombra', 0, spec.resist.shadow ?? 0]] as Array<[string, string, number, number]> : []),
   ];
@@ -466,7 +466,8 @@ export function championUnit(c: Champion, pos: Pos, team: 'hero' | 'enemy', owne
   u.owner = owner;
   u.ai = owner ? null : 'champ';
   u.hp = u.maxHp = Math.round(u.maxHp * (o.hpMul ?? 1));
-  u.power = Math.round(u.power * (o.powerMul ?? 1));
+  // Némesis: sus hechizos de héroe hacen el doble de daño; los rebaja con daño negativo
+  if ((o.powerMul ?? 1) < 1) u.power -= 4;
   return u;
 }
 
@@ -510,7 +511,7 @@ export function buildFight(run: RunState): CombatSetup {
   const heroes = run.heroes.map((s, i) => {
     const u = heroSpec(s, { x: 1, y: ys[i]! });
     u.hp = Math.max(1, Math.min(u.maxHp, s.hp));
-    if (omen === 'sangre') u.power += 20;
+    if (omen === 'sangre') u.power += 2;
     if (omen === 'bendicion') u.shield = Math.round(u.maxHp * 0.2);
     if (omen === 'calma') { u.ap++; u.maxAp++; }
     return u;
@@ -521,6 +522,8 @@ export function buildFight(run: RunState): CombatSetup {
     const a = makeEnemy(id, { x: 0, y: Math.min(h - 1, i * 2 + 1) }, run.zone * 3 + Math.min(run.zoneFight, 4), 1);
     a.team = 'hero';
     a.summoner = -1;
+    // los aliados no llevan la vida ×2,75 de los enemigos
+    a.hp = a.maxHp = Math.round(a.maxHp / ENEMY_SCALING.flatHp);
     return a;
   });
   const ids = enemyList(run);
@@ -540,7 +543,7 @@ export function buildFight(run: RunState): CombatSetup {
     const enemies = ids.map((id, i) => id.startsWith('nemesis:') ? nemesisUnit(run, id.slice(8), free(w - 4, w - 1)) : makeEnemy(id, free(w - 4, w - 1), Math.min(id === bossOf(run).id || (run.kind === 'elite' && i === 0) ? 2 : 5, run.zoneFight), n, enemyOpts(run, id, i === 0)));
     if (run.kind === 'elite' && enemies[0]) { enemies[0].rank = 'elite'; enemies[0].tackle = (enemies[0].tackle ?? 0) + 3; }
     for (const e of enemies) {
-      if (omen === 'sangre') e.power += 20;
+      if (omen === 'sangre') e.power += 1;
       if (omen === 'eclipse' && !e.traits?.includes('regen')) e.traits = [...(e.traits ?? []), 'regen'];
       if (omen === 'oro') e.hp = e.maxHp = Math.round(e.maxHp * 1.25);
       if (omen === 'tormenta' || run.mods.includes('veloces')) { e.mp++; e.maxMp++; }
@@ -581,8 +584,9 @@ function enemyOpts(run: RunState, id: string, first: boolean) {
   if (run.mods.includes('llamas') && !affixes.includes('ardiente')) affixes.push('ardiente');
   return {
     affixes,
+    laterList: run.kind !== 'boss' && run.zoneFight >= 1,
     hpMul: 1 + boost + (id === bossOf(run).id ? (run.asc >= 6 ? 0.2 : 0) + (run.mods.includes('jefes') ? 0.3 : 0) : 0),
-    power: boost * 100 + (run.mods.includes('frenesi') ? 20 : 0),
+    power: boost * 5 + (run.mods.includes('frenesi') ? 1 : 0),
   };
 }
 

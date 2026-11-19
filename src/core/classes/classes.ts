@@ -44,7 +44,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     ],
   },
   mago: {
-    hidden: true, id: 'mago', name: 'Mago', hp: 42, armor: 0, power: 8, crit: 5, ap: 6, mp: 3, initiative: 14, base: ['dardo', 'chispa', 'escudo_arcano'], tackle: 2, dodge: 4,
+    hidden: true, id: 'mago', name: 'Mago', hp: 42, armor: 0, power: 1, crit: 5, ap: 6, mp: 3, initiative: 14, base: ['dardo', 'chispa', 'escudo_arcano'], tackle: 2, dodge: 4,
     routes: [
       R('base', 'Clásico', '', ['dardo', 'chispa', 'escudo_arcano'], 'El kit inicial: dos ataques y una potenciación propia.'),
       R('fuego', 'Fuego', '', ['ignicion', 'bola', 'lluvia'], 'Daño en área y Quemadura.'),
@@ -64,7 +64,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     ],
   },
   clerigo: {
-    hidden: true, id: 'clerigo', name: 'Clérigo', hp: 56, armor: 1, power: 4, crit: 5, ap: 6, mp: 3, initiative: 8, base: ['maza', 'castigo', 'fervor'], tackle: 4, dodge: 3,
+    hidden: true, id: 'clerigo', name: 'Clérigo', hp: 56, armor: 1, power: 0, crit: 5, ap: 6, mp: 3, initiative: 8, base: ['maza', 'castigo', 'fervor'], tackle: 4, dodge: 3,
     routes: [
       R('base', 'Clásico', '', ['maza', 'castigo', 'fervor'], 'El kit inicial: dos ataques y una potenciación propia.'),
       R('luz', 'Luz', '', ['maza', 'sanar', 'aura'], 'Curación directa y en área.'),
