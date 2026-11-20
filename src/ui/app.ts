@@ -317,14 +317,10 @@ function hideTip(): void {
   tipEl.style.display = 'none';
 }
 // en pantallas táctiles el tooltip sale al tocar y se quita solo
-let lastTouch = 0, tipTimer = 0;
-document.addEventListener('touchstart', () => { lastTouch = Date.now(); }, { passive: true });
-document.addEventListener('scroll', () => hideTip(), { passive: true, capture: true });
-document.addEventListener('mouseover', (e) => {
-  const el = (e.target as HTMLElement).closest<HTMLElement>('[data-tip]');
-  clearTimeout(tipTimer);
-  if (el && Date.now() - lastTouch < 800) tipTimer = window.setTimeout(hideTip, 3500);
-  if (!el) { hideTip(); return; }
+let lastTouch = 0, tipTimer = 0, pressTimer = 0, pressed = false;
+
+/** Muestra el tooltip de `el` encima (o debajo si no cabe). */
+function showTip(el: HTMLElement): void {
   tipEl.innerHTML = el.dataset.tip ?? '';
   tipEl.style.display = 'block';
   const r = el.getBoundingClientRect(), t = tipEl.getBoundingClientRect();
@@ -332,6 +328,28 @@ document.addEventListener('mouseover', (e) => {
   const above = r.top - t.height - 8;
   tipEl.style.left = `${x}px`;
   tipEl.style.top = `${above > 4 ? above : r.bottom + 8}px`;
+}
+
+// táctil: un toque normal NO enseña la descripción (para no tapar el tablero);
+// se ve manteniendo pulsado medio segundo, y ese toque largo no activa el botón
+document.addEventListener('touchstart', (e) => {
+  lastTouch = Date.now();
+  pressed = false;
+  clearTimeout(pressTimer);
+  hideTip();
+  const el = (e.target as HTMLElement).closest<HTMLElement>('[data-tip]');
+  if (el) pressTimer = window.setTimeout(() => { pressed = true; showTip(el); clearTimeout(tipTimer); tipTimer = window.setTimeout(hideTip, 4000); }, 450);
+}, { passive: true });
+document.addEventListener('touchmove', () => clearTimeout(pressTimer), { passive: true });
+document.addEventListener('touchend', () => clearTimeout(pressTimer), { passive: true });
+document.addEventListener('click', (e) => { if (pressed) { pressed = false; e.stopPropagation(); e.preventDefault(); } }, true);
+document.addEventListener('contextmenu', (e) => { if (Date.now() - lastTouch < 1000 && (e.target as HTMLElement).closest('[data-tip]')) e.preventDefault(); });
+document.addEventListener('scroll', () => hideTip(), { passive: true, capture: true });
+document.addEventListener('mouseover', (e) => {
+  if (Date.now() - lastTouch < 1000) return;
+  const el = (e.target as HTMLElement).closest<HTMLElement>('[data-tip]');
+  if (!el) { hideTip(); return; }
+  showTip(el);
 });
 
 // el reloj del turno

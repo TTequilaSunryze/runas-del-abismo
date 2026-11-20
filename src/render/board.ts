@@ -62,7 +62,7 @@ export class Board {
     canvas.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') this.hover = this.cell(e); });
     canvas.addEventListener('mouseleave', () => { if (!this.touch) this.hover = null; });
     canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); this.select(null); });
-    canvas.addEventListener('pointerdown', (e) => { this.touch = e.pointerType !== 'mouse'; });
+    window.addEventListener('pointerdown', (e) => { this.touch = e.pointerType !== 'mouse'; });
     canvas.addEventListener('click', (e) => {
       const p = this.cell(e);
       // en pantallas táctiles no hay «pasar el ratón»: el primer toque enseña la previsualización y el segundo confirma
@@ -461,10 +461,13 @@ export class Board {
     g.globalAlpha = 1;
     if (this.hover) this.tooltip(c);
     // táctil: recordatorio de que el segundo toque confirma
-    if (this.touch && this.hover && this.session.isMyTurn() && !c.over) {
-      const g = this.g, txt = this.sel ? 'Toca otra vez la casilla para lanzar' : 'Toca otra vez la casilla para moverte';
+    if (this.touch && this.session.isMyTurn() && !c.over && (this.hover || this.sel)) {
+      const d = this.sel && me ? spellOf(me, this.sel) : undefined;
+      const g = this.g, txt = this.hover ? (this.sel ? 'Toca otra vez la casilla para lanzar' : 'Toca otra vez la casilla para moverte') : `${d?.name ?? ''}: toca una casilla iluminada`;
       g.font = 'bold 16px "Pixelify Sans", ui-monospace, monospace'; g.textAlign = 'center';
-      const w = g.measureText(txt).width + 24, X = (c.w * TILE) / 2, Y = c.h * TILE - 14;
+      const w = g.measureText(txt).width + 24, X = (c.w * TILE) / 2;
+      // el aviso va abajo, salvo que tape la casilla que estás mirando
+      const Y = this.hover && this.hover.y >= c.h - 2 ? 26 : c.h * TILE - 14;
       g.fillStyle = 'rgba(10,8,6,.85)'; g.fillRect(X - w / 2, Y - 18, w, 26);
       g.strokeStyle = '#e3b04b'; g.lineWidth = 2; g.strokeRect(X - w / 2, Y - 18, w, 26);
       g.fillStyle = '#ffe2a0'; g.fillText(txt, X, Y);
