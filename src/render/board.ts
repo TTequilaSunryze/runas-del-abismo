@@ -11,6 +11,8 @@ import { PLAYER_COLORS, drawUnit, isModel } from './sprites';
 import { ANIM_FRAMES, animFor, type Anim } from './models';
 
 const TILE = 56;
+/** margen superior: los muros y los personajes sobresalen por arriba de su casilla */
+const PAD = 22;
 const STATUS_COLOR: Record<string, string> = { burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0', charm: '#ff9ad8', vuln: '#c9a0ff', bleed: '#e03040', hobble: '#9ad0e8', guarded: '#7fe0b0', deathmark: '#ff3a4a', verdugo: '#ff8a30', frenzy: '#ff5030', orbita: '#b07cff', chained: '#a0a8c0' };
 export const STATUS_NAME: Record<string, string> = { burn: 'Quemadura', poison: 'Veneno', slow: 'Ralentizado', stun: 'Aturdido', mark: 'Marcado', empower: 'Potenciado', reach: 'Alcance+', invis: 'Invisible', exposed: 'Expuesto', charm: 'Encantado', vuln: 'Vulnerable', bleed: 'Sangrado', hobble: 'Atrapado', guarded: 'Protegido', deathmark: 'Marca de la muerte', verdugo: 'Presa', frenzy: 'Frenesí', orbita: 'Órbita', chained: 'Encadenado' };
 
@@ -91,7 +93,7 @@ export class Board {
     const c = this.c;
     if (!c) return null;
     const r = this.canvas.getBoundingClientRect();
-    const p = { x: Math.floor(((e.clientX - r.left) / r.width) * c.w), y: Math.floor(((e.clientY - r.top) / r.height) * c.h) };
+    const p = { x: Math.floor(((e.clientX - r.left) / r.width) * c.w), y: Math.floor((((e.clientY - r.top) / r.height) * (c.h * TILE + PAD) - PAD) / TILE) };
     return p.x >= 0 && p.y >= 0 && p.x < c.w && p.y < c.h ? p : null;
   }
 
@@ -189,39 +191,127 @@ export class Board {
     }
   }
 
+  /** Suelo en damero con ruido pixel-art, abismos, raíces, fuego y la sombra que proyectan los muros. */
+  private drawFloor(c: CombatState, zone: (typeof ZONES)[number], now: number): void {
+    const g = this.g;
+    const wall = new Set(c.obstacles), pit = new Set(c.abyss ?? []);
+    for (let y = 0; y < c.h; y++)
+      for (let x = 0; x < c.w; x++) {
+        const X = x * TILE, Y = y * TILE, k = `${x},${y}`;
+        if (pit.has(k)) {
+          // abismo: hueco negro con el borde de piedra iluminado y algún brillo lejano
+          const gr = g.createLinearGradient(0, Y, 0, Y + TILE);
+          gr.addColorStop(0, '#000'); gr.addColorStop(1, '#0a0614');
+          g.fillStyle = gr; g.fillRect(X, Y, TILE, TILE);
+          if (!pit.has(`${x},${y - 1}`)) { g.fillStyle = zone.rock[0]; g.fillRect(X, Y, TILE, 9); g.fillStyle = zone.rock[1]; g.fillRect(X, Y, TILE, 3); g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(X, Y + 9, TILE, 6); }
+          const tw = 0.3 + 0.3 * Math.sin(now / 700 + x * 3 + y);
+          g.fillStyle = `rgba(150,90,255,${tw * 0.5})`; g.fillRect(X + ((x * 17 + y * 7) % 40) + 6, Y + 26 + ((x * 5) % 18), 2, 2);
+          continue;
+        }
+        // damero: casillas claras y oscuras con ruido fijo
+        const light = (x + y) % 2 === 0;
+        g.fillStyle = zone.floor[light ? 0 : 1]!;
+        g.fillRect(X, Y, TILE, TILE);
+        // damero marcado: las casillas oscuras se oscurecen y las claras reciben un poco de luz
+        g.fillStyle = light ? 'rgba(255,240,210,.05)' : 'rgba(0,0,0,.22)'; g.fillRect(X, Y, TILE, TILE);
+        const h = (x * 73856093) ^ (y * 19349663);
+        for (let i = 0; i < 10; i++) {
+          const r = Math.imul(h ^ (i * 2654435761), 2246822519) >>> 0;
+          g.fillStyle = (r & 1) ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.18)';
+          g.fillRect(X + 2 + ((r >>> 4) % (TILE - 6)), Y + 2 + ((r >>> 12) % (TILE - 6)), 4, 4);
+        }
+        // juntas de las losas: luz arriba-izquierda, sombra abajo-derecha
+        g.fillStyle = 'rgba(255,255,255,.06)'; g.fillRect(X, Y, TILE, 2); g.fillRect(X, Y, 2, TILE);
+        g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(X, Y + TILE - 2, TILE, 2); g.fillRect(X + TILE - 2, Y, 2, TILE);
+        if ((h & 15) === 3) { g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(X + 10 + ((h >> 6) & 15), Y + 18 + ((h >> 10) & 15), 12, 2); g.fillRect(X + 20 + ((h >> 6) & 15), Y + 20 + ((h >> 10) & 15), 2, 7); }
+        // sombra proyectada por el muro de arriba
+        if (wall.has(`${x},${y - 1}`)) { const sg = g.createLinearGradient(0, Y, 0, Y + TILE * 0.45); sg.addColorStop(0, 'rgba(0,0,0,.55)'); sg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = sg; g.fillRect(X, Y, TILE, TILE * 0.45); }
+      }
+    // raíces venenosas: zarzas violáceas con espinas verdes
+    for (const k of c.roots ?? []) {
+      const [x, y] = k.split(',').map(Number) as [number, number];
+      const X = x * TILE, Y = y * TILE;
+      g.strokeStyle = '#2a1028'; g.lineWidth = 7;
+      g.beginPath(); g.moveTo(X + 6, Y + 40); g.bezierCurveTo(X + 18, Y + 18, X + 34, Y + 46, X + 50, Y + 16); g.stroke();
+      g.strokeStyle = '#b04aa0'; g.lineWidth = 3;
+      g.beginPath(); g.moveTo(X + 6, Y + 40); g.bezierCurveTo(X + 18, Y + 18, X + 34, Y + 46, X + 50, Y + 16); g.stroke();
+      g.beginPath(); g.moveTo(X + 10, Y + 12); g.quadraticCurveTo(X + 26, Y + 30, X + 20, Y + 50); g.stroke();
+      g.fillStyle = `rgba(140,255,120,${0.6 + 0.3 * Math.sin(now / 300 + x)})`;
+      for (const [a, b] of [[16, 26], [30, 36], [42, 22], [22, 44]] as const) g.fillRect(X + a, Y + b, 3, 3);
+    }
+    // fuego en el suelo (brasero roto)
+    for (const [k, t] of Object.entries(c.fire ?? {})) {
+      const [x, y] = k.split(',').map(Number) as [number, number];
+      const X = x * TILE, Y = y * TILE;
+      g.fillStyle = 'rgba(255,90,20,.22)'; g.fillRect(X + 2, Y + 2, TILE - 4, TILE - 4);
+      for (let i = 0; i < 4; i++) {
+        const fx = X + 10 + i * 11, fl = 10 + 6 * Math.sin(now / 90 + i * 1.7 + x);
+        g.fillStyle = '#ff5a1a'; g.beginPath(); g.moveTo(fx - 5, Y + TILE - 8); g.quadraticCurveTo(fx, Y + TILE - 8 - fl * 2, fx + 5, Y + TILE - 8); g.fill();
+        g.fillStyle = '#ffd24a'; g.beginPath(); g.moveTo(fx - 2, Y + TILE - 8); g.quadraticCurveTo(fx, Y + TILE - 8 - fl, fx + 2, Y + TILE - 8); g.fill();
+      }
+      g.fillStyle = '#fff3c0'; g.font = 'bold 11px monospace'; g.textAlign = 'left'; g.fillText(String(t), X + TILE - 13, Y + 13);
+    }
+  }
+
+  /** Muro con volumen: cara superior iluminada (sobresale hacia arriba) y cara frontal de ladrillo más oscura. */
+  private drawWall(c: CombatState, zone: (typeof ZONES)[number], x: number, y: number): void {
+    const g = this.g, X = x * TILE, Y = y * TILE, lift = Math.round(TILE * 0.4);
+    const front = !c.obstacles.includes(`${x},${y + 1}`);
+    const topY = Y - lift, topH = TILE - 2;
+    // cara frontal de ladrillo (la que mira hacia abajo, si no hay otro muro delante)
+    if (front) {
+      const fy = topY + topH, fh = Y + TILE - fy;
+      g.fillStyle = zone.rock[2]; g.fillRect(X, fy, TILE, fh);
+      g.fillStyle = 'rgba(0,0,0,.28)';
+      for (let r = 0; r < fh; r += 8) {
+        g.fillRect(X, fy + r, TILE, 1);
+        const off = (r / 8) % 2 ? 0 : 14;
+        for (let bx = off; bx < TILE; bx += 28) g.fillRect(X + bx, fy + r, 1, 8);
+      }
+      g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(X, Y + TILE - 3, TILE, 3);
+    }
+    // cara superior: más clara, biselada y con grietas
+    g.fillStyle = zone.rock[1]; g.fillRect(X, topY, TILE, topH);
+    g.fillStyle = zone.rock[0]; g.fillRect(X + 3, topY + 3, TILE - 6, topH - 7);
+    g.fillStyle = 'rgba(255,255,255,.14)'; g.fillRect(X + 3, topY + 3, TILE - 6, 3);
+    const h = (x * 92821) ^ (y * 68917);
+    g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(X + 8 + (h & 15), topY + 12 + ((h >> 4) & 15), 10, 2); g.fillRect(X + 22 + ((h >> 8) & 15), topY + 20 + ((h >> 12) & 7), 2, 8);
+    g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 2; g.strokeRect(X + 1, topY + 1, TILE - 2, (front ? Y + TILE : topY + topH) - topY - 2);
+  }
+
+  /** Brasero: cuenco de hierro con llamas; se rompe con un golpe y deja una línea de fuego. */
+  private drawBrazier(x: number, y: number, now: number): void {
+    const g = this.g, cx = (x + 0.5) * TILE, base = (y + 1) * TILE - 8;
+    const sh = g.createRadialGradient(cx, base, 1, cx, base, TILE * 0.35); sh.addColorStop(0, 'rgba(0,0,0,.55)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = sh; g.beginPath(); g.ellipse(cx, base, TILE * 0.35, 8, 0, 0, 6.3); g.fill();
+    const glow = g.createRadialGradient(cx, base - 30, 2, cx, base - 30, TILE * 0.7);
+    glow.addColorStop(0, 'rgba(255,140,40,.35)'); glow.addColorStop(1, 'rgba(255,140,40,0)');
+    g.fillStyle = glow; g.beginPath(); g.arc(cx, base - 30, TILE * 0.7, 0, 6.3); g.fill();
+    g.fillStyle = '#2a2420'; g.fillRect(cx - 3, base - 18, 6, 16); g.fillRect(cx - 12, base - 3, 24, 4);
+    g.fillStyle = '#4a4038'; g.beginPath(); g.moveTo(cx - 16, base - 24); g.lineTo(cx + 16, base - 24); g.lineTo(cx + 10, base - 14); g.lineTo(cx - 10, base - 14); g.fill();
+    g.fillStyle = '#8a7a68'; g.fillRect(cx - 16, base - 26, 32, 3);
+    for (let i = 0; i < 3; i++) {
+      const fx = cx - 9 + i * 9, fl = 12 + 5 * Math.sin(now / 80 + i * 2 + x);
+      g.fillStyle = '#ff5a1a'; g.beginPath(); g.moveTo(fx - 6, base - 25); g.quadraticCurveTo(fx, base - 25 - fl * 1.6, fx + 6, base - 25); g.fill();
+      g.fillStyle = '#ffd24a'; g.beginPath(); g.moveTo(fx - 3, base - 25); g.quadraticCurveTo(fx, base - 25 - fl, fx + 3, base - 25); g.fill();
+    }
+  }
+
   private draw(): void {
     const c = this.c;
     const g = this.g;
     if (!c) return;
-    if (this.canvas.width !== c.w * TILE || this.canvas.height !== c.h * TILE) {
+    if (this.canvas.width !== c.w * TILE || this.canvas.height !== c.h * TILE + PAD) {
       this.canvas.width = c.w * TILE;
-      this.canvas.height = c.h * TILE;
+      this.canvas.height = c.h * TILE + PAD;
       this.shown.clear();
     }
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.fillStyle = '#07050a'; g.fillRect(0, 0, this.canvas.width, PAD);
+    g.setTransform(1, 0, 0, 1, 0, PAD);
     const now = performance.now();
     const zone = ZONES[this.session.run?.zone ?? 0] ?? ZONES[0]!;
-    for (let y = 0; y < c.h; y++)
-      for (let x = 0; x < c.w; x++) {
-        g.fillStyle = zone.floor[(x + y) % 2]!;
-        g.fillRect(x * TILE, y * TILE, TILE, TILE);
-        g.fillStyle = 'rgba(0,0,0,.28)';
-        g.fillRect(x * TILE, y * TILE, TILE, 2);
-        g.fillRect(x * TILE, y * TILE, 2, TILE);
-        // losas agrietadas y algún hueso, siempre en el mismo sitio
-        const h = (x * 73856093) ^ (y * 19349663);
-        g.fillStyle = 'rgba(0,0,0,.3)';
-        g.fillRect(x * TILE + 6 + (h & 31), y * TILE + 8 + ((h >> 5) & 31), 8, 3);
-        g.fillRect(x * TILE + 10 + ((h >> 10) & 31), y * TILE + 12 + ((h >> 15) & 31), 3, 3);
-        if ((h & 7) === 3) { g.fillStyle = zone.rock[2]; g.fillRect(x * TILE + 14 + ((h >> 8) & 15), y * TILE + 34, 10, 3); g.fillRect(x * TILE + 13 + ((h >> 8) & 15), y * TILE + 33, 2, 5); }
-      }
-    for (const k of c.obstacles) {
-      const [x, y] = k.split(',').map(Number) as [number, number];
-      const X = x * TILE, Y = y * TILE;
-      g.fillStyle = '#120e1a'; g.fillRect(X + 5, Y + TILE - 14, TILE - 10, 10);
-      g.fillStyle = zone.rock[0]; g.fillRect(X + 8, Y + 8, TILE - 16, TILE - 20);
-      g.fillStyle = zone.rock[1]; g.fillRect(X + 8, Y + 8, TILE - 16, 7);
-      g.fillStyle = zone.rock[2]; g.fillRect(X + TILE - 17, Y + 15, 9, TILE - 27);
-    }
+    this.drawFloor(c, zone, now);
     const me0 = this.session.myUnit();
     for (const k of c.puddles ?? []) {
       const [x, y] = k.split(',').map(Number) as [number, number];
@@ -289,9 +379,14 @@ export class Board {
     }
     for (const k of c.traps ?? []) {
       const [x, y] = k.split(',').map(Number) as [number, number];
-      g.fillStyle = '#3a1820'; g.fillRect(x * TILE + 6, y * TILE + 6, TILE - 12, TILE - 12);
-      g.fillStyle = '#c9c0d8';
-      for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) { const px = x * TILE + 13 + i * 13, py = y * TILE + 15 + j * 13; g.beginPath(); g.moveTo(px, py + 5); g.lineTo(px + 4, py - 5); g.lineTo(px + 8, py + 5); g.fill(); }
+      // púas: placa hundida con borde rojo encendido y pinchos con brillo
+      g.fillStyle = '#1a0c10'; g.fillRect(x * TILE + 5, y * TILE + 5, TILE - 10, TILE - 10);
+      g.strokeStyle = `rgba(255,80,70,${0.55 + 0.25 * Math.sin(now / 240 + x + y)})`; g.lineWidth = 2; g.strokeRect(x * TILE + 5, y * TILE + 5, TILE - 10, TILE - 10);
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+        const px = x * TILE + 12 + i * 13, py = y * TILE + 15 + j * 13;
+        g.fillStyle = '#8a8098'; g.beginPath(); g.moveTo(px, py + 5); g.lineTo(px + 4, py - 6); g.lineTo(px + 8, py + 5); g.fill();
+        g.fillStyle = '#f0ecff'; g.fillRect(px + 3, py - 4, 2, 4);
+      }
     }
     const me = this.session.myUnit();
     const cur = current(c);
@@ -320,10 +415,20 @@ export class Board {
           for (let y = 0; y < c.h; y++) for (let x = 0; x < c.w; x++) if ((def.square ? Math.max(Math.abs(x - this.hover.x), Math.abs(y - this.hover.y)) : dist({ x, y }, this.hover)) <= def.area) fill({ x, y }, 'rgba(255,60,60,.2)');
         }
       } else {
-        for (const [k, cost] of reachable(c, me.pos, usableMp(c, me)).cost) {
+        const reach = reachable(c, me.pos, usableMp(c, me));
+        for (const [k, cost] of reach.cost) {
           if (!cost) continue;
           const [x, y] = k.split(',').map(Number) as [number, number];
-          fill({ x, y }, 'rgba(88,166,255,.2)');
+          fill({ x, y }, 'rgba(120,255,170,.24)');
+          // borde iluminado en el contorno de la zona de movimiento
+          g.strokeStyle = 'rgba(200,255,215,.95)'; g.lineWidth = 3;
+          const edge = (nx: number, ny: number): boolean => !reach.cost.has(`${nx},${ny}`) && !(nx === me.pos.x && ny === me.pos.y);
+          g.beginPath();
+          if (edge(x, y - 1)) { g.moveTo(x * TILE + 1, y * TILE + 1); g.lineTo((x + 1) * TILE - 1, y * TILE + 1); }
+          if (edge(x, y + 1)) { g.moveTo(x * TILE + 1, (y + 1) * TILE - 1); g.lineTo((x + 1) * TILE - 1, (y + 1) * TILE - 1); }
+          if (edge(x - 1, y)) { g.moveTo(x * TILE + 1, y * TILE + 1); g.lineTo(x * TILE + 1, (y + 1) * TILE - 1); }
+          if (edge(x + 1, y)) { g.moveTo((x + 1) * TILE - 1, y * TILE + 1); g.lineTo((x + 1) * TILE - 1, (y + 1) * TILE - 1); }
+          g.stroke();
           // zona de placaje: salir de aquí costará PM (rojo translúcido)
           if (c.units.some((o) => o.team !== me.team && o.hp > 0 && o.ai !== 'pillar' && (o.tackle ?? 0) > 0 && !o.statuses.invis && Math.abs(o.pos.x - x) + Math.abs(o.pos.y - y) === 1)) fill({ x, y }, 'rgba(220,60,50,.16)');
         }
@@ -346,7 +451,12 @@ export class Board {
     if (this.hover) { g.strokeStyle = 'rgba(255,255,255,.35)'; g.lineWidth = 2; g.strokeRect(this.hover.x * TILE + 2, this.hover.y * TILE + 2, TILE - 4, TILE - 4); }
 
     const heroIdx = teamIdx(c);
+    // 2.5D: muros y braseros se dibujan por filas junto a las unidades, para que lo de delante tape lo de detrás
+    const props = [...c.obstacles].map((k) => { const [x, y] = k.split(',').map(Number) as [number, number]; return { x, y, brazier: (c.braziers ?? []).includes(k) }; }).sort((a, b) => a.y - b.y || a.x - b.x);
+    let pi = 0;
+    const flushProps = (row: number): void => { while (pi < props.length && props[pi]!.y <= row) { const p = props[pi++]!; if (p.brazier) this.drawBrazier(p.x, p.y, now); else this.drawWall(c, zone, p.x, p.y); } };
     for (const u of c.units.filter(alive).sort((a, b) => a.pos.y - b.pos.y)) {
+      flushProps(u.pos.y);
       // posición mostrada: se acerca suavemente a la real
       const s = this.shown.get(u.id) ?? { ...u.pos };
       s.x += (u.pos.x - s.x) * 0.25; s.y += (u.pos.y - s.y) * 0.25;
@@ -355,7 +465,10 @@ export class Board {
       this.shown.set(u.id, s);
       const cx = (s.x + 0.5) * TILE, by = (s.y + 1) * TILE - 6;
       if (cur?.id === u.id) { g.strokeStyle = u.team === 'hero' ? '#f2c14e' : '#e0475b'; g.lineWidth = 3; g.beginPath(); g.ellipse(cx, by - 2, TILE * 0.36, 8, 0, 0, 6.3); g.stroke(); }
-      g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(cx, by - 2, TILE * 0.3, 6, 0, 0, 6.3); g.fill();
+      // sombra bajo los pies (más oscura en el centro)
+      const sh = g.createRadialGradient(cx, by - 1, 1, cx, by - 1, TILE * 0.36);
+      sh.addColorStop(0, 'rgba(0,0,0,.6)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = sh; g.beginPath(); g.ellipse(cx, by - 1, TILE * 0.36, 9, 0, 0, 6.3); g.fill();
       const moving = s.x !== u.pos.x || s.y !== u.pos.y;
       const model = isModel(u.kind);
       // modelos animados: hechizo en curso, andar o reposo (sin el balanceo de los sprites antiguos)
@@ -385,7 +498,7 @@ export class Board {
       }
       // Furia alta: el Bárbaro arde
       if ((u.fury ?? 0) >= 60) { g.fillStyle = `rgba(255,70,30,${0.12 + ((u.fury ?? 0) / 100) * 0.18})`; g.beginPath(); g.arc(cx, by - TILE * 0.4, TILE * 0.5, 0, 6.3); g.fill(); }
-      drawUnit(g, u.kind, u.team, heroIdx.get(u.id) ?? 0, cx + (lg ? lg.dx * swing * TILE * 0.3 : 0), by + bob + (lg ? lg.dy * swing * TILE * 0.3 : 0), TILE,
+      drawUnit(g, u.kind, u.team, heroIdx.get(u.id) ?? 0, cx + (lg ? lg.dx * swing * TILE * 0.3 : 0), by + bob + (lg ? lg.dy * swing * TILE * 0.3 : 0), Math.round(TILE * 1.18),
         { flash: (this.flash.get(u.id) ?? 0) > now, swing, flip: def0 ? left : !left, alpha: u.statuses.invis ? 0.4 : u.ai === 'decoy' ? 0.55 : 1, anim, frame });
       // Marca de la muerte: calavera con el daño guardado
       const dmk = u.statuses.deathmark;
@@ -394,8 +507,9 @@ export class Board {
         g.fillStyle = '#1a0610'; g.fillRect(mx - 9, my - 9, 18 + String(dmk.stacks).length * 7, 16);
         g.fillStyle = '#ff3a4a'; g.font = 'bold 12px ui-monospace, monospace'; g.textAlign = 'left'; g.fillText(`☠${dmk.stacks}`, mx - 7, my + 3);
       }
-      this.bars(u, cx, s.y * TILE + 2, heroIdx.get(u.id));
+      this.bars(u, cx, s.y * TILE - 8, heroIdx.get(u.id));
     }
+    flushProps(c.h);
     // caídos: se desvanecen hacia arriba
     this.ghosts = this.ghosts.filter((d) => now - d.t0 < (isModel(d.kind) ? DEATH_MS : 600));
     for (const d of this.ghosts) {
