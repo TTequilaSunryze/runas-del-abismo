@@ -28,7 +28,7 @@ export function sysButtons(): string {
 }
 
 export function hpBar(hp: number, max: number, shield = 0): string {
-  return `<span class="hp"><i style="width:${Math.max(0, Math.min(100, (hp / max) * 100))}%"></i>${shield ? `<u style="width:${Math.min(100, (shield / max) * 100)}%"></u>` : ''}<b>${hp}/${max}</b></span>`;
+  return `<span class="hp"><i style="width:${Math.max(0, Math.min(100, (hp / max) * 100))}%"></i>${shield ? `<u style="width:${Math.min(100, (shield / max) * 100)}%"></u>` : ''}<b>${hp}/${max}${max - hp > 0 ? ` <span class="miss">(−${max - hp})</span>` : ''}</b></span>`;
 }
 
 export function topBar(run: RunState): string {

@@ -204,15 +204,41 @@ export function shopScreen(): void {
     ${''}<div class="lootcard"><div class="row"><div class="cell big"><span class="emo">🧪</span></div><div><b>Poción de vida</b><div class="sm">Recupera el ${POTION_HEAL * 100}% de tu vida máxima.</div></div></div><button class="pri" data-act="potion" ${!h || h.gold < POTION_PRICE || h.hp >= heroMaxHp(h) ? 'disabled' : ''}>Beber · ${POTION_PRICE} 💰</button></div></div>${pendingRows(run)}`, true);
 }
 
+/** Ilustración del evento: icono y color de luz según de qué trate. */
+function eventArt(key: string): { i: string; c: string } {
+  const k = key.toLowerCase();
+  const table: Array<[RegExp, string, string]> = [
+    [/fuente|manantial|agua|lago|pozo/, '⛲', '#5fb4ff'], [/fuego|brasa|llama|volc|ceniza|forja|horno/, '🔥', '#ff7a3a'], [/altar|santuario|vela|oraci|templo/, '🕯️', '#ffd27a'],
+    [/espejo|reflej/, '🪞', '#b9a6ff'], [/hongo|seta|espora|semilla|raíz|bosque|árbol|roble/, '🍄', '#7fd36a'], [/cofre|tesoro|oro|mercader|comerci/, '💰', '#ffcc4d'],
+    [/espíritu|fantasma|alma|eco|susurro/, '👻', '#9fe0ff'], [/libro|pergamino|runa|oráculo|biblioteca/, '📜', '#e8c27a'], [/sangre|pacto|demonio|maldi/, '🩸', '#ff4a5a'],
+    [/prision|jaula|cadena|preso/, '⛓️', '#c0c0c0'], [/lobo|bestia|criatura|nido/, '🐺', '#d0a070'], [/estatua|ídolo|reliquia/, '🗿', '#d8c8a0'],
+  ];
+  for (const [re, i, c] of table) if (re.test(k)) return { i, c };
+  return { i: '🔮', c: '#c58aff' };
+}
+
+/** Pista de una opción partida en ganancias (verde) y riesgos (rojo). */
+function outcomeList(hint: string): string {
+  const parts = hint.replace(/^Todos:\s*/i, '').replace(/^Cada uno:\s*/i, '').split(/,?\s+pero\s+|\.\s+|;\s+|,\s+(?=(?:pierde|pierden|cuesta|te cuesta|recibe|reciben|-|−))/i).map((x) => x.trim().replace(/\.$/, '')).filter(Boolean);
+  const risky = /pierde|pierden|pierdes|cuesta|−\d|-\d|menos|daño a|maldi|veneno a|riesgo|puede salir mal|nada/i;
+  return `<ul>${parts.map((p) => `<li class="${risky.test(p) ? 'down' : 'up'}">${esc(p[0]!.toUpperCase() + p.slice(1))}</li>`).join('')}</ul>`;
+}
+
 export function eventScreen(): void {
   const s = ui.session!, run = s.run!, ev = run.event!;
   const def = eventDef(run)!;
   const voters = (i: number): string => run.heroes.filter((h) => ev.votes[h.owner] === i).map((h) => esc(h.name)).join(', ');
   const canVote = !!mine(run) && !ev.result;
-  frame(run, `<h2>❓ ${esc(def.title)}</h2><div class="panel note">${esc(def.text)}</div>
-  <div class="dim sm">Evento de grupo: decide la mayoría y afecta a todos. En empate decide el anfitrión.</div>
-  ${ev.result ? `<div class="panel note"><b>${esc(ev.result)}</b></div>` : `<div class="cards c2">${def.options.map((o, i) => `<button class="pick ${ev.votes[ui.myId] === i ? 'on' : ''}" data-act="vote" data-id="${i}" ${canVote ? '' : 'disabled'}><b>${esc(o.label)}</b><span class="dim sm">${esc(o.hint)}</span><span class="pill sm">${voters(i) ? `Votos: ${voters(i)}` : 'Sin votos'}</span></button>`).join('')}</div>`}
-  ${ev.result ? advanceBar(run, 'Continuar →') : `<div class="row">${s.isHost ? `<button data-act="resolve" ${Object.keys(ev.votes).length ? '' : 'disabled'}>Cerrar la votación ya</button>` : '<span class="dim sm">Votad todos para continuar.</span>'}</div>`}${pendingRows(run)}`);
+  const art = eventArt(def.id + ' ' + def.title);
+  frame(run, `<div class="panel evwin">
+  <div class="evart" style="--evc:${art.c}"><span>${art.i}</span></div>
+  <h2 class="evtitle">${esc(def.title)}</h2>
+  <p class="evtext">${esc(def.text)}</p>
+  ${ev.result ? `<div class="panel note evresult"><b>${esc(ev.result)}</b></div>${advanceBar(run, 'Continuar →')}` : `
+  <div class="dim sm evhint">Evento de grupo: decide la mayoría y afecta a todos. En empate decide el anfitrión.</div>
+  <div class="evopts">${def.options.map((o, i) => `<button class="evcard ${ev.votes[ui.myId] === i ? 'on' : ''}" data-act="vote" data-id="${i}" ${canVote ? '' : 'disabled'}><b>${esc(o.label)}</b>${outcomeList(o.hint)}<span class="votes">${voters(i) ? `🗳️ ${voters(i)}` : 'Sin votos'}</span></button>`).join('')}</div>
+  <div class="row">${s.isHost ? `<button data-act="resolve" ${Object.keys(ev.votes).length ? '' : 'disabled'}>Cerrar la votación ya</button>` : '<span class="dim sm">Votad todos para continuar.</span>'}</div>`}
+  </div>${pendingRows(run)}`);
 }
 
 export function endScreen(): void {

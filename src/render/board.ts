@@ -317,6 +317,8 @@ export class Board {
           if (!cost) continue;
           const [x, y] = k.split(',').map(Number) as [number, number];
           fill({ x, y }, 'rgba(88,166,255,.2)');
+          // zona de placaje: salir de aquí costará PM (rojo translúcido)
+          if (c.units.some((o) => o.team !== me.team && o.hp > 0 && o.ai !== 'pillar' && (o.tackle ?? 0) > 0 && !o.statuses.invis && Math.abs(o.pos.x - x) + Math.abs(o.pos.y - y) === 1)) fill({ x, y }, 'rgba(220,60,50,.16)');
         }
         // previsualización del camino: en rojo las casillas en las que el placaje te quitará PM al salir
         const pv = this.hover ? movePreview(c, me, this.hover) : null;
@@ -459,14 +461,25 @@ export class Board {
   private bars(u: Unit, cx: number, top: number, heroIdx: number | undefined): void {
     const g = this.g, w = TILE - 14, x = cx - w / 2;
     if (this.showBars) {
-    g.fillStyle = '#000'; g.fillRect(x - 1, top - 1, w + 2, 7);
-    g.fillStyle = u.team === 'hero' ? '#4cb85a' : '#e0475b'; g.fillRect(x, top, (w * u.hp) / u.maxHp, 5);
-    if (u.shield > 0) { g.fillStyle = '#58a6ff'; g.fillRect(x, top + 5, Math.min(w, (w * u.shield) / u.maxHp), 3); }
+    // barra con borde de hierro, vida actual/total centrada y la vida que falta en rojo oscuro
+    const bh = 10;
+    g.fillStyle = '#0a0806'; g.fillRect(x - 2, top - 2, w + 4, bh + 4);
+    g.fillStyle = '#5d544b'; g.fillRect(x - 1, top - 1, w + 2, bh + 2);
+    g.fillStyle = '#2a0f0c'; g.fillRect(x, top, w, bh);
+    const hw = Math.max(0, (w * u.hp) / u.maxHp);
+    g.fillStyle = u.team === 'hero' ? '#3f9a4a' : '#c23b3b'; g.fillRect(x, top, hw, bh);
+    g.fillStyle = u.team === 'hero' ? '#6fd07a' : '#ef6a5e'; g.fillRect(x, top, hw, 3);
+    if (u.shield > 0) { g.fillStyle = '#6aa9ff'; g.fillRect(x, top + bh - 3, Math.min(w, (w * u.shield) / u.maxHp), 3); }
+    g.font = 'bold 9px "Pixelify Sans", ui-monospace, monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const label = `${u.hp}/${u.maxHp}${u.shield > 0 ? ` +${u.shield}` : ''}`;
+    g.lineWidth = 3; g.strokeStyle = '#000'; g.strokeText(label, cx, top + bh / 2 + 0.5);
+    g.fillStyle = '#fff'; g.fillText(label, cx, top + bh / 2 + 0.5);
+    g.textBaseline = 'alphabetic';
     if (u.fury !== undefined) { g.fillStyle = '#000'; g.fillRect(x - 1, top - 6, w + 2, 5); g.fillStyle = '#ff6a20'; g.fillRect(x, top - 5, (w * u.fury) / 100, 3); }
     if (u.essence !== undefined) for (let i = 0; i < essenceNeed(u); i++) { g.fillStyle = i < u.essence ? '#ff8ad0' : '#3a2040'; g.fillRect(x + i * 7, top - 6, 5, 4); }
     }
     let ix = x;
-    for (const k of Object.keys(u.statuses)) { g.fillStyle = STATUS_COLOR[k] ?? '#fff'; g.fillRect(ix, top + 9, 6, 6); ix += 8; }
+    for (const k of Object.keys(u.statuses)) { g.fillStyle = STATUS_COLOR[k] ?? '#fff'; g.fillRect(ix, top + 14, 6, 6); ix += 8; }
     if (heroIdx !== undefined) {
       g.font = '12px ui-monospace, monospace'; g.textAlign = 'center';
       g.lineWidth = 3; g.strokeStyle = '#000'; g.strokeText(u.name, cx, top + TILE - 2);
