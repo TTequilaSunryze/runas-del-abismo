@@ -24,7 +24,7 @@ export function volumeControl(): string {
 export function sysButtons(): string {
   const s = ui.session;
   const warn = s?.isHost && s.t.kind === 'online' ? '¿Seguro? Termina para todos' : '¿Seguro? Pulsa otra vez';
-  return `${ui.screen === 'combat' ? `<button class="sq ${ui.hpBars ? '' : 'off'}" data-act="bars" ${tip('Mostrar u ocultar las barras de vida (V)')}>❤️</button>` : ''}${ui.session?.run && !ui.session.run.arena ? `<button class="sq" data-act="map" ${tip('Mapa del acto (M)')}>🗺️ Mapa</button>` : ''}${ui.session?.run && !ui.session.run.arena ? `<button class="sq" data-act="stats" ${tip('Ficha del personaje: estadísticas totales (S)')}>📊</button>` : ''}${volumeControl()}<button data-act="leave" class="${ui.leaveArmed ? 'danger' : ''}">${ui.leaveArmed ? warn : 'Abandonar'}</button>`;
+  return `${ui.screen !== 'combat' && ui.session?.run && !ui.session.run.arena ? `<button class="sq mobonly ${ui.sideOpen ? 'on' : ''}" data-act="side" ${tip('Equipo, hechizos y grupo')}>🎒</button>` : ''}${ui.screen === 'combat' ? `<button class="sq ${ui.hpBars ? '' : 'off'}" data-act="bars" ${tip('Mostrar u ocultar las barras de vida (V)')}>❤️</button>` : ''}${ui.session?.run && !ui.session.run.arena ? `<button class="sq" data-act="map" ${tip('Mapa del acto (M)')}>🗺️<span class="deskonly"> Mapa</span></button>` : ''}${ui.session?.run && !ui.session.run.arena ? `<button class="sq" data-act="stats" ${tip('Ficha del personaje: estadísticas totales (S)')}>📊</button>` : ''}${volumeControl()}<button data-act="leave" class="${ui.leaveArmed ? 'danger' : ''}">${ui.leaveArmed ? warn : 'Abandonar'}</button>`;
 }
 
 export function hpBar(hp: number, max: number, shield = 0): string {
@@ -277,7 +277,7 @@ export function mapSvg(run: RunState, pick = false): string {
     const label = can ? `<text x="${x}" y="${y + 36}" text-anchor="middle" font-size="12" fill="#f2c14e">${esc(NODE_NAME[k].replace(/^\S+\s/, ''))}</text>` : '';
     return `<g ${click} opacity="${l < run.step && !done ? 0.35 : 1}"><title>${esc(NODE_NAME[k])}</title><circle cx="${x}" cy="${y}" r="${can ? 24 : 20}" fill="${can ? '#3a2c1a' : '#241a33'}" stroke="${stroke}" stroke-width="${can || done ? 3 : 2}"/><text x="${x}" y="${y + 7}" text-anchor="middle" font-size="20" pointer-events="none">${NODE_ICON[k]}</text>${label}</g>`;
   }).join('')).join('');
-  return `<svg class="actmap" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${lines}${nodes}</svg>`;
+  return `<div class="mapscroll"><svg class="actmap" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${lines}${nodes}</svg></div>`;
 }
 
 const mapLegend = (): string => (['combat', 'elite', 'event', 'shrine', 'shop', 'treasure', 'rest', 'boss'] as const).map((k) => `<span class="chip">${NODE_ICON[k]} ${esc(NODE_NAME[k].replace(/^\S+\s/, ''))}</span>`).join('');

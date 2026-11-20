@@ -59,10 +59,17 @@ export class Board {
 
   constructor(private canvas: HTMLCanvasElement, private session: Session) {
     this.g = canvas.getContext('2d')!;
-    canvas.addEventListener('mousemove', (e) => (this.hover = this.cell(e)));
-    canvas.addEventListener('mouseleave', () => (this.hover = null));
+    canvas.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') this.hover = this.cell(e); });
+    canvas.addEventListener('mouseleave', () => { if (!this.touch) this.hover = null; });
     canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); this.select(null); });
-    canvas.addEventListener('click', (e) => this.click(this.cell(e)));
+    canvas.addEventListener('pointerdown', (e) => { this.touch = e.pointerType !== 'mouse'; });
+    canvas.addEventListener('click', (e) => {
+      const p = this.cell(e);
+      // en pantallas táctiles no hay «pasar el ratón»: el primer toque enseña la previsualización y el segundo confirma
+      if (this.touch && p && !(this.hover && this.hover.x === p.x && this.hover.y === p.y) && !this.c?.deploy) { this.hover = p; return; }
+      this.click(p);
+      if (this.touch) this.hover = null;
+    });
     const loop = (): void => { this.raf = requestAnimationFrame(loop); this.draw(); };
     loop();
   }
@@ -453,7 +460,19 @@ export class Board {
     }
     g.globalAlpha = 1;
     if (this.hover) this.tooltip(c);
+    // táctil: recordatorio de que el segundo toque confirma
+    if (this.touch && this.hover && this.session.isMyTurn() && !c.over) {
+      const g = this.g, txt = this.sel ? 'Toca otra vez la casilla para lanzar' : 'Toca otra vez la casilla para moverte';
+      g.font = 'bold 16px "Pixelify Sans", ui-monospace, monospace'; g.textAlign = 'center';
+      const w = g.measureText(txt).width + 24, X = (c.w * TILE) / 2, Y = c.h * TILE - 14;
+      g.fillStyle = 'rgba(10,8,6,.85)'; g.fillRect(X - w / 2, Y - 18, w, 26);
+      g.strokeStyle = '#e3b04b'; g.lineWidth = 2; g.strokeRect(X - w / 2, Y - 18, w, 26);
+      g.fillStyle = '#ffe2a0'; g.fillText(txt, X, Y);
+    }
   }
+
+  /** el último toque fue con el dedo (o lápiz) y no con el ratón */
+  private touch = false;
 
   /** se pueden ocultar las barras de vida (botón ❤️ o tecla V) */
   showBars = true;

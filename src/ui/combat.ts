@@ -86,7 +86,7 @@ export function combatScreen(events: GameEvent[]): void {
           <kbd>${i + 1}</kbd>${spellIcon(d, false)}<span class="cost ${sp.free ? 'free' : ''}">${cost}</span>${d.perTurn ? `<span class="uses">${(d.perTurn - (sp.uses ?? 0))}/${d.perTurn}</span>` : ''}${sp.cd > 0 ? `<span class="cdn">${sp.cd}</span>` : ''}<small>${esc(d.name)}</small></button>`; }).join('')}
       ${me.spells.some((sp) => sp.charges !== undefined) ? `<span class="itemsep"></span>${me.spells.filter((sp) => sp.charges !== undefined).map((sp) => { const d = spellOf(me, sp.id)!; const off = !myTurn || (sp.charges ?? 0) <= 0 || me.hp <= 0;
         return `<button class="sbtn item ${board.sel === d.id ? 'on' : ''}" data-act="spell" data-id="${d.id}" ${off ? 'disabled' : ''} ${tip(spellTip(d, `<div class="sm">Te quedan ${sp.charges}</div>`))}>${spellIcon(d, false)}<span class="cost free">0</span><span class="cdn qty">x${sp.charges}</span><small>${esc(d.name.replace('Poción de ', 'P. ').replace('Bomba de ', 'B. '))}</small></button>`; }).join('')}` : ''}</div>
-      <button class="pri endturn" data-act="end" ${myTurn ? '' : 'disabled'}>Terminar<br>turno<br><small>(E)</small></button>`
+      <button class="pri endturn" data-act="end" ${myTurn ? '' : 'disabled'}>Terminar <br>turno <br><small>(E)</small></button>`
     : '<span class="dim">Estás como espectador en este combate.</span>';
   const lg = document.getElementById('log')!;
   lg.className = `log ${ui.logOpen ? 'open' : ''}`;

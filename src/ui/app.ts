@@ -234,6 +234,7 @@ document.addEventListener('click', (e) => {
     case 'deployready': s?.act({ a: 'deployready' }); break;
     case 'readyall': s?.act({ a: 'deployready', force: true }); break;
     case 'bars': ui.hpBars = !ui.hpBars; if (ui.board) ui.board.showBars = ui.hpBars; lastKey = ''; render([]); break;
+    case 'side': ui.sideOpen = !ui.sideOpen; lastKey = ''; render([]); break;
     case 'map': ui.mapOpen = !ui.mapOpen; lastKey = ''; render([]); break;
     case 'stats': ui.statsOpen = !ui.statsOpen; lastKey = ''; render([]); break;
     case 'mod': ui.mods = ui.mods.includes(id) ? ui.mods.filter((x) => x !== id) : ui.mods.length < 3 ? [...ui.mods, id] : ui.mods; publish(); render([]); break;
@@ -315,8 +316,14 @@ document.body.appendChild(tipEl);
 function hideTip(): void {
   tipEl.style.display = 'none';
 }
+// en pantallas táctiles el tooltip sale al tocar y se quita solo
+let lastTouch = 0, tipTimer = 0;
+document.addEventListener('touchstart', () => { lastTouch = Date.now(); }, { passive: true });
+document.addEventListener('scroll', () => hideTip(), { passive: true, capture: true });
 document.addEventListener('mouseover', (e) => {
   const el = (e.target as HTMLElement).closest<HTMLElement>('[data-tip]');
+  clearTimeout(tipTimer);
+  if (el && Date.now() - lastTouch < 800) tipTimer = window.setTimeout(hideTip, 3500);
   if (!el) { hideTip(); return; }
   tipEl.innerHTML = el.dataset.tip ?? '';
   tipEl.style.display = 'block';

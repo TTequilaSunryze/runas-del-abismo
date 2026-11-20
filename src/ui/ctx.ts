@@ -47,6 +47,8 @@ export const ui = {
   /** cartel «Has obtenido…» tras recoger botín o una recompensa */
   got: null as null | { title: string; html: string },
   mapOpen: false,
+  /** móvil: ficha lateral (equipo, hechizos, grupo) desplegada */
+  sideOpen: false,
   /** barras de vida visibles en el tablero */
   hpBars: true,
   /** sello del último informe de combate cerrado */

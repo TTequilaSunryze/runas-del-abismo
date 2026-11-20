@@ -361,3 +361,76 @@ input:focus { outline: none; border-color: var(--gold); }
 .big { font-size: 18px; }
 .hp b .miss { color: #ffb0a0; font-size: 11px; }
 .modal.got { z-index: 70; }
+
+/* =====================================================================
+   v12 · Móvil y táctil
+   ===================================================================== */
+button, canvas, .cell, .evcard, a { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.mobonly { display: none; }
+.mapscroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+@media (max-width: 760px) {
+  html { -webkit-text-size-adjust: 100%; }
+  body { font-size: 14px; }
+  #app { padding: 6px 6px calc(8px + env(safe-area-inset-bottom)); gap: 6px; }
+  .mobonly { display: inline-flex; }
+  .deskonly { display: none; }
+  h1 { font-size: 28px; letter-spacing: 2px; margin-top: 6px; }
+  h2 { font-size: 18px; }
+
+  /* barra superior compacta */
+  .bar { gap: 6px; padding: 6px 8px; }
+  .bar .zone { font-size: 14px; flex: 1 1 100%; order: -1; }
+  .bar .code-s { display: none; }
+  .bar .hp { min-width: 90px; }
+  .vol input[type=range] { display: none; }
+  button.sq { min-width: 40px; min-height: 40px; padding: 6px; }
+
+  /* la ficha lateral se abre con 🎒 */
+  .cols { display: flex; flex-direction: column; }
+  .cols .side { display: none; position: static; max-height: none; width: 100% !important; }
+  .cols.sideopen .side { display: flex; order: -1; }
+
+  /* mapa: se desplaza en horizontal con nodos grandes */
+  .mapscroll .actmap { min-width: 720px; max-height: none; }
+
+  /* combate */
+  #info { font-size: 12px; }
+  #info .blessbar { flex: 1 1 100%; }
+  .init { font-size: 11px; }
+  .stage canvas, canvas { width: 100% !important; max-height: none !important; border-width: 1px; }
+  .hud { flex-wrap: nowrap; gap: 6px; flex-direction: column; }
+  .hud > .panel, .hud > div:first-child { width: 100%; }
+  .spellbar { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
+  .sbtn { flex: 0 0 auto; width: 66px; min-width: 66px; min-height: 64px; }
+  .sbtn kbd { display: none; }
+  .sbtn .sicon { width: 40px; height: 40px; }
+  .sbtn .sicon img { width: 32px; height: 32px; }
+  .endturn { min-width: 0; width: 100%; min-height: 44px; }
+  .endturn br { display: none; }
+  .endturn small { display: none; }
+  .log { max-height: 90px; font-size: 12px; }
+
+  /* carteles y eventos */
+  .modal { padding: 6px; align-items: flex-end; }
+  .modal .panel, .modal .panel.wide { max-width: 100% !important; width: 100%; max-height: 92vh; overflow: auto; }
+  .evwin { padding: 12px; }
+  .evart { height: 100px; width: 90%; }
+  .evart span { font-size: 46px; }
+  .evtitle { font-size: 21px; }
+  .evtext { font-size: 14px; }
+  .evopts { grid-template-columns: 1fr; }
+  .cards.c3 { grid-template-columns: 1fr !important; }
+  .cells { grid-template-columns: repeat(4, 1fr); }
+  .cell { width: auto; height: auto; }
+  .stashitem { flex-wrap: wrap; }
+  .stashitem .grow { flex-basis: 100%; height: 0; }
+  #tip { max-width: calc(100vw - 16px); font-size: 13px; }
+  .vbar span { width: 70px; }
+  .tabs button { padding: 10px 4px; }
+}
+
+@media (max-width: 760px) {
+  .hud .me { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 10px; width: 100%; min-width: 0; padding: 6px 8px; }
+  .hud .me .hp { flex: 1 1 140px; height: 18px; }
+  .hud .me .res { flex: 1 1 100%; }
+}

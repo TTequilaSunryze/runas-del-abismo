@@ -172,7 +172,7 @@ export function lobbyScreen(): void {
 }
 
 function frame(run: RunState, main: string, selling = false): void {
-  ui.root.innerHTML = `${topBar(run)}<div class="cols"><section class="main">${main}</section>${sidePanel(run, selling)}</div>`;
+  ui.root.innerHTML = `${topBar(run)}<div class="cols ${ui.sideOpen ? 'sideopen' : ''}"><section class="main">${main}</section>${sidePanel(run, selling)}</div>`;
 }
 
 export function mapScreen(): void {
