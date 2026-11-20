@@ -16,7 +16,7 @@ function play(classes: ClassId[], seed: number): { run: RunState; stalls: number
     }
     if (run.phase === 'map') {
       // alijo: cada objeto al primero que tenga libre esa ranura; si no, se reparte
-      while (run.stash?.length) { const it = run.stash[0]!; const h = run.heroes.find((x) => !x.equip[it.slot]); metaAction(run, (h ?? run.heroes[0]!).owner, { a: 'stash', idx: 0, op: h ? 'equip' : 'split' }); }
+      while (run.stash?.length) { const it = run.stash[0]!; metaAction(run, it.owner ?? run.heroes[0]!.owner, { a: 'stash', idx: 0, op: 'split' }); }
       for (const h of run.heroes) { if (run.offers[h.owner]) metaAction(run, h.owner, { a: 'pick', idx: 0 }); if (h.bag.length) metaAction(run, h.owner, { a: 'equip', idx: 0 }); }
       const nodes = run.map[run.step]!, av = availableNodes(run);
       const low = run.heroes.reduce((a, h) => a + h.hp / heroMaxHp(h), 0) / run.heroes.length < 0.7;

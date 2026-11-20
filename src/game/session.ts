@@ -6,8 +6,10 @@ import type { ClassId, GameEvent, Pos } from '../core/state';
 import { saveRun, type Peer, type Transport } from '../net/transport';
 import { clearSnapshot, saveSnapshot } from './snapshot';
 import { meta } from './meta';
+import { cancel, every, later, type Timer } from '../net/clock';
 import type { Perks } from '../content/modes';
 import { pendingOf, waitingFor, type HeroSave } from './run';
+import { mapChoice } from './run';
 import { bossInfo, chooseNode, recordEvents, finishFight, leaveNode, metaAction, newArena, newRun, resolveEvent, type MetaAction, type RunState } from './run';
 
 export type Action = { a: 'move'; to: Pos } | { a: 'cast'; spell: string; at: Pos } | { a: 'end' } | { a: 'deploy'; to: Pos } | { a: 'deployready'; force?: boolean } | MetaAction;
@@ -51,11 +53,13 @@ export class Session {
   turnEndsAt = 0;
   private mine: Record<string, unknown> = {};
   private beacons = new Map<string, { data: Record<string, unknown>; at: number }>();
-  private beaconTimer: ReturnType<typeof setInterval>;
+  private beaconTimer: Timer;
   private lobbyKey = '';
-  private aiTimer: ReturnType<typeof setTimeout> | null = null;
-  private turnTimer: ReturnType<typeof setTimeout> | null = null;
-  private beat: ReturnType<typeof setInterval> | null = null;
+  private aiTimer: Timer | null = null;
+  private turnTimer: Timer | null = null;
+  /** última vez que llegó el estado del anfitrión (para pedirlo si deja de llegar) */
+  private lastSync = Date.now();
+  private beat: Timer | null = null;
   private lastTurnKey = '';
   private savedAt = 0;
   private savedKey = '';
@@ -76,6 +80,7 @@ export class Session {
       const m = p as { run: RunState; ev: GameEvent[] };
       if (!m?.run || m.run.version !== 9) return;
       this.run = m.run;
+      this.lastSync = Date.now();
       this.noteTurn();
       this.onChange(Array.isArray(m.ev) ? m.ev : []);
     });
@@ -102,7 +107,10 @@ export class Session {
       const m = p as { to: string; text: string };
       if (m && m.to === this.myId) this.onError(String(m.text).slice(0, 80));
     });
-    if (isHost) this.beat = setInterval(() => this.run && this.broadcast([]), HEARTBEAT);
+    if (isHost) this.beat = every(() => this.run && this.broadcast([]), HEARTBEAT);
+    // al recuperar la conexión: el anfitrión reenvía el estado y los demás lo piden
+    t.onReconnect?.(() => { if (this.isHost) { if (this.run) this.broadcast([]); } else this.t.send('syncreq', null); this.t.send('here', this.mine); });
+    t.on('syncreq', () => { if (this.isHost && this.run) this.broadcast([]); });
     // Cada jugador se anuncia también por mensaje: la lista no depende solo de la presencia del servidor.
     t.on('here', (p, from) => {
       if (p && typeof p === 'object') this.beacons.set(from, { data: p as Record<string, unknown>, at: Date.now() });
@@ -110,7 +118,12 @@ export class Session {
     });
     t.on('bye', (_p, from) => { this.beacons.delete(from); this.checkLobby(); });
     t.onPeers(() => this.checkLobby());
-    this.beaconTimer = setInterval(() => { this.t.send('here', this.mine); this.checkLobby(); }, BEACON);
+    this.beaconTimer = every(() => {
+      this.t.send('here', this.mine);
+      this.checkLobby();
+      // si el estado del anfitrión deja de llegar, se pide de nuevo
+      if (!this.isHost && this.run && Date.now() - this.lastSync > HEARTBEAT * 3) { this.lastSync = Date.now(); this.t.send('syncreq', null); }
+    }, BEACON);
   }
 
   /** Publica mis datos de sala (nombre, clase, rutas). */
@@ -216,16 +229,36 @@ export class Session {
     if (!this.isHost) return;
     this.run = null;
     clearSnapshot();
-    if (this.aiTimer) clearTimeout(this.aiTimer);
+    cancel(this.aiTimer);
     for (let i = 0; i < 3; i++) setTimeout(() => this.t.send('reset', null), i * 700);
     this.onChange([]);
   }
 
-  /** Elige un nodo del mapa. */
+  /** Vota un nodo del mapa (en solitario, se va directamente). */
   choose(idx: number): void {
+    if (this.run?.phase !== 'map') return;
+    this.act({ a: 'mapvote', idx });
+  }
+
+  /** El anfitrión decide ya con los votos que haya. */
+  goNow(): void {
     if (!this.isHost || this.run?.phase !== 'map') return;
-    if (this.blocked()) return;
-    this.afterChange(chooseNode(this.run, idx));
+    this.tryMove(true);
+  }
+
+  /** Cuando todos los presentes han votado (y nadie tiene nada pendiente), el grupo va a la sala más votada. */
+  private tryMove(force = false): boolean {
+    const run = this.run;
+    if (!this.isHost || !run || run.phase !== 'map') return false;
+    const present = [this.myId, ...this.lobby().map((p) => p.id)];
+    const heroes = run.heroes.filter((h) => present.includes(h.owner));
+    const all = heroes.every((h) => run.mapVotes?.[h.owner] !== undefined);
+    if (!all && !force) return false;
+    if (this.waiting().some((h) => pendingOf(run, h).length)) { if (force) this.onError('Alguien aún tiene botín o una elección pendiente'); return false; }
+    const idx = mapChoice(run, this.myId);
+    if (idx < 0) return false;
+    this.afterChange(chooseNode(run, idx));
+    return true;
   }
 
   /** Jugadores conectados por los que hay que esperar (botín sin elegir o sin pulsar «Listo»). */
@@ -303,6 +336,7 @@ export class Session {
       if (a.a === 'room' && a.op === 'seal' && !(from === this.myId && this.isHost)) return this.reject(from, 'Solo el anfitrión puede cerrar la votación');
       const err = metaAction(run, from, a);
       if (err) return this.reject(from, err);
+      if (run.phase === 'map' && this.tryMove()) return;
       if (run.phase === 'event' && run.event && !run.event.result && run.heroes.every((h) => run.event!.votes[h.owner] !== undefined)) resolveEvent(run, this.myId);
       this.afterChange([]);
       return;
@@ -342,16 +376,16 @@ export class Session {
       else saveSnapshot({ code: run.code, host: false, local: false });
     }
     const c = run.combat;
-    if (this.aiTimer) clearTimeout(this.aiTimer);
+    cancel(this.aiTimer);
     this.aiTimer = null;
     if (!c || run.phase !== 'combat') return;
     if (c.over) {
-      this.aiTimer = setTimeout(() => {
+      this.aiTimer = later(() => {
         finishFight(run);
         this.afterChange([]);
       }, 1600);
     } else if (current(c)?.ai) {
-      this.aiTimer = setTimeout(() => this.afterChange(runAiTurn(c, bossInfo(run))), AI_DELAY);
+      this.aiTimer = later(() => { if (this.run?.combat === c && !c.over && current(c)?.ai) this.afterChange(runAiTurn(c, bossInfo(run))); }, AI_DELAY);
     }
   }
 
@@ -366,10 +400,10 @@ export class Session {
     const k = c && u ? `${this.run!.step}:${c.round}:${c.turn}:${u.id}` : '';
     if (k === this.lastTurnKey) return;
     this.lastTurnKey = k;
-    if (this.turnTimer) clearTimeout(this.turnTimer);
+    cancel(this.turnTimer);
     this.turnEndsAt = u && !u.ai ? Date.now() + TURN_SECONDS * 1000 : 0;
     if (this.isHost && c && u && !u.ai) {
-      this.turnTimer = setTimeout(() => {
+      this.turnTimer = later(() => {
         if (this.run?.combat !== c || current(c)?.id !== u.id) return;
         const r = endTurn(c, u.id);
         if (r.ok) this.afterChange(r.events);
@@ -384,10 +418,10 @@ export class Session {
   }
 
   leave(): void {
-    if (this.aiTimer) clearTimeout(this.aiTimer);
-    if (this.turnTimer) clearTimeout(this.turnTimer);
-    if (this.beat) clearInterval(this.beat);
-    clearInterval(this.beaconTimer);
+    cancel(this.aiTimer);
+    cancel(this.turnTimer);
+    cancel(this.beat);
+    cancel(this.beaconTimer);
     this.t.send('bye', null);
     this.t.leave();
   }

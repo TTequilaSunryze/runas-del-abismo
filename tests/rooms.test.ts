@@ -115,3 +115,18 @@ describe('salas especiales v14', () => {
     expect(run.phase).toBe('map');
   });
 });
+
+import { availableNodes, mapChoice } from '../src/game/run';
+describe('votación del camino', () => {
+  it('gana la más votada; en empate, la del anfitrión', () => {
+    const run = roomStep(newRun('T', 4, [...P, { owner: 'c', name: 'C', cls: 'esferas' as const, routes: [] }]));
+    const av = availableNodes(run);
+    expect(mapChoice(run, 'a')).toBe(-1);
+    expect(metaAction(run, 'b', { a: 'mapvote', idx: av[1]! })).toBeNull();
+    expect(metaAction(run, 'a', { a: 'mapvote', idx: av[0]! })).toBeNull();
+    expect(mapChoice(run, 'a')).toBe(av[0]);
+    metaAction(run, 'c', { a: 'mapvote', idx: av[1]! });
+    expect(mapChoice(run, 'a')).toBe(av[1]);
+    expect(run.ready.b).toBe(run.stamp);
+  });
+});

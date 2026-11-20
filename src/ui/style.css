@@ -596,3 +596,30 @@ button.big { font-size: 18px; padding: 10px 22px; }
   .combatmode .cgrid { display: contents; }
   .combatmode .cinfo { order: 0; } .combatmode .stage { order: 1; } .combatmode .dhud { order: 2; } .combatmode .cside { order: 3; }
 }
+.actmap .voting { animation: voterot 3s linear infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes voterot { to { transform: rotate(360deg); } }
+.advance.votes { flex-wrap: wrap; gap: 6px; }
+.pill.esc { color: #e8d28a; }
+.scene .ray { animation: rayp 3s ease-in-out infinite; }
+@keyframes rayp { 50% { opacity: .2; } }
+.scene .halo { animation: glowp 2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+
+/* ---------- v15: selección de héroe animada ---------- */
+.pick .portrait.anim { display: block; width: 96px; height: 96px; margin: 2px auto; background-repeat: no-repeat; background-size: calc(var(--n) * 96px) 96px; image-rendering: pixelated; animation: strip calc(var(--n) * .22s) steps(var(--n)) infinite; }
+@keyframes strip { from { background-position: 0 0; } to { background-position: calc(var(--n) * -96px) 0; } }
+.pick .portrait.bob { animation: pbob 1.4s ease-in-out infinite; }
+@keyframes pbob { 50% { transform: translateY(-4px); } }
+.pick { position: relative; overflow: hidden; transition: transform .15s; }
+.pick:hover .portrait.anim { filter: drop-shadow(0 0 6px rgba(227, 176, 75, .6)); }
+.pick.burst .portrait.anim { animation: strip calc(var(--n) * .12s) steps(var(--n)) 3, pjump .5s cubic-bezier(.3, 1.8, .5, 1); }
+.pick.burst.bob .portrait, .pick.burst .portrait.bob { animation: pjump .6s cubic-bezier(.3, 1.8, .5, 1) 2; }
+@keyframes pjump { 40% { transform: translateY(-14px) scale(1.12); } }
+.pickfx { position: absolute; left: 50%; top: 92px; width: 10px; height: 10px; border-radius: 50%; pointer-events: none; transform: translate(-50%, -50%); box-shadow: 0 0 0 2px var(--gold); animation: pickring .9s ease-out forwards; }
+@keyframes pickring { to { width: 190px; height: 190px; opacity: 0; box-shadow: 0 0 0 6px var(--gold), 0 0 30px var(--gold); } }
+.pick.burst { animation: pickflash .9s ease-out; }
+@keyframes pickflash { 0% { box-shadow: 0 0 0 0 rgba(227, 176, 75, .9), inset 0 0 40px rgba(227, 176, 75, .5); } 100% { box-shadow: 0 0 0 10px rgba(227, 176, 75, 0); } }
+.mates { display: flex; flex-wrap: wrap; gap: 3px; justify-content: center; }
+.mtag { font-size: 11px; padding: 0 6px; border-radius: 3px; color: #000; font-weight: bold; }
+.p0b { background: #e8607a; } .p1b { background: #5a9cf0; } .p2b { background: #5fcf70; } .p3b { background: #e8bd40; }
+.pick.on.p0c { border-color: #e8607a; } .pick.on.p1c { border-color: #5a9cf0; } .pick.on.p2c { border-color: #5fcf70; } .pick.on.p3c { border-color: #e8bd40; }
+.pick.mate.m0 { box-shadow: inset 0 0 0 2px #e8607a; } .pick.mate.m1 { box-shadow: inset 0 0 0 2px #5a9cf0; } .pick.mate.m2 { box-shadow: inset 0 0 0 2px #5fcf70; } .pick.mate.m3 { box-shadow: inset 0 0 0 2px #e8bd40; }

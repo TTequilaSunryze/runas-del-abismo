@@ -1,6 +1,6 @@
 // Pantallas fuera del combate: inicio, sala, mapa, tienda, evento y final.
 import { CLASSES, PLAYABLE, findRoute } from '../core/classes/classes';
-import { classPortraitUrl } from '../render/sprites';
+import { classStripUrl } from '../render/sprites';
 import { SPELLS } from '../core/classes/spells';
 import type { ClassId } from '../core/state';
 import { POTION_HEAL, POTION_PRICE, eventDef, heroMaxHp, type RunState } from '../game/run';
@@ -16,15 +16,15 @@ import { RELICS } from '../content/relics';
 import { championOf, dailyOf, dailyScore, lastZone } from '../game/run';
 import { CLASS_STORY, ENDING_LOST, ENDING_WON, TUTORIAL, ZONE_STORY } from '../content/story';
 import { esc, mine, store, tip, today, ui } from './ctx';
-import { itemIcon, spellIcon, spellTip } from './icons';
-import { advanceBar, blessingBar, diffHtml, itemHtml, mapLegend, mapSvg, pendingRows, sidePanel, topBar, volumeControl } from './panels';
+import { NODE_ICON, itemIcon, spellIcon, spellTip } from './icons';
+import { advanceBar, blessingBar, boonRow, diffHtml, itemHtml, mapSvg, pendingRows, sidePanel, topBar, volumeControl } from './panels';
 import { CONSUMABLES, MAX_CONSUMABLE } from '../content/boons';
 import { CHEST_CURSE_CHANCE, HEAT, HEAT_HOT, HEAT_MAX, HEAT_OVERLOAD, HONE_COST, SCRAP_YIELD, curseOf, heatTier, pactOf, recalibratePrice } from '../content/pacts';
 import { REST_OPTIONS, itemByRef, recalStats, restHeal, restText } from '../game/rooms';
-import { altarScene, chestScene, forgeScene, restScene } from './scenes';
+import { altarScene, chestScene, forgeScene, restScene, shrineScene } from './scenes';
 import { STAT_NAME, type Item } from '../core/items/items';
 import { MAX_SPELL_UPS, UPGRADES } from '../core/upgrades';
-import { heroSpec, upCount, upgradeChoices } from '../game/run';
+import { NODE_NAME, heroSpec, upCount, upgradeChoices } from '../game/run';
 
 const RAR = ['ir0', 'ir1', 'ir2', 'ir3'];
 
@@ -161,7 +161,16 @@ export function lobbyScreen(): void {
       <div class="chips">${DAILY_MODS.map((m) => `<button class="chip ${ui.mods.includes(m.id) ? 'r2 sel' : ''}" data-act="mod" data-id="${m.id}" ${tip(`<b>${esc(m.name)}</b><div class="sm">${esc(m.text)}</div>`)}>${ui.mods.includes(m.id) ? '✔ ' : ''}${esc(m.name)}</button>`).join('')}</div>`}</div>` : players.find((p) => p.host) ? (() => { const hp = players.find((p) => p.host)!; return `<div class="panel dim sm">Dificultad del anfitrión: ${hp.daily ? 'Reto diario' : `Ascensión ${hp.asc}${hp.abyss ? ' · con El Abismo' : ''}${hp.mods.length ? ` · ${hp.mods.map((id) => esc(DAILY_MODS.find((d) => d.id === id)?.name ?? id)).join(', ')}` : ''}`}</div>`; })() : ''}
     ${currentAccount() && s.t.kind === 'online' ? (() => { const fr = friendsStatus().filter((f) => f.online && f.room !== s.code); return fr.length ? `<div class="panel sm"><b>👥 Invitar:</b> ${fr.map((f) => `<button class="mini" data-act="invite" data-id="${esc(f.name)}">✉ ${esc(f.name)}</button>`).join(' ')}</div>` : ''; })() : ''}
     <div class="lbl">Tu clase <span class="dim">· maestría ${mlv}/5 con ${cls.name}</span></div>
-    <div class="cards c5">${PLAYABLE.map((id) => { const c = CLASSES[id]; return `<button class="pick ${id === me.cls ? 'on' : ''}" data-act="cls" data-id="${id}"><b>${c.name}</b><img class="portrait" src="${classPortraitUrl(id)}" alt="${esc(c.name)}"><span class="dim sm">❤️ ${c.hp} · PA ${c.ap} · PM ${c.mp} · ⏱️ ${c.initiative}</span><span class="dim sm"><i>${esc(CLASS_STORY[id] ?? '')}</i></span>${masteryBar(id)}</button>`; }).join('')}</div>
+    <div class="cards c5">${PLAYABLE.map((id) => { const c = CLASSES[id];
+      // compañeros que han elegido esta clase (con su color)
+      const mates = players.slice(0, 4).map((p, i) => ({ p, i })).filter(({ p }) => p.id !== ui.myId && p.cls === id);
+      const mateCls = mates.length ? `mate m${mates[0]!.i % 4}` : '';
+      const myIdx = players.findIndex((p) => p.id === ui.myId);
+      const burst = id === me.cls && ui.picked?.cls === id && Date.now() - ui.picked.at < 1500;
+      const st = classStripUrl(id, burst ? 'special' : 'idle');
+      return `<button class="pick ${id === me.cls ? `on p${Math.max(0, myIdx) % 4}c` : ''} ${mateCls} ${burst ? 'burst' : ''}" data-act="cls" data-id="${id}"><b>${c.name}</b>
+        <span class="portrait anim ${st.n > 1 ? '' : 'bob'}" style="--n:${st.n};background-image:url(${st.url})"></span>${burst ? '<span class="pickfx"></span>' : ''}
+        ${mates.length || id === me.cls ? `<span class="mates">${id === me.cls ? `<span class="mtag p${Math.max(0, myIdx) % 4}b">Tú</span>` : ''}${mates.map(({ p, i }) => `<span class="mtag p${i % 4}b">${esc(p.name)}</span>`).join('')}</span>` : ''}<span class="dim sm">❤️ ${c.hp} · PA ${c.ap} · PM ${c.mp} · ⏱️ ${c.initiative}</span><span class="dim sm"><i>${esc(CLASS_STORY[id] ?? '')}</i></span>${masteryBar(id)}</button>`; }).join('')}</div>
     <div class="lbl">Tu kit inicial <span class="dim">· 3 habilidades; durante la partida las mejoras con bendiciones. Más kits con maestría.</span></div>
     <div class="cards c2">${cls.routes.map((r) => {
       const locked = !open.includes(r.id);
@@ -188,12 +197,21 @@ export function mapScreen(): void {
   ${run.allies.length ? `<div class="panel sm">🤝 Os acompañan: ${run.allies.map((a) => `<b>${esc(ALLIES[a]?.name ?? a)}</b>`).join(', ')} <span class="dim">(hasta el final de la zona)</span></div>` : ''}
   ${run.nextOmen ? `<div class="panel sm">Próximo combate: ${OMENS.find((o) => o.id === run.nextOmen)?.icon} <b>${esc(OMENS.find((o) => o.id === run.nextOmen)?.name ?? '')}</b></div>` : ''}
   ${blessingBar(run)}
-  <div class="lbl">Zona ${run.zone + 1}/${lastZone(run) + 1} · Sala ${run.step + 1} de ${run.map.length} · ${s.isHost ? 'pulsa en el mapa a dónde vais' : 'el anfitrión elige el camino'}</div>
-  ${advanceBar(run, '', '')}
-  <div class="chips">${mapLegend()}</div>
+  <div class="lbl">Zona ${run.zone + 1}/${lastZone(run) + 1} · Sala ${run.step + 1} de ${run.map.length} · ${run.heroes.length > 1 ? 'votad a dónde queréis ir: cuando votéis todos, el grupo va a la más votada (en empate, la del anfitrión)' : 'pulsa en el mapa a dónde vas'}</div>
   ${mapSvg(run, true)}
+  ${run.heroes.length > 1 ? voteRow(run) : ''}
   ${s.isHost && pending ? `<div class="dim sm">${pending} jugador${pending > 1 ? 'es' : ''} aún eligiendo botín: los caminos se desbloquean cuando todos estén listos.</div>` : ''}
   ${pendingRows(run)}`);
+}
+
+/** Quién ha votado qué camino (con su color) y botón del anfitrión para decidir ya. */
+function voteRow(run: RunState): string {
+  const s = ui.session!;
+  const PCLS = ['p0', 'p1', 'p2', 'p3'];
+  const row = run.map[run.step] ?? [];
+  const chips = run.heroes.map((h, k) => { const v = run.mapVotes?.[h.owner]; return `<span class="pill sm ${PCLS[k % 4]}">${esc(h.name)}: ${v === undefined ? '<span class="dim">pensando…</span>' : `${NODE_ICON[row[v]!]} ${esc(NODE_NAME[row[v]!].replace(/^\S+\s/, ''))}`}</span>`; }).join(' ');
+  const any = Object.keys(run.mapVotes ?? {}).length > 0;
+  return `<div class="row advance votes">🗳️ ${chips}<span class="grow"></span>${s.isHost ? `<button class="pri" data-act="mapgo" ${any ? '' : 'disabled'}>Ir ya a la más votada</button>` : ''}</div>`;
 }
 
 export function shopScreen(): void {
@@ -307,9 +325,16 @@ export function roomScreen(): void {
       ? `<div class="dim sm evhint">Un solo cofre para todo el grupo: botín para cada uno… o una maldición para todos (${Math.round(CHEST_CURSE_CHANCE * 100)}%).</div><div class="row center"><button class="pri big" data-act="openchest" ${h ? '' : 'disabled'}>🗝️ Abrir el cofre</button></div>`
       : curse
         ? `<div class="cursebox"><div class="curseicon">${curse.icon}</div><div><b class="bad">Maldición: ${esc(curse.name)}</b><div>${esc(curse.text)}</div>${(r.lines ?? []).map((l) => `<div class="sm bad">${esc(l)}</div>`).join('')}</div></div>${advanceBar(run, 'Seguir adelante →')}`
-        : `<div class="lootbox"><b class="good">¡Botín!</b><ul>${(r.lines ?? []).map((l) => `<li class="up">${esc(l)}</li>`).join('')}</ul><div class="dim sm">Los objetos que no caben en la mochila van al Alijo de grupo.</div></div>${advanceBar(run, 'Seguir adelante →')}`;
+        : `<div class="lootbox"><b class="good">¡Botín!</b><ul>${(r.lines ?? []).map((l) => `<li class="up">${esc(l)}</li>`).join('')}</ul><div class="dim sm">Cada objeto es tuyo: va a tu equipo o mochila (si no cabe, aparece abajo para que decidas).</div></div>${advanceBar(run, 'Seguir adelante →')}`;
     frame(run, roomWin(scene, r.opened ? (curse ? 'El cofre estaba maldito' : 'El cofre se abre') : 'Un cofre en la penumbra',
       r.opened ? '' : 'Entre el polvo, un cofre con herrajes de hierro. La cerradura cede al primer toque… demasiado fácil.', inner, 'chestwin') + pendingRows(run));
+    return;
+  }
+  if (r.kind === 'shrine') {
+    const status = run.heroes.map((x) => `<span class="pill sm ${x.boonOffer ? 'dim' : 'good'}">${x.boonOffer ? '⏳' : '✔'} ${esc(x.name)}</span>`).join(' ');
+    const inner = `${h?.boonOffer ? boonRow(run) : `<div class="panel note"><b class="good">${h ? 'Ya has recibido la bendición del santuario.' : 'Estás mirando el santuario.'}</b></div>`}
+      <div class="row">${status}</div>${advanceBar(run, 'Continuar →')}`;
+    frame(run, roomWin(shrineScene(r.zone), 'El Santuario', 'Una estatua sin rostro vela entre cirios que nunca se consumen. Ante ella, el poder dormido de cada clase despierta: elige una bendición pasiva.', inner, 'shrinewin'));
     return;
   }
   if (r.kind === 'rest') {

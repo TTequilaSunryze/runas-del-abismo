@@ -168,6 +168,8 @@ export interface RunState extends RngBox {
   /** nodo elegido en cada capa ya recorrida */
   trail: number[];
   phase: 'map' | 'combat' | 'event' | 'shop' | 'room' | 'won' | 'lost';
+  /** votos del grupo sobre a qué sala ir: dueño → índice en la capa actual */
+  mapVotes?: Record<string, number>;
   /** sala especial en curso (altar, forja, cofre o descanso) */
   room?: RoomState | null;
   /** Pacto Mayor sellado en el altar */
@@ -182,7 +184,7 @@ export interface RunState extends RngBox {
   combat: CombatState | null;
   /** botín a elegir por jugador (uno de la lista) */
   offers: Record<string, Item[]>;
-  /** Alijo de grupo: objetos encontrados que nadie se ha quedado aún */
+  /** Alijo: objetos encontrados que no cabían en la mochila (cada uno es de su dueño) */
   stash?: Item[];
   event: GroupEvent | null;
   eventsSeen: string[];
@@ -729,7 +731,7 @@ export function genLoot(run: RunState, kind: DropKind = dropKindOf(run), min: Ra
 
 /**
  * Botín de objetos: 1 objeto por héroe en combate normal y élite, 2 en jefe (más 1 con el perk o la lupa en élites
- * y jefes), con el tipo de daño de ese héroe. Todo va al Alijo de grupo y el grupo decide quién se lo queda.
+ * y jefes), con el tipo de daño de ese héroe. Es individual: va directo a cada héroe (si no cabe, a su parte del alijo).
  */
 function dropLoot(run: RunState, h: HeroSave, kind: DropKind, report: Item[]): void {
   if (!(rand(run) < dropChance(run.zone, kind)) && !(kind === 'elite' && run.pact === 'tirano')) return;
@@ -737,7 +739,8 @@ function dropLoot(run: RunState, h: HeroSave, kind: DropKind, report: Item[]): v
   const n = { combat: 1, elite: 1, boss: 2, shop: 1 }[kind] + extra;
   for (let i = 0; i < n; i++) {
     const it = genLoot(run, kind, kind === 'elite' && run.pact === 'tirano' && i === 0 ? 2 : 0, h);
-    (run.stash ??= []).push(it);
+    // botín individual: directo al héroe; si no le cabe, a su parte del alijo (solo él puede cogerlo)
+    if (!receive(h, it)) (run.stash ??= []).push({ ...it, owner: h.owner });
     report.push(it);
   }
 }
@@ -748,6 +751,7 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
   if (run.phase !== 'map' || !node || !availableNodes(run).includes(idx)) return [];
   run.at = idx;
   run.trail[run.step] = idx;
+  run.mapVotes = {};
   run.report = null;
   run.dmg0 = Object.fromEntries(run.heroes.map((h) => [h.owner, h.stats.dmg]));
   run.offers = {};
@@ -795,10 +799,21 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
     enterRoom(run, 'altar');
   } else if (node === 'shrine') {
     for (const h of run.heroes) offerBoon(run, h);
-    run.note = 'El santuario despierta el poder de cada clase: elegid una bendición pasiva.';
-    run.step++;
+    enterRoom(run, 'shrine');
   }
   return [];
+}
+
+/** Sala más votada (en empate, la del anfitrión; si no votó, la primera empatada). -1 si nadie ha votado. */
+export function mapChoice(run: RunState, hostId: string): number {
+  const votes = Object.values(run.mapVotes ?? {}).filter((i) => availableNodes(run).includes(i));
+  if (!votes.length) return -1;
+  const count = new Map<number, number>();
+  for (const v of votes) count.set(v, (count.get(v) ?? 0) + 1);
+  const max = Math.max(...count.values());
+  const tied = [...count].filter(([, n]) => n === max).map(([i]) => i);
+  const hv = run.mapVotes?.[hostId];
+  return hv !== undefined && tied.includes(hv) ? hv : tied.sort((a, b) => a - b)[0]!;
 }
 
 /** Salir de la tienda o de un evento ya resuelto y volver al mapa. */
@@ -807,7 +822,7 @@ export function leaveNode(run: RunState): void {
     if (!roomDone(run)) return;
     const r = run.room!;
     run.note = r.kind === 'forge' ? (run.overload === 'overload' ? '¡El crisol se desborda! El próximo combate será una Sobrecarga de fuego.' : run.overload === 'hot' ? 'El crisol arde: el próximo combate será Ardiente.' : 'Dejáis la forja con el metal aún tibio.')
-      : r.kind === 'rest' ? r.lines.join(' ') : r.kind === 'chest' ? (r.cursed ? 'El cofre maldito queda atrás.' : 'Repartís el botín del cofre.') : (r.kind === 'altar' ? r.result ?? '' : '');
+      : r.kind === 'shrine' ? 'La luz del santuario se apaga tras vosotros.' : r.kind === 'rest' ? r.lines.join(' ') : r.kind === 'chest' ? (r.cursed ? 'El cofre maldito queda atrás.' : 'Repartís el botín del cofre.') : (r.kind === 'altar' ? r.result ?? '' : '');
     run.room = null;
     run.step++;
     run.phase = 'map';
@@ -940,8 +955,8 @@ export function finishFight(run: RunState): void {
 /** Da un objeto nuevo a un héroe (a la ranura libre o a la mochila; si no cabe, se pierde). */
 export function giveItem(run: RunState, h: HeroSave, kind: DropKind = 'combat', min: Rarity = 0): Item {
   const it = genLoot(run, kind, min, h);
-  // si no le cabe, va al Alijo de grupo (nunca se pierde ni se vende solo)
-  if (!receive(h, it)) (run.stash ??= []).push(it);
+  // si no le cabe, va a su parte del alijo (nunca se pierde ni se lo lleva otro)
+  if (!receive(h, it)) (run.stash ??= []).push({ ...it, owner: h.owner });
   return it;
 }
 
@@ -967,6 +982,7 @@ export type MetaAction =
   | { a: 'bossreward'; idx: number }
   | { a: 'boon'; idx: number }
   | { a: 'ready' }
+  | { a: 'mapvote'; idx: number }
   | ({ a: 'room' } & RoomOp);
 
 /** Acciones de un jugador fuera del combate. Devuelve un mensaje de error o null si se aplicó. */
@@ -989,6 +1005,8 @@ export function metaAction(run: RunState, owner: string, a: MetaAction): string 
     case 'stash': {
       const item = run.stash?.[a.idx];
       if (!item) return 'Ese objeto ya no está en el alijo';
+      if (item.owner && item.owner !== owner) return 'Ese objeto es de otro jugador';
+      delete item.owner;
       const before = heroMaxHp(h);
       if (a.op === 'equip') {
         const old = h.equip[item.slot];
@@ -999,9 +1017,8 @@ export function metaAction(run: RunState, owner: string, a: MetaAction): string 
         if (h.bag.length >= BAG_SIZE) return `Mochila llena (${BAG_SIZE})`;
         h.bag.push(item);
       } else {
-        // repartir: se vende al 50% y el oro se reparte a partes iguales
-        const each = Math.floor(Math.floor(PRICE[item.rarity] / 2) / run.heroes.length);
-        for (const x of run.heroes) x.gold += each;
+        // vender: al 50%, para quien lo encontró
+        h.gold += Math.floor(PRICE[item.rarity] / 2);
       }
       run.stash!.splice(a.idx, 1);
       h.hp = Math.max(1, Math.min(heroMaxHp(h), h.hp + Math.max(0, heroMaxHp(h) - before)));
@@ -1088,6 +1105,16 @@ export function metaAction(run: RunState, owner: string, a: MetaAction): string 
       if (!o) return 'No tienes ninguna bendición pendiente';
       if (a.idx >= 0) { const sp = o.spells[a.idx]; if (!sp) return 'Opción no válida'; if (!h.boons.includes(sp)) h.boons.push(sp); }
       h.boonOffer = null;
+      break;
+    }
+    case 'mapvote': {
+      if (run.phase !== 'map') return 'Ahora no se elige camino';
+      if (!availableNodes(run).includes(a.idx)) return 'No se puede ir ahí';
+      const p = pendingOf(run, h);
+      if (p.length) return `Antes elige: ${p.join(', ')}`;
+      (run.mapVotes ??= {})[owner] = a.idx;
+      // votar cuenta como «Estoy listo»
+      run.ready[owner] = run.stamp;
       break;
     }
     case 'ready': {

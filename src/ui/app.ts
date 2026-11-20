@@ -97,7 +97,7 @@ function render(events: GameEvent[]): void {
   const run = s.run;
   const want = !run ? 'lobby' : run.phase === 'combat' && run.combat ? 'combat' : run.phase === 'event' && run.event ? 'event' : run.phase === 'shop' ? 'shop' : run.phase === 'room' && run.room ? 'room' : run.phase === 'map' ? 'map' : 'end';
   // sin cambios reales no se redibuja: así un latido de red no interrumpe un clic
-  const key = want + JSON.stringify([meta().ecos, ui.asc, ui.daily, ui.mods, ui.abyss, run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), s.t.connected(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selItem, ui.tab, ui.logOpen, ui.statsOpen, ui.mapOpen, ui.forgeRef, ui.forgeAffix, ui.forgeSpell, ui.sideOpen]);
+  const key = want + JSON.stringify([meta().ecos, ui.asc, ui.daily, ui.mods, ui.abyss, run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), s.t.connected(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selItem, ui.tab, ui.logOpen, ui.statsOpen, ui.mapOpen, ui.forgeRef, ui.forgeAffix, ui.forgeSpell, ui.sideOpen, ui.picked]);
   if (key === lastKey && want === ui.screen && !events.length) return;
   lastKey = key;
   if (want !== ui.screen) hideTip();
@@ -167,13 +167,14 @@ document.addEventListener('click', (e) => {
     case 'resume': { const h = JSON.parse(store.get('rda_host') ?? 'null') as { code: string } | null; if (h) void enter(h.code, true, false, true); break; }
     case 'doresume': if (ui.saved) { ui.log.length = 0; s?.resume(ui.saved); } break;
     case 'home': home(); break;
-    case 'cls': ui.me.cls = id as ClassId; ui.me.routes = ['base']; publish(); render([]); break;
+    case 'cls': ui.me.cls = id as ClassId; ui.me.routes = ['base']; ui.picked = { cls: String(id), at: Date.now() }; publish(); render([]); setTimeout(() => { ui.picked = null; lastKey = ''; render([]); }, 1500); break;
     case 'route':
       // un solo kit: elegir otro lo sustituye
       if (canPickRoute(ui.me.cls, [], id) && openRoutes(ui.me.cls).includes(id)) ui.me.routes = [id];
       publish(); render([]); break;
     case 'start': ui.log.length = 0; ui.tab = 'equipo'; s?.startRun(); break;
     case 'node': ui.log.length = 0; s?.choose(Number(id)); break;
+    case 'mapgo': ui.log.length = 0; s?.goNow(); break;
     case 'leavenode': s?.leaveNode(); break;
     case 'resolve': s?.resolve(); break;
     case 'skip': s?.skipTurn(); break;
@@ -235,7 +236,7 @@ document.addEventListener('click', (e) => {
       const it = s?.run?.stash?.[Number(id)], me = s?.run ? mine(s.run) : undefined;
       if (it && me) {
         const full = me.bag.length >= BAG_SIZE;
-        if (op === 'split') ui.got = { title: 'Botín repartido', html: `${itemHtml(it, true)}<p class="good">Vendido por ${Math.floor(PRICE[it.rarity] / 2)} de oro, repartido entre el grupo.</p>` };
+        if (op === 'split') ui.got = { title: 'Vendido', html: `${itemHtml(it, true)}<p class="good">+${Math.floor(PRICE[it.rarity] / 2)} de oro.</p>` };
         else if (!(op === 'bag' ? full : full && me.equip[it.slot])) ui.got = { title: '¡Has obtenido!', html: `${itemHtml(it, true)}<p class="dim sm">${op === 'equip' ? 'Equipado ahora mismo.' : 'Guardado en tu mochila.'}</p>` };
       }
       s?.act({ a: 'stash', idx: Number(id), op });

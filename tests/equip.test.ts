@@ -109,16 +109,18 @@ describe('rework de equipo v11', () => {
     const leg = genItem(box(5), ZONA1_ITEMS, 0, 'boss', 3, 'arma', 'phys');
     expect(leg.passive?.trait).toBeTruthy();
   });
-  it('alijo de grupo: equipar, mochila y repartir al 50%; vender en tienda al 50%', async () => {
+  it('alijo individual: equipar, mochila y vender al 50%; vender en tienda al 50%', async () => {
     const { metaAction } = await import('../src/game/run');
     const r = newRun('T', 3, [{ owner: 'a', name: 'A', cls: 'barbaro', routes: [] }, { owner: 'b', name: 'B', cls: 'zorro', routes: [] }]);
     r.phase = 'map';
     const mk = (rarity: Rarity) => ({ slot: 'arma' as const, name: 'X', rarity, stats: { crit: 3 } });
-    r.stash = [mk(0), mk(1), mk(3)];
+    r.stash = [{ ...mk(0), owner: 'b' }, { ...mk(1), owner: 'a' }, { ...mk(3), owner: 'a' }];
     const [a, b] = r.heroes as [typeof r.heroes[0], typeof r.heroes[0]];
     const g0 = a.gold, gb = b.gold;
+    // el botín es individual: no se puede coger lo de otro
+    expect(metaAction(r, 'b', { a: 'stash', idx: 2, op: 'equip' })).toBe('Ese objeto es de otro jugador');
     expect(metaAction(r, 'a', { a: 'stash', idx: 2, op: 'split' })).toBeNull();
-    expect(a.gold - g0).toBe(50); expect(b.gold - gb).toBe(50);
+    expect(a.gold - g0).toBe(100); expect(b.gold - gb).toBe(0);
     expect(metaAction(r, 'b', { a: 'stash', idx: 0, op: 'equip' })).toBeNull();
     expect(b.equip.arma?.rarity).toBe(0);
     expect(metaAction(r, 'a', { a: 'stash', idx: 0, op: 'bag' })).toBeNull();

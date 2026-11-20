@@ -196,3 +196,38 @@ export function altarScene(lit: boolean, icons: string[] = []): string {
     ${lit ? embers(14, '#d9a6ff', 64, 96, 50, 17) : ''}`;
   return svg(body, lit ? ['#3a2050', '#07040a'] : ['#2a262e', '#08070a'], `altar ${lit ? 'lit' : 'cold'}`);
 }
+
+// ---------------------------------------------------------------------------
+// Santuario: estatua con halo y rayos de luz
+// ---------------------------------------------------------------------------
+const STATUE = [
+  '....kkkk....',
+  '...kssssk...',
+  '...ksSSsk...',
+  '...kssssk...',
+  '....kssk....',
+  '..kkssssskk.',
+  '.kssSssssssk',
+  'kss.ksssskssk',
+  'ks..ksSssk.sk',
+  '....kssssk..',
+  '....kssssk..',
+  '...ksssssssk',
+  '..kkkkkkkkkkk',
+  '.kppppppppppk',
+  '.kPPPPPPPPPPk',
+  'kkkkkkkkkkkkkk',
+];
+const SHRINE_BG: Array<[string, string]> = [['#3a3a5a', '#08070c'], ['#2f4a3a', '#060b08'], ['#5a3a2a', '#0c0705'], ['#3a2a5a', '#05030c']];
+export function shrineScene(zone: number): string {
+  const pal = { k: '#15131a', s: '#b9b4c2', S: '#e6e2ee', p: '#6a6474', P: '#4a4552' };
+  const rays = [0, 1, 2, 3, 4].map((i) => `<polygon class="ray" points="80,0 ${58 + i * 11},72 ${64 + i * 11},72" fill="#fff4c8" opacity=".09" style="animation-delay:-${i * 0.6}s"/>`).join('');
+  const body = `${rays}${floor('#26222c', '#1e1a24')}${big(`
+    <ellipse class="fireglow" cx="80" cy="40" rx="16" ry="16" fill="#ffe9a0" opacity=".25"/>
+    <circle class="halo" cx="80" cy="32" r="6" fill="none" stroke="#ffe27a" stroke-width="1"/>
+    <ellipse cx="80" cy="60" rx="14" ry="2.5" fill="#000" opacity=".5"/>
+    ${px(STATUE, pal, 74, 44)}
+    ${px(CANDLE, { f: '#ffb02a', y: '#ffe36a', w: '#e8e0cc', k: '#3a3328' }, 66, 53, 'flame')}${px(CANDLE, { f: '#ffb02a', y: '#ffe36a', w: '#e8e0cc', k: '#3a3328' }, 91, 53, 'flame')}
+    ${embers(12, '#fff0b0', 64, 96, 52, 23)}`, 1.6)}`;
+  return svg(body, SHRINE_BG[zone] ?? SHRINE_BG[0]!, 'shrine');
+}

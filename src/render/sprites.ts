@@ -1,4 +1,4 @@
-import { MODEL_CLASSES, MODEL_SIZE, modelFrame, type Anim } from './models';
+import { ANIM_FRAMES, MODEL_CLASSES, MODEL_SIZE, modelFrame, type Anim } from './models';
 // Sprites dibujados por código. Cada letra es un color de la paleta.
 // Héroes: 16×16, uno por clase. Enemigos: 12×12.
 const SPR: Record<string, string[]> = {
@@ -249,6 +249,22 @@ export function classPortraitUrl(cls: string): string {
   url = c.toDataURL();
   portraits.set(cls, url);
   return url;
+}
+
+/** Tira de fotogramas de una animación (para retratos animados con CSS). Devuelve url y nº de fotogramas. */
+export function classStripUrl(cls: string, anim: Anim = 'idle'): { url: string; n: number } {
+  const n = isModel(cls) ? ANIM_FRAMES[anim] : 1;
+  const k = `s:${cls}:${anim}`;
+  let url = portraits.get(k);
+  if (!url) {
+    const c = document.createElement('canvas');
+    c.width = 96 * n; c.height = 96;
+    const g = c.getContext('2d')!;
+    for (let f = 0; f < n; f++) drawUnit(g, cls, 'hero', 0, 48 + f * 96, 94, 96, { anim, frame: f });
+    url = c.toDataURL();
+    portraits.set(k, url);
+  }
+  return { url, n };
 }
 
 /** Retrato pequeño de cualquier unidad (para la línea de turnos), con caché. */

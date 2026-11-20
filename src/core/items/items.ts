@@ -33,6 +33,8 @@ export interface Item {
   lore?: string;
   /** pasiva propia de los legendarios con nombre */
   passive?: { trait: string; text: string };
+  /** en el alijo: jugador al que pertenece (el botín es individual) */
+  owner?: string;
 }
 
 /** Temática de una zona: nombres por ranura y legendarios con nombre propio. */

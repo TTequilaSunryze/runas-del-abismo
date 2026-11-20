@@ -10,7 +10,7 @@ import { MAX_BOONS, PATRONS, patronBonus, patronOf } from '../content/boons';
 import { BLESSINGS, BOON_MODS } from '../core/boonmods';
 import { MAX_SPELL_UPS, UPGRADES, tuned } from '../core/upgrades';
 import { SOULS_PER_ARMOR, SOUL_ARMOR } from '../core/combat/engine';
-import { NODE_NAME, availableNodes, heroMaxHp, heroSpec, pendingOf, statBreakdown, upCount, zoneOf, type BossOption, type HeroSave, type RunState } from '../game/run';
+import { NODE_HINT, NODE_NAME, availableNodes, heroMaxHp, heroSpec, pendingOf, statBreakdown, upCount, zoneOf, type BossOption, type HeroSave, type RunState } from '../game/run';
 import { esc, mine, tip, ui } from './ctx';
 import { NODE_ICON, itemIcon, spellIcon, spellTip } from './icons';
 import { rangeText, spellSummary } from './spellicons';
@@ -32,11 +32,14 @@ export function hpBar(hp: number, max: number, shield = 0): string {
   return `<span class="hp"><i style="width:${Math.max(0, Math.min(100, (hp / max) * 100))}%"></i>${shield ? `<u style="width:${Math.min(100, (shield / max) * 100)}%"></u>` : ''}<b>${hp}/${max}${max - hp > 0 ? ` <span class="miss">(−${max - hp})</span>` : ''}</b></span>`;
 }
 
+/** Escofinas de Eco (siempre a la vista). */
+export const escofinas = (h: HeroSave): string => `<span class="pill esc" ${tip('<b>🔔 Escofinas de Eco</b><div class="sm">Se consiguen desguazando objetos en la Forja, meditando en el descanso o con el Pacto de los Ecos. En la Forja, 3 Escofinas = una mejora de hechizo a elegir.</div>')}>🔔 ${h.escofinas ?? 0}</span>`;
+
 export function topBar(run: RunState): string {
   const h = mine(run);
   if (run.arena) return `<div class="bar"><span class="zone">🏟️ Duelo: ${esc(run.arena.nameA)} contra ${esc(run.arena.nameB)}</span><span class="grow"></span>${sysButtons()}</div>`;
   return `<div class="bar"><b class="code-s">${esc(run.code)}</b><span class="zone">Zona ${run.zone + 1} · ${esc(zoneOf(run).name)}</span>
-  ${h ? `<span class="pill">💰 ${h.gold}</span>${hpBar(h.hp, heroMaxHp(h))}` : '<span class="dim">Espectador</span>'}
+  ${h ? `<span class="pill">💰 ${h.gold}</span>${escofinas(h)}${hpBar(h.hp, heroMaxHp(h))}` : '<span class="dim">Espectador</span>'}
   ${ui.notice ? `<span class="bad">${esc(ui.notice)}</span>` : ''}${!ui.session!.t.connected() ? '<span class="bad">⚠ Conexión perdida: reconectando…</span>' : !ui.session!.hostPresent() ? '<span class="bad">Anfitrión desconectado</span>' : ''}<span class="grow"></span>${sysButtons()}</div>`;
 }
 
@@ -104,7 +107,7 @@ export function soulsHtml(h: HeroSave): string {
 }
 
 function groupTab(run: RunState): string {
-  return run.heroes.map((h, i) => `<div class="member"><div class="row"><b class="p${i % 4}">${esc(h.name)}</b><span class="dim sm">${CLASSES[h.cls].name}</span><span class="grow"></span><span class="pill sm">💰 ${h.gold}</span></div>${soulsHtml(h)}
+  return run.heroes.map((h, i) => `<div class="member"><div class="row"><b class="p${i % 4}">${esc(h.name)}</b><span class="dim sm">${CLASSES[h.cls].name}</span><span class="grow"></span><span class="pill sm">💰 ${h.gold}</span>${escofinas(h)}</div>${soulsHtml(h)}
     <div class="dim sm">${h.routes.map((r) => findRoute(h.cls, r)?.name).join(' + ')}${h.relics.length ? ` · ${h.relics.map((r) => RELICS[r]?.icon ?? '').join('')}` : ''}</div>${hpBar(h.hp, heroMaxHp(h))}
     <div class="cells tiny">${SLOTS.map((sl) => cell(h.equip[sl], 'disabled', undefined, sl)).join('')}</div></div>`).join('');
 }
@@ -149,8 +152,8 @@ export function victoryModal(run: RunState): string {
   if (!r) return '';
   const chip = (icon: string, tipHtml: string, cls = ''): string => `<span class="cell big ${cls}" ${tip(tipHtml)}><span class="emo">${icon}</span></span>`;
   const mineLoot = r.loot.filter((l) => !h || l.owner === h.owner);
-  const found = r.items.map((x) => x.item);
-  const items = found.map((it) => `<span class="cell big ${RAR[it.rarity]}" ${tip(itemHtml(it, true))}>${itemIcon(it)}</span>`).join('');
+  const found = r.items.filter((x) => !h || x.owner === h.owner).map((x) => x.item);
+  const items = found.map((it) => `<span class="cell big ${RAR[it.rarity]}" ${tip(`${itemHtml(it, true)}<div class="sm good">Ya es tuyo: equipado si tenías la ranura libre, si no en la mochila.</div>`)}>${itemIcon(it)}</span>`).join('');
   const total = Math.max(1, ...r.damage.map((x) => x.dmg));
   return `<div class="modal victory" id="victorymodal"><div class="panel wide">
   <h2 class="vtitle">FIN DEL COMBATE - ¡HAS GANADO!</h2>
@@ -212,15 +215,15 @@ export function advanceBar(run: RunState, label: string, act = 'leavenode'): str
 }
 
 /** Botín pendiente: tarjetas grandes con icono, datos y comparación. */
-/** Alijo de grupo: cada uno puede equipárselo, guardarlo o venderlo para repartir el oro. */
+/** Botín propio que no cabía: equiparlo, guardarlo o venderlo. */
 export function stashRow(run: RunState): string {
   const h = mine(run);
-  const list = run.stash ?? [];
+  const list = (run.stash ?? []).map((it, i) => ({ it, i })).filter(({ it }) => !it.owner || it.owner === h?.owner);
   if (!list.length || !h) return '';
-  return `<div class="panel loot"><div class="row"><h3>🧰 Alijo de grupo (${list.length})</h3><span class="grow"></span><span class="dim sm">Mochila ${h.bag.length}/${BAG_SIZE}</span></div>
-  <div class="dim sm">Lo que encontráis cae aquí. Decidid entre todos quién se lo queda; «Repartir» lo vende al 50% y el oro se divide entre el grupo.</div>
-  <div class="stash">${list.map((it, i) => `<div class="stashitem"><span class="cell ${RAR[it.rarity]}" ${tip(itemHtml(it, true) + diffHtml(it, h))}>${itemIcon(it)}</span><div class="sm"><b class="${RAR[it.rarity]}">${esc(it.name)}</b><div class="dim">${SLOT_NAME[it.slot]}</div></div>
-    <span class="grow"></span><button class="mini" data-act="stash" data-id="${i}" data-op="equip">Equipar</button><button class="mini" data-act="stash" data-id="${i}" data-op="bag">Mochila</button><button class="mini" data-act="stash" data-id="${i}" data-op="split" ${tip(`Vender por ${Math.floor(PRICE[it.rarity] / 2)} y repartir`)}>Repartir 💰</button></div>`).join('')}</div></div>`;
+  return `<div class="panel loot"><div class="row"><h3>🧰 Tu botín sin guardar (${list.length})</h3><span class="grow"></span><span class="dim sm">Mochila ${h.bag.length}/${BAG_SIZE}</span></div>
+  <div class="dim sm">No te cabía en la mochila. Es solo tuyo: equípalo, guárdalo (haz sitio antes) o véndelo al 50%.</div>
+  <div class="stash">${list.map(({ it, i }) => `<div class="stashitem"><span class="cell ${RAR[it.rarity]}" ${tip(itemHtml(it, true) + diffHtml(it, h))}>${itemIcon(it)}</span><div class="sm"><b class="${RAR[it.rarity]}">${esc(it.name)}</b><div class="dim">${SLOT_NAME[it.slot]}</div></div>
+    <span class="grow"></span><button class="mini" data-act="stash" data-id="${i}" data-op="equip">Equipar</button><button class="mini" data-act="stash" data-id="${i}" data-op="bag">Mochila</button><button class="mini" data-act="stash" data-id="${i}" data-op="split">Vender · ${Math.floor(PRICE[it.rarity] / 2)} 💰</button></div>`).join('')}</div></div>`;
 }
 
 export function lootRow(run: RunState): string {
@@ -264,7 +267,10 @@ export function mapSvg(run: RunState, pick = false): string {
   const avail = run.phase === 'map' ? availableNodes(run) : [];
   const here = (l: number, i: number): boolean => run.trail[l] === i && l < run.step;
   const current = (l: number, i: number): boolean => run.phase !== 'map' && l === run.step && run.trail[l] === i;
-  const canPick = pick && ui.session?.isHost && !ui.session.waiting().length;
+  const me = mine(run);
+  const canPick = pick && !!me && !(me && pendingOf(run, me).length);
+  const PCOL = ['#e8607a', '#5a9cf0', '#5fcf70', '#e8bd40'];
+  const votesAt = (i: number): Array<{ name: string; col: string; mine: boolean }> => run.heroes.map((h, k) => ({ h, k })).filter(({ h }) => run.mapVotes?.[h.owner] === i).map(({ h, k }) => ({ name: h.name, col: PCOL[k % 4]!, mine: h.owner === ui.myId }));
   const lines = run.links.map((rows, l) => rows.map((to, i) => to.map((j) => {
     const [x1, y1] = pos(l, i), [x2, y2] = pos(l + 1, j);
     const walked = run.trail[l] === i && (run.trail[l + 1] === j && l + 1 < run.step || (l + 1 === run.step && avail.includes(j)));
@@ -276,7 +282,11 @@ export function mapSvg(run: RunState, pick = false): string {
     const stroke = can ? '#f2c14e' : done ? '#6fcf6f' : '#5a4a6e';
     const click = pick && can ? `data-act="node" data-id="${i}" style="cursor:${canPick ? 'pointer' : 'not-allowed'}"` : '';
     const label = can ? `<text x="${x}" y="${y + 36}" text-anchor="middle" font-size="12" fill="#f2c14e">${esc(NODE_NAME[k].replace(/^\S+\s/, ''))}</text>` : '';
-    return `<g ${click} opacity="${l < run.step && !done ? 0.35 : 1}"><title>${esc(NODE_NAME[k])}</title><circle cx="${x}" cy="${y}" r="${can ? 24 : 20}" fill="${can ? '#3a2c1a' : '#241a33'}" stroke="${stroke}" stroke-width="${can || done ? 3 : 2}"/><text x="${x}" y="${y + 7}" text-anchor="middle" font-size="20" pointer-events="none">${NODE_ICON[k]}</text>${label}</g>`;
+    const vs = can ? votesAt(i) : [];
+    const voteMarks = vs.map((v, n) => `<g><circle cx="${x - 18 + n * 12}" cy="${y - 24}" r="7" fill="${v.col}" stroke="#000" stroke-width="2"/><text x="${x - 18 + n * 12}" y="${y - 20.5}" text-anchor="middle" font-size="9" font-weight="bold" fill="#000" pointer-events="none">${esc(v.name.charAt(0).toUpperCase())}</text></g>`).join('');
+    const ring = vs.length ? `<circle cx="${x}" cy="${y}" r="29" fill="none" stroke="${vs.find((v) => v.mine)?.col ?? vs[0]!.col}" stroke-width="2" stroke-dasharray="4 3" class="voting"/>` : '';
+    const tipHtml = `<b>${esc(NODE_NAME[k])}</b><div class="sm">${esc(NODE_HINT[k] ?? '')}</div>${vs.length ? `<div class="sm">Quieren ir: ${vs.map((v) => `<b style="color:${v.col}">${esc(v.name)}</b>`).join(', ')}</div>` : ''}${can && pick ? '<div class="sm good">Haz clic para votar este camino</div>' : ''}`;
+    return `<g ${click} ${tip(tipHtml)} opacity="${l < run.step && !done ? 0.35 : 1}">${ring}<circle cx="${x}" cy="${y}" r="${can ? 24 : 20}" fill="${can ? '#3a2c1a' : '#241a33'}" stroke="${stroke}" stroke-width="${can || done ? 3 : 2}"/><text x="${x}" y="${y + 7}" text-anchor="middle" font-size="20" pointer-events="none">${NODE_ICON[k]}</text>${label}${voteMarks}</g>`;
   }).join('')).join('');
   return `<div class="mapscroll"><svg class="actmap" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${lines}${nodes}</svg></div>`;
 }
@@ -288,9 +298,8 @@ export function mapModal(run: RunState): string {
   const L = run.map.length;
   return `<div class="modal" id="mapmodal"><div class="panel wide">
   <div class="row"><h2>🗺️ Mapa · Zona ${run.zone + 1}</h2><span class="dim sm">Sala ${Math.min(run.step + 1, L)} de ${L}</span><span class="grow"></span><button class="mini" data-act="map">Cerrar ✕</button></div>
-  <div class="chips">${mapLegend()}</div>
   ${mapSvg(run)}
-  <div class="dim sm">Dorado: caminos disponibles · Verde: ruta recorrida. El jefe está a la derecha.</div></div></div>`;
+  <div class="dim sm">Dorado: caminos disponibles · Verde: ruta recorrida. Pasa el ratón por una sala para ver qué es. El jefe está a la derecha.</div></div></div>`;
 }
 
 export { mapLegend };

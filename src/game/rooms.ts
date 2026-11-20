@@ -11,7 +11,8 @@ export type RoomState =
   | { kind: 'altar'; pacts: string[]; votes: Record<string, number>; result?: string }
   | { kind: 'forge'; heat: number; log: string[] }
   | { kind: 'chest'; opened: boolean; cursed?: string | null; lines?: string[] }
-  | { kind: 'rest'; zone: number; picks: Record<string, number>; lines: string[] };
+  | { kind: 'rest'; zone: number; picks: Record<string, number>; lines: string[] }
+  | { kind: 'shrine'; zone: number };
 
 export type RoomOp =
   | { op: 'pact'; idx: number }
@@ -27,6 +28,7 @@ export function enterRoom(run: RunState, kind: RoomState['kind'], firstRun = fal
   if (kind === 'altar') run.room = { kind, pacts: firstRun ? [] : shuffle(run, PACTS.map((p) => p.id)).slice(0, 2), votes: {} };
   else if (kind === 'forge') run.room = { kind, heat: 0, log: [] };
   else if (kind === 'chest') run.room = { kind, opened: false };
+  else if (kind === 'shrine') run.room = { kind, zone: run.zone };
   else run.room = { kind: 'rest', zone: run.zone, picks: {}, lines: [] };
   if (run.room.kind === 'altar' && !run.room.pacts.length) run.room.result = 'El altar está frío. Aún no conocéis los nombres de los Pactos: volved cuando hayáis bajado una vez al Abismo.';
   run.phase = 'room';
