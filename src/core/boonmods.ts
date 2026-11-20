@@ -72,7 +72,7 @@ export const BOON_MODS: Record<string, BoonMod> = Object.fromEntries(([
   // Carcelero de Almas
   M('km_gancho_largo', 'k_sentencia', 'Cadena larga', 'Alcance 1-6.', (d) => { d.range = [1, 6]; }),
   M('km_gancho_pesado', 'k_sentencia', 'Cadena de plomo', 'Quita 3 PA en vez de 2.', (d) => { d.drainAp = 3; }),
-  M('km_desollar', 'k_despellejar', 'Desollar', '+2 de daño y deja Expuesto: −2 de armadura 2 turnos.', (d) => { more(d, 1.25); d.extraStatus = { kind: 'exposed', turns: 2, stacks: 2 }; }),
+  M('km_desollar', 'k_guadana', 'Desollar', '+2 de daño y deja Expuesto: −2 de armadura 2 turnos.', (d) => { more(d, 1.25); d.extraStatus = { kind: 'exposed', turns: 2, stacks: 2 }; }),
   M('km_farol_cura', 'k_linterna', 'Linterna de vida', 'Además cura 10 a los aliados pegados a ella.', (d) => { if (d.lantern) d.lantern = { ...d.lantern, heal: 10 }; }),
   M('km_farol_largo', 'k_linterna', 'Linterna eterna', 'Dura un turno más y alcance 1-6.', (d) => { if (d.lantern) d.lantern = { ...d.lantern, turns: d.lantern.turns + 1 }; d.range = [1, 6]; }),
   M('km_azote', 'k_azote', 'Azote pesado', 'Además quita 1 PM a todos los alcanzados.', (d) => { d.status = { kind: 'slow', turns: 1, stacks: 1 }; }),
@@ -112,7 +112,7 @@ export const BLESSINGS: Record<string, BlessingDef> = Object.fromEntries(([
   B({ id: 'kb_condena', cls: 'carcelero', name: 'Condenación eterna', icon: '⛓️', trait: 'condena', text: 'Los enemigos que engancha, empuja o aturde tienen un 50% de soltar un Alma aunque no mueran.' }),
   B({ id: 'kb_faro', cls: 'carcelero', name: 'Faro de las sombras', icon: '🏮', trait: 'faro', text: 'La Linterna espectral dura 2 turnos y cura 10 al aliado que la toma para teletransportarse.',
     mod: { target: 'k_linterna', apply: (d) => { if (d.lantern) d.lantern = { ...d.lantern, turns: 2 }; } } }),
-  B({ id: 'kb_guadana', cls: 'carcelero', name: 'Guadaña segadora', icon: '💀', trait: 'guadana', text: 'Tras Sentencia de muerte o Despellejar, tu siguiente ataque de ese turno hace +2 de daño por cada Alma de este combate (máx. +20).' }),
+  B({ id: 'kb_guadana', cls: 'carcelero', name: 'Guadaña segadora', icon: '💀', trait: 'guadana', text: 'Tras Sentencia de muerte o Corte de Guadaña, tu siguiente ataque de ese turno hace +2 de daño por cada Alma de este combate (máx. +20).' }),
   // Acechador de Sombras
   B({ id: 'sb_maestro', cls: 'acechador', name: 'Maestro de las sombras', icon: '👥', trait: 'maestro', text: 'Hasta 2 Sombras a la vez, y todas replican tus habilidades de daño.' }),
   B({ id: 'sb_desprecio', cls: 'acechador', name: 'Desprecio por los débiles', icon: '🗡️', trait: 'desprecio', text: 'Tú y tus sombras hacéis +3 de daño a enemigos por debajo de la mitad de su vida.' }),

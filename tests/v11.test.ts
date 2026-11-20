@@ -67,3 +67,12 @@ describe('v12 daño plano', () => {
     expect(before - e.hp).toBe(SPELLS.b_tajo!.dmg![0] + 4 - 3);
   });
 });
+
+describe('v13 iniciativa intercalada', () => {
+  it('alterna aliado y enemigo, cada bando de mayor a menor, empezando por la mayor absoluta', async () => {
+    const { interleave } = await import('../src/core/combat/engine');
+    const u = (id: number, team: 'hero' | 'enemy', initiative: number) => ({ id, team, initiative });
+    expect(interleave([u(1, 'hero', 10), u(2, 'hero', 8), u(3, 'hero', 5), u(4, 'enemy', 12), u(5, 'enemy', 3)])).toEqual([4, 1, 5, 2, 3]);
+    expect(interleave([u(1, 'hero', 14), u(2, 'enemy', 9), u(3, 'enemy', 11), u(4, 'enemy', 2)])).toEqual([1, 3, 2, 4]);
+  });
+});

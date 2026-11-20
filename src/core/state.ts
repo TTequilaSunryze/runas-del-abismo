@@ -115,6 +115,9 @@ export interface Unit {
   bloodUsed?: boolean;
   behindNow?: boolean;
   egidaRound?: number;
+  /** Corte de Guadaña: turnos seguidos sin usarlo (0-3) y si se usó en este turno */
+  scytheCharge?: number;
+  scytheUsed?: boolean;
   firstCast?: boolean;
   tearUsed?: boolean;
   /** Furia del Bárbaro (0 a 100) */

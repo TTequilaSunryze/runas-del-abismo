@@ -94,12 +94,28 @@ export function addFury(u: Unit, n: number, ev: GameEvent[]): void {
 }
 const fail = (reason: string): ActionResult => ({ ok: false, reason });
 
+/**
+ * Cola de turnos intercalada (v13): cada bando ordenado de mayor a menor iniciativa; empieza la iniciativa más alta
+ * de todas y después se alterna estrictamente un aliado y un enemigo. Si un bando se queda sin unidades, el otro
+ * termina la ronda en su orden.
+ */
+export function interleave(units: Array<Pick<Unit, 'id' | 'team' | 'initiative'>>): number[] {
+  const byInit = (a: Pick<Unit, 'id' | 'initiative'>, b: Pick<Unit, 'id' | 'initiative'>): number => b.initiative - a.initiative || a.id - b.id;
+  const heroes = units.filter((u) => u.team === 'hero').sort(byInit);
+  const foes = units.filter((u) => u.team !== 'hero').sort(byInit);
+  let turnHero = (heroes[0]?.initiative ?? -Infinity) >= (foes[0]?.initiative ?? -Infinity);
+  const out: number[] = [];
+  while (heroes.length || foes.length) {
+    const from = (turnHero && heroes.length) || !foes.length ? heroes : foes;
+    out.push(from.shift()!.id);
+    turnHero = from !== heroes;
+  }
+  return out;
+}
+
 export function createCombat(setup: CombatSetup): { state: CombatState; events: GameEvent[] } {
   const units: Unit[] = setup.units.map((u, i) => ({ ...u, pos: { ...u.pos }, statuses: { ...u.statuses }, spells: u.spells.map((s) => ({ ...s })), id: i + 1 }));
-  const order = units
-    .slice()
-    .sort((a, b) => b.initiative - a.initiative || (a.team === b.team ? a.id - b.id : a.team === 'hero' ? -1 : 1))
-    .map((u) => u.id);
+  const order = interleave(units);
   const state: CombatState = {
     version: 1, rng: setup.seed >>> 0, w: setup.w, h: setup.h, obstacles: setup.obstacles.map(key), traps: (setup.traps ?? []).map(key), puddles: (setup.puddles ?? []).map(key),
     units, order, turn: -1, round: 1, over: null, nextId: units.length + 1,
@@ -356,6 +372,12 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     // Mirada del verdugo: si su presa sigue marcada, el Bárbaro gana 1 PM para ir a por ella
     if (s.units.some((x) => alive(x) && x.statuses.verdugo?.from === u.id)) { u.mp++; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: 1 }); }
     turnStartBlessings(s, u, ev);
+    // Corte de Guadaña: se carga en cada turno propio en que no se usó el anterior
+    if (u.spells.some((sp) => sp.id === 'k_guadana')) {
+      if (u.scytheCharge === undefined) u.scytheCharge = 0;
+      else if (!u.scytheUsed) u.scytheCharge = Math.min(3, u.scytheCharge + 1);
+      u.scytheUsed = false;
+    }
     if (u.statuses.stun) {
       tick(u, 'stun');
       ev.push({ t: 'skip', unit: u.id, reason: 'stun' });
@@ -827,7 +849,7 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
     const [ax, ay] = dirOf(main.pos, u.pos), [bx, by] = dirOf(main.pos, sh.pos);
     flank = ax === -bx && ay === -by;
   }
-  // Guadaña segadora: tras Sentencia o Despellejar, el siguiente ataque pega más por las almas del combate
+  // Guadaña segadora: tras Sentencia o Corte de Guadaña, el siguiente ataque pega más por las almas del combate
   let reapBonus = 0;
   if (u.reaper && def.dmg) { reapBonus = Math.min(20, 2 * (u.soulsFight ?? 0)); u.reaper = false; }
   // Explosión de almas: gasta hasta 3 almas
@@ -835,7 +857,10 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
   if (def.special === 'soulburst') { spent = Math.min(3, u.soulBank ?? 0); u.soulBank = (u.soulBank ?? 0) - spent; u.spentSouls = spent; }
   // Descarga desatada: consume todas tus esferas, +daño por cada una
   let flat = reapBonus + (def.furyScale ? Math.round((u.fury ?? 0) * def.furyScale) : 0);
-  const flatAll = spent * 6;
+  // Corte de Guadaña Espectral: +3 por turno sin usarlo (máx. 3) y +1 cada 5 almas del combate (máx. +3)
+  const scythe = def.special === 'scythe' ? scytheBonus(u) : 0;
+  if (def.special === 'scythe') { u.scytheCharge = 0; u.scytheUsed = true; }
+  const flatAll = spent * 6 + scythe;
   if (def.consume) {
     const mine = marksOf(s, 'sphere', u.id);
     flat = mine.length * def.consume.per;
@@ -949,15 +974,16 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
   // Condenación eterna: los enemigos controlados pueden soltar un alma sin morir
   if (hasTrait(u, 'condena') && u.souls !== undefined && (def.hook || def.push || def.pull || def.status?.kind === 'stun'))
     for (const t of targets) if (alive(t) && t.team !== u.team && rand(s) < 0.5) gainSoul(s, u, t.pos, ev);
-  if ((def.id === 'k_sentencia' || def.id === 'k_despellejar') && hasTrait(u, 'guadana')) u.reaper = true;
+  if ((def.id === 'k_sentencia' || def.id === 'k_guadana' || def.id === 'k_despellejar') && hasTrait(u, 'guadana')) u.reaper = true;
   if (def.cone && def.push) coneBlast(s, u, def, at, targets, ev);
   const pullN = def.hook?.pull ?? def.pull ?? 0;
   if (pullN && main && alive(main) && alive(u) && main.team !== u.team) {
     // arrastra al enganchado hacia ti (élites y jefes: dos tiradas por casilla)
     const n = landed(s, main, pullN);
     if (n < pullN) ev.push({ t: 'resist', unit: main.id, what: n ? 'Resiste parte del arrastre' : 'Resiste el arrastre' });
-    const [dx, dy] = dirOf(main.pos, u.pos);
     for (let i = 0; i < n && dist(main.pos, u.pos) > 1; i++) {
+      // el arrastre sigue a quien tira, aunque no esté en línea recta
+      const [dx, dy] = dirOf(main.pos, u.pos);
       const p = { x: main.pos.x + dx, y: main.pos.y + dy };
       if (!isFree(s, p)) break;
       main.pos = p;
@@ -1411,4 +1437,9 @@ function stepBlessings(s: CombatState, u: Unit, ev: GameEvent[]): void {
   }
   if (u.statuses.frenzy && hasTrait(u, 'imparable'))
     for (const t of s.units.filter((x) => alive(x) && x.team !== u.team && !x.rank && x.ai !== 'pillar' && dist(x.pos, u.pos) === 1 && !x.statuses.slow)) addStatus(t, 'slow', 1, 1, ev);
+}
+
+/** Daño extra del Corte de Guadaña: +3 por turno de carga (máx. 3) y +1 cada 5 almas del combate (máx. +3). */
+export function scytheBonus(u: Unit): number {
+  return 3 * Math.min(3, u.scytheCharge ?? 0) + Math.min(3, Math.floor((u.soulsFight ?? 0) / 5));
 }

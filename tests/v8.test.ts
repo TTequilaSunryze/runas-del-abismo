@@ -37,8 +37,8 @@ describe('v8', () => {
     expect(new Set(traits).size).toBe(traits.length);
   });
 
-  it('Orbe y Shuriken: máximo 2 veces por turno; Sentencia y Descarga: 1', () => {
-    for (const [cls, id, n] of [['zorro', 'z_orbe', 2], ['acechador', 's_shuriken', 2], ['carcelero', 'k_sentencia', 1], ['esferas', 't_descarga', 1]] as const) {
+  it('Orbe y Shuriken: máximo 2 veces por turno; Descarga: 1', () => {
+    for (const [cls, id, n] of [['zorro', 'z_orbe', 2], ['acechador', 's_shuriken', 2], ['esferas', 't_descarga', 1]] as const) {
       const s = board([hero(cls), foe({ x: 4, y: 3 })]);
       const h = s.units[0]!;
       turnOf(s, h.id);

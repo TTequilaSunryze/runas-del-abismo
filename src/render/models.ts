@@ -16,7 +16,7 @@ export const ANIM_FRAMES: Record<Anim, number> = { idle: 4, walk: 4, attack: 4, 
 const SPELL_ANIM: Record<string, Anim> = {
   z_orbe: 'attack', z_encanto: 'special', z_impulso: 'cast', z_drenaje: 'attack', z_velo: 'cast',
   t_pulso: 'cast', t_dispersion: 'special', t_descarga: 'attack', t_semilla: 'cast', t_implosion: 'special',
-  k_sentencia: 'attack', k_viaje: 'walk', k_linterna: 'cast', k_despellejar: 'attack', k_cosecha: 'cast',
+  k_sentencia: 'attack', k_viaje: 'walk', k_linterna: 'cast', k_despellejar: 'attack', k_guadana: 'attack', k_cosecha: 'cast',
   s_shuriken: 'cast', s_tajo: 'attack', s_sombra: 'special', s_cambio: 'special', s_marca: 'cast', s_ocaso: 'special',
   z_fuego: 'special', z_espejismo: 'cast', z_vortice: 'cast', z_seduccion: 'special', z_estallido: 'attack', z_vinculo: 'cast',
   t_voluntad: 'attack', t_gravedad: 'special', t_orbita: 'cast', t_resonancia: 'special', t_singularidad: 'special', t_transfusion: 'cast',

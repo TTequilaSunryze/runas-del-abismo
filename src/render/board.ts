@@ -19,7 +19,7 @@ interface Shot { x0: number; y0: number; x1: number; y1: number; color: string; 
 /** Onda expansiva (esfera nueva, golpe giratorio) */
 interface Ring { x: number; y: number; color: string; t0: number; dur: number; r: number; spin?: boolean }
 /** golpes giratorios: el personaje (y su Sombra) dan una vuelta */
-const SPIN_SPELLS = ['s_tajo', 'k_despellejar', 'z_colas', 'g_remolino', 'torbellino'];
+const SPIN_SPELLS = ['s_tajo', 'k_despellejar', 'k_guadana', 'z_colas', 'g_remolino', 'torbellino'];
 const SPIN_MS = 420;
 interface Ghost { kind: string; team: string; idx: number; x: number; y: number; t0: number }
 const ELEMENT_COLOR: Record<string, string> = { fire: '#ff8a30', ice: '#8ae0ff', poison: '#7fe05a', shadow: '#b07cff', holy: '#ffe9a0' };

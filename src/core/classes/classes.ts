@@ -108,9 +108,9 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     ],
   },
   carcelero: {
-    id: 'carcelero', name: 'Carcelero de Almas', hp: 60, armor: 1, power: 0, crit: 5, ap: 6, mp: 4, initiative: 9, base: ['k_sentencia', 'k_linterna', 'k_despellejar'], tackle: 6, dodge: 2,
+    id: 'carcelero', name: 'Carcelero de Almas', hp: 60, armor: 1, power: 0, crit: 5, ap: 6, mp: 4, initiative: 9, base: ['k_sentencia', 'k_linterna', 'k_guadana'], tackle: 6, dodge: 2,
     routes: [
-      R('base', 'Clásico', '', ['k_sentencia', 'k_linterna', 'k_despellejar'], 'El kit inicial: un gancho, una linterna salvavidas y un barrido a tu alrededor.'),
+      R('base', 'Clásico', '', ['k_sentencia', 'k_linterna', 'k_guadana'], 'El kit inicial: un gancho que hace sangrar, una linterna salvavidas y una guadaña que se carga.'),
     ],
   },
 };

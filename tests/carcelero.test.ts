@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { makeEnemy } from '../src/content/enemies';
 import { makeHero } from '../src/core/classes/factory';
 import { SPELLS } from '../src/core/classes/spells';
-import { cast, castProblem, createCombat, current, endTurn, SOULS_PER_ARMOR, type UnitSpec } from '../src/core/combat/engine';
+import { cast, castProblem, createCombat, current, endTurn, SOULS_PER_ARMOR, scytheBonus, type UnitSpec } from '../src/core/combat/engine';
 import { marksOf } from '../src/core/combat/marks';
 import { runAiTurn } from '../src/core/combat/ai';
 import { finishFight, heroSpec, newRun } from '../src/game/run';
@@ -79,21 +79,36 @@ describe('Carcelero de Almas', () => {
     turnOf(s, k!.id);
     expect(marksOf(s, 'lantern')).toHaveLength(0);
   });
-  it('Despellejar alcanza el 3×3, quita PM y empuja 1', () => {
-    const s = board([carc({ x: 5, y: 3 }), foe({ x: 6, y: 4 }), foe({ x: 4, y: 3 })]);
+  it('Corte de Guadaña: arco frontal, empuja 1 y se carga +3 por turno sin usarlo (máx. 3)', () => {
+    const s = board([carc({ x: 3, y: 3 }), foe({ x: 4, y: 3 }), foe({ x: 5, y: 4 })]);
     const [k, a, b] = s.units;
     turnOf(s, k!.id);
-    const r = cast(s, k!.id, 'k_despellejar', k!.pos);
+    a!.armor = 0; b!.armor = 0;
+    const hp = a!.hp;
+    const r = cast(s, k!.id, 'k_guadana', { x: 4, y: 3 });
     expect(r.ok).toBe(true);
-    for (const e of [a!, b!]) expect(r.ok && r.events.some((ev) => ev.t === 'damage' && ev.unit === e.id)).toBe(true);
-    expect(b!.pos).toEqual({ x: 3, y: 3 });
-    expect(a!.statuses.slow?.stacks).toBe(2);
+    expect(r.ok && r.events.some((ev) => ev.t === 'damage' && ev.unit === b!.id)).toBe(true);
+    expect(a!.pos).toEqual({ x: 5, y: 3 });
+    const base = hp - a!.hp;
+    // tres turnos sin usarla: +9
+    for (let i = 0; i < 4; i++) { endTurn(s, current(s)!.id); turnOf(s, k!.id); }
+    expect(k!.scytheCharge).toBe(3);
+    expect(scytheBonus(k!)).toBe(9);
+    k!.pos = { x: 4, y: 3 }; a!.hp = a!.maxHp = 500;
+    const h2 = a!.hp;
+    k!.ap = 6;
+    a!.shield = 0;
+    const r2 = cast(s, k!.id, 'k_guadana', { x: 5, y: 3 });
+    expect(r2.ok).toBe(true);
+    expect(h2 - a!.hp).toBe(base + 9);
+    expect(k!.scytheCharge).toBe(0);
   });
   it(`cada ${SOULS_PER_ARMOR} almas, +1 de armadura en el acto`, () => {
     const s = board([carc({ x: 3, y: 3 }), ...Array.from({ length: 8 }, (_, i) => foe({ x: 2 + (i % 3), y: 2 + Math.floor(i / 3) }, 1)).filter((_, i) => i !== 4)]);
     const k = s.units[0]!;
     const before = k.armor;
     turnOf(s, k.id);
+    k.spells.push({ id: 'k_despellejar', cd: 0 });
     cast(s, k.id, 'k_despellejar', k.pos);
     expect(k.souls).toBe(7);
     expect(k.armor).toBe(before + 1);

@@ -112,7 +112,7 @@ const LOOK: Record<string, [string, string]> = {
   a_letal: ['crosshair', 'steel'], a_abanico: ['multi', 'fire'], a_campo: ['trap', 'poison'], a_halcon: ['paw', 'nature'],
   p_frasco: ['vial', 'poison'], p_degollar: ['skull', 'blood'], p_debilidad: ['eye', 'shadow'], p_danza: ['twin', 'storm'],
   s_shuriken: ['star', 'steel'], s_tajo: ['whirl', 'shadow'], s_sombra: ['twin', 'shadow'], s_cambio: ['twin', 'arcane'], s_marca: ['skull', 'shadow'], s_ocaso: ['cloud', 'shadow'],
-  k_sentencia: ['link', 'shadow'], k_viaje: ['dash', 'shadow'], k_linterna: ['lantern', 'poison'], k_farol: ['lantern', 'holy'], k_despellejar: ['whirl', 'steel'], k_cosecha: ['skull', 'arcane'],
+  k_sentencia: ['link', 'shadow'], k_viaje: ['dash', 'shadow'], k_linterna: ['lantern', 'poison'], k_farol: ['lantern', 'holy'], k_despellejar: ['whirl', 'steel'], k_guadana: ['scythe', 'shadow'], k_cosecha: ['skull', 'arcane'],
   t_pulso: ['orbs', 'shadow'], t_dispersion: ['wind', 'shadow'], t_descarga: ['storm', 'shadow'], t_semilla: ['orbs', 'arcane'], t_implosion: ['whirl', 'shadow'],
   z_orbe: ['fireball', 'shadow'], z_encanto: ['eye', 'shadow'], z_impulso: ['dash', 'arcane'], z_drenaje: ['heart', 'shadow'], z_velo: ['cloud', 'shadow'],
   z_colas: ['whirl', 'arcane'], z_maldicion: ['eye', 'blood'],

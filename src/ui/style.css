@@ -434,3 +434,15 @@ button, canvas, .cell, .evcard, a { touch-action: manipulation; -webkit-tap-high
   .hud .me .hp { flex: 1 1 140px; height: 18px; }
   .hud .me .res { flex: 1 1 100%; }
 }
+
+/* Corte de Guadaña: color según la carga */
+.sbtn.chg0 .sicon { filter: grayscale(.75) brightness(.8) sepia(.2) hue-rotate(180deg); }
+.sbtn.chg1 .sicon, .sbtn.chg2 .sicon { filter: drop-shadow(0 0 4px #b46bff) drop-shadow(0 0 2px #d7a6ff) saturate(1.4) hue-rotate(250deg); }
+.sbtn.chg2 { border-color: #a35bff; }
+.sbtn.chg3 { border-color: #ff3fb4; box-shadow: 0 0 12px rgba(255, 63, 180, .6), inset 0 0 10px rgba(255, 63, 180, .35); overflow: hidden; }
+.sbtn.chg3 .sicon { filter: drop-shadow(0 0 6px #ff3fb4) saturate(1.8) hue-rotate(290deg) brightness(1.15); animation: chgpulse 1.1s ease-in-out infinite; }
+.sbtn.chg3::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(circle, #ffd0f0 1px, transparent 2px) 6px 30px / 14px 18px, radial-gradient(circle, #ff8ad8 1px, transparent 2px) 0 0 / 18px 22px;
+  animation: souls 2.2s linear infinite; opacity: .8; }
+@keyframes chgpulse { 50% { transform: scale(1.08); } }
+@keyframes souls { from { background-position: 6px 40px, 0 40px; } to { background-position: 6px -10px, 0 -14px; } }

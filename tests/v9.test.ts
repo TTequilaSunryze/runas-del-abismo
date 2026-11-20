@@ -198,6 +198,7 @@ describe('Carcelero de Almas', () => {
   it('cada muerte deja un alma en el suelo; Atracción las absorbe; Explosión gasta almas', () => {
     const s = board([kc(['k_atraccion', 'k_explosion']), foe({ x: 3, y: 3 }, 1), foe({ x: 2, y: 4 }, 1), foe({ x: 9, y: 1 })]);
     const u = me(s);
+    u.spells.push({ id: 'k_despellejar', cd: 0 });
     ok(s, u, 'k_despellejar', u.pos);
     expect(marksOf(s, 'soul')).toHaveLength(2);
     expect(u.soulBank).toBe(2);
