@@ -1,4 +1,5 @@
 // Piezas comunes: barra superior, celdas de objeto con icono, ficha lateral (equipo, hechizos, grupo) y botín.
+import { HEAT_HOT, HEAT_OVERLOAD, curseOf, heatTier, pactOf } from '../content/pacts';
 import { FEATURES, schoolOf } from '../core/tuning';
 import { isMuted, musicVolume } from '../audio/sfx';
 import { CLASSES, findRoute } from '../core/classes/classes';
@@ -8,7 +9,7 @@ import { RELICS } from '../content/relics';
 import { MAX_BOONS, PATRONS, patronBonus, patronOf } from '../content/boons';
 import { BLESSINGS, BOON_MODS } from '../core/boonmods';
 import { MAX_SPELL_UPS, UPGRADES, tuned } from '../core/upgrades';
-import { SOULS_PER_ARMOR } from '../core/combat/engine';
+import { SOULS_PER_ARMOR, SOUL_ARMOR } from '../core/combat/engine';
 import { NODE_NAME, availableNodes, heroMaxHp, heroSpec, pendingOf, statBreakdown, upCount, zoneOf, type BossOption, type HeroSave, type RunState } from '../game/run';
 import { esc, mine, tip, ui } from './ctx';
 import { NODE_ICON, itemIcon, spellIcon, spellTip } from './icons';
@@ -99,7 +100,7 @@ function spellsTab(h: HeroSave): string {
 export function soulsHtml(h: HeroSave): string {
   if (h.cls !== 'carcelero') return '';
   const n = h.souls ?? 0;
-  return `<div class="sm souls" ${tip(`Cosecha de almas: cada ${SOULS_PER_ARMOR} almas de la partida, +1 de armadura permanente.`)}>💀 ${n} almas · +${Math.floor(n / SOULS_PER_ARMOR)} armadura · próxima en ${SOULS_PER_ARMOR - (n % SOULS_PER_ARMOR)}</div>`;
+  return `<div class="sm souls" ${tip(`Cosecha de almas: cada ${SOULS_PER_ARMOR} almas de la partida, +0,5 de armadura permanente.`)}>💀 ${n} almas · +${Math.floor(n / SOULS_PER_ARMOR) * SOUL_ARMOR} armadura · próxima en ${SOULS_PER_ARMOR - (n % SOULS_PER_ARMOR)}</div>`;
 }
 
 function groupTab(run: RunState): string {
@@ -280,7 +281,7 @@ export function mapSvg(run: RunState, pick = false): string {
   return `<div class="mapscroll"><svg class="actmap" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${lines}${nodes}</svg></div>`;
 }
 
-const mapLegend = (): string => (['combat', 'elite', 'event', 'shrine', 'shop', 'treasure', 'rest', 'boss'] as const).map((k) => `<span class="chip">${NODE_ICON[k]} ${esc(NODE_NAME[k].replace(/^\S+\s/, ''))}</span>`).join('');
+const mapLegend = (): string => (['combat', 'elite', 'event', 'shrine', 'shop', 'treasure', 'forge', 'rest', 'altar', 'boss'] as const).map((k) => `<span class="chip">${NODE_ICON[k]} ${esc(NODE_NAME[k].replace(/^\S+\s/, ''))}</span>`).join('');
 
 /** Mapa del acto como cartel (para consultarlo desde cualquier pantalla). */
 export function mapModal(run: RunState): string {
@@ -295,13 +296,24 @@ export function mapModal(run: RunState): string {
 export { mapLegend };
 
 /** Iconos de las bendiciones activas de cada héroe (esquina superior izquierda). */
+/** Pacto, calor de la forja y maldiciones activas: chips siempre visibles. */
+export function runChips(run: RunState): string {
+  const out: string[] = [];
+  const p = pactOf(run.pact);
+  if (p) out.push(`<span class="pill chip pact" ${tip(`<b>${p.icon} ${esc(p.name)}</b><div class="sm good">▲ ${esc(p.boon)}</div><div class="sm bad">▼ ${esc(p.bane)}</div>`)}>${p.icon} ${esc(p.name.replace('Pacto ', ''))}</span>`);
+  if (run.overload) { const t = heatTier(run.overload === 'overload' ? HEAT_OVERLOAD : HEAT_HOT); out.push(`<span class="pill chip heatchip ${run.overload}" ${tip(`<b>🔥 ${esc(t.name)}</b><div class="sm">${esc(t.text)}</div>`)}>🔥 ${esc(t.name)}</span>`); }
+  for (const x of run.hexes ?? []) { const c = curseOf(x.id); if (c) out.push(`<span class="pill chip curse" ${tip(`<b>${c.icon} ${esc(c.name)}</b><div class="sm">${esc(c.text)}</div><div class="sm dim">Quedan ${x.fights} combate(s)</div>`)}>${c.icon} ${esc(c.name)} · ${x.fights}</span>`); }
+  return out.length ? `<span class="runchips">${out.join('')}</span>` : '';
+}
+
 export function blessingBar(run: RunState): string {
+  const chips = runChips(run);
   const rows = run.heroes.map((h, i) => {
     const bl = h.boons.filter((b) => BLESSINGS[b]).map((b) => BLESSINGS[b]!);
     if (!bl.length) return '';
     return `<span class="bless p${i % 4}"><span class="sm">${esc(h.name)}</span>${bl.map((b) => `<span class="bicon" ${tip(`<b>${b.icon} ${esc(b.name)}</b><div class="sm">${esc(b.text)}</div>`)}>${b.icon}</span>`).join('')}</span>`;
   }).join('');
-  return rows ? `<div class="blessbar">${rows}</div>` : '';
+  return rows || chips ? `<div class="blessbar">${chips}${rows}</div>` : '';
 }
 
 /** Cartel central «Has obtenido…» con el objeto o el hechizo recibido. */

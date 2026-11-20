@@ -5,6 +5,7 @@ import { cast, current, deployMove, endTurn, move, startCombat, type ActionResul
 import type { ClassId, GameEvent, Pos } from '../core/state';
 import { saveRun, type Peer, type Transport } from '../net/transport';
 import { clearSnapshot, saveSnapshot } from './snapshot';
+import { meta } from './meta';
 import type { Perks } from '../content/modes';
 import { pendingOf, waitingFor, type HeroSave } from './run';
 import { bossInfo, chooseNode, recordEvents, finishFight, leaveNode, metaAction, newArena, newRun, resolveEvent, type MetaAction, type RunState } from './run';
@@ -183,7 +184,7 @@ export class Session {
     const host = all.find((p) => p.id === this.myId);
     this.run = newRun(this.code, (Date.now() ^ (Math.random() * 2 ** 31)) >>> 0,
       players.map((p) => ({ owner: p.id, name: p.name, cls: p.cls, routes: p.routes, perks: p.perks, mastery: p.mastery })),
-      { asc: host?.asc ?? 0, daily: host?.daily ?? null, unlocked: players.flatMap((p) => p.unlocked), nemesis: all.map((p) => p.nem).filter(Boolean), mods: host?.mods ?? [], abyss: host?.abyss ?? false });
+      { firstRun: meta().stats.runs === 0, asc: host?.asc ?? 0, daily: host?.daily ?? null, unlocked: players.flatMap((p) => p.unlocked), nemesis: all.map((p) => p.nem).filter(Boolean), mods: host?.mods ?? [], abyss: host?.abyss ?? false });
     this.afterChange([]);
   }
 
@@ -299,6 +300,7 @@ export class Session {
       return this.afterChange(ev);
     }
     if (a.a !== 'move' && a.a !== 'cast' && a.a !== 'end') {
+      if (a.a === 'room' && a.op === 'seal' && !(from === this.myId && this.isHost)) return this.reject(from, 'Solo el anfitrión puede cerrar la votación');
       const err = metaAction(run, from, a);
       if (err) return this.reject(from, err);
       if (run.phase === 'event' && run.event && !run.event.result && run.heroes.every((h) => run.event!.votes[h.owner] !== undefined)) resolveEvent(run, this.myId);

@@ -49,6 +49,12 @@ export const ui = {
   mapOpen: false,
   /** móvil: ficha lateral (equipo, hechizos, grupo) desplegada */
   sideOpen: false,
+  /** forja: objeto, afijo y hechizo elegidos */
+  forgeRef: '',
+  forgeAffix: -1,
+  forgeSpell: '',
+  /** último hechizo lanzado (cartel flotante sobre el tablero) */
+  toast: null as null | { text: string; team: string; at: number },
   /** barras de vida visibles en el tablero */
   hpBars: true,
   /** sello del último informe de combate cerrado */

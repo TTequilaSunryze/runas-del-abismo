@@ -86,7 +86,7 @@ describe('contenido', () => {
 const P = [{ owner: 'a', name: 'A', cls: 'guerrero' as const, routes: ['baluarte'] }];
 describe('salas, reliquias y presagios', () => {
   it('reliquias: cambian estadísticas y rasgos', () => {
-    const run = newRun('T', 3, P);
+    const run = roomStep(newRun('T', 3, P));
     const h = run.heroes[0]!;
     h.relics = ['caparazon', 'raiz'];
     const u = heroSpec(h);
@@ -95,7 +95,7 @@ describe('salas, reliquias y presagios', () => {
     expect(Object.keys(RELICS).length).toBeGreaterThanOrEqual(20);
   });
   it('jaula: el aliado lucha con el grupo y no cuenta para perder', () => {
-    const run = newRun('T', 3, P);
+    const run = roomStep(newRun('T', 3, P));
     run.map[run.step] = ['cage'];
     chooseNode(run, 0);
     // la jaula es un combate: el aliado se une al ganarlo
@@ -110,7 +110,7 @@ describe('salas, reliquias y presagios', () => {
   });
   it('los presagios cambian el combate', () => {
     expect(OMENS.length).toBeGreaterThanOrEqual(8);
-    const run = newRun('T', 3, P);
+    const run = roomStep(newRun('T', 3, P));
     run.kind = 'combat';
     run.omen = 'pantano';
     expect(buildFight(run).puddles!.length).toBeGreaterThan(0);
@@ -140,3 +140,5 @@ describe('zona 4', () => {
     expect(newRun('T', 3, P, { abyss: true, daily: '2026-11-16' }).abyss).toBe(false);
   });
 });
+
+import { roomStep } from './helpers';

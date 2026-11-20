@@ -72,4 +72,4 @@ export function spellTip(d: SpellDef, extra = ''): string {
   ${d.text ? `<i class="sm dim">${esc(d.text)}</i>` : ''}${extra}`;
 }
 
-export const NODE_ICON: Record<NodeKind, string> = { combat: '⚔️', elite: '☠️', event: '❓', rest: '🔥', shop: '💰', boss: '👑', cage: '⛓️', shrine: '✨', treasure: '🎁' };
+export const NODE_ICON: Record<NodeKind, string> = { combat: '⚔️', elite: '☠️', event: '❓', rest: '🔥', shop: '💰', boss: '👑', cage: '⛓️', shrine: '✨', treasure: '🎁', forge: '⚒️', altar: '🕯️' };

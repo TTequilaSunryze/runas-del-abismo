@@ -24,6 +24,8 @@ export interface CombatSetup {
   units: UnitSpec[];
   /** empieza con una fase de colocación de los héroes */
   deploy?: boolean;
+  /** casillas de inicio elegibles (si no, las 3 primeras columnas) */
+  deployCells?: Pos[];
 }
 
 export type ActionResult = { ok: true; events: GameEvent[] } | { ok: false; reason: string };
@@ -49,6 +51,8 @@ const BOMB_DMG = 8;
 const BOMB_PCT = 0.15;
 /** Cosecha de almas: cada tantas almas de la partida, +1 de armadura permanente. */
 export const SOULS_PER_ARMOR = 5;
+/** Armadura que da cada tanda de almas (se redondea hacia abajo al recibir daño). */
+export const SOUL_ARMOR = 0.5;
 /** Cosecha (hechizo): tope de escudo. */
 const SOUL_SHIELD_CAP = 20;
 /** Élites y jefes: cada punto de PA/PM (o casilla de empuje) se tira dos veces y solo entra si salen las dos. */
@@ -128,7 +132,9 @@ export function createCombat(setup: CombatSetup): { state: CombatState; events: 
   if (setup.deploy) {
     // zona de despliegue: las 3 primeras columnas, sin obstáculos, trampas ni enemigos
     const cells: string[] = [];
-    for (let x = 0; x < Math.min(3, state.w); x++) for (let y = 0; y < state.h; y++) {
+    const only = setup.deployCells?.length ? new Set(setup.deployCells.map(key)) : null;
+    for (let x = 0; x < (only ? state.w : Math.min(3, state.w)); x++) for (let y = 0; y < state.h; y++) {
+      if (only && !only.has(key({ x, y }))) continue;
       const k = key({ x, y });
       if (state.obstacles.includes(k) || state.traps.includes(k) || state.puddles.includes(k) || state.abyss!.includes(k)) continue;
       if (units.some((u) => u.team !== 'hero' && same(u.pos, { x, y }))) continue;
@@ -265,6 +271,19 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
       ev.push({ t: 'explode', unit: u.id });
       for (const o of s.units.filter((x) => x !== u && alive(x) && dist(x.pos, u.pos) <= 1)) hurt(s, o, BOMB_DMG + u.maxHp * BOMB_PCT, ev, 'bomb', { pierce: true, element: 'fire' });
     }
+    // Pacto del Vacío Hambriento: estalla y daña a sus aliados pegados
+    if (hasTrait(u, 'hambriento')) {
+      u.traits = u.traits!.filter((t) => t !== 'hambriento');
+      ev.push({ t: 'explode', unit: u.id });
+      for (const o of s.units.filter((x) => x !== u && alive(x) && x.team === u.team && dist(x.pos, u.pos) <= 1)) hurt(s, o, Math.ceil(u.maxHp * 0.2), ev, 'vacio', { pierce: true });
+    }
+    // las invocaciones mueren con su creador
+    for (const m of s.units.filter((x) => alive(x) && x.summoner === u.id)) {
+      m.hp = 0; m.shield = 0;
+      ev.push({ t: 'death', unit: m.id });
+      ev.push({ t: 'note', text: `${m.name} se desvanece con su invocador.` });
+      clearMarksOf(s, m.id, ev);
+    }
     checkOver(s, ev);
   }
   return dmg;
@@ -275,7 +294,7 @@ function gainSoul(s: CombatState, k: Unit, at: Pos, ev: GameEvent[]): void {
   k.souls = (k.souls ?? 0) + 1;
   k.soulBank = (k.soulBank ?? 0) + 1;
   k.soulsFight = (k.soulsFight ?? 0) + 1;
-  const gain = k.souls % SOULS_PER_ARMOR === 0 ? 1 : 0;
+  const gain = k.souls % SOULS_PER_ARMOR === 0 ? SOUL_ARMOR : 0;
   k.armor += gain;
   ev.push({ t: 'soul', unit: k.id, armor: gain });
   if (!marksAt(s, 'soul', at).length) addMark(s, { kind: 'soul', pos: at, team: k.team, turns: 99 }, ev);
@@ -301,6 +320,8 @@ export function heal(u: Unit, amount: number, ev: GameEvent[]): void {
 
 function addStatus(u: Unit, kind: StatusKind, turns: number, stacks: number, ev: GameEvent[]): void {
   if (!alive(u)) return;
+  // Sobrecarga de la forja: enemigos inmunes a las quemaduras
+  if (kind === 'burn' && hasTrait(u, 'ignifugo')) return;
   const cur = u.statuses[kind];
   const stackable = kind === 'poison';
   u.statuses[kind] = { turns: Math.max(turns, cur?.turns ?? 0), stacks: stackable ? (cur?.stacks ?? 0) + stacks : Math.max(stacks, cur?.stacks ?? 0) };
@@ -616,7 +637,9 @@ export function apCost(u: Unit, id: string, s?: CombatState): number {
   const dom = s && d && hasTrait(u, 'dominio') && isSphereSpell(d) && marksOf(s, 'sphere', u.id).some((m) => dist(m.pos, u.pos) <= 2) ? 1 : 0;
   // Primera Runa: el primer hechizo del turno cuesta 1 PA menos
   const first = hasTrait(u, 'primera') && !u.firstCast ? 1 : 0;
-  return Math.max(0, base - Math.max(u.discount ?? 0, sym) - dom - first);
+  const cost = Math.max(0, base - Math.max(u.discount ?? 0, sym) - dom - first);
+  // Pacto de la Magia Desatada: 1 PA menos (mínimo 1)
+  return hasTrait(u, 'desatada') && cost > 1 ? cost - 1 : cost;
 }
 
 /** Hechizos que crean, mueven, consumen o usan esferas. */
@@ -870,6 +893,8 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
   // Explosión de almas: gasta hasta 3 almas
   let spent = 0;
   if (def.special === 'soulburst') { spent = Math.min(3, u.soulBank ?? 0); u.soulBank = (u.soulBank ?? 0) - spent; u.spentSouls = spent; }
+  // Siega del condenado: gasta hasta 2 almas (+6 cada una); si mata, las recupera y gana 1 más
+  if (def.special === 'soulreap') { spent = Math.min(2, u.soulBank ?? 0); u.soulBank = (u.soulBank ?? 0) - spent; u.spentSouls = spent; }
   // Descarga desatada: consume todas tus esferas, +daño por cada una
   let flat = reapBonus + (def.furyScale ? Math.round((u.fury ?? 0) * def.furyScale) : 0);
   // Corte de Guadaña Espectral: +3 por turno sin usarlo (máx. 3) y +1 cada 5 almas del combate (máx. +3)
@@ -1377,6 +1402,10 @@ const TARGET_SPECIALS: Record<string, TargetSpecial> = {
   },
   // Explosión de almas: se cura por cada alma gastada (el daño extra ya se sumó)
   soulburst: (_s, u, _d, _at, _m, _t, _h, ev) => { const n = u.spentSouls ?? 0; if (n) heal(u, 5 * n, ev); delete u.spentSouls; },
+  soulreap: (_s, u, _d, _at, main, _t, _h, ev) => {
+    const n = u.spentSouls ?? 0; delete u.spentSouls;
+    if (main && !alive(main)) { u.soulBank = (u.soulBank ?? 0) + n + 1; ev.push({ t: 'note', text: `Siega del condenado: ${u.name} recupera ${n + 1} alma(s).` }); }
+  },
 };
 
 // ---------------------------------------------------------------------------

@@ -87,7 +87,8 @@ const ACT_GROWTH = 0.25;
 /** Estadísticas que solo salen en Rare o mejor (pesan mucho en el combate). */
 const RARE_ONLY: StatKey[] = ['ap', 'mp'];
 
-function roll(box: RngBox, k: StatKey, rarity: Rarity, act: number): number {
+/** Valor de un afijo (también para recalibrar en la Forja). */
+export function rollAffix(box: RngBox, k: StatKey, rarity: Rarity, act: number): number {
   if (k === 'ap' || k === 'mp') return 1;
   const m = MULT[rarity]! * (1 + ACT_GROWTH * act);
   if (k.startsWith('res')) return Math.round(randInt(box, 8, 13) * m);
@@ -158,7 +159,7 @@ export function genItem(box: RngBox, theme: ItemTheme, act: number, kind: DropKi
   kinds.forEach((kind2, i) => {
     const stat = keys[i];
     if (!stat) return;
-    const value = roll(box, stat, rarity, act);
+    const value = rollAffix(box, stat, rarity, act);
     stats[stat] = (stats[stat] ?? 0) + value;
     affixes.push({ kind: kind2, id: `${kind2}_${stat}`, name: AFFIX_NAMES[stat][kind2], stat, value });
   });

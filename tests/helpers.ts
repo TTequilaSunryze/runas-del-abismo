@@ -45,3 +45,15 @@ export function autoplay(s: CombatState, maxTurns = 600, info?: Parameters<typeo
     if (!s.over && current(s)?.id === u.id) endTurn(s, u.id);
   }
 }
+
+import { leaveNode, metaAction, type RunState } from '../src/game/run';
+/** Resuelve una sala especial como lo haría un grupo de bots (pacto 0, abrir cofre, descansar, salir de la forja). */
+export function roomStep(run: RunState): RunState {
+  if (run.phase !== 'room' || !run.room) return run;
+  const r = run.room;
+  if (r.kind === 'altar' && !r.result) for (const h of run.heroes) metaAction(run, h.owner, { a: 'room', op: 'pact', idx: 0 });
+  if (r.kind === 'chest') metaAction(run, run.heroes[0]!.owner, { a: 'room', op: 'open' });
+  if (r.kind === 'rest') for (const h of run.heroes) metaAction(run, h.owner, { a: 'room', op: 'rest', idx: 0 });
+  leaveNode(run);
+  return run;
+}

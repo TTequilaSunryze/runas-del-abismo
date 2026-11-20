@@ -230,6 +230,7 @@ export type GameEvent =
   | { t: 'markAdd'; kind: string; at: Pos }
   | { t: 'markGone'; kind: string; at: Pos }
   | { t: 'markMove'; kind: string; from: Pos; to: Pos }
+  | { t: 'note'; text: string }
   | { t: 'over'; result: 'win' | 'lose' };
 
 export const key = (p: Pos): string => `${p.x},${p.y}`;

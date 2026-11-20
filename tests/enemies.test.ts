@@ -63,7 +63,7 @@ describe('rasgos de enemigos', () => {
     until(s, aco.id);
     runAiTurn(s, bossInfo(newRun('T', 1, [{ owner: 'p', name: 'L', cls: 'mago', routes: ['fuego'] }])));
     expect(s.units.length).toBe(before + 1);
-    expect(s.units[s.units.length - 1]!.kind).toBe('esqueleto');
+    expect(['esqueleto', 'espectro']).toContain(s.units[s.units.length - 1]!.kind);
   });
   it('los lobos hacen más daño en manada', () => {
     const dmg = (pack: number): number => {

@@ -251,6 +251,20 @@ export function classPortraitUrl(cls: string): string {
   return url;
 }
 
+/** Retrato pequeño de cualquier unidad (para la línea de turnos), con caché. */
+export function unitPortraitUrl(kind: string, team: string, colorIdx = 0): string {
+  const k = `u:${kind}:${team}:${colorIdx}`;
+  let url = portraits.get(k);
+  if (url) return url;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  try { drawUnit(g, kind, team, colorIdx, 32, 62, 64, { anim: 'idle', frame: 0 }); } catch { /* sin sprite: queda vacío */ }
+  url = c.toDataURL();
+  portraits.set(k, url);
+  return url;
+}
+
 /** Para comprobaciones: todas las filas de cada sprite miden lo mismo que su alto. */
 export function spriteErrors(): string[] {
   return Object.entries(SPR).flatMap(([k, rows]) => rows.filter((r) => r.length !== rows.length).map((r) => `${k}: "${r}" mide ${r.length}`));

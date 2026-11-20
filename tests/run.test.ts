@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ZONA1_ITEMS } from '../src/content/zona1/items';
 import { SLOTS, genItem, statDiff } from '../src/core/items/items';
 import { availableNodes, bossInfo, chooseNode, finishFight, heroMaxHp, leaveNode, metaAction, newRun, resolveEvent, type RunState } from '../src/game/run';
-import { autoplay } from './helpers';
+import { autoplay, roomStep } from './helpers';
 
 const CLS = [
   { cls: 'guerrero', routes: ['baluarte', 'duelista'] }, { cls: 'mago', routes: ['fuego', 'tormenta'] },
@@ -10,7 +10,7 @@ const CLS = [
 ] as const;
 
 const make = (n: number, seed: number): RunState =>
-  newRun('TEST', seed, CLS.slice(0, n).map((c, i) => ({ owner: `p${i}`, name: `H${i}`, cls: c.cls, routes: [...c.routes] })));
+  roomStep(newRun('TEST', seed, CLS.slice(0, n).map((c, i) => ({ owner: `p${i}`, name: `H${i}`, cls: c.cls, routes: [...c.routes] }))));
 
 /** Juega una partida entera eligiendo siempre el nodo `prefer` si existe (o el primero). */
 function playRun(n: number, seed: number, prefer: string): RunState {
@@ -32,6 +32,8 @@ function playRun(n: number, seed: number, prefer: string): RunState {
       resolveEvent(run, 'p0');
       expect(run.event!.result).toBeTruthy();
       leaveNode(run);
+    } else if (run.phase === 'room') {
+      roomStep(run);
     } else if (run.phase === 'shop') {
       for (const h of run.heroes) { metaAction(run, h.owner, { a: 'buy', idx: 5 }); metaAction(run, h.owner, { a: 'potion' }); }
       leaveNode(run);
@@ -82,7 +84,7 @@ describe('mochila y tienda', () => {
   });
   it('comprar exige oro y cada objeto se vende una sola vez', () => {
     const run = make(2, 3);
-    run.map[0] = ['shop'];
+    run.map[run.step] = ['shop'];
     chooseNode(run, 0);
     expect(run.phase).toBe('shop');
     expect(metaAction(run, 'p0', { a: 'buy', idx: 0 })).toBe('No tienes oro suficiente');

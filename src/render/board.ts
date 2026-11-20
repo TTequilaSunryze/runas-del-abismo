@@ -392,7 +392,14 @@ export class Board {
     const cur = current(c);
     const fill = (p: Pos, color: string): void => { g.fillStyle = color; g.fillRect(p.x * TILE + 3, p.y * TILE + 3, TILE - 6, TILE - 6); };
     if (c.deploy) {
-      for (const k of c.deploy.cells) { const [x, y] = k.split(',').map(Number) as [number, number]; fill({ x, y }, 'rgba(95,207,112,.22)'); g.strokeStyle = 'rgba(95,207,112,.6)'; g.lineWidth = 1; g.strokeRect(x * TILE + 3, y * TILE + 3, TILE - 6, TILE - 6); }
+      // casillas de inicio: azules y con pulso, bien visibles (al estilo Dofus)
+      const pulse = 0.55 + 0.25 * Math.sin(performance.now() / 300);
+      for (const k of c.deploy.cells) {
+        const [x, y] = k.split(',').map(Number) as [number, number];
+        fill({ x, y }, `rgba(60,140,255,${(0.28 * pulse + 0.12).toFixed(3)})`);
+        g.strokeStyle = `rgba(150,200,255,${pulse.toFixed(3)})`; g.lineWidth = 2; g.strokeRect(x * TILE + 4, y * TILE + 4, TILE - 8, TILE - 8);
+        g.fillStyle = 'rgba(210,235,255,.85)'; g.beginPath(); g.arc(x * TILE + TILE / 2, y * TILE + TILE / 2, 3, 0, Math.PI * 2); g.fill();
+      }
       if (me) { g.strokeStyle = '#5fcf70'; g.lineWidth = 3; g.strokeRect(me.pos.x * TILE + 2, me.pos.y * TILE + 2, TILE - 4, TILE - 4); }
     }
     if (me && cur?.id === me.id && !c.over) {

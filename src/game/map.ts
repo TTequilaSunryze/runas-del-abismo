@@ -1,7 +1,7 @@
 // Mapa de un acto: grafo por capas (estilo Slay the Spire). Cada nodo enlaza con 1-2 nodos de la capa siguiente.
 import { pick, rand, randInt, shuffle, type RngBox } from '../core/rng';
 
-export type MapKind = 'combat' | 'elite' | 'event' | 'rest' | 'shop' | 'boss' | 'cage' | 'shrine' | 'treasure';
+export type MapKind = 'combat' | 'elite' | 'event' | 'rest' | 'shop' | 'boss' | 'cage' | 'shrine' | 'treasure' | 'forge' | 'altar';
 export interface ActMap {
   /** capas de nodos: la última es el jefe */
   layers: MapKind[][];
@@ -70,6 +70,8 @@ function build(box: RngBox): ActMap {
   layers[mid]![pick(box, freeIn(mid))] = 'treasure';
   put('shop', 2, mid - 1); put('shop', mid + 1, L - 3);
   put('event', 2, L - 3); if (rand(box) < 0.5) put('event', 2, L - 3);
+  // al menos una Forja por zona
+  put('forge', 3, L - 3);
   // el resto (élites, más descansos y santuarios) hasta dejar entre el 60% y el 70% de combates
   const target = Math.round(total * (0.62 + rand(box) * 0.06));
   put('elite', 4, L - 3);
@@ -87,7 +89,7 @@ export function makeActMap(box: RngBox): ActMap {
   for (let t = 0; t < 300; t++) {
     const s = combatShare(m);
     const n = (k: MapKind): number => m.layers.flat().filter((x) => x === k).length;
-    if (s >= 0.6 && s <= 0.7 && minFightsOnPath(m) >= 5 && n('shop') === 2 && n('treasure') === 1 && n('event') >= 1 && n('event') <= 2) return m;
+    if (s >= 0.6 && s <= 0.7 && minFightsOnPath(m) >= 5 && n('shop') === 2 && n('treasure') === 1 && n('forge') >= 1 && n('event') >= 1 && n('event') <= 2) return m;
     m = build(box);
   }
   return m;

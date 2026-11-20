@@ -111,14 +111,14 @@ describe('Carcelero de Almas', () => {
     k.spells.push({ id: 'k_despellejar', cd: 0 });
     cast(s, k.id, 'k_despellejar', k.pos);
     expect(k.souls).toBe(7);
-    expect(k.armor).toBe(before + 1);
+    expect(k.armor).toBe(before + 0.5);
   });
   it('las almas cuentan en toda la partida y dan armadura permanente', () => {
     const run = newRun('T', 1, [{ owner: 'p0', name: 'K', cls: 'carcelero', routes: ['base'] }]);
     const h = run.heroes[0]!;
     const base = heroSpec(h).armor;
     h.souls = 11;
-    expect(heroSpec(h).armor).toBe(base + 2);
+    expect(heroSpec(h).armor).toBe(base + 1);
     expect(heroSpec(h).souls).toBe(11);
   });
   it('las almas del combate se guardan en la partida', () => {
@@ -138,5 +138,23 @@ describe('Carcelero de Almas', () => {
     const s = board([{ ...carc(), ai: 'champ' }, { ...ally({ x: 1, y: 5 }), ai: 'champ' }, foe({ x: 6, y: 3 }, 60), foe({ x: 8, y: 2 }, 60)]);
     for (let i = 0; i < 300 && !s.over; i++) runAiTurn(s);
     expect(s.over).toBeTruthy();
+  });
+});
+
+describe('v14', () => {
+  it('las invocaciones mueren con su creador', () => {
+    const k = carc({ x: 2, y: 3 });
+    const boss = { ...foe({ x: 4, y: 3 }, 1), shield: 0, armor: 0 };
+    const pet = { ...foe({ x: 6, y: 5 }), summoner: 2 };
+    const s = createCombat({ seed: 3, w: 10, h: 7, obstacles: [], units: [k, boss, pet] }).state;
+    s.turn = s.order.indexOf(1); s.units[0]!.ap = 9;
+    const r = cast(s, 1, 'k_sentencia', { x: 4, y: 3 });
+    expect(r.ok).toBe(true);
+    expect(s.units[1]!.hp).toBe(0);
+    expect(s.units[2]!.hp).toBe(0);
+  });
+  it('La caja: 3 PA y 2 de espera; Siega del condenado existe', () => {
+    expect(SPELLS.k_caja!.ap).toBe(3); expect(SPELLS.k_caja!.cd).toBe(2);
+    expect(SPELLS.k_siega).toBeTruthy(); expect(SPELLS.k_tormento).toBeTruthy();
   });
 });

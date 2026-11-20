@@ -19,7 +19,7 @@ import { championOf } from '../game/run';
 import { MAX_ASC } from '../content/modes';
 import { setMusicVolume, setZoneMusic } from '../audio/sfx';
 import { gotFromBoss, gotModal, itemHtml, mapModal, statsModal, victoryModal } from './panels';
-import { endScreen, eventScreen, homeScreen, lobbyScreen, mapScreen, shopScreen } from './screens';
+import { endScreen, eventScreen, homeScreen, lobbyScreen, mapScreen, roomScreen, shopScreen } from './screens';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 
@@ -95,20 +95,21 @@ function render(events: GameEvent[]): void {
   const s = ui.session;
   if (!s) return;
   const run = s.run;
-  const want = !run ? 'lobby' : run.phase === 'combat' && run.combat ? 'combat' : run.phase === 'event' && run.event ? 'event' : run.phase === 'shop' ? 'shop' : run.phase === 'map' ? 'map' : 'end';
+  const want = !run ? 'lobby' : run.phase === 'combat' && run.combat ? 'combat' : run.phase === 'event' && run.event ? 'event' : run.phase === 'shop' ? 'shop' : run.phase === 'room' && run.room ? 'room' : run.phase === 'map' ? 'map' : 'end';
   // sin cambios reales no se redibuja: así un latido de red no interrumpe un clic
-  const key = want + JSON.stringify([meta().ecos, ui.asc, ui.daily, ui.mods, ui.abyss, run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), s.t.connected(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selItem, ui.tab, ui.logOpen, ui.statsOpen, ui.mapOpen]);
+  const key = want + JSON.stringify([meta().ecos, ui.asc, ui.daily, ui.mods, ui.abyss, run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), s.t.connected(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selItem, ui.tab, ui.logOpen, ui.statsOpen, ui.mapOpen, ui.forgeRef, ui.forgeAffix, ui.forgeSpell, ui.sideOpen]);
   if (key === lastKey && want === ui.screen && !events.length) return;
   lastKey = key;
   if (want !== ui.screen) hideTip();
   const meH = run?.heroes.find((h) => h.owner === ui.myId);
   setZoneMusic(!run ? 'lobby' : want === 'combat' ? (run.kind === 'boss' ? 'boss' : 'combat') : want === 'end' ? 'end' : want === 'shop' ? 'calm'
-    : want === 'event' || meH?.boonOffer || meH?.bossOffer ? 'choice' : `map${Math.min(3, run.zone)}`);
+    : want === 'event' || want === 'room' || meH?.boonOffer || meH?.bossOffer ? 'choice' : `map${Math.min(3, run.zone)}`);
   if (want === 'combat') combatScreen(events);
   else {
+    ui.root.classList.remove('combatmode');
     ui.board?.destroy();
     ui.board = null;
-    ({ lobby: lobbyScreen, event: eventScreen, shop: shopScreen, map: mapScreen, end: endScreen })[want]();
+    ({ lobby: lobbyScreen, event: eventScreen, shop: shopScreen, room: roomScreen, map: mapScreen, end: endScreen })[want]();
   }
   ui.screen = want;
   // ficha del personaje por encima de cualquier pantalla
@@ -178,6 +179,16 @@ document.addEventListener('click', (e) => {
     case 'skip': s?.skipTurn(); break;
     case 'pick': s?.act({ a: 'pick', idx: Number(id) }); break;
     case 'vote': s?.act({ a: 'vote', idx: Number(id) }); break;
+    case 'pact': s?.act({ a: 'room', op: 'pact', idx: Number(id) }); break;
+    case 'seal': s?.act({ a: 'room', op: 'seal' }); break;
+    case 'openchest': s?.act({ a: 'room', op: 'open' }); break;
+    case 'restpick': s?.act({ a: 'room', op: 'rest', idx: Number(id) }); break;
+    case 'fsel': ui.forgeRef = ui.forgeRef === id ? '' : String(id); ui.forgeAffix = -1; render([]); break;
+    case 'faff': ui.forgeAffix = Number(id); render([]); break;
+    case 'frecal': s?.act({ a: 'room', op: 'recal', ref: ui.forgeRef, affix: ui.forgeAffix, stat: id as never }); ui.forgeAffix = -1; break;
+    case 'fscrap': s?.act({ a: 'room', op: 'scrap', idx: Number(id) }); ui.forgeRef = ''; break;
+    case 'fspell': ui.forgeSpell = ui.forgeSpell === id ? '' : String(id); render([]); break;
+    case 'fhone': s?.act({ a: 'room', op: 'hone', spell: ui.forgeSpell, up: String(id) }); break;
     case 'tab': ui.tab = id as typeof ui.tab; render([]); break;
     case 'selitem': ui.selItem = ui.selItem === id ? '' : id; render([]); break;
     case 'equip': s?.act({ a: 'equip', idx: Number(id) }); ui.selItem = ''; break;
@@ -299,6 +310,8 @@ document.addEventListener('keydown', (e) => {
   if ((e.target as HTMLElement).tagName !== 'INPUT' && s?.run && !s.run.arena && (e.key === 'm' || e.key === 'M' || (e.key === 'Escape' && ui.mapOpen))) { ui.mapOpen = e.key === 'Escape' ? false : !ui.mapOpen; lastKey = ''; render([]); return; }
   if ((e.target as HTMLElement).tagName !== 'INPUT' && s?.run && !s.run.arena && (e.key === 's' || e.key === 'S' || (e.key === 'Escape' && ui.statsOpen))) { ui.statsOpen = e.key === 'Escape' ? false : !ui.statsOpen; lastKey = ''; render([]); return; }
   if (ui.screen === 'combat' && (e.target as HTMLElement).tagName !== 'INPUT' && (e.key === 'v' || e.key === 'V')) { ui.hpBars = !ui.hpBars; if (ui.board) ui.board.showBars = ui.hpBars; lastKey = ''; render([]); return; }
+  // fase de colocación: E = «¡Listo!»
+  if (ui.screen === 'combat' && s?.run?.combat?.deploy && (e.target as HTMLElement).tagName !== 'INPUT' && (e.key === 'e' || e.key === 'E')) { if (!s.run.combat.deploy.ready.includes(s.myId)) s.act({ a: 'deployready' }); return; }
   if (ui.screen !== 'combat' || !s?.isMyTurn() || (e.target as HTMLElement).tagName === 'INPUT') return;
   const u = s.myUnit();
   const n = Number(e.key);

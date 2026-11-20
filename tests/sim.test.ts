@@ -3,7 +3,7 @@
 // La versión corta comprueba siempre que las clases nuevas no atascan los combates.
 import { expect, it } from 'vitest';
 import { availableNodes, heroMaxHp, DIFF, bossInfo, chooseNode, finishFight, leaveNode, metaAction, newRun, resolveEvent, type RunState } from '../src/game/run';
-import { autoplay } from './helpers';
+import { autoplay, roomStep } from './helpers';
 import type { ClassId } from '../src/core/state';
 
 function play(classes: ClassId[], seed: number): { run: RunState; stalls: number } {
@@ -25,6 +25,8 @@ function play(classes: ClassId[], seed: number): { run: RunState; stalls: number
     } else if (run.phase === 'event') {
       for (const h of run.heroes) metaAction(run, h.owner, { a: 'vote', idx: 0 });
       resolveEvent(run, 'p0'); leaveNode(run);
+    } else if (run.phase === 'room') {
+      roomStep(run);
     } else if (run.phase === 'shop') {
       for (const h of run.heroes) metaAction(run, h.owner, { a: 'potion' });
       leaveNode(run);

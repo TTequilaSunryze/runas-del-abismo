@@ -20,7 +20,7 @@ const SPELL_ANIM: Record<string, Anim> = {
   s_shuriken: 'cast', s_tajo: 'attack', s_sombra: 'special', s_cambio: 'special', s_marca: 'cast', s_ocaso: 'special',
   z_fuego: 'special', z_espejismo: 'cast', z_vortice: 'cast', z_seduccion: 'special', z_estallido: 'attack', z_vinculo: 'cast',
   t_voluntad: 'attack', t_gravedad: 'special', t_orbita: 'cast', t_resonancia: 'special', t_singularidad: 'special', t_transfusion: 'cast',
-  k_caja: 'cast', k_explosion: 'attack', k_vinculo: 'attack', k_atraccion: 'cast', k_tormento: 'attack', k_sacrificio: 'cast',
+  k_caja: 'cast', k_explosion: 'attack', k_vinculo: 'attack', k_atraccion: 'cast', k_tormento: 'attack', k_siega: 'attack', k_sacrificio: 'cast',
   s_danza: 'attack', s_paso: 'special', s_velo: 'special', s_convergencia: 'attack', s_cosecha: 'cast',
   b_sed: 'special', b_tajo: 'attack', b_embiste: 'attack', b_grito: 'special', b_colosal: 'attack', b_pacto: 'special', b_cuchillada: 'attack', b_mirada: 'cast', b_frenesi: 'special',
 };

@@ -122,7 +122,7 @@ const LOOK: Record<string, [string, string]> = {
   a_ignea: ['arrow', 'fire'], a_conmocion: ['bolt', 'gold'],
   z_fuego: ['flame', 'ice'], z_espejismo: ['twin', 'arcane'], z_vortice: ['vortex', 'arcane'], z_seduccion: ['heart', 'blood'], z_estallido: ['wind', 'fire'], z_vinculo: ['leap', 'arcane'],
   t_voluntad: ['orbs', 'arcane'], t_gravedad: ['vortex', 'shadow'], t_orbita: ['circle', 'shadow'], t_resonancia: ['sun', 'shadow'], t_singularidad: ['vortex', 'blood'], t_transfusion: ['drop', 'shadow'],
-  k_caja: ['cage', 'poison'], k_explosion: ['skull', 'poison'], k_vinculo: ['link', 'arcane'], k_atraccion: ['whirl', 'poison'], k_tormento: ['scythe', 'steel'], k_sacrificio: ['hexshield', 'poison'],
+  k_caja: ['cage', 'poison'], k_explosion: ['skull', 'poison'], k_vinculo: ['link', 'arcane'], k_atraccion: ['whirl', 'poison'], k_tormento: ['scythe', 'steel'], k_siega: ['link', 'poison'], k_sacrificio: ['hexshield', 'poison'],
   s_danza: ['whirl', 'blood'], s_velo: ['mask', 'shadow'], s_convergencia: ['twin', 'blood'], s_cosecha: ['bloodfx', 'shadow'],
   b_sed: ['heart', 'blood'], b_tajo: ['bigsword', 'blood'], b_embiste: ['whirl', 'steel'], b_grito: ['horn', 'blood'], b_colosal: ['hammer', 'blood'], b_pacto: ['bloodfx', 'blood'], b_cuchillada: ['whirl', 'blood'], b_mirada: ['eye', 'fire'], b_frenesi: ['flame', 'blood'],
 };

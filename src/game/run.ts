@@ -12,13 +12,15 @@ import { CLASSES, MAX_LEVEL, canPickRoute } from '../core/classes/classes';
 import { SPELLS } from '../core/classes/spells';
 import { MAX_SPELL_UPS, UPGRADES, canUpgrade } from '../core/upgrades';
 import { makeHero } from '../core/classes/factory';
-import { SOULS_PER_ARMOR, createCombat, type CombatSetup, type UnitSpec } from '../core/combat/engine';
+import { SOULS_PER_ARMOR, SOUL_ARMOR, createCombat, type CombatSetup, type UnitSpec } from '../core/combat/engine';
 import { reachable } from '../core/combat/grid';
 import { BAG_SIZE, PRICE, SLOTS, STAT_NAME, genItem, sumStats, type DropKind, type Item, type Rarity, type Slot, type StatKey, type Stats } from '../core/items/items';
 import { pick, rand, randInt, seedFrom, shuffle, type RngBox } from '../core/rng';
 import { makeActMap, type ActMap } from './map';
 import { CORRIDOR_CHANCE, genTerrain } from './terrain';
 import type { ClassId, CombatState, GameEvent, Pos } from '../core/state';
+import { enterRoom, roomAction, roomDone, roomPending, type RoomOp, type RoomState } from './rooms';
+import { pactEnemyHp, pactEnemyPower } from '../content/pacts';
 
 /** Una opción de la recompensa del jefe. */
 export type BossOption =
@@ -75,6 +77,10 @@ export interface HeroSave {
   boonOffer: { patron: string; spells: string[] } | null;
   /** consumibles: id → cantidad */
   bag2: Record<string, number>;
+  /** Escofinas de Eco (Forja): 3 = una mejora de hechizo a elegir */
+  escofinas?: number;
+  /** recalibrados hechos (cada uno encarece el siguiente) */
+  forgeUses?: number;
 }
 
 /** Héroe guardado en el Salón: lo justo para reconstruirlo. */
@@ -108,12 +114,14 @@ export interface GroupEvent {
   result?: string;
 }
 
-export type NodeKind = 'combat' | 'elite' | 'event' | 'rest' | 'shop' | 'boss' | 'cage' | 'shrine' | 'treasure';
-export const NODE_NAME: Record<NodeKind, string> = { combat: '⚔️ Combate', elite: '☠️ Élite', event: '❓ Evento de grupo', rest: '🔥 Descanso', shop: '💰 Tienda', boss: '👑 Jefe', cage: '⛓️ Jaula', shrine: '✨ Santuario', treasure: '🎁 Botín' };
+export type NodeKind = 'combat' | 'elite' | 'event' | 'rest' | 'shop' | 'boss' | 'cage' | 'shrine' | 'treasure' | 'forge' | 'altar';
+export const NODE_NAME: Record<NodeKind, string> = { forge: '⚒️ Forja', altar: '🕯️ Altar de Pactos', combat: '⚔️ Combate', elite: '☠️ Élite', event: '❓ Evento de grupo', rest: '🔥 Descanso', shop: '💰 Tienda', boss: '👑 Jefe', cage: '⛓️ Jaula', shrine: '✨ Santuario', treasure: '🎁 Botín' };
 export const NODE_HINT: Record<NodeKind, string> = {
-  treasure: 'Sin combate: cada uno se lleva un objeto Uncommon o mejor.',
+  treasure: 'Un cofre para el grupo: botín para todos… o una maldición (30%).',
+  forge: 'Recalibra afijos, desguaza objetos en Escofinas de Eco y mejora hechizos. Cuidado con el calor: endurece el siguiente combate.',
+  altar: 'Aquí empieza la partida: el grupo sella un Pacto Mayor.',
   combat: 'Enemigos normales. Oro y, a veces, un objeto.', elite: 'El campeón de la zona, con modificadores. Oro y objetos mejores.',
-  event: 'Una decisión que se vota y afecta a todos.', rest: 'Todos recuperan el 40% de su vida.',
+  event: 'Una decisión que se vota y afecta a todos.', rest: 'Cada uno elige: descansar (40% de vida) o meditar (2 Escofinas de Eco).',
   shop: 'Gastad vuestro oro en objetos y pociones.', boss: 'El guardián de la zona. Dos fases. Objetos, una reliquia y una mejora o un hechizo nuevo.',
   cage: 'Un prisionero vigilado: venced a sus captores y luchará con vosotros hasta el final de la zona.',
   shrine: 'Cada uno elige una de las bendiciones pasivas de su clase.',
@@ -159,7 +167,15 @@ export interface RunState extends RngBox {
   at: number;
   /** nodo elegido en cada capa ya recorrida */
   trail: number[];
-  phase: 'map' | 'combat' | 'event' | 'shop' | 'won' | 'lost';
+  phase: 'map' | 'combat' | 'event' | 'shop' | 'room' | 'won' | 'lost';
+  /** sala especial en curso (altar, forja, cofre o descanso) */
+  room?: RoomState | null;
+  /** Pacto Mayor sellado en el altar */
+  pact?: string | null;
+  /** maldiciones de cofre que duran varios combates */
+  hexes?: Array<{ id: string; fights: number }>;
+  /** calor de la forja: el próximo combate sale Ardiente o en Sobrecarga de fuego */
+  overload?: 'hot' | 'overload' | null;
   /** tipo del combate en curso */
   kind: NodeKind;
   heroes: HeroSave[];
@@ -215,8 +231,10 @@ export function availableNodes(run: Pick<RunState, 'map' | 'links' | 'at' | 'ste
   return ok.length ? ok : row.map((_, i) => i);
 }
 
-function setMap(run: RunState): void {
+function setMap(run: RunState, altar = false): void {
   const m = makeMap(run, run.mods);
+  // la partida empieza siempre en el Altar de Pactos, del que sale el resto del mapa
+  if (altar) { m.layers = [['altar'], ...m.layers]; m.links = [[m.layers[1]!.map((_, i) => i)], ...m.links]; }
   run.map = m.layers; run.links = m.links; run.at = -1; run.trail = [];
 }
 
@@ -230,6 +248,8 @@ export interface RunOpts {
   mods?: string[];
   /** incluir la zona 4 */
   abyss?: boolean;
+  /** primera partida del anfitrión: el altar está apagado */
+  firstRun?: boolean;
 }
 
 export type NewHero = Pick<HeroSave, 'owner' | 'name' | 'cls' | 'routes'> & { perks?: Perks; mastery?: number };
@@ -260,7 +280,7 @@ export function newRun(code: string, seed: number, players: NewHero[], opts: Run
       relics: [], boons: [], boonOffer: null, bag2: { c_vida: 1 }, ups: {}, bossOffer: null, mastery: Math.max(0, Math.min(5, Math.floor(Number(p.mastery) || 0))),
     })),
   };
-  setMap(run);
+  setMap(run, !run.arena);
   run.bossPick = ZONES.map((z) => randInt(run, 0, z.bosses.length - 1));
   for (const h of run.heroes) {
     const base = heroMaxHp(h);
@@ -272,6 +292,8 @@ export function newRun(code: string, seed: number, players: NewHero[], opts: Run
     h.rerolls = perkLevel(h.perks, 'reroll');
     h.hp = Math.round(heroMaxHp(h) * (run.asc >= 8 ? 0.75 : 1));
   }
+  // se empieza dentro del Altar (en la primera partida del jugador, apagado)
+  if (run.map[0]?.[0] === 'altar') { run.at = 0; run.trail = [0]; enterRoom(run, 'altar', !!opts.firstRun); }
   return run;
 }
 
@@ -305,6 +327,16 @@ export function newSpellPool(h: Pick<HeroSave, 'cls' | 'boons' | 'routes' | 'lev
   return [...new Set(patronsOf(h.cls).flatMap((p) => p.spells))].filter((id) => !!SPELLS[id] && SPELLS[id]!.route === 'boon' && !BOON_MODS[id] && !BLESSINGS[id] && !h.boons.includes(id) && !owned.has(id));
 }
 
+/** Mejoras que aún puede recibir un hechizo del héroe (genéricas y propias de la clase), respetando el tope. */
+export function upgradeChoices(h: HeroSave, id: string): string[] {
+  const def = SPELLS[id];
+  if (!def) return [];
+  const have = [...modsOn(h, id), ...(h.ups[id] ?? [])];
+  if (upCount(h, id) >= MAX_SPELL_UPS) return [];
+  const generic = Object.keys(UPGRADES).filter((up) => canUpgrade(def, have, up));
+  return generic;
+}
+
 /**
  * Santuario: bendiciones pasivas de la clase (hasta 3 en total). Elige una o rechaza.
  */
@@ -323,14 +355,7 @@ export function offerBoon(run: RunState, h: HeroSave): void {
  */
 export function buildBossOffer(run: RunState, h: HeroSave): BossOption[] {
   const spells = heroSpec(h).spells.filter((sp) => sp.charges === undefined).map((sp) => sp.id);
-  const choices = (id: string): string[] => {
-    const def = SPELLS[id]!;
-    const have = [...modsOn(h, id), ...(h.ups[id] ?? [])];
-    if (upCount(h, id) >= MAX_SPELL_UPS) return [];
-    const generic = Object.keys(UPGRADES).filter((up) => canUpgrade(def, have, up));
-    const own = Object.keys(BOON_MODS).filter((m) => BOON_MODS[m]!.target === id && !h.boons.includes(m) && !have.includes(m));
-    return [...generic, ...own];
-  };
+  const choices = (id: string): string[] => upCount(h, id) >= MAX_SPELL_UPS ? [] : [...upgradeChoices(h, id), ...Object.keys(BOON_MODS).filter((m) => BOON_MODS[m]!.target === id && !h.boons.includes(m) && !(h.ups[id] ?? []).includes(m))];
   // v12: el jefe ofrece 3 hechizos nuevos de la clase. Si ya no quedan, mejoras de los que tienes; y si tampoco, oro o curación.
   const out: BossOption[] = shuffle(run, newSpellPool(h)).slice(0, 3).map((id) => ({ kind: 'spell', id }));
   for (const id of shuffle(run, spells.filter((id) => choices(id).length))) { if (out.length >= 3) break; out.push({ kind: 'up', spell: id, up: pick(run, choices(id)) }); }
@@ -346,6 +371,7 @@ export function pendingOf(run: RunState, h: HeroSave): string[] {
   if (run.offers[h.owner]) out.push('botín');
   if (h.bossOffer) out.push('recompensa del jefe');
   if (h.boonOffer) out.push('bendición');
+  out.push(...roomPending(run, h));
   return out;
 }
 /** Jugadores (presentes) por los que hay que esperar antes de cambiar de sala. */
@@ -371,7 +397,7 @@ export function statBreakdown(h: HeroSave): Array<{ key: string; name: string; b
   ];
   return rows.map(([key, name, b, total]) => {
     const k = key as StatKey;
-    const parts: Array<[string, number]> = ([['Equipo', equip[k]], ['Reliquias', rel[k]], ['Bendiciones', pat[k]], ['Eventos', boon[k]], ['Almas', k === 'armor' && spec.souls !== undefined ? Math.floor(spec.souls / SOULS_PER_ARMOR) : 0]] as Array<[string, number]>).filter(([, v]) => v);
+    const parts: Array<[string, number]> = ([['Equipo', equip[k]], ['Reliquias', rel[k]], ['Bendiciones', pat[k]], ['Eventos y pacto', boon[k]], ['Almas', k === 'armor' && spec.souls !== undefined ? Math.floor(spec.souls / SOULS_PER_ARMOR) * SOUL_ARMOR : 0]] as Array<[string, number]>).filter(([, v]) => v);
     return { key, name, base: b, parts, total };
   });
 }
@@ -392,7 +418,7 @@ export function heroSpec(h: Build, pos: Pos = { x: 0, y: 0 }): UnitSpec {
   const u = makeHero({ cls: h.cls, name: h.name, owner: h.owner, routes: h.routes, pos, level: h.level, bonus: [...Object.values(h.equip).map((i) => i.stats), h.boon, ...relics.map((r) => r!.stats), ...pat.stats] });
   for (const t of pat.traits) if (!traits.includes(t)) traits.push(t);
   // Carcelero: las almas de toda la partida dan armadura (+1 cada 5)
-  if (u.souls !== undefined) { u.souls = Math.max(0, Math.floor(h.souls ?? 0)); u.soulBank = Math.max(0, Math.floor(h.soulBank ?? 0)); u.armor += Math.floor(u.souls / SOULS_PER_ARMOR); }
+  if (u.souls !== undefined) { u.souls = Math.max(0, Math.floor(h.souls ?? 0)); u.soulBank = Math.max(0, Math.floor(h.soulBank ?? 0)); u.armor += Math.floor(u.souls / SOULS_PER_ARMOR) * SOUL_ARMOR; }
   // habilidades de bendición y consumibles (con sus usos)
   for (const b of h.boons ?? []) {
     // bendiciones pasivas: un rasgo y, si la tiene, un cambio en un hechizo
@@ -515,6 +541,13 @@ export function buildFight(run: RunState): CombatSetup {
     if (omen === 'sangre') u.power += 2;
     if (omen === 'bendicion') u.shield = Math.round(u.maxHp * 0.2);
     if (omen === 'calma') { u.ap++; u.maxAp++; }
+    // pacto y maldiciones de cofre
+    const addTrait = (t: string): void => { if (!(u.traits ?? []).includes(t)) u.traits = [...(u.traits ?? []), t]; };
+    if (run.pact === 'desatada') addTrait('desatada');
+    if (run.pact === 'espinas') addTrait('thorns');
+    if (run.pact === 'ceniza') addTrait('ignite');
+    if (run.hexes?.some((x) => x.id === 'grilletes')) { u.mp = Math.max(1, u.mp - 1); u.maxMp = Math.max(1, u.maxMp - 1); }
+    if (run.hexes?.some((x) => x.id === 'oxido')) u.power -= 2;
     return u;
   });
   // aliados (jaulas, eventos y el espíritu del ciervo en el jefe): no cuentan para ganar ni perder
@@ -532,10 +565,13 @@ export function buildFight(run: RunState): CombatSetup {
   const corridor = run.kind === 'combat' && !run.ambush && rand(run) < CORRIDOR_CHANCE;
   for (let attempt = 0; ; attempt++) {
     const terrain = attempt > 30 ? null : genTerrain(run, run.zone, w, h, n, corridor && attempt < 15);
-    // en el pasillo, los héroes empiezan dentro del carril
-    if (terrain?.lane) heroes.forEach((u, i) => { u.pos = { x: i < terrain.lane!.length ? 1 : 0, y: terrain.lane![i % terrain.lane!.length]! }; });
-    else heroes.forEach((u, i) => { u.pos = { x: 1, y: ys[i]! }; });
+    const blocked = new Set((terrain ? [...terrain.obstacles, ...terrain.abyss, ...terrain.braziers, ...terrain.puddles, ...terrain.roots] : []).map((p) => `${p.x},${p.y}`));
+    // casillas de inicio: unas pocas, separadas entre sí y al azar (en el pasillo, dentro del carril)
+    const starts = startCells(run, w, h, blocked, n, terrain?.lane);
+    heroes.forEach((u, i) => { u.pos = { ...starts[i]! }; });
+    allies.forEach((a) => { const p = [...starts, ...heroes.map((x) => x.pos)].flatMap((q) => [{ x: q.x + 1, y: q.y }, { x: q.x - 1, y: q.y }, { x: q.x, y: q.y + 1 }, { x: q.x, y: q.y - 1 }]).find((q) => q.x >= 0 && q.y >= 0 && q.x < w && q.y < h && !blocked.has(`${q.x},${q.y}`) && ![...heroes, ...allies].some((o) => o !== a && o.pos.x === q.x && o.pos.y === q.y) && !starts.some((st) => st.x === q.x && st.y === q.y)); if (p) a.pos = p; });
     const taken = new Set([...heroes, ...allies].map((u) => `${u.pos.x},${u.pos.y}`));
+    for (const k of starts) taken.add(`${k.x},${k.y}`);
     for (const p of terrain ? [...terrain.obstacles, ...terrain.abyss, ...terrain.braziers] : []) taken.add(`${p.x},${p.y}`);
     const free = (minX: number, maxX: number): Pos => {
       for (;;) {
@@ -550,19 +586,66 @@ export function buildFight(run: RunState): CombatSetup {
     // el jefe no crece indefinidamente con los combates previos
     const enemies = ids.map((id, i) => id.startsWith('nemesis:') ? nemesisUnit(run, id.slice(8), free(w - 4, w - 1)) : makeEnemy(id, free(w - 4, w - 1), Math.min(id === bossOf(run).id || (run.kind === 'elite' && i === 0) ? 2 : 5, run.zoneFight), n, enemyOpts(run, id, i === 0)));
     if (run.kind === 'elite' && enemies[0]) { enemies[0].rank = 'elite'; enemies[0].tackle = (enemies[0].tackle ?? 0) + 3; }
+    // los enemigos salen repartidos a 5 casillas como mucho de alguna casilla de inicio; los que placan o se mueven poco, más cerca
+    for (const e of enemies) taken.delete(`${e.pos.x},${e.pos.y}`);
+    for (const e of enemies) { const p = enemyCell(run, e, starts, taken, w, h); if (p) { e.pos = p; taken.add(`${p.x},${p.y}`); } else taken.add(`${e.pos.x},${e.pos.y}`); }
     for (const e of enemies) {
       if (omen === 'sangre') e.power += 1;
       if (omen === 'eclipse' && !e.traits?.includes('regen')) e.traits = [...(e.traits ?? []), 'regen'];
       if (omen === 'oro') e.hp = e.maxHp = Math.round(e.maxHp * 1.25);
       if (omen === 'tormenta' || run.mods.includes('veloces')) { e.mp++; e.maxMp++; }
       if (run.mods.includes('veloces')) e.initiative += 4;
+      const add = (t: string): void => { if (!(e.traits ?? []).includes(t)) e.traits = [...(e.traits ?? []), t]; };
+      if (run.pact === 'presteza') { e.mp++; e.maxMp++; }
+      if (run.pact === 'cristal') e.crit += 15;
+      if (run.pact === 'vacio') add('hambriento');
+      // calor de la forja
+      if (run.overload) { add('ignifugo'); add('ignite'); }
+      if (run.overload === 'overload') { add('pavesa'); e.hp = e.maxHp = Math.round(e.maxHp * 1.2); }
     }
-    const setup: CombatSetup = { seed: randInt(run, 1, 2 ** 31 - 1), w, h, obstacles, traps, puddles, abyss: terrain?.abyss ?? [], braziers: terrain?.braziers ?? [], roots: terrain?.roots ?? [], biome: terrain?.name, units: [...heroes, ...allies, ...enemies] };
+    const setup: CombatSetup = { seed: randInt(run, 1, 2 ** 31 - 1), w, h, obstacles, traps, puddles, abyss: terrain?.abyss ?? [], braziers: terrain?.braziers ?? [], roots: terrain?.roots ?? [], biome: terrain?.name, units: [...heroes, ...allies, ...enemies], deployCells: starts };
     // todo el mundo debe poder llegar a todo el mundo
     const probe = createCombat(setup).state;
     const walk = reachable(probe, heroes[0]!.pos, 99, true).cost;
     if (setup.units.every((u) => walk.has(`${u.pos.x},${u.pos.y}`))) return setup;
   }
+}
+
+const manh = (a: Pos, b: Pos): number => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+
+/** Casillas de inicio de los héroes: n + 2 (mín. 4), separadas al menos 3 casillas entre sí. */
+export function startCells(box: RngBox, w: number, h: number, blocked: Set<string>, n: number, lane?: number[]): Pos[] {
+  const want = Math.max(4, n + 2);
+  const pool: Pos[] = [];
+  for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) {
+    if (blocked.has(`${x},${y}`)) continue;
+    // en el pasillo, en las primeras columnas del carril
+    if (lane && (x > 3 || !lane.includes(y))) continue;
+    pool.push({ x, y });
+  }
+  for (const gap of lane ? [2, 1] : [3, 2, 1]) {
+    const out: Pos[] = [];
+    for (const p of shuffle(box, [...pool])) { if (out.every((q) => manh(p, q) >= gap)) out.push(p); if (out.length === want) break; }
+    if (out.length >= Math.min(want, n + 1) || gap === 1) return out;
+  }
+  return pool.slice(0, want);
+}
+
+/** Casilla de aparición de un enemigo: entre 2 y 5 casillas de alguna casilla de inicio (más cerca si placa o se mueve poco). */
+function enemyCell(box: RngBox, e: UnitSpec, starts: Pos[], taken: Set<string>, w: number, h: number): Pos | null {
+  const close = e.ai === 'melee' && ((e.tackle ?? 0) >= 3 || e.maxMp <= 3);
+  const far = e.ai === 'ranged' || e.ai === 'pillar';
+  const [lo, hi] = e.ai === 'boss' ? [4, 6] : close ? [2, 3] : far ? [4, 5] : [3, 5];
+  const cells: Pos[] = [];
+  for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) {
+    if (taken.has(`${x},${y}`)) continue;
+    const d = Math.min(...starts.map((s) => manh(s, { x, y })));
+    if (d >= lo && d <= hi) cells.push({ x, y });
+  }
+  if (!cells.length) {
+    for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) if (!taken.has(`${x},${y}`) && Math.min(...starts.map((s) => manh(s, { x, y }))) >= 2) cells.push({ x, y });
+  }
+  return cells.length ? pick(box, cells) : null;
 }
 
 function nemesisUnit(run: RunState, id: string, pos: Pos): UnitSpec {
@@ -589,12 +672,13 @@ function enemyOpts(run: RunState, id: string, first: boolean) {
     const chance = run.zone * 0.12 + (run.zoneFight >= 2 ? 0.1 : 0) + 0.08 * (n - 1) + (run.asc >= 5 ? 0.15 : 0) + (run.mods.includes('elites') ? 0.4 : 0);
     if (rand(run) < chance) affixes.push(pick(run, all));
   }
-  if (run.mods.includes('llamas') && !affixes.includes('ardiente')) affixes.push('ardiente');
+  if ((run.mods.includes('llamas') || run.pact === 'ceniza') && !affixes.includes('ardiente')) affixes.push('ardiente');
+  const strong = id === bossOf(run).id || (run.kind === 'elite' && first);
   return {
     affixes,
     laterList: run.kind !== 'boss' && run.zoneFight >= 1,
-    hpMul: 1 + boost + (id === bossOf(run).id ? (run.asc >= 6 ? 0.2 : 0) + (run.mods.includes('jefes') ? 0.3 : 0) : 0),
-    power: boost * 5 + (run.mods.includes('frenesi') ? 1 : 0),
+    hpMul: 1 + boost + pactEnemyHp(run.pact, strong) + (id === bossOf(run).id ? (run.asc >= 6 ? 0.2 : 0) + (run.mods.includes('jefes') ? 0.3 : 0) : 0),
+    power: boost * 5 + (run.mods.includes('frenesi') ? 1 : 0) + pactEnemyPower(run.pact),
   };
 }
 
@@ -648,11 +732,11 @@ export function genLoot(run: RunState, kind: DropKind = dropKindOf(run), min: Ra
  * y jefes), con el tipo de daño de ese héroe. Todo va al Alijo de grupo y el grupo decide quién se lo queda.
  */
 function dropLoot(run: RunState, h: HeroSave, kind: DropKind, report: Item[]): void {
-  if (!(rand(run) < dropChance(run.zone, kind))) return;
+  if (!(rand(run) < dropChance(run.zone, kind)) && !(kind === 'elite' && run.pact === 'tirano')) return;
   const extra = kind === 'combat' ? 0 : perkLevel(h.perks, 'loot') + (h.relics.includes('lupa') ? 1 : 0);
   const n = { combat: 1, elite: 1, boss: 2, shop: 1 }[kind] + extra;
   for (let i = 0; i < n; i++) {
-    const it = genLoot(run, kind, 0, h);
+    const it = genLoot(run, kind, kind === 'elite' && run.pact === 'tirano' && i === 0 ? 2 : 0, h);
     (run.stash ??= []).push(it);
     report.push(it);
   }
@@ -699,17 +783,16 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
     const rel = pick(run, Object.values(RELICS));
     run.shop.push({ relic: rel.id, price: priceOf(run, rel.rare ? 160 : 100), sold: false });
     // consumibles: no se agotan (cada uno compra los suyos)
-    for (const id of ['c_vida', 'c_fuego', 'c_humo', 'c_resu']) run.shop.push({ consumable: id, price: priceOf(run, CONSUMABLES[id]!.price), sold: false });
+    if (run.pact !== 'ayuno') for (const id of ['c_vida', 'c_fuego', 'c_humo', 'c_resu']) run.shop.push({ consumable: id, price: priceOf(run, CONSUMABLES[id]!.price), sold: false });
     run.phase = 'shop';
   } else if (node === 'rest') {
-    for (const h of run.heroes) h.hp = Math.min(heroMaxHp(h), h.hp + Math.ceil(heroMaxHp(h) * healOf(run, h, 0.4)));
-    run.note = 'Descansáis junto a una hoguera: todos recuperáis el 40% de la vida.';
-    run.step++;
+    enterRoom(run, 'rest');
   } else if (node === 'treasure') {
-    const got: string[] = [];
-    for (const h of run.heroes) { const it = giveItem(run, h, 'elite', 1); got.push(`${h.name}: ${it.name}`); }
-    run.note = `Sala del botín: cada uno encuentra un objeto Uncommon o mejor (${got.join(' · ')}).`;
-    run.step++;
+    enterRoom(run, 'chest');
+  } else if (node === 'forge') {
+    enterRoom(run, 'forge');
+  } else if (node === 'altar') {
+    enterRoom(run, 'altar');
   } else if (node === 'shrine') {
     for (const h of run.heroes) offerBoon(run, h);
     run.note = 'El santuario despierta el poder de cada clase: elegid una bendición pasiva.';
@@ -720,6 +803,16 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
 
 /** Salir de la tienda o de un evento ya resuelto y volver al mapa. */
 export function leaveNode(run: RunState): void {
+  if (run.phase === 'room') {
+    if (!roomDone(run)) return;
+    const r = run.room!;
+    run.note = r.kind === 'forge' ? (run.overload === 'overload' ? '¡El crisol se desborda! El próximo combate será una Sobrecarga de fuego.' : run.overload === 'hot' ? 'El crisol arde: el próximo combate será Ardiente.' : 'Dejáis la forja con el metal aún tibio.')
+      : r.kind === 'rest' ? r.lines.join(' ') : r.kind === 'chest' ? (r.cursed ? 'El cofre maldito queda atrás.' : 'Repartís el botín del cofre.') : (r.kind === 'altar' ? r.result ?? '' : '');
+    run.room = null;
+    run.step++;
+    run.phase = 'map';
+    return;
+  }
   if (run.phase === 'shop' || (run.phase === 'event' && run.event?.result)) {
     // el «Listo» dado en la tienda o el evento vale también para el mapa que sigue
     run.note = run.phase === 'event' ? (run.event?.result ?? '') : 'Dejáis atrás al mercader de reliquias.';
@@ -766,7 +859,10 @@ export function finishFight(run: RunState): void {
   if (run.arena) { run.phase = c.over === 'win' ? 'won' : 'lost'; run.note = `Gana el equipo de ${c.over === 'win' ? run.arena.nameA : run.arena.nameB}.`; return; }
   if (c.over === 'lose') { run.phase = 'lost'; return; }
   if (c.units.some((u) => u.name.startsWith('Némesis: '))) run.flags.push('nemesis');
-  const gold = Math.round((25 + run.fight * 8 + (run.kind === 'elite' ? 20 : run.kind === 'boss' ? 40 : 0)) * (run.mods.includes('codicia') ? 2 : 1) * (run.omen === 'oro' ? 2 : 1) * (run.mods.includes('pobreza') ? 0.5 : 1));
+  const gold = Math.round((25 + run.fight * 8 + (run.kind === 'elite' ? 20 : run.kind === 'boss' ? 40 : 0)) * (run.mods.includes('codicia') ? 2 : 1) * (run.omen === 'oro' ? 2 : 1) * (run.mods.includes('pobreza') ? 0.5 : 1) * (run.pact === 'avaricia' ? 2 : 1));
+  // las maldiciones de cofre y el calor de la forja se gastan con el combate
+  run.hexes = (run.hexes ?? []).map((x) => ({ ...x, fights: x.fights - 1 })).filter((x) => x.fights > 0);
+  run.overload = null;
   const flawless = c.units.every((u) => u.team !== 'hero' || u.summoner !== undefined || u.hp > 0);
   const extra: string[] = [];
   const loot: FightReport['loot'] = [];
@@ -779,17 +875,17 @@ export function finishFight(run: RunState): void {
     // los consumibles gastados no vuelven
     if (u) for (const sp of u.spells) if (sp.charges !== undefined) h.bag2[sp.id] = Math.max(0, sp.charges);
     // botín variado: consumibles (seguros tras élite o jefe)
-    if (run.kind !== 'combat' || rand(run) < 0.4) {
+    if (run.pact !== 'ayuno' && (run.kind !== 'combat' || rand(run) < 0.4)) {
       const r = rand(run), id = r < 0.4 ? 'c_vida' : r < 0.65 ? 'c_fuego' : r < 0.9 ? 'c_humo' : 'c_resu';
       if ((h.bag2[id] ?? 0) < MAX_CONSUMABLE) { h.bag2[id] = (h.bag2[id] ?? 0) + 1; extra.push(`${h.name}: ${CONSUMABLES[id]!.icon} ${CONSUMABLES[id]!.name}`); loot.push({ owner: h.owner, icon: CONSUMABLES[id]!.icon, name: CONSUMABLES[id]!.name, text: 'Consumible de combate' }); }
     }
-    // Cosecha de almas del Carcelero: cuentan en toda la partida (cada 5, +1 de armadura)
+    // Cosecha de almas del Carcelero: cuentan en toda la partida (cada 5, +0,5 de armadura)
     if (u?.souls !== undefined) {
       const before = Math.floor((h.souls ?? 0) / SOULS_PER_ARMOR);
       h.souls = u.souls;
       h.soulBank = u.soulBank ?? 0;
       const gained = Math.floor(h.souls / SOULS_PER_ARMOR) - before;
-      if (gained > 0) extra.push(`${h.name}: ${h.souls} almas, +${gained} de armadura`);
+      if (gained > 0) extra.push(`${h.name}: ${h.souls} almas, +${gained * SOUL_ARMOR} de armadura`);
     }
     // objetos según la sala; los hechizos solo llegan al vencer al jefe de la zona
     dropLoot(run, h, dropKindOf(run), (found[h.owner] ??= []));
@@ -797,7 +893,7 @@ export function finishFight(run: RunState): void {
     const max = heroMaxHp(h);
     // no hay curación gratis tras un combate: solo tras vencer al jefe (o en hogueras, eventos y habilidades).
     // Los caídos se levantan con el 30% de la vida para poder seguir jugando.
-    const healPct = run.kind === 'boss' ? healOf(run, h, 0.5) : 0;
+    const healPct = run.kind === 'boss' && run.pact !== 'desatada' ? healOf(run, h, 0.5) : 0;
     h.hp = left <= 0 ? Math.max(Math.ceil(max * 0.3), Math.ceil(max * healPct)) : Math.min(max, left + Math.ceil(max * healPct));
     h.gold += gold + (h.relics.includes('bolsa') ? 15 : 0);
     h.stats.maxGold = Math.max(h.stats.maxGold, h.gold);
@@ -826,8 +922,8 @@ export function finishFight(run: RunState): void {
     run.step = 0;
     setMap(run);
     run.allies = [];
-    for (const h of run.heroes) { h.hp = Math.min(heroMaxHp(h), h.hp + Math.ceil(heroMaxHp(h) * 0.5)); h.rerolls = perkLevel(h.perks, 'reroll') + (h.relics.includes('dado') ? 1 : 0); }
-    run.note = `${won} ${zoneOf(run).intro} Recuperáis el 50% de la vida.`;
+    for (const h of run.heroes) { h.hp = Math.min(heroMaxHp(h), h.hp + (run.pact === 'desatada' ? 0 : Math.ceil(heroMaxHp(h) * 0.5))); h.rerolls = perkLevel(h.perks, 'reroll') + (h.relics.includes('dado') ? 1 : 0); }
+    run.note = `${won} ${zoneOf(run).intro}${run.pact === 'desatada' ? ' El pacto os niega el descanso.' : ' Recuperáis el 50% de la vida.'}`;
     // el prestamista cobra al llegar a la zona siguiente
     if (run.flags.includes(`deuda_${run.zone}`)) {
       run.flags = run.flags.filter((f) => f !== `deuda_${run.zone}`);
@@ -870,7 +966,8 @@ export type MetaAction =
   | { a: 'reroll' }
   | { a: 'bossreward'; idx: number }
   | { a: 'boon'; idx: number }
-  | { a: 'ready' };
+  | { a: 'ready' }
+  | ({ a: 'room' } & RoomOp);
 
 /** Acciones de un jugador fuera del combate. Devuelve un mensaje de error o null si se aplicó. */
 export function metaAction(run: RunState, owner: string, a: MetaAction): string | null {
@@ -878,6 +975,7 @@ export function metaAction(run: RunState, owner: string, a: MetaAction): string 
   if (!h) return 'No formas parte de esta partida';
   if (run.phase === 'combat') return 'No se puede en combate';
   switch (a.a) {
+    case 'room': return roomAction(run, h, a);
     case 'pick': {
       const list = run.offers[owner];
       if (!list) return 'No tienes botín pendiente';
@@ -1001,6 +1099,7 @@ export function metaAction(run: RunState, owner: string, a: MetaAction): string 
     case 'potion': {
       const cost = priceOf(run, POTION_PRICE);
       if (run.phase !== 'shop') return 'Solo en la tienda';
+      if (run.pact === 'desatada') return 'El Pacto de la Magia Desatada no deja curarse entre combates';
       if (h.gold < cost) return 'No tienes oro suficiente';
       if (h.hp >= heroMaxHp(h)) return 'Ya tienes la vida al máximo';
       h.gold -= cost;

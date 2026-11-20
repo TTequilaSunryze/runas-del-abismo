@@ -36,15 +36,17 @@ describe('mapa ramificado', () => {
     }
   });
   it('en la partida solo se puede ir por las aristas del mapa', () => {
-    const run = newRun('T', 5, [{ owner: 'a', name: 'A', cls: 'barbaro', routes: [] }]);
+    const run = roomStep(newRun('T', 5, [{ owner: 'a', name: 'A', cls: 'barbaro', routes: [] }]));
     expect(availableNodes(run)).toEqual([0, 1, 2]);
     chooseNode(run, 1);
     expect(run.at).toBe(1);
     expect(run.phase).toBe('combat');
-    run.phase = 'map'; run.step = 1;
+    run.phase = 'map'; run.step = 2;
     const ok = availableNodes(run);
-    expect(ok).toEqual(run.links[0]![1]);
-    const bad = run.map[1]!.map((_, i) => i).find((i) => !ok.includes(i));
+    expect(ok).toEqual(run.links[1]![1]);
+    const bad = run.map[2]!.map((_, i) => i).find((i) => !ok.includes(i));
     if (bad !== undefined) { chooseNode(run, bad); expect(run.phase).toBe('map'); }
   });
 });
+
+import { roomStep } from './helpers';

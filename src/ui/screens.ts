@@ -19,6 +19,12 @@ import { esc, mine, store, tip, today, ui } from './ctx';
 import { itemIcon, spellIcon, spellTip } from './icons';
 import { advanceBar, blessingBar, diffHtml, itemHtml, mapLegend, mapSvg, pendingRows, sidePanel, topBar, volumeControl } from './panels';
 import { CONSUMABLES, MAX_CONSUMABLE } from '../content/boons';
+import { CHEST_CURSE_CHANCE, HEAT, HEAT_HOT, HEAT_MAX, HEAT_OVERLOAD, HONE_COST, SCRAP_YIELD, curseOf, heatTier, pactOf, recalibratePrice } from '../content/pacts';
+import { REST_OPTIONS, itemByRef, recalStats, restHeal, restText } from '../game/rooms';
+import { altarScene, chestScene, forgeScene, restScene } from './scenes';
+import { STAT_NAME, type Item } from '../core/items/items';
+import { MAX_SPELL_UPS, UPGRADES } from '../core/upgrades';
+import { heroSpec, upCount, upgradeChoices } from '../game/run';
 
 const RAR = ['ir0', 'ir1', 'ir2', 'ir3'];
 
@@ -269,4 +275,78 @@ export function endScreen(): void {
   <div class="panel"><h3>Resumen del grupo</h3>${run.heroes.map((h, i) => `<div class="row sm"><b class="p${i % 4}">${esc(h.name)}</b><span class="dim">${CLASSES[h.cls].name}</span><span class="grow"></span><span>⚔️ ${h.stats.dmg} (${Math.round((h.stats.dmg / total) * 100)}%)</span><span>☠️ ${h.stats.kills}</span><span>✚ ${h.stats.heal}</span><span class="${h.stats.falls ? 'bad' : 'good'}">💀 ${h.stats.falls}</span></div>`).join('')}</div>
   ${myHero ? `<div class="panel"><div class="row"><div><b>🏟️ Salón de héroes</b><div class="dim sm">Guarda a ${esc(myHero.name)} tal como está para tus duelos 3 contra 3 y para que vuelva como Némesis.</div></div><span class="grow"></span><button data-act="champsave" ${saved ? 'disabled' : ''}>${saved ? '✔ Guardado' : 'Guardar en el Salón'}</button></div></div>` : ''}
   <div class="row">${s.isHost ? '<button class="pri" data-act="again">⚔️ Jugar otra partida</button>' : '<span class="dim sm">Esperando al anfitrión para otra partida…</span>'}<button data-act="home">Volver al inicio</button></div></div>`);
+}
+
+// ---------------------------------------------------------------------------
+// Salas especiales (v14): Altar, Forja, Cofre y Descanso
+// ---------------------------------------------------------------------------
+function roomWin(scene: string, title: string, text: string, inner: string, cls = ''): string {
+  return `<div class="panel evwin roomwin ${cls}"><div class="evart scenebox">${scene}</div><h2 class="evtitle">${title}</h2>${text ? `<p class="evtext">${text}</p>` : ''}${inner}</div>`;
+}
+
+export function roomScreen(): void {
+  const s = ui.session!, run = s.run!, r = run.room!;
+  const h = mine(run);
+  if (r.kind === 'altar') {
+    const pacts = r.pacts.map((id) => pactOf(id)!).filter(Boolean);
+    const voters = (i: number): string => run.heroes.filter((x) => r.votes[x.owner] === i).map((x) => esc(x.name)).join(', ');
+    const chosen = pactOf(run.pact);
+    const inner = r.result
+      ? `<div class="panel note evresult">${chosen ? `<div class="pactseal">${chosen.icon}</div>` : ''}<b>${esc(r.result)}</b></div>${chosen ? `<div class="evopts one"><div class="evcard on"><b>${chosen.icon} ${esc(chosen.name)}</b><ul><li class="up">${esc(chosen.boon)}</li><li class="down">${esc(chosen.bane)}</li></ul><span class="votes">Dura toda la partida</span></div></div>` : ''}${advanceBar(run, 'Descender a la mazmorra →')}`
+      : `<div class="dim sm evhint">Pacto Mayor: decide la mayoría y cambia las reglas de toda la partida. En empate decide el anfitrión.</div>
+      <div class="evopts">${pacts.map((p, i) => `<button class="evcard pactcard ${r.votes[ui.myId] === i ? 'on' : ''}" data-act="pact" data-id="${i}" ${h ? '' : 'disabled'}><b>${p.icon} ${esc(p.name)}</b><ul><li class="up">${esc(p.boon)}</li><li class="down">${esc(p.bane)}</li></ul><span class="votes">${voters(i) ? `🗳️ ${voters(i)}` : 'Sin votos'}</span></button>`).join('')}</div>
+      <div class="row">${s.isHost ? `<button data-act="seal" ${Object.keys(r.votes).length ? '' : 'disabled'}>Sellar el pacto ya</button>` : '<span class="dim sm">Votad todos para sellarlo.</span>'}</div>`;
+    frame(run, roomWin(altarScene(!!pacts.length, pacts.map((p) => p.icon)), 'El Altar de los Pactos',
+      pacts.length ? 'Antes de bajar, la piedra exige un precio. Dos pactos arden sobre el altar: elegid uno y la mazmorra entera obedecerá sus reglas.' : '', inner, 'altarwin') + pendingRows(run));
+    return;
+  }
+  if (r.kind === 'chest') {
+    const curse = r.cursed ? curseOf(r.cursed) : undefined;
+    const scene = chestScene(!r.opened ? 'closed' : curse ? 'cursed' : 'loot');
+    const inner = !r.opened
+      ? `<div class="dim sm evhint">Un solo cofre para todo el grupo: botín para cada uno… o una maldición para todos (${Math.round(CHEST_CURSE_CHANCE * 100)}%).</div><div class="row center"><button class="pri big" data-act="openchest" ${h ? '' : 'disabled'}>🗝️ Abrir el cofre</button></div>`
+      : curse
+        ? `<div class="cursebox"><div class="curseicon">${curse.icon}</div><div><b class="bad">Maldición: ${esc(curse.name)}</b><div>${esc(curse.text)}</div>${(r.lines ?? []).map((l) => `<div class="sm bad">${esc(l)}</div>`).join('')}</div></div>${advanceBar(run, 'Seguir adelante →')}`
+        : `<div class="lootbox"><b class="good">¡Botín!</b><ul>${(r.lines ?? []).map((l) => `<li class="up">${esc(l)}</li>`).join('')}</ul><div class="dim sm">Los objetos que no caben en la mochila van al Alijo de grupo.</div></div>${advanceBar(run, 'Seguir adelante →')}`;
+    frame(run, roomWin(scene, r.opened ? (curse ? 'El cofre estaba maldito' : 'El cofre se abre') : 'Un cofre en la penumbra',
+      r.opened ? '' : 'Entre el polvo, un cofre con herrajes de hierro. La cerradura cede al primer toque… demasiado fácil.', inner, 'chestwin') + pendingRows(run));
+    return;
+  }
+  if (r.kind === 'rest') {
+    const mine2 = h ? r.picks[h.owner] : undefined;
+    const who = (i: number): string => run.heroes.filter((x) => r.picks[x.owner] === i).map((x) => esc(x.name)).join(', ');
+    const heal = h ? Math.ceil(heroMaxHp(h) * restHeal(run, h)) : 0;
+    const inner = `<div class="evopts">${REST_OPTIONS.map((o, i) => `<button class="evcard ${mine2 === i ? 'on' : ''}" data-act="restpick" data-id="${i}" ${h && mine2 === undefined ? '' : 'disabled'}><b>${o.icon} ${esc(o.name)}</b><ul><li class="${o.id === 'rest' && !heal ? 'down' : 'up'}">${o.id === 'rest' ? (heal ? `Recuperas ${heal} de vida (${h ? `${h.hp}/${heroMaxHp(h)}` : ''})` : 'El pacto no te deja curarte') : esc(o.text)}</li></ul><span class="votes">${who(i) ? `✔ ${who(i)}` : '—'}</span></button>`).join('')}</div>
+      ${r.lines.length ? `<div class="panel note">${r.lines.map((l) => `<div class="sm good">${esc(l)}</div>`).join('')}</div>` : ''}
+      <div class="row"><button data-act="side" class="mobonly">🎒 Revisar inventario</button><button data-act="stats">📊 Ver ficha</button><span class="dim sm deskonly">Tu equipo y mochila están en el panel de la derecha.</span></div>
+      ${advanceBar(run, 'Continuar →')}`;
+    frame(run, roomWin(restScene(r.zone), 'Descanso', esc(restText(r.zone)), inner, 'restwin') + pendingRows(run));
+    return;
+  }
+  // forja
+  const tier = heatTier(r.heat);
+  const pct = Math.round((r.heat / HEAT_MAX) * 100);
+  const heat = `<div class="heat ${tier.id}"><div class="row"><b>🌡️ Calor del Crisol: ${r.heat}</b><span class="grow"></span><span class="pill heattier">${esc(tier.name)}</span></div>
+    <div class="heatbar"><i style="width:${pct}%"></i><s style="left:${(HEAT_HOT / HEAT_MAX) * 100}%" title="Ardiente"></s><s style="left:${(HEAT_OVERLOAD / HEAT_MAX) * 100}%" title="Sobrecarga"></s></div>
+    <div class="sm">${esc(tier.text)}</div><div class="dim sm">Recalibrar +${HEAT.recalibrate} · Desguazar +${HEAT.scrap} · Templar +${HEAT.hone}. El calor se reparte entre todo el grupo.</div></div>`;
+  let tools = '<div class="dim">Estás mirando la forja.</div>';
+  if (h) {
+    const refs: Array<[string, Item]> = [...(Object.entries(h.equip) as Array<[string, Item]>).map(([k, it]): [string, Item] => [`e:${k}`, it]), ...h.bag.map((it, i): [string, Item] => [`b:${i}`, it])];
+    const sel = itemByRef(h, ui.forgeRef);
+    const price = recalibratePrice(h.forgeUses ?? 0);
+    const recal = `<div class="forgecol"><h3>⚒️ Recalibrar</h3><div class="dim sm">Cambia un prefijo o sufijo por una estadística de tu clase. ${price} 💰 (sube con cada uso).</div>
+      <div class="forgeitems">${refs.map(([ref, it]) => `<button class="cell ${RAR[it.rarity]} ${ui.forgeRef === ref ? 'on' : ''}" data-act="fsel" data-id="${ref}" ${tip(itemHtml(it, true))}>${itemIcon(it)}</button>`).join('') || '<span class="dim sm">No llevas objetos.</span>'}</div>
+      ${sel ? `<div class="sm"><b class="${RAR[sel.rarity]}">${esc(sel.name)}</b></div><div class="affrow">${(sel.affixes ?? []).map((a, i) => `<button class="mini ${ui.forgeAffix === i ? 'on' : ''}" data-act="faff" data-id="${i}">${a.kind === 'prefix' ? 'Prefijo' : 'Sufijo'}: +${a.value} ${esc(STAT_NAME[a.stat])}</button>`).join('')}</div>
+        ${ui.forgeAffix >= 0 && sel.affixes?.[ui.forgeAffix] ? `<div class="sm dim">Cambiar a:</div><div class="affrow">${recalStats(h, sel).filter((k) => k !== sel.affixes![ui.forgeAffix]!.stat).map((k) => `<button class="mini pri" data-act="frecal" data-id="${k}" ${h.gold < price ? 'disabled' : ''}>${esc(STAT_NAME[k])}</button>`).join('')}</div>` : ''}` : '<div class="dim sm">Elige un objeto.</div>'}</div>`;
+    const scrap = `<div class="forgecol"><h3>🔨 Desguace de Ecos</h3><div class="dim sm">Rompe un objeto de la mochila y extrae Escofinas de Eco: Common 1, Uncommon 2, Rare 3, Legendary 5.</div>
+      <div class="forgeitems">${h.bag.map((it, i) => `<button class="cell ${RAR[it.rarity]}" data-act="fscrap" data-id="${i}" ${tip(`${itemHtml(it, true)}<div class="sm good">Desguazar: +${SCRAP_YIELD[it.rarity]} Escofina(s)</div>`)}>${itemIcon(it)}<span class="qty">+${SCRAP_YIELD[it.rarity]}</span></button>`).join('') || '<span class="dim sm">Tu mochila está vacía (lo equipado no se puede desguazar).</span>'}</div></div>`;
+    const spells = heroSpec(h).spells.filter((sp) => sp.charges === undefined).map((sp) => sp.id);
+    const spSel = spells.includes(ui.forgeSpell) ? ui.forgeSpell : '';
+    const hone = `<div class="forgecol"><h3>🔔 Templar hechizo</h3><div class="dim sm">Con ${HONE_COST} Escofinas eliges tú la mejora exacta de un hechizo (máx. ${MAX_SPELL_UPS} por hechizo). Tienes <b class="gold">${h.escofinas ?? 0}</b>.</div>
+      <div class="forgeitems">${spells.map((id) => `<button class="cell ${spSel === id ? 'on' : ''} ${upgradeChoices(h, id).length ? '' : 'off'}" data-act="fspell" data-id="${id}" ${tip(spellTip(SPELLS[id]!))}>${spellIcon(SPELLS[id]!, false)}</button>`).join('')}</div>
+      ${spSel ? `<div class="sm"><b>${esc(SPELLS[spSel]!.name)}</b> <span class="dim">(${upCount(h, spSel)}/${MAX_SPELL_UPS} mejoras)</span></div><div class="affrow">${upgradeChoices(h, spSel).map((up) => `<button class="mini pri" data-act="fhone" data-id="${up}" ${(h.escofinas ?? 0) < HONE_COST ? 'disabled' : ''} ${tip(esc(UPGRADES[up]!.text))}>${UPGRADES[up]!.icon} ${esc(UPGRADES[up]!.name)}</button>`).join('') || '<span class="dim sm">Este hechizo ya no admite más mejoras.</span>'}</div>` : '<div class="dim sm">Elige un hechizo.</div>'}</div>`;
+    tools = `<div class="forgegrid">${recal}${scrap}${hone}</div>`;
+  }
+  const inner = `${heat}${tools}${r.log.length ? `<div class="panel note forgelog">${r.log.slice(-6).map((l) => `<div class="sm">🔥 ${esc(l)}</div>`).join('')}</div>` : ''}${advanceBar(run, 'Salir de la forja →')}`;
+  frame(run, roomWin(forgeScene(r.heat), 'La Forja del Crisol', 'Yunques de transformación y un crisol que nunca se enfría. Cada golpe de martillo aviva el fuego… y lo que espera en la siguiente sala lo sentirá.', inner, `forgewin ${tier.id}`) + pendingRows(run));
 }
