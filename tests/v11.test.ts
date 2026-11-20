@@ -76,3 +76,48 @@ describe('v13 iniciativa intercalada', () => {
     expect(interleave([u(1, 'hero', 14), u(2, 'enemy', 9), u(3, 'enemy', 11), u(4, 'enemy', 2)])).toEqual([1, 3, 2, 4]);
   });
 });
+
+describe('v13 mapas por bioma y terreno', () => {
+  it('cada zona usa sus biomas y todos los combates son transitables', async () => {
+    const { newRun, buildFight } = await import('../src/game/run');
+    const { BIOMES } = await import('../src/game/terrain');
+    const { reachable } = await import('../src/core/combat/grid');
+    let corridors = 0;
+    for (let zone = 0; zone < 4; zone++) for (let seed = 1; seed <= 25; seed++) {
+      const run = newRun('T', seed * 31 + zone, [{ owner: 'a', name: 'A', cls: 'barbaro', routes: [] }, { owner: 'b', name: 'B', cls: 'zorro', routes: [] }]);
+      run.zone = Math.min(zone, 2); run.kind = 'combat'; run.zoneFight = 2;
+      if (zone === 3) { run.mods = [...run.mods]; run.zone = 3; }
+      const setup = buildFight(run);
+      const st = createCombat(setup).state;
+      if (st.biome?.includes('pasillo')) corridors++;
+      if (st.biome && !st.biome.includes('pasillo')) expect(BIOMES.filter((b) => b.zone === Math.min(run.zone, 3)).map((b) => b.name), st.biome).toContain(st.biome);
+      const walk = reachable(st, st.units[0]!.pos, 99, true).cost;
+      for (const u of st.units) expect(walk.has(`${u.pos.x},${u.pos.y}`)).toBe(true);
+    }
+    expect(corridors).toBeGreaterThan(0);
+  });
+  it('abismo: un enemigo normal empujado cae y muere; un élite recibe 20 y vuelve', () => {
+    for (const rank of [undefined, 'elite'] as const) {
+      const e = foe(4, 2); if (rank) e.rank = rank;
+      const s = createCombat({ seed: 3, w: 10, h: 6, obstacles: [], abyss: [{ x: 5, y: 2 }], units: [hero('carcelero', 3, 2), e] }).state;
+      while (current(s)!.team !== 'hero') endTurn(s, current(s)!.id);
+      const k = s.units[0]!, f = s.units[1]!; f.shield = 0;
+      const hp = f.hp;
+      expect(cast(s, k.id, 'k_guadana', { x: 4, y: 2 }).ok).toBe(true);
+      if (rank) { expect(f.hp).toBeGreaterThan(0); expect(f.pos).not.toEqual({ x: 5, y: 2 }); expect(hp - f.hp).toBeGreaterThanOrEqual(20); }
+      else expect(f.hp).toBe(0);
+    }
+  });
+  it('braseros: un golpe los rompe y deja una línea de fuego que quema; las raíces envenenan', () => {
+    const s = createCombat({ seed: 3, w: 10, h: 6, obstacles: [], braziers: [{ x: 4, y: 2 }], roots: [{ x: 2, y: 3 }], units: [hero('zorro', 2, 2), foe(6, 2)] }).state;
+    while (current(s)!.team !== 'hero') endTurn(s, current(s)!.id);
+    const z = s.units[0]!, e = s.units[1]!;
+    expect(cast(s, z.id, 'z_orbe', { x: 4, y: 2 }).ok).toBe(true);
+    expect(s.braziers).toEqual([]);
+    expect(s.obstacles).not.toContain('4,2');
+    expect(s.fire?.['6,2']).toBeGreaterThan(0);
+    expect(e.statuses.burn).toBeTruthy();
+    expect(move(s, z.id, { x: 2, y: 3 }).ok).toBe(true);
+    expect(z.statuses.poison).toBeTruthy();
+  });
+});

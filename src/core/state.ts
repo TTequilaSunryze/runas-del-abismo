@@ -170,6 +170,13 @@ export interface CombatState extends RngBox {
   h: number;
   /** casillas bloqueadas, como "x,y" */
   obstacles: string[];
+  /** v13 terreno: abismos (no se pisan; quien cae, muere), braseros (obstáculos que se rompen),
+   *  raíces venenosas, casillas en llamas (turnos que les quedan) y el bioma del mapa */
+  abyss?: string[];
+  braziers?: string[];
+  roots?: string[];
+  fire?: Record<string, number>;
+  biome?: string;
   /** casillas con púas: dañan a quien las pisa */
   traps: string[];
   /** casillas pegajosas: detienen al héroe que entra */

@@ -17,6 +17,7 @@ import { reachable } from '../core/combat/grid';
 import { BAG_SIZE, PRICE, SLOTS, STAT_NAME, genItem, sumStats, type DropKind, type Item, type Rarity, type Slot, type StatKey, type Stats } from '../core/items/items';
 import { pick, rand, randInt, seedFrom, shuffle, type RngBox } from '../core/rng';
 import { makeActMap, type ActMap } from './map';
+import { CORRIDOR_CHANCE, genTerrain } from './terrain';
 import type { ClassId, CombatState, GameEvent, Pos } from '../core/state';
 
 /** Una opción de la recompensa del jefe. */
@@ -527,18 +528,25 @@ export function buildFight(run: RunState): CombatSetup {
     return a;
   });
   const ids = enemyList(run);
+  // los combates normales (no élites ni jefes) salen a veces como pasillo estrecho
+  const corridor = run.kind === 'combat' && !run.ambush && rand(run) < CORRIDOR_CHANCE;
   for (let attempt = 0; ; attempt++) {
+    const terrain = attempt > 30 ? null : genTerrain(run, run.zone, w, h, n, corridor && attempt < 15);
+    // en el pasillo, los héroes empiezan dentro del carril
+    if (terrain?.lane) heroes.forEach((u, i) => { u.pos = { x: i < terrain.lane!.length ? 1 : 0, y: terrain.lane![i % terrain.lane!.length]! }; });
+    else heroes.forEach((u, i) => { u.pos = { x: 1, y: ys[i]! }; });
     const taken = new Set([...heroes, ...allies].map((u) => `${u.pos.x},${u.pos.y}`));
+    for (const p of terrain ? [...terrain.obstacles, ...terrain.abyss, ...terrain.braziers] : []) taken.add(`${p.x},${p.y}`);
     const free = (minX: number, maxX: number): Pos => {
       for (;;) {
         const p = { x: randInt(run, minX, maxX), y: randInt(run, 0, h - 1) };
         if (!taken.has(`${p.x},${p.y}`)) { taken.add(`${p.x},${p.y}`); return p; }
       }
     };
-    const obstacles = attempt > 30 ? [] : Array.from({ length: 4 + n * 2 }, () => free(3, w - 5));
-    // las púas solo aparecen en grupo: 2 por jugador extra
-    const traps = Array.from({ length: (n - 1) * 2 + (omen === 'puas' ? 6 : 0) }, () => free(3, w - 4));
-    const puddles = omen === 'pantano' ? Array.from({ length: 4 + n * 2 }, () => free(2, w - 4)) : [];
+    // v13: el terreno lo pone el bioma; las púas solo con el presagio de púas
+    const obstacles = terrain?.obstacles ?? [];
+    const traps = Array.from({ length: omen === 'puas' ? 6 : 0 }, () => free(3, w - 4));
+    const puddles = [...(terrain?.puddles ?? []), ...(omen === 'pantano' ? Array.from({ length: 4 + n * 2 }, () => free(2, w - 4)) : [])];
     // el jefe no crece indefinidamente con los combates previos
     const enemies = ids.map((id, i) => id.startsWith('nemesis:') ? nemesisUnit(run, id.slice(8), free(w - 4, w - 1)) : makeEnemy(id, free(w - 4, w - 1), Math.min(id === bossOf(run).id || (run.kind === 'elite' && i === 0) ? 2 : 5, run.zoneFight), n, enemyOpts(run, id, i === 0)));
     if (run.kind === 'elite' && enemies[0]) { enemies[0].rank = 'elite'; enemies[0].tackle = (enemies[0].tackle ?? 0) + 3; }
@@ -549,7 +557,7 @@ export function buildFight(run: RunState): CombatSetup {
       if (omen === 'tormenta' || run.mods.includes('veloces')) { e.mp++; e.maxMp++; }
       if (run.mods.includes('veloces')) e.initiative += 4;
     }
-    const setup: CombatSetup = { seed: randInt(run, 1, 2 ** 31 - 1), w, h, obstacles, traps, puddles, units: [...heroes, ...allies, ...enemies] };
+    const setup: CombatSetup = { seed: randInt(run, 1, 2 ** 31 - 1), w, h, obstacles, traps, puddles, abyss: terrain?.abyss ?? [], braziers: terrain?.braziers ?? [], roots: terrain?.roots ?? [], biome: terrain?.name, units: [...heroes, ...allies, ...enemies] };
     // todo el mundo debe poder llegar a todo el mundo
     const probe = createCombat(setup).state;
     const walk = reachable(probe, heroes[0]!.pos, 99, true).cost;

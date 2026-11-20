@@ -17,6 +17,10 @@ export interface CombatSetup {
   obstacles: Pos[];
   traps?: Pos[];
   puddles?: Pos[];
+  abyss?: Pos[];
+  braziers?: Pos[];
+  roots?: Pos[];
+  biome?: string;
   units: UnitSpec[];
   /** empieza con una fase de colocación de los héroes */
   deploy?: boolean;
@@ -117,7 +121,7 @@ export function createCombat(setup: CombatSetup): { state: CombatState; events: 
   const units: Unit[] = setup.units.map((u, i) => ({ ...u, pos: { ...u.pos }, statuses: { ...u.statuses }, spells: u.spells.map((s) => ({ ...s })), id: i + 1 }));
   const order = interleave(units);
   const state: CombatState = {
-    version: 1, rng: setup.seed >>> 0, w: setup.w, h: setup.h, obstacles: setup.obstacles.map(key), traps: (setup.traps ?? []).map(key), puddles: (setup.puddles ?? []).map(key),
+    version: 1, rng: setup.seed >>> 0, w: setup.w, h: setup.h, obstacles: [...setup.obstacles, ...(setup.braziers ?? [])].map(key), abyss: (setup.abyss ?? []).map(key), braziers: (setup.braziers ?? []).map(key), roots: (setup.roots ?? []).map(key), fire: {}, biome: setup.biome, traps: (setup.traps ?? []).map(key), puddles: (setup.puddles ?? []).map(key),
     units, order, turn: -1, round: 1, over: null, nextId: units.length + 1,
   };
   const events: GameEvent[] = [];
@@ -126,7 +130,7 @@ export function createCombat(setup: CombatSetup): { state: CombatState; events: 
     const cells: string[] = [];
     for (let x = 0; x < Math.min(3, state.w); x++) for (let y = 0; y < state.h; y++) {
       const k = key({ x, y });
-      if (state.obstacles.includes(k) || state.traps.includes(k) || state.puddles.includes(k)) continue;
+      if (state.obstacles.includes(k) || state.traps.includes(k) || state.puddles.includes(k) || state.abyss!.includes(k)) continue;
       if (units.some((u) => u.team !== 'hero' && same(u.pos, { x, y }))) continue;
       cells.push(k);
     }
@@ -316,6 +320,7 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
       s.turn = 0;
       s.round++;
       tickMarks(s, undefined, ev);
+      for (const k of Object.keys(s.fire ?? {})) if (--s.fire![k]! <= 0) delete s.fire![k];
     }
     const u = getUnit(s, s.order[s.turn]!)!;
     if (!alive(u)) continue;
@@ -399,7 +404,7 @@ export function move(s: CombatState, unitId: number, to: Pos): ActionResult {
   if (typeof u === 'string') return fail(u);
   const reach = reachable(s, u.pos, u.mp, false, hasTrait(u, 'ghost'));
   const cost = reach.cost.get(key(to));
-  if (!cost || s.obstacles.includes(key(to))) return fail('Casilla fuera de alcance');
+  if (!cost || s.obstacles.includes(key(to)) || (s.abyss ?? []).includes(key(to))) return fail('Casilla fuera de alcance');
   const path = pathTo(reach, u.pos, to);
   const ev: GameEvent[] = [];
   const walked: Pos[] = [];
@@ -487,6 +492,10 @@ const dodgeOf = (s: CombatState, u: Unit): number => {
  */
 function stepOn(s: CombatState, u: Unit, ev: GameEvent[]): boolean {
   let stop = false;
+  // terreno: raíces venenosas y casillas en llamas
+  const here = key(u.pos);
+  if (alive(u) && (s.roots ?? []).includes(here)) addStatus(u, 'poison', 2, 1, ev);
+  if (alive(u) && (s.fire?.[here] ?? 0) > 0) addStatus(u, 'burn', 2, 1, ev);
   const ch = u.statuses.chained;
   if (ch && alive(u)) {
     // al moverse uno de los encadenados, el otro sufre: daño y −2 PM; la cadena se rompe
@@ -584,7 +593,7 @@ export function castProblem(s: CombatState, u: Unit, base: SpellDef, at: Pos): s
     if (def.summon && s.units.some((x) => alive(x) && x.summoner === u.id)) return 'Ya tienes un compañero invocado';
     return null;
   }
-  if (def.target === 'enemy' && (!t || t.team === u.team)) return 'Necesitas un enemigo como objetivo';
+  if (def.target === 'enemy' && (!t || t.team === u.team) && !(def.dmg && (s.braziers ?? []).includes(key(at)))) return 'Necesitas un enemigo como objetivo';
   if (def.target === 'ally' && (!t || t.team !== u.team)) return 'Necesitas un aliado como objetivo';
   if (def.hookOnly && t?.id !== u.hooked) return 'Solo sobre el enemigo enganchado';
   if (def.behind && t && !behindCell(s, u, t)) return 'No hay hueco a su espalda';
@@ -662,6 +671,7 @@ function push(s: CombatState, from: Pos, u: Unit, cells: number, ev: GameEvent[]
 function pushDir(s: CombatState, u: Unit, dx: number, dy: number, cells: number, ev: GameEvent[]): boolean {
   for (let i = 0; i < cells && alive(u); i++) {
     const n = { x: u.pos.x + dx, y: u.pos.y + dy };
+    if ((s.abyss ?? []).includes(key(n)) && !unitAt(s, n)) { fallInto(s, u, n, ev); return false; }
     if (!isFree(s, n)) {
       hurt(s, u, PUSH_CRASH_DMG, ev, 'push', { pierce: true });
       return true;
@@ -720,6 +730,11 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
     essenceSpent = true;
   }
   if (def.furyCost) addFury(u, -def.furyCost, ev);
+  // golpe a un brasero (sin enemigo en la casilla): solo lo rompe
+  if (def.target === 'enemy' && !unitAt(s, at) && (s.braziers ?? []).includes(key(at))) {
+    breakBrazier(s, at, dirOf(u.pos, at), ev);
+    return { ok: true, events: ev };
+  }
   // Vínculo etéreo y Paso sombrío: apareces a su espalda
   if (def.behind) {
     const t0 = unitAt(s, at)!;
@@ -954,6 +969,7 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
       if (n) push(s, u.pos, t, n, ev);
     }
   }
+  hitBraziers(s, u, def, at, ev);
   if (u.twinBlades && def.dmg && targets.some((t) => dist(t.pos, u.pos) <= 1)) u.twinBlades = false;
   // Juicio del inframundo: tu hechizo más caro da 1 alma extra si alcanza a un élite o jefe
   if (hasTrait(u, 'juicio') && u.souls !== undefined && hits > 0 && def.ap >= Math.max(...u.spells.filter((sp) => !sp.temp && sp.charges === undefined).map((sp) => SPELLS[sp.id]?.ap ?? 0))) {
@@ -1442,4 +1458,52 @@ function stepBlessings(s: CombatState, u: Unit, ev: GameEvent[]): void {
 /** Daño extra del Corte de Guadaña: +3 por turno de carga (máx. 3) y +1 cada 5 almas del combate (máx. +3). */
 export function scytheBonus(u: Unit): number {
   return 3 * Math.min(3, u.scytheCharge ?? 0) + Math.min(3, Math.floor((u.soulsFight ?? 0) / 5));
+}
+
+// ---------------------------------------------------------------------------
+// v13 terreno: abismos y braseros
+// ---------------------------------------------------------------------------
+
+/** Cae al abismo: los normales y los héroes mueren; élites y jefes reciben 20 y vuelven a una casilla libre cercana. */
+function fallInto(s: CombatState, u: Unit, pit: Pos, ev: GameEvent[]): void {
+  ev.push({ t: 'push', unit: u.id, to: { ...pit } });
+  ev.push({ t: 'resist', unit: u.id, what: '¡Cae al abismo!' });
+  if (u.rank || u.ai === 'boss' || u.ai === 'pillar') {
+    hurt(s, u, 20, ev, 'abismo', { pierce: true });
+    const back = [...reachable(s, u.pos, 6, true).cost.keys()].map((k) => { const [x, y] = k.split(',').map(Number) as [number, number]; return { x, y }; }).filter((p) => isFree(s, p)).sort((a, b) => dist(a, pit) - dist(b, pit))[0];
+    if (back) { u.pos = back; ev.push({ t: 'blink', unit: u.id, to: { ...back } }); }
+    return;
+  }
+  u.shield = 0;
+  delete u.undying;
+  hurt(s, u, u.hp + 999, ev, 'abismo', { pierce: true });
+}
+
+/** Rompe un brasero: deja una línea de fuego de 4 casillas en la dirección del golpe (3 turnos; quema 2 turnos). */
+export function breakBrazier(s: CombatState, at: Pos, dir: [number, number], ev: GameEvent[]): void {
+  const k = key(at);
+  if (!(s.braziers ?? []).includes(k)) return;
+  s.braziers = s.braziers!.filter((x) => x !== k);
+  s.obstacles = s.obstacles.filter((x) => x !== k);
+  ev.push({ t: 'markAdd', kind: 'pulse', at: { ...at } });
+  const [dx, dy] = dir[0] || dir[1] ? dir : [1, 0];
+  s.fire ??= {};
+  for (let i = 0; i <= 4; i++) {
+    const p = { x: at.x + dx * i, y: at.y + dy * i };
+    if (!inBoundsPos(s, p) || s.obstacles.includes(key(p))) break;
+    s.fire[key(p)] = 3;
+    const t = unitAt(s, p);
+    if (t && alive(t)) addStatus(t, 'burn', 2, 1, ev);
+  }
+}
+const inBoundsPos = (s: CombatState, p: Pos): boolean => p.x >= 0 && p.y >= 0 && p.x < s.w && p.y < s.h;
+
+/** Si un hechizo de daño alcanza un brasero (en su casilla objetivo, su línea o su área), lo rompe. */
+function hitBraziers(s: CombatState, u: Unit, def: SpellDef, at: Pos, ev: GameEvent[]): void {
+  if (!def.dmg || !(s.braziers ?? []).length) return;
+  const cells: Pos[] = [at];
+  if (def.line) cells.push(...lineCells(u.pos, at));
+  if (def.cone) cells.push(...coneCells(u.pos, at, def.cone));
+  if (def.area) for (const k of [...s.braziers!]) { const [x, y] = k.split(',').map(Number) as [number, number]; if (dist({ x, y }, at) <= def.area) cells.push({ x, y }); }
+  for (const p of cells) if ((s.braziers ?? []).includes(key(p))) breakBrazier(s, p, dirOf(u.pos, p), ev);
 }

@@ -14,7 +14,7 @@ export function unitAt(s: CombatState, p: Pos): Unit | undefined {
 }
 
 export function isFree(s: CombatState, p: Pos): boolean {
-  return inBounds(s, p) && !s.obstacles.includes(key(p)) && !unitAt(s, p);
+  return inBounds(s, p) && !s.obstacles.includes(key(p)) && !(s.abyss ?? []).includes(key(p)) && !unitAt(s, p);
 }
 
 const DIRS: readonly Pos[] = [
@@ -34,7 +34,9 @@ export function reachable(s: CombatState, from: Pos, max: number, throughUnits =
   const cost = new Map<string, number>([[key(from), 0]]);
   const prev = new Map<string, string>();
   const queue: Pos[] = [from];
+  // los abismos no se pueden pisar (ni los espectros se quedan sobre ellos)
   const blocked = new Set(s.obstacles);
+  const pit = new Set(s.abyss ?? []);
   while (queue.length) {
     const p = queue.shift()!;
     const c = cost.get(key(p))!;
@@ -42,7 +44,7 @@ export function reachable(s: CombatState, from: Pos, max: number, throughUnits =
     for (const d of DIRS) {
       const n = { x: p.x + d.x, y: p.y + d.y };
       const k = key(n);
-      if (!inBounds(s, n) || cost.has(k) || (!ghost && blocked.has(k))) continue;
+      if (!inBounds(s, n) || cost.has(k) || (!ghost && blocked.has(k)) || pit.has(k)) continue;
       if (!throughUnits && unitAt(s, n)) continue;
       cost.set(k, c + 1);
       prev.set(k, key(p));
