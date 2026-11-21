@@ -34,7 +34,7 @@ import { ATLAS_CATS, CHRONICLE_CATS, MAX_LV, MASTERED_AT, type AtlasCat, type Ch
 import { ATLAS, ATLAS_DONE_TEXT, ATLAS_NAME, ATLAS_STATE_NAME, CHRONICLES, CHRONICLE_NAME, CHRONICLE_STATE_NAME, atlasEntry, atlasProgress, chronicleEntry, chronicleProgress } from '../game/atlas';
 import { BLESSINGS } from '../core/boonmods';
 import { unitPortraitUrl } from '../render/sprites';
-import { setMenuScene } from '../render/menubg';
+import { setCombatBg, setMenuScene } from '../render/menubg';
 import { NODE_NAME, heroSpec, upCount, upgradeChoices } from '../game/run';
 
 const RAR = ['ir0', 'ir1', 'ir2', 'ir3'];
@@ -300,6 +300,7 @@ function reconnectBanner(): string {
 
 export function homeScreen(msg: string): void {
   setMenuScene('home');
+  setCombatBg(null);
   const host = JSON.parse(store.get('rda_host') ?? 'null') as { code: string } | null;
   const m = meta();
   const pend = contractsReady(m) + specialReady(m), shopNew = unseenOwned(m).length || (m.perksRefundEcos && !m.refundSeen);

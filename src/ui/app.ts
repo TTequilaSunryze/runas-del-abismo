@@ -16,7 +16,7 @@ import { drainArchiveNotices, recordArchive, type ArchiveNotice } from '../game/
 import { claimContractReward } from '../game/contracts';
 import { applyLoadout, buyItem, currentLook, emblemOf, deleteLoadout, equipItem, resetLook, saveLoadout, unequip } from '../game/shop';
 import { setLooks } from '../render/looks';
-import { setMenuScene } from '../render/menubg';
+import { setCombatBg, setMenuScene } from '../render/menubg';
 import { claimSpecialReward, equipCosmetic } from '../game/specials';
 import { masteryOf, meta, myNemesis, myTeam, openRoutes, removeChampion, saveChampion, saveMeta, toggleTeam } from '../game/meta';
 import { currentAccount, fetchTeam, restoreAccount, signIn, signOut, signUp } from '../net/account';
@@ -141,6 +141,7 @@ function render(events: GameEvent[]): void {
   }
   ui.screen = want;
   setMenuScene(want === 'combat' ? null : 'game');
+  setCombatBg(want === 'combat' ? run?.zone ?? null : null);
   // ficha del personaje por encima de cualquier pantalla
   document.getElementById('statsmodal')?.remove();
   if (ui.statsOpen && run) ui.root.insertAdjacentHTML('beforeend', statsModal(run));

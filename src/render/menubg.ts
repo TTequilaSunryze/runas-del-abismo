@@ -107,3 +107,13 @@ export function setMenuScene(s: MenuScene | null): void {
   frame(performance.now());
   if (!raf && !reduce) raf = requestAnimationFrame(loop);
 }
+
+/** Fondo ilustrado detrás del tablero de combate (por ahora, la zona 1). null lo quita. */
+const COMBAT_BG: Record<number, string> = { 0: 'bg/zona1.jpg' };
+export function setCombatBg(zone: number | null): void {
+  if (typeof document === 'undefined') return;
+  const img = zone === null ? undefined : COMBAT_BG[zone], b = document.body;
+  b.classList.toggle('combatbg', !!img);
+  if (img) { b.style.backgroundImage = `linear-gradient(rgba(5,6,10,.45), rgba(5,6,10,.7)), url(${import.meta.env.BASE_URL}${img})`; b.style.backgroundSize = 'cover'; b.style.backgroundPosition = 'center'; b.style.backgroundAttachment = 'fixed'; }
+  else { b.style.backgroundImage = ''; b.style.backgroundSize = ''; b.style.backgroundPosition = ''; b.style.backgroundAttachment = ''; }
+}

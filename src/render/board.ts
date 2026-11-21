@@ -14,7 +14,12 @@ import { ANIM_FRAMES, animFor, type Anim } from './models';
 
 const TILE = 56;
 /** margen superior: los muros y los personajes sobresalen por arriba de su casilla */
-const PAD = 22;
+const PAD = 42;
+
+/** Arte ilustrado de la zona 1 (Catacumbas): losas (hoja 4×4 de 64 px) y pilar. Si aún no ha cargado, se dibuja lo de siempre. */
+const art = (src: string): HTMLImageElement | null => { if (typeof Image === 'undefined') return null; const i = new Image(); i.src = `${import.meta.env.BASE_URL}${src}`; return i; };
+const Z1 = { floor: art('tiles/z1_floor.png'), pillar: art('tiles/z1_pillar.png') };
+const ready = (i: HTMLImageElement | null): i is HTMLImageElement => !!i && i.complete && i.naturalWidth > 0;
 const STATUS_COLOR: Record<string, string> = { burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0', charm: '#ff9ad8', vuln: '#c9a0ff', bleed: '#e03040', hobble: '#9ad0e8', guarded: '#7fe0b0', deathmark: '#ff3a4a', verdugo: '#ff8a30', frenzy: '#ff5030', orbita: '#b07cff', chained: '#a0a8c0', rooted: '#c89a5a', anchor: '#5ac8ff', silver: '#e0e8ff', smoke: '#9a8ab8', immune: '#7ae8ff', kinetic: '#58a6ff', prism: '#c8a0ff' };
 export const STATUS_NAME: Record<string, string> = { burn: 'Quemadura', poison: 'Veneno', slow: 'Ralentizado', stun: 'Aturdido', mark: 'Marcado', empower: 'Potenciado', reach: 'Alcance+', invis: 'Invisible', exposed: 'Expuesto', charm: 'Encantado', vuln: 'Vulnerable', bleed: 'Sangrado', hobble: 'Atrapado', guarded: 'Protegido', deathmark: 'Marca de la muerte', verdugo: 'Presa', frenzy: 'Frenesí', orbita: 'Órbita', chained: 'Encadenado', rooted: 'Inmovilizado', anchor: 'Sello de anclaje', silver: 'Balas de plata', smoke: 'En el humo', immune: 'Inmune', kinetic: 'Barrera cinética', prism: 'Baluarte prismático' };
 
@@ -214,8 +219,16 @@ export class Board {
           g.fillStyle = `rgba(150,90,255,${tw * 0.5})`; g.fillRect(X + ((x * 17 + y * 7) % 40) + 6, Y + 26 + ((x * 5) % 18), 2, 2);
           continue;
         }
-        // damero: casillas claras y oscuras con ruido fijo
         const light = (x + y) % 2 === 0;
+        if (zone === ZONES[0] && ready(Z1.floor)) {
+          // losas ilustradas: una de las 16 variantes, fija por casilla; el damero se conserva para leer las casillas
+          const v = (((x * 73856093) ^ (y * 19349663)) >>> 0) % 16;
+          g.drawImage(Z1.floor, (v % 4) * 64, Math.floor(v / 4) * 64, 64, 64, X, Y, TILE, TILE);
+          g.fillStyle = light ? 'rgba(255,240,210,.04)' : 'rgba(0,0,0,.2)'; g.fillRect(X, Y, TILE, TILE);
+          if (wall.has(`${x},${y - 1}`)) { const sg = g.createLinearGradient(0, Y, 0, Y + TILE * 0.45); sg.addColorStop(0, 'rgba(0,0,0,.55)'); sg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = sg; g.fillRect(X, Y, TILE, TILE * 0.45); }
+          continue;
+        }
+        // damero: casillas claras y oscuras con ruido fijo
         g.fillStyle = zone.floor[light ? 0 : 1]!;
         g.fillRect(X, Y, TILE, TILE);
         // damero marcado: las casillas oscuras se oscurecen y las claras reciben un poco de luz
@@ -262,6 +275,13 @@ export class Board {
   /** Muro con volumen: cara superior iluminada (sobresale hacia arriba) y cara frontal de ladrillo más oscura. */
   private drawWall(c: CombatState, zone: (typeof ZONES)[number], x: number, y: number): void {
     const g = this.g, X = x * TILE, Y = y * TILE, lift = Math.round(TILE * 0.4);
+    if (zone === ZONES[0] && ready(Z1.pillar)) {
+      // pilar ilustrado: ocupa su casilla y sobresale hacia arriba (tapa lo que hay detrás, no lo de delante)
+      const h = Math.round(TILE * (Z1.pillar.naturalHeight / Z1.pillar.naturalWidth));
+      g.fillStyle = 'rgba(0,0,0,.45)'; g.beginPath(); g.ellipse(X + TILE / 2, Y + TILE - 4, TILE * 0.46, 7, 0, 0, Math.PI * 2); g.fill();
+      g.drawImage(Z1.pillar, X, Y + TILE - h, TILE, h);
+      return;
+    }
     const front = !c.obstacles.includes(`${x},${y + 1}`);
     const topY = Y - lift, topH = TILE - 2;
     // cara frontal de ladrillo (la que mira hacia abajo, si no hay otro muro delante)
