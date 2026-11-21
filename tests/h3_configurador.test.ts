@@ -107,6 +107,6 @@ describe('H3 · alternativas sin tiempo de espera', () => {
     for (const c of PLAYABLE) for (const id of SPELL_CATALOG[c]!.alts) expect(SPELLS[id]!.cd, id).toBe(0);
     expect(SPELLS.z_encanto!.cd).toBe(2);
     expect(SPELLS.ojo_halcon!.cd).toBe(3);
-    expect(catalogSpells('barbaro')).toHaveLength(9);
+    expect(catalogSpells('barbaro')).toHaveLength(14);
   });
 });

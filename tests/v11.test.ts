@@ -17,7 +17,8 @@ const fight = (units: UnitSpec[]) => { const s = createCombat({ seed: 7, w: 12, 
 describe('bendiciones v11', () => {
   it('cada clase nueva tiene 10 bendiciones y cada rasgo lo usa el motor', () => {
     for (const c of ['zorro', 'esferas', 'acechador', 'carcelero', 'barbaro']) expect(Object.values(BLESSINGS).filter((b) => b.cls === c), c).toHaveLength(10);
-    expect(Object.values(BLESSINGS).filter((b) => b.cls === 'arquero')).toHaveLength(0);
+    // H5: el Arquero ya tiene sus 10 bendiciones propias
+    expect(Object.values(BLESSINGS).filter((b) => b.cls === 'arquero')).toHaveLength(10);
     for (const b of Object.values(BLESSINGS)) if (b.trait) expect(engine.includes(`'${b.trait}'`), b.id).toBe(true);
   });
   it('Zorro de fuego: el orbe quema', () => {

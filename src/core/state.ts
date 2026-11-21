@@ -158,6 +158,8 @@ export interface Snare {
   dmg: number;
   /** turnos de quemadura que deja (Mina de proximidad) */
   burn?: number;
+  /** H5: turnos de sangrado que deja (Cepos afilados del Arquero) */
+  bleed?: number;
 }
 
 /**

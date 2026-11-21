@@ -135,6 +135,8 @@ const LOOK: Record<string, [string, string]> = {
   g_rodilla: ['bullet', 'blood'], g_danza: ['whirl', 'arcane'], g_mina: ['mine', 'fire'], g_certero: ['crosshair', 'blood'], g_humo: ['cloud', 'shadow'],
   g_plata: ['bullet', 'ice'], g_gancho: ['link', 'steel'], g_tambor: ['pistol', 'fire'],
   s_danza: ['whirl', 'blood'], s_velo: ['mask', 'shadow'], s_convergencia: ['twin', 'blood'], s_cosecha: ['bloodfx', 'shadow'],
+  b_salto: ['leap', 'blood'], b_piel: ['shield', 'blood'], b_arenga: ['banner', 'blood'], b_decapitar: ['axe', 'blood'], b_agarre: ['fist', 'steel'],
+  s_garrote: ['link', 'shadow'], s_bruma: ['cloud', 'shadow'], z_resguardo: ['hexshield', 'ice'], r_runa: ['rune', 'gold'], g_bengala: ['star', 'fire'],
   b_sed: ['heart', 'blood'], b_tajo: ['bigsword', 'blood'], b_embiste: ['whirl', 'steel'], b_grito: ['horn', 'blood'], b_colosal: ['hammer', 'blood'], b_pacto: ['bloodfx', 'blood'], b_cuchillada: ['whirl', 'blood'], b_mirada: ['eye', 'fire'], b_frenesi: ['flame', 'blood'],
 };
 

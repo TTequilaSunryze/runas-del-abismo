@@ -188,4 +188,15 @@ export const BLESSINGS: Record<string, BlessingDef> = Object.fromEntries(([
   B({ id: 'bb_carga', cls: 'barbaro', name: 'Carga berserker', icon: '🏃', trait: 'carga', text: 'Si empiezas tu turno con un enemigo visible en línea recta, ganas +1 PM.' }),
   B({ id: 'bb_resiliencia', cls: 'barbaro', name: 'Resiliencia salvaje', icon: '🪨', trait: 'resiliencia', text: 'Cada 20 de Furia reduce en 1 el daño físico que recibes (cada 40 de Furia, máx. 2).' }),
   B({ id: 'bb_matasangre', cls: 'barbaro', name: 'Matasangre', icon: '🩸', trait: 'matasangre', text: 'Si rematas a un enemigo cuerpo a cuerpo con la Furia al máximo, recuperas 2 PA (1 vez por turno).' }),
+  // H5 · Arquero: bendiciones pasivas propias (distancia, trampas, presa y compañero)
+  B({ id: 'ab_viento', cls: 'arquero', name: 'Lectura del viento', icon: '🌬️', trait: 'viento', text: 'Distancia letal llega hasta +5 de daño (a 8 casillas o más).' }),
+  B({ id: 'ab_presa', cls: 'arquero', name: 'Acecho de la presa', icon: '🐾', trait: 'presa', text: 'Tus golpes hacen +3 de daño a enemigos Ralentizados, Inmovilizados, aturdidos o con la Huida reducida.' }),
+  B({ id: 'ab_escarcha', cls: 'arquero', name: 'Puntas de escarcha', icon: '❄️', trait: 'escarcha', text: 'Lo que golpeas a 4 casillas o más queda Ralentizado (−1 PM) 1 turno.' }),
+  B({ id: 'ab_cepos', cls: 'arquero', name: 'Cepos afilados', icon: '🪤', trait: 'cepos', needs: ['a_campo'], text: 'Tus cepos hacen +6 de daño y dejan Sangrando 2 turnos a quien los pisa.' }),
+  B({ id: 'ab_cetrero', cls: 'arquero', name: 'Vínculo del cetrero', icon: '🦅', trait: 'cetrero', needs: ['a_halcon'], text: 'Tu halcón tiene un 50% más de vida y +2 de daño.' }),
+  B({ id: 'ab_ojo', cls: 'arquero', name: 'Ojo certero', icon: '🎯', trait: 'ojocert', needs: ['ojo_halcon'], text: 'Mientras dure Ojo de halcón, +15% de crítico.' }),
+  B({ id: 'ab_paso', cls: 'arquero', name: 'Paso del cazador', icon: '🥾', trait: 'pasocaz', text: 'Rematar a un enemigo a distancia te da +2 PM (una vez por turno).' }),
+  B({ id: 'ab_retirada', cls: 'arquero', name: 'Retirada táctica', icon: '↩️', trait: 'retirada', text: 'Si empiezas tu turno con un enemigo pegado, ganas +1 PM y el placaje no te afecta ese turno.' }),
+  B({ id: 'ab_brea', cls: 'arquero', name: 'Puntas de brea', icon: '🔥', trait: 'ignite', text: 'Todo tu daño quema 2 turnos (combina con Flecha ígnea: +6 contra quien ya arde).' }),
+  B({ id: 'ab_primera', cls: 'arquero', name: 'Primera flecha', icon: '🏹', trait: 'primera', text: 'El primer hechizo de cada turno cuesta 1 PA menos.' }),
 ] as BlessingDef[]).map((b) => [b.id, b]));

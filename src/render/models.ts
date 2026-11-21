@@ -31,6 +31,7 @@ const SPELL_ANIM: Record<string, Anim> = {
   s_kunai: 'special', s_hoja: 'attack', s_ejecucion: 'attack', k_grilletes: 'attack', k_condena: 'cast', k_azote: 'attack', k_alma: 'attack',
   flecha: 'attack', tiro_rasante: 'attack', ojo_halcon: 'cast', a_letal: 'attack', a_abanico: 'attack', a_ignea: 'attack', a_campo: 'cast',
   a_conmocion: 'attack', a_halcon: 'cast', perforante: 'attack', salto_atras: 'special', flecha_hielo: 'attack', red: 'cast', orden: 'cast',
+  b_salto: 'attack', b_piel: 'special', b_arenga: 'special', b_decapitar: 'attack', b_agarre: 'attack', s_garrote: 'attack', s_bruma: 'cast', z_resguardo: 'cast', r_runa: 'cast', g_bengala: 'attack',
   b_sed: 'special', b_tajo: 'attack', b_embiste: 'attack', b_grito: 'special', b_colosal: 'attack', b_pacto: 'special', b_cuchillada: 'attack', b_mirada: 'cast', b_frenesi: 'special',
 };
 

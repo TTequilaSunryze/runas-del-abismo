@@ -24,8 +24,8 @@ export const CATALOG_SIZE = STARTERS + ALTS;
 export const SPELL_CATALOG: Record<string, ClassCatalog> = {
   zorro: {
     starters: ['z_orbe', 'z_encanto', 'z_impulso', 'z_fuego'],
-    alts: ['z_espejismo', 'z_vortice', 'z_seduccion', 'z_estallido', 'z_vinculo', 'z_drenaje', 'z_colas', 'z_maldicion', 'z_velo'],
-    missing: 1,
+    alts: ['z_espejismo', 'z_vortice', 'z_seduccion', 'z_estallido', 'z_vinculo', 'z_drenaje', 'z_colas', 'z_maldicion', 'z_velo', 'z_resguardo'],
+    missing: 0,
     excluded: [],
   },
   esferas: {
@@ -36,8 +36,8 @@ export const SPELL_CATALOG: Record<string, ClassCatalog> = {
   },
   acechador: {
     starters: ['s_shuriken', 's_tajo', 's_sombra', 's_paso'],
-    alts: ['s_marca', 's_danza', 's_velo', 's_convergencia', 's_cosecha', 's_kunai', 's_hoja', 's_ejecucion'],
-    missing: 2,
+    alts: ['s_marca', 's_danza', 's_velo', 's_convergencia', 's_cosecha', 's_kunai', 's_hoja', 's_ejecucion', 's_garrote', 's_bruma'],
+    missing: 0,
     excluded: [{ id: 's_ocaso', reason: 'Mismo efecto que Velo espectral de la Zorro (invisible y +2 PM) y que Velo de penumbra.' }],
   },
   carcelero: {
@@ -52,20 +52,20 @@ export const SPELL_CATALOG: Record<string, ClassCatalog> = {
   },
   barbaro: {
     starters: ['b_sed', 'b_tajo', 'b_embiste', 'b_grito'],
-    alts: ['b_colosal', 'b_pacto', 'b_cuchillada', 'b_mirada', 'b_frenesi'],
-    missing: 5,
+    alts: ['b_colosal', 'b_pacto', 'b_cuchillada', 'b_mirada', 'b_frenesi', 'b_salto', 'b_piel', 'b_arenga', 'b_decapitar', 'b_agarre'],
+    missing: 0,
     excluded: [],
   },
   arquitecto: {
     starters: ['r_glifo', 'r_barrera', 'r_lanza', 'r_pulsar'],
-    alts: ['r_gravedad', 'r_baluarte', 'r_cercado', 'r_inercia', 'r_arquitectonico', 'r_sello', 'r_sobrecarga', 'r_matriz', 'r_ciudadela'],
-    missing: 1,
+    alts: ['r_gravedad', 'r_baluarte', 'r_cercado', 'r_inercia', 'r_arquitectonico', 'r_sello', 'r_sobrecarga', 'r_matriz', 'r_ciudadela', 'r_runa'],
+    missing: 0,
     excluded: [],
   },
   pistolero: {
     starters: ['g_disparo', 'g_rebote', 'g_recarga', 'g_trazadora'],
-    alts: ['g_abanico', 'g_rodilla', 'g_danza', 'g_mina', 'g_certero', 'g_humo', 'g_plata', 'g_gancho', 'g_tambor'],
-    missing: 1,
+    alts: ['g_abanico', 'g_rodilla', 'g_danza', 'g_mina', 'g_certero', 'g_humo', 'g_plata', 'g_gancho', 'g_tambor', 'g_bengala'],
+    missing: 0,
     excluded: [],
   },
   arquero: {
@@ -97,7 +97,7 @@ export const SPELL_NEEDS: Record<string, Need> = {
   t_descarga: SPHERES, t_voluntad: SPHERES, t_gravedad: SPHERES, t_orbita: SPHERES, t_resonancia: SPHERES, t_transfusion: SPHERES, t_implosion: SPHERES,
   s_cosecha: SHADOW, s_convergencia: SHADOW,
   r_pulsar: GLYPHS, r_arquitectonico: GLYPHS,
-  b_sed: FURY, b_colosal: FURY, b_frenesi: FURY,
+  b_sed: FURY, b_colosal: FURY, b_frenesi: FURY, b_piel: FURY, b_decapitar: FURY,
   g_tambor: CHARGES,
   orden: COMPANION,
 };

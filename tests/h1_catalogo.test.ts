@@ -17,8 +17,8 @@ describe('H1 · catálogo de habilidades', () => {
       expect(k.alts.length + k.missing, c).toBe(ALTS);
       expect(catalogSpells(c).length, c).toBeLessThanOrEqual(CATALOG_SIZE);
     }
-    // huecos reales (contenido por crear en H5)
-    expect(Object.fromEntries(PLAYABLE.map((c) => [c, SPELL_CATALOG[c]!.missing]))).toEqual({ zorro: 1, esferas: 0, acechador: 2, carcelero: 0, barbaro: 5, arquitecto: 1, pistolero: 1, arquero: 0 });
+    // H5: ya no falta ninguna
+    expect(Object.fromEntries(PLAYABLE.map((c) => [c, SPELL_CATALOG[c]!.missing]))).toEqual({ zorro: 0, esferas: 0, acechador: 0, carcelero: 0, barbaro: 0, arquitecto: 0, pistolero: 0, arquero: 0 });
   });
   it('solo usa habilidades que ya existen, sin repetir ni mezclar clases, y sin temporales', () => {
     const seen = new Set<string>();

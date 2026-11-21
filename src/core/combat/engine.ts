@@ -97,7 +97,12 @@ export const ARCHER_RANGE_FROM = 3;
 export const ARCHER_RANGE_MAX = 3;
 /** ¿Es un héroe Arquero (no el Arquero óseo enemigo)? */
 const isArcher = (u: Unit): boolean => u.kind === 'arquero' && (u.ai === null || u.ai === 'champ');
-export const archerBonus = (u: Unit, t: Unit): number => (isArcher(u) ? Math.max(0, Math.min(ARCHER_RANGE_MAX, dist(u.pos, t.pos) - ARCHER_RANGE_FROM)) : 0);
+export const archerBonus = (u: Unit, t: Unit): number => (isArcher(u) ? Math.max(0, Math.min(hasTrait(u, 'viento') ? ARCHER_WIND_MAX : ARCHER_RANGE_MAX, dist(u.pos, t.pos) - ARCHER_RANGE_FROM)) : 0);
+/** H5: Lectura del viento sube el tope de Distancia letal. */
+export const ARCHER_WIND_MAX = 5;
+/** H5: Acecho de la presa: daño extra contra enemigos frenados. */
+export const PREY_BONUS = 3;
+const slowed = (t: Unit): boolean => !!(t.statuses.slow || t.statuses.rooted || t.statuses.stun || t.statuses.hobble);
 /** quién está lanzando el hechizo en curso (para la Marca de la muerte) */
 let casting: number | null = null;
 /** escuela del hechizo en curso: lo mágico usa el % de daño mágico del equipo y lo demás el físico */
@@ -643,6 +648,7 @@ function springSnare(s: CombatState, u: Unit, ev: GameEvent[]): boolean {
   ev.push({ t: 'snare', unit: u.id });
   hurt(s, u, t.dmg, ev, t.burn ? 'mina' : 'snare', { pierce: true, element: t.burn ? 'fire' : undefined });
   if (t.burn && alive(u)) addStatus(u, 'burn', t.burn, 1, ev);
+  if (t.bleed && alive(u)) addStatus(u, 'bleed', t.bleed, 1, ev);
   return true;
 }
 
@@ -939,12 +945,17 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
         if (!a.spells.some((sp) => sp.id === 'k_farol')) a.spells.push({ id: 'k_farol', cd: 0, temp: true });
       }
     }
-    if (def.snare) (s.snares ??= []).push({ k: key(at), team: u.team, dmg: Math.round(def.snare.dmg * (1 + u.power / 100)), ...(def.snare.burn ? { burn: def.snare.burn } : {}) });
+    // H5 · Cepos afilados: +6 de daño y sangrado
+    if (def.snare) (s.snares ??= []).push({ k: key(at), team: u.team, dmg: Math.round(def.snare.dmg * (1 + u.power / 100)) + (hasTrait(u, 'cepos') ? 6 : 0), ...(def.snare.burn ? { burn: def.snare.burn } : {}), ...(hasTrait(u, 'cepos') ? { bleed: 2 } : {}) });
     if (def.summon) {
       const m = def.summon, hp = Math.round(u.maxHp * m.hpPct);
       const pet = summon(s, { team: u.team, kind: m.kind, name: m.name, owner: null, pos: at, hp, maxHp: hp, shield: 0, armor: m.armor, power: u.power, crit: 5,
         ap: m.ap, maxAp: m.ap, mp: m.mp, maxMp: m.mp, initiative: m.initiative, apMod: 0, mpMod: 0, resist: {}, statusBonus: 0, statuses: {}, spells: [{ id: m.spell, cd: 0 }], ai: 'melee', summoner: u.id }, at, ev);
-      if (pet) pet.summoner = u.id;
+      if (pet) {
+        pet.summoner = u.id;
+        // H5 · Vínculo del cetrero: el compañero es más duro y pega más
+        if (hasTrait(u, 'cetrero')) { pet.maxHp = pet.hp = Math.round(pet.maxHp * 1.5); pet.power += 2; }
+      }
     }
     return { ok: true, events: ev };
   }
@@ -1028,7 +1039,7 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
       // Aura de astucia: los enemigos pegados a quien la tiene pierden un 10% de crítico
       const astute = s.units.some((z) => alive(z) && z.team !== u.team && hasTrait(z, 'astucia') && dist(z.pos, u.pos) <= 1) ? 10 : 0;
       // Tirador nato: a más de 4 casillas, +15% de crítico; Tiro certero: probabilidad doble
-      const far = hasTrait(u, 'tiradornato') && dist(u.pos, t.pos) > 4 ? 15 : 0;
+      const far = (hasTrait(u, 'tiradornato') && dist(u.pos, t.pos) > 4 ? 15 : 0) + (hasTrait(u, 'ojocert') && u.statuses.reach ? 15 : 0);
       const crit = flank || fullMag || rand(s) * 100 < (u.crit + furyCrit(u) + (def.crit ?? 0) + far) * (def.critMul ?? 1) - astute;
       const melee = dist(u.pos, t.pos) <= 1;
       const furyBefore = u.fury ?? 0;
@@ -1042,10 +1053,15 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
       const lres = def.id === 'r_lanza' && hasTrait(u, 'lanzares') && marksOf(s, 'glyph', u.id).some((m) => dist(m.pos, t.pos) <= 1) ? 4 : 0;
       // G3.4: daño extra contra objetivos con un estado concreto (Flecha ígnea contra quemados…); G3.3: Distancia letal
       const vs = def.bonusVs && t.statuses[def.bonusVs.kind] ? def.bonusVs.dmg : 0;
-      const got = hurt(s, t, raw + lres + vs + archerBonus(u, t), ev, def.id, { crit, element: fullMag ? 'fire' : def.element, pierce: def.pierce || (crit && opposite) || (!!def.gun && !!u.statuses.silver), armorPen: pen, armorFlat: def.armorIgnore });
+      const prey = hasTrait(u, 'presa') && slowed(t) ? PREY_BONUS : 0;
+      const got = hurt(s, t, raw + lres + vs + prey + archerBonus(u, t), ev, def.id, { crit, element: fullMag ? 'fire' : def.element, pierce: def.pierce || (crit && opposite) || (!!def.gun && !!u.statuses.silver), armorPen: pen, armorFlat: def.armorIgnore });
       // Munición incendiaria: el disparo con el cargador lleno quema
       if (fullMag && hasTrait(u, 'incendiaria') && alive(t) && !pass) addStatus(t, 'burn', 2, 1, ev);
       if (!pass) {
+        // H5 · Puntas de escarcha: los disparos a 4 casillas o más ralentizan
+        if (hasTrait(u, 'escarcha') && alive(t) && t.team !== u.team && dist(u.pos, t.pos) >= 4) addStatus(t, 'slow', 1, 1, ev);
+        // H5 · Paso del cazador: rematar a distancia da +2 PM (una vez por turno)
+        if (hasTrait(u, 'pasocaz') && !alive(t) && t.team !== u.team && !melee && !u.huntUsed) { u.huntUsed = true; u.mp += 2; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: 2 }); }
         // Zorro de fuego: lo que golpea en línea recta quema 2 turnos
         if (hasTrait(u, 'zfuego') && alive(t) && (def.line || def.straight || def.firstHit)) addStatus(t, 'burn', 2, 1, ev);
         // Espina de la Madre Raíz: los golpes envenenan
@@ -1107,6 +1123,8 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
     }
   }
   hitBraziers(s, u, def, at, ev);
+  // H5: remate con un golpe directo (Decapitar): se puede repetir gratis este turno
+  if (def.resetOnKill && def.target === 'enemy' && main && !alive(main) && main.team !== u.team && !s.over) { slotUsed.uses = 0; slotUsed.free = true; ev.push({ t: 'reset', unit: u.id, spell: def.id }); }
   if (u.twinBlades && def.dmg && targets.some((t) => dist(t.pos, u.pos) <= 1)) u.twinBlades = false;
   // Juicio del inframundo: tu hechizo más caro da 1 alma extra si alcanza a un élite o jefe
   if (hasTrait(u, 'juicio') && u.souls !== undefined && hits > 0 && def.ap >= Math.max(...u.spells.filter((sp) => !sp.temp && sp.charges === undefined).map((sp) => SPELLS[sp.id]?.ap ?? 0))) {
@@ -1586,6 +1604,8 @@ function turnStartBlessings(s: CombatState, u: Unit, ev: GameEvent[]): void {
   }
   // Pies ligeros (Pistolero): +1 PM en el primer turno de cada combate
   if (hasTrait(u, 'piesligeros') && s.round === 1) { u.mp++; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: 1 }); }
+  // H5 · Retirada táctica: con un enemigo pegado al empezar, +1 PM y el placaje no te afecta este turno
+  if (hasTrait(u, 'retirada') && s.units.some((t) => alive(t) && t.team !== u.team && t.ai !== 'pillar' && dist(t.pos, u.pos) === 1)) { u.mp++; u.mistWalk = true; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: 1 }); }
   // Voluntad indómita: por debajo del 25%, +1 carga de Esencia
   if (hasTrait(u, 'indomita') && u.hp < u.maxHp * 0.25) gainEssence(u, 1, ev);
   // Órbita protectora: con 2+ esferas, escudo del 10% de la vida máxima
