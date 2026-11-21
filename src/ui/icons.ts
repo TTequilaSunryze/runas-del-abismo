@@ -47,9 +47,12 @@ export function slotIconUrl(slot: Slot, rarity: number): string {
   return url;
 }
 
+/** Ilustración de cada ranura (public/items): la misma para todos los objetos de la ranura; la rareza la marca el brillo. */
+export const slotArtUrl = (slot: Slot): string => `${import.meta.env.BASE_URL}items/${slot}.png`;
+
 export function itemIcon(it: Item | undefined, slot?: Slot): string {
-  if (it) return `<img class="ico" src="${slotIconUrl(it.slot, it.rarity)}" alt="">`;
-  return slot ? `<img class="ico ghost" src="${slotIconUrl(slot, 0)}" alt="">` : '';
+  if (it) return `<img class="ico art rar${it.rarity}" src="${slotArtUrl(it.slot)}" alt="">`;
+  return slot ? `<img class="ico art ghost" src="${slotArtUrl(slot)}" alt="">` : '';
 }
 
 export function iconErrors(): string[] {

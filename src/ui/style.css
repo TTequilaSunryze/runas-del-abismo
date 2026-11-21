@@ -797,3 +797,10 @@ body.has-menubg .lbl { color: #f0d79c; border-bottom-color: rgba(242, 193, 78, .
 .mapscroll.parchment .mpulse { animation: mpulse 1.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
 @keyframes mpulse { 50% { opacity: .1; transform: scale(1.18); } }
 body.has-menubg .cards.c5 { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+
+/* iconos ilustrados de objetos y ranuras */
+.ico.art { image-rendering: auto; object-fit: contain; }
+.ico.art.ghost { opacity: .5; filter: grayscale(.45) brightness(.85); }
+.ico.art.rar1 { filter: drop-shadow(0 0 3px rgba(88, 166, 255, .85)); }
+.ico.art.rar2 { filter: drop-shadow(0 0 3px rgba(199, 125, 255, .9)); }
+.ico.art.rar3 { filter: drop-shadow(0 0 4px rgba(255, 196, 70, .95)); }
