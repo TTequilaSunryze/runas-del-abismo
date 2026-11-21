@@ -11,6 +11,7 @@ import { MAX_BOONS, PATRONS, patronBonus, patronOf } from '../content/boons';
 import { BLESSINGS, BOON_MODS } from '../core/boonmods';
 import { MAX_SPELL_UPS, UPGRADES, tuned } from '../core/upgrades';
 import { SOULS_PER_ARMOR, SOUL_ARMOR } from '../core/combat/engine';
+import { consequences, secretOpen } from '../content/branching';
 import { NODE_HINT, NODE_NAME, availableNodes, heroMaxHp, heroSpec, pendingOf, statBreakdown, upCount, zoneOf, type BossOption, type HeroSave, type RunState } from '../game/run';
 import { esc, mine, tip, ui } from './ctx';
 import { NODE_ICON, itemIcon, spellIcon, spellTip } from './icons';
@@ -291,6 +292,8 @@ export function mapSvg(run: RunState, pick = false): string {
   const lines = run.links.map((rows, l) => rows.map((to, i) => to.map((j) => {
     const [x1, y1] = pos(l, i), [x2, y2] = pos(l + 1, j);
     const walked = run.trail[l] === i && (run.trail[l + 1] === j && l + 1 < run.step || (l + 1 === run.step && avail.includes(j)));
+    const toSealed = run.map[l + 1]![j] === 'vault' && !secretOpen(run);
+    if (toSealed && !walked) return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#4a3622" stroke-width="2" stroke-dasharray="3 5" opacity=".55"/>`;
     return walked ? `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#ffd36a" stroke-width="4" filter="url(#mglow)"/>`
       : `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#4a3622" stroke-width="3" stroke-linecap="round" opacity=".75"/>`;
   }).join('')).join('')).join('');
@@ -299,21 +302,23 @@ export function mapSvg(run: RunState, pick = false): string {
     const can = l === run.step && avail.includes(i), done = here(l, i) || current(l, i);
     // Oscuridad profunda: más allá de las 2 capas siguientes no se sabe qué hay (salvo el jefe)
     const dark = run.mods.includes('oscuridad') && l > run.step + 1 && l < run.map.length - 1;
+    // G4: pasaje secreto sellado
+    const sealed = k === 'vault' && !secretOpen(run);
     const stroke = can ? '#ffcf5a' : done ? '#7fe07a' : '#7a6a52';
     const click = pick && can ? `data-act="node" data-id="${i}" style="cursor:${canPick ? 'pointer' : 'not-allowed'}"` : '';
     const label = can ? `<text x="${x}" y="${y + 37}" text-anchor="middle" font-size="12" font-weight="700" fill="#3a2410" class="mlabel">${esc(NODE_NAME[k].replace(/^\S+\s/, ''))}</text>` : '';
     const vs = can ? votesAt(i) : [];
     const voteMarks = vs.map((v, n) => `<g><circle cx="${x - 18 + n * 12}" cy="${y - 24}" r="7" fill="${v.col}" stroke="#000" stroke-width="2"/><text x="${x - 18 + n * 12}" y="${y - 20.5}" text-anchor="middle" font-size="9" font-weight="bold" fill="#000" pointer-events="none">${esc(v.name.charAt(0).toUpperCase())}</text></g>`).join('');
     const ring = vs.length ? `<circle cx="${x}" cy="${y}" r="29" fill="none" stroke="${vs.find((v) => v.mine)?.col ?? vs[0]!.col}" stroke-width="2" stroke-dasharray="4 3" class="voting"/>` : '';
-    const tipHtml = dark ? '<b>❔ En sombra</b><div class="sm">La Oscuridad profunda no deja ver qué hay aquí.</div>' : `<b>${esc(NODE_NAME[k])}</b><div class="sm">${esc(NODE_HINT[k] ?? '')}</div>${vs.length ? `<div class="sm">Quieren ir: ${vs.map((v) => `<b style="color:${v.col}">${esc(v.name)}</b>`).join(', ')}</div>` : ''}${can && pick ? '<div class="sm good">Haz clic para votar este camino</div>' : ''}`;
-    return `<g ${click} ${tip(tipHtml)} opacity="${l < run.step && !done ? 0.35 : 1}">${ring}${can ? `<circle cx="${x}" cy="${y}" r="27" fill="#ff9a3a" opacity=".35" class="mpulse"/>` : ''}<circle cx="${x}" cy="${y}" r="${can ? 23 : 19}" fill="${can ? '#3b2a18' : '#24201c'}" stroke="${stroke}" stroke-width="${can || done ? 3 : 2}"${can || done ? ' filter="url(#mglow)"' : ''}/><circle cx="${x}" cy="${y}" r="${can ? 18 : 15}" fill="none" stroke="#000" stroke-opacity=".45"/><text x="${x}" y="${y + 7}" text-anchor="middle" font-size="20" pointer-events="none">${dark ? '❔' : NODE_ICON[k]}</text>${label}${voteMarks}</g>`;
+    const tipHtml = dark ? '<b>❔ En sombra</b><div class="sm">La Oscuridad profunda no deja ver qué hay aquí.</div>' : `<b>${esc(NODE_NAME[k])}</b><div class="sm">${esc(NODE_HINT[k] ?? '')}</div>${k === 'vault' ? `<div class="sm ${sealed ? 'bad' : 'good'}">${sealed ? '🔒 Sellado: aún no podéis entrar.' : '🔓 Abierto: podéis tomar este camino.'}</div>` : ''}${vs.length ? `<div class="sm">Quieren ir: ${vs.map((v) => `<b style="color:${v.col}">${esc(v.name)}</b>`).join(', ')}</div>` : ''}${can && pick ? '<div class="sm good">Haz clic para votar este camino</div>' : ''}`;
+    return `<g ${click} ${tip(tipHtml)} opacity="${l < run.step && !done ? 0.35 : 1}">${ring}${can ? `<circle cx="${x}" cy="${y}" r="27" fill="#ff9a3a" opacity=".35" class="mpulse"/>` : ''}<circle cx="${x}" cy="${y}" r="${can ? 23 : 19}" fill="${can ? '#3b2a18' : '#24201c'}" stroke="${stroke}" stroke-width="${can || done ? 3 : 2}"${sealed ? ' stroke-dasharray="4 3"' : ''}${can || done ? ' filter="url(#mglow)"' : ''}/><circle cx="${x}" cy="${y}" r="${can ? 18 : 15}" fill="none" stroke="#000" stroke-opacity=".45"/><text x="${x}" y="${y + 7}" text-anchor="middle" font-size="20" pointer-events="none">${dark ? '❔' : sealed ? '🔒' : NODE_ICON[k]}</text>${label}${voteMarks}</g>`;
   }).join('')).join('');
   const grid = Array.from({ length: Math.ceil(W / 40) }, (_, i) => `<line x1="${i * 40}" y1="0" x2="${i * 40}" y2="${H}"/>`).join('') + Array.from({ length: Math.ceil(H / 40) }, (_, i) => `<line x1="0" y1="${i * 40}" x2="${W}" y2="${i * 40}"/>`).join('');
   const defs = '<defs><filter id="mglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>';
   return `<div class="mapscroll parchment"><svg class="actmap" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${defs}<g class="mgrid">${grid}</g>${lines}${nodes}</svg></div>`;
 }
 
-const mapLegend = (): string => (['combat', 'elite', 'event', 'shrine', 'shop', 'treasure', 'forge', 'rest', 'altar', 'boss'] as const).map((k) => `<span class="chip">${NODE_ICON[k]} ${esc(NODE_NAME[k].replace(/^\S+\s/, ''))}</span>`).join('');
+const mapLegend = (): string => (['combat', 'elite', 'sangre', 'event', 'shrine', 'shop', 'treasure', 'forge', 'rest', 'vault', 'altar', 'boss'] as const).map((k) => `<span class="chip">${NODE_ICON[k]} ${esc(NODE_NAME[k].replace(/^\S+\s/, ''))}</span>`).join('');
 
 /** Mapa del acto como cartel (para consultarlo desde cualquier pantalla). */
 export function mapModal(run: RunState): string {
@@ -334,6 +339,9 @@ export function runChips(run: RunState): string {
   if (run.mods.length) out.push(`<span class="pill chip mods" ${tip(`<b>⚠ Modificadores de la expedición</b>${run.mods.map((id) => { const m = modDef(id); return m ? `<div class="sm"><b>${esc(m.name)}</b>: ${esc(m.text)}</div>` : ''; }).join('')}`)}>⚠ ${run.mods.length === 1 ? esc(modDef(run.mods[0]!)?.name ?? run.mods[0]!) : `${run.mods.length} modificadores`}</span>`);
   if (p) out.push(`<span class="pill chip pact" ${tip(`<b>${p.icon} ${esc(p.name)}</b><div class="sm good">▲ ${esc(p.boon)}</div><div class="sm bad">▼ ${esc(p.bane)}</div>`)}>${p.icon} ${esc(p.name.replace('Pacto ', ''))}</span>`);
   if (run.overload) { const t = heatTier(run.overload === 'overload' ? HEAT_OVERLOAD : HEAT_HOT); out.push(`<span class="pill chip heatchip ${run.overload}" ${tip(`<b>🔥 ${esc(t.name)}</b><div class="sm">${esc(t.text)}</div>`)}>🔥 ${esc(t.name)}</span>`); }
+  // G4: consecuencias activas de decisiones anteriores
+  const cons = consequences(run);
+  if (cons.length) out.push(`<span class="pill chip conseq" ${tip(`<b>⑂ Consecuencias de vuestras decisiones</b>${cons.map((c) => `<div class="sm ${c.tone === 'good' ? 'good' : c.tone === 'bad' ? 'bad' : ''}">${c.icon} <b>${esc(c.name)}</b>: ${esc(c.text)}</div>`).join('')}`)}>⑂ ${cons.length === 1 ? `${cons[0]!.icon} ${esc(cons[0]!.name)}` : `${cons.length} consecuencias`}</span>`);
   for (const x of run.hexes ?? []) { const c = curseOf(x.id); if (c) out.push(`<span class="pill chip curse" ${tip(`<b>${c.icon} ${esc(c.name)}</b><div class="sm">${esc(c.text)}</div><div class="sm dim">Quedan ${x.fights} combate(s)</div>`)}>${c.icon} ${esc(c.name)} · ${x.fights}</span>`); }
   return out.length ? `<span class="runchips">${out.join('')}</span>` : '';
 }

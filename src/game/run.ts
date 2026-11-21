@@ -23,6 +23,7 @@ import { enterRoom, roomAction, roomDone, roomPending, type RoomOp, type RoomSta
 import { pactEnemyHp, pactEnemyPower } from '../content/pacts';
 import { SPECIAL_CHANCE, SPECIAL_EVENTS, specialCandidates, specialWeight } from '../content/specialEvents';
 import { validEmblem, validFrame, validTitle } from './cosmetics';
+import { BRANCH_EVENTS, branchStarters, followUps, keyFlag, optionOpen, secretOpen, weakBossFlag } from '../content/branching';
 
 /** Una opción de la recompensa del jefe. */
 export type BossOption =
@@ -116,8 +117,12 @@ export interface GroupEvent {
   result?: string;
 }
 
-export type NodeKind = 'combat' | 'elite' | 'event' | 'rest' | 'shop' | 'boss' | 'cage' | 'shrine' | 'treasure' | 'forge' | 'altar';
-export const NODE_NAME: Record<NodeKind, string> = { forge: '⚒️ Forja', altar: '🕯️ Altar de Pactos', combat: '⚔️ Combate', elite: '☠️ Élite', event: '❓ Evento de grupo', rest: '🔥 Descanso', shop: '💰 Tienda', boss: '👑 Jefe', cage: '⛓️ Jaula', shrine: '✨ Santuario', treasure: '🎁 Botín' };
+export type NodeKind = 'combat' | 'elite' | 'event' | 'rest' | 'shop' | 'boss' | 'cage' | 'shrine' | 'treasure' | 'forge' | 'altar' | 'sangre' | 'vault';
+export const NODE_NAME: Record<NodeKind, string> = { forge: '⚒️ Forja', altar: '🕯️ Altar de Pactos', combat: '⚔️ Combate', elite: '☠️ Élite', event: '❓ Evento de grupo', rest: '🔥 Descanso', shop: '💰 Tienda', boss: '👑 Jefe', cage: '⛓️ Jaula', shrine: '✨ Santuario', treasure: '🎁 Botín', sangre: '🩸 Senda de sangre', vault: '🗝️ Pasaje secreto' };
+/** G4: Senda de sangre. */
+export const SANGRE_HP = 0.25, SANGRE_POWER = 2;
+/** G4: el sello de la Fuente quita este % de vida al jefe de la zona. */
+export const WEAK_BOSS = 0.15;
 export const NODE_HINT: Record<NodeKind, string> = {
   treasure: 'Un cofre para el grupo: botín para todos… o una maldición (30%).',
   forge: 'Recalibra afijos, desguaza objetos en Escofinas de Eco y mejora hechizos. Cuidado con el calor: endurece el siguiente combate.',
@@ -127,6 +132,8 @@ export const NODE_HINT: Record<NodeKind, string> = {
   shop: 'Gastad vuestro oro en objetos y pociones.', boss: 'El guardián de la zona. Dos fases. Objetos, una reliquia y una mejora o un hechizo nuevo.',
   cage: 'Un prisionero vigilado: venced a sus captores y luchará con vosotros hasta el final de la zona.',
   shrine: 'Cada uno elige una de las bendiciones pasivas de su clase.',
+  sangre: `Riesgo: combate endurecido (enemigos con +${Math.round(SANGRE_HP * 100)}% de vida y +${SANGRE_POWER} de daño). Recompensa: +50% de oro y una reliquia para cada uno.`,
+  vault: 'Pasaje sellado: se abre con una llave rúnica (decisiones de eventos) o si el jefe anterior cayó sin bajas. Lleva a la Cámara Rúnica: reliquias raras, hechizos o descanso.',
 };
 
 export interface ShopSlot {
@@ -228,11 +235,13 @@ function makeMap(box: RngBox, mods: string[] = []): ActMap {
 }
 
 /** Nodos de la sala actual a los que se puede ir desde el último elegido (índices en `map[step]`). */
-export function availableNodes(run: Pick<RunState, 'map' | 'links' | 'at' | 'step'>): number[] {
+export function availableNodes(run: Pick<RunState, 'map' | 'links' | 'at' | 'step'> & Partial<Pick<RunState, 'flags' | 'zone'>>): number[] {
   const row = run.map[run.step] ?? [];
+  // G4: el pasaje secreto solo se puede elegir si está abierto (nunca es la única salida: su nodo de origen conserva sus caminos)
+  const open = (i: number): boolean => row[i] !== 'vault' || secretOpen({ flags: run.flags ?? [], zone: run.zone ?? 0 });
   const from = run.step > 0 && run.at >= 0 ? run.links?.[run.step - 1]?.[run.at] : undefined;
-  const ok = (from ?? []).filter((i) => i < row.length);
-  return ok.length ? ok : row.map((_, i) => i);
+  const ok = (from ?? []).filter((i) => i < row.length && open(i));
+  return ok.length ? ok : row.map((_, i) => i).filter(open);
 }
 
 function setMap(run: RunState, altar = false): void {
@@ -701,8 +710,8 @@ function enemyOpts(run: RunState, id: string, first: boolean) {
   return {
     affixes,
     laterList: run.kind !== 'boss' && run.zoneFight >= 1,
-    hpMul: 1 + (id === bossOf(run).id && boost > 0 ? boost * BOSS_BOOST : boost) + pactEnemyHp(run.pact, strong) + (run.mods.includes('riesgo') ? 0.12 * Math.min(3, run.zone) : 0) + (id === bossOf(run).id ? (run.asc >= 6 ? 0.2 : 0) + (run.mods.includes('jefes') ? 0.3 : 0) + (run.flags.includes(`g2_carga_${run.zone}`) ? 0.25 : 0) : 0),
-    power: boost * 5 + (run.mods.includes('frenesi') ? 1 : 0) + (run.mods.includes('riesgo') ? Math.min(3, run.zone) : 0) + pactEnemyPower(run.pact),
+    hpMul: 1 + (id === bossOf(run).id && boost > 0 ? boost * BOSS_BOOST : boost) + pactEnemyHp(run.pact, strong) + (run.mods.includes('riesgo') ? 0.12 * Math.min(3, run.zone) : 0) + (id === bossOf(run).id ? (run.asc >= 6 ? 0.2 : 0) + (run.mods.includes('jefes') ? 0.3 : 0) + (run.flags.includes(`g2_carga_${run.zone}`) ? 0.25 : 0) - (run.flags.includes(weakBossFlag(run.zone)) ? WEAK_BOSS : 0) : (run.flags.includes('g4_sangre') ? SANGRE_HP : 0)),
+    power: boost * 5 + (run.flags.includes('g4_sangre') && id !== bossOf(run).id ? SANGRE_POWER : 0) + (run.mods.includes('frenesi') ? 1 : 0) + (run.mods.includes('riesgo') ? Math.min(3, run.zone) : 0) + pactEnemyPower(run.pact),
   };
 }
 
@@ -790,8 +799,10 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
     run.cage = CAGE_ALLY[run.zone] ?? 'mercenario';
     run.ambush = true;
   }
-  if (node === 'combat' || node === 'elite' || node === 'boss' || node === 'cage') {
-    run.kind = node === 'cage' ? 'combat' : node;
+  // G4: la Senda de sangre es un combate endurecido con recompensa conocida
+  if (node === 'sangre' && !run.flags.includes('g4_sangre')) run.flags.push('g4_sangre');
+  if (node === 'combat' || node === 'elite' || node === 'boss' || node === 'cage' || node === 'sangre') {
+    run.kind = node === 'cage' || node === 'sangre' ? 'combat' : node;
     // presagio: a veces (siempre con el modificador), nunca en el jefe
     run.omen = node === 'boss' ? null : run.nextOmen ?? (run.mods.includes('presagios') || rand(run) < 0.3 ? pick(run, OMENS).id : null);
     run.nextOmen = null;
@@ -800,8 +811,25 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
     run.phase = 'combat';
     return events;
   }
+  if (node === 'vault') {
+    // G4: la Cámara Rúnica tras el pasaje secreto (gasta la llave de la zona)
+    run.flags = run.flags.filter((f) => f !== keyFlag(run.zone));
+    run.flags.push(`g4_camara_${run.zone}`);
+    run.event = { id: 'g4_camara', votes: {} };
+    run.phase = 'event';
+    return [];
+  }
+  // G4: si una decisión anterior tiene continuación pendiente, el evento es esa continuación
+  const follow = node === 'event' && !run.arena ? followUps(run) : [];
+  if (follow.length) {
+    const e = follow[0]!;
+    run.eventsSeen.push(e.id);
+    run.event = { id: e.id, votes: {} };
+    run.phase = 'event';
+    return [];
+  }
   if (node === 'event') {
-    const all = zoneOf(run).events;
+    const all = [...zoneOf(run).events, ...(run.arena ? [] : branchStarters(run))];
     const options = all.filter((e) => !run.eventsSeen.includes(e.id));
     // Fase G2: a veces la sala esconde un evento especial (como mucho uno por zona y sin repetir en la expedición)
     const sp = run.arena || run.flags.includes(`g2z${run.zone}`) ? [] : specialCandidates(run);
@@ -875,12 +903,12 @@ export function leaveNode(run: RunState): void {
   }
 }
 
-export const eventDef = (run: RunState) => [...RELIC_EVENTS, ...ZONES.flatMap((z) => z.events), ...SPECIAL_EVENTS].find((e) => e.id === run.event?.id);
+export const eventDef = (run: RunState) => [...RELIC_EVENTS, ...ZONES.flatMap((z) => z.events), ...SPECIAL_EVENTS, ...BRANCH_EVENTS].find((e) => e.id === run.event?.id);
 
 export function vote(run: RunState, owner: string, idx: number): void {
   const def = eventDef(run);
   if (!def || !run.event || run.event.result || !run.heroes.some((h) => h.owner === owner)) return;
-  if (idx >= 0 && idx < def.options.length) run.event.votes[owner] = idx;
+  if (idx >= 0 && idx < def.options.length && optionOpen(run, def.options[idx]!)) run.event.votes[owner] = idx;
 }
 
 /** Decide por mayoría; en empate manda el voto del anfitrión (o la primera opción empatada). */
@@ -888,7 +916,8 @@ export function resolveEvent(run: RunState, hostId: string): void {
   const ev = run.event;
   const def = eventDef(run);
   if (!ev || !def || ev.result) return;
-  const count = def.options.map((_, i) => Object.values(ev.votes).filter((v) => v === i).length);
+  // G4: las opciones bloqueadas no cuentan (ni pueden ganar por empate)
+  const count = def.options.map((o, i) => (optionOpen(run, o) ? Object.values(ev.votes).filter((v) => v === i).length : -1));
   const max = Math.max(...count);
   const tied = count.map((c, i) => (c === max ? i : -1)).filter((i) => i >= 0);
   const hostVote = ev.votes[hostId];
@@ -911,7 +940,7 @@ export function finishFight(run: RunState): void {
   if (c.over === 'lose') { run.phase = 'lost'; return; }
   if (c.units.some((u) => u.name.startsWith('Némesis: '))) run.flags.push('nemesis');
   // ×1.2 en combates normales y de élite: con zonas más cortas hay menos combates (y menos oro) hasta el jefe
-  const gold = Math.round((25 + run.fight * 8 + (run.kind === 'elite' ? 20 : run.kind === 'boss' ? 40 : 0)) * (run.kind === 'boss' ? 1 : 1.2) * (run.mods.includes('codicia') ? 2 : 1) * (run.omen === 'oro' ? 2 : 1) * (run.mods.includes('pobreza') ? 0.5 : 1) * (run.pact === 'avaricia' ? 2 : 1) * (run.mods.includes('ecos_inestables') ? (run.kind === 'combat' ? 0.7 : 1.5) : 1));
+  const gold = Math.round((25 + run.fight * 8 + (run.kind === 'elite' ? 20 : run.kind === 'boss' ? 40 : 0)) * (run.kind === 'boss' ? 1 : 1.2) * (run.mods.includes('codicia') ? 2 : 1) * (run.omen === 'oro' ? 2 : 1) * (run.mods.includes('pobreza') ? 0.5 : 1) * (run.pact === 'avaricia' ? 2 : 1) * (run.mods.includes('ecos_inestables') ? (run.kind === 'combat' ? 0.7 : 1.5) : 1) * (run.flags.includes('g4_sangre') ? 1.5 : 1));
   // las maldiciones de cofre y el calor de la forja se gastan con el combate
   run.hexes = (run.hexes ?? []).map((x) => ({ ...x, fights: x.fights - 1 })).filter((x) => x.fights > 0);
   run.overload = null;
@@ -924,6 +953,12 @@ export function finishFight(run: RunState): void {
   }
   const extra: string[] = [];
   const loot: FightReport['loot'] = [];
+  // G4: la Senda de sangre paga lo prometido: una reliquia a cada uno
+  if (run.flags.includes('g4_sangre')) {
+    run.flags = run.flags.filter((f) => f !== 'g4_sangre');
+    for (const h of run.heroes) { const r = giveRelic(run, h); if (r) loot.push({ owner: h.owner, icon: RELICS[r]!.icon, name: RELICS[r]!.name, text: RELICS[r]!.text, rare: !!RELICS[r]!.rare }); }
+    run.note = (run.note ? `${run.note} ` : '') + 'La Senda de sangre paga su precio: una reliquia para cada uno.';
+  }
   const found: Record<string, Item[]> = {};
   if (run.kind === 'boss' && flawless) run.flags.push(`flawless_${run.zone}`);
   if (run.kind === 'boss') run.flags.push(`boss_${run.zone}`);

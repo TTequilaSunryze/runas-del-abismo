@@ -35,6 +35,7 @@ import { ATLAS, ATLAS_DONE_TEXT, ATLAS_NAME, ATLAS_STATE_NAME, CHRONICLES, CHRON
 import { BLESSINGS } from '../core/boonmods';
 import { unitPortraitUrl } from '../render/sprites';
 import { setCombatBg, setMenuScene } from '../render/menubg';
+import { branchDef, optionOpen, type BranchOption } from '../content/branching';
 import { NODE_NAME, heroSpec, upCount, upgradeChoices } from '../game/run';
 
 const RAR = ['ir0', 'ir1', 'ir2', 'ir3'];
@@ -469,14 +470,15 @@ export function eventScreen(): void {
   const canVote = !!mine(run) && !ev.result;
   const art = eventArt(def.id + ' ' + def.title);
   const sp = def.special;
+  const br = branchDef(def.id);
   frame(run, `<div class="panel evwin ${sp ? `evspecial ev-${sp}` : ''}">
-  ${sp ? `<div class="evbadge">${sp === 'raro' ? '✦ Encuentro poco frecuente' : '✦ Evento especial'}</div>` : ''}
+  ${sp ? `<div class="evbadge">${sp === 'raro' ? '✦ Encuentro poco frecuente' : '✦ Evento especial'}</div>` : ''}${br?.requires ? '<div class="evbadge chain">↪ Consecuencia de una decisión anterior</div>' : br?.starter ? '<div class="evbadge chain">⑂ Decisión con consecuencias más adelante</div>' : ''}
   <div class="evart" style="--evc:${art.c}"><span>${art.i}</span></div>
   <h2 class="evtitle">${esc(def.title)}</h2>
   <p class="evtext">${esc(def.text)}</p>
   ${ev.result ? `<div class="panel note evresult"><b>${esc(ev.result)}</b></div>${advanceBar(run, 'Continuar →')}` : `
   <div class="dim sm evhint">Evento de grupo: decide la mayoría y afecta a todos. En empate decide el anfitrión.</div>
-  <div class="evopts">${def.options.map((o, i) => `<button class="evcard ${ev.votes[ui.myId] === i ? 'on' : ''}" data-act="vote" data-id="${i}" ${canVote ? '' : 'disabled'}><b>${esc(o.label)}</b>${outcomeList(o.hint)}<span class="votes">${voters(i) ? `🗳️ ${voters(i)}` : 'Sin votos'}</span></button>`).join('')}</div>
+  <div class="evopts">${def.options.map((o, i) => { const open = optionOpen(run, o), need = (o as BranchOption).need; return `<button class="evcard ${ev.votes[ui.myId] === i ? 'on' : ''} ${open ? '' : 'locked'}" data-act="vote" data-id="${i}" ${canVote && open ? '' : 'disabled'}><b>${open ? '' : '🔒 '}${esc(o.label)}</b>${outcomeList(o.hint)}${need ? `<span class="sm ${open ? 'good' : 'dim'}">${open ? '⑂ Disponible por una decisión anterior' : esc(need)}</span>` : ''}<span class="votes">${voters(i) ? `🗳️ ${voters(i)}` : 'Sin votos'}</span></button>`; }).join('')}</div>
   <div class="row">${s.isHost ? `<button data-act="resolve" ${Object.keys(ev.votes).length ? '' : 'disabled'}>Cerrar la votación ya</button>` : '<span class="dim sm">Votad todos para continuar.</span>'}</div>`}
   </div>${pendingRows(run)}`);
 }

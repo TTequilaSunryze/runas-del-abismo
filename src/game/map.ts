@@ -1,7 +1,9 @@
 // Mapa de un acto: grafo por capas (estilo Slay the Spire). Cada nodo enlaza con 1-2 nodos de la capa siguiente.
 import { rand, randInt, type RngBox } from '../core/rng';
 
-export type MapKind = 'combat' | 'elite' | 'event' | 'rest' | 'shop' | 'boss' | 'cage' | 'shrine' | 'treasure' | 'forge' | 'altar';
+export type MapKind = 'combat' | 'elite' | 'event' | 'rest' | 'shop' | 'boss' | 'cage' | 'shrine' | 'treasure' | 'forge' | 'altar'
+  // G4: Senda de sangre (combate endurecido con recompensa conocida) y pasaje secreto (cámara, solo si se abre)
+  | 'sangre' | 'vault';
 export interface ActMap {
   /** capas de nodos: la última es el jefe */
   layers: MapKind[][];
@@ -36,7 +38,7 @@ function makeLinks(box: RngBox, widths: number[]): number[][][] {
 
 /** Nº mínimo de combates (de cualquier tipo, jefe incluido) en cualquier camino de la capa 0 al jefe. */
 export function minFightsOnPath(m: ActMap): number {
-  const fight = (k: MapKind): number => (k === 'combat' || k === 'elite' || k === 'boss' || k === 'cage' ? 1 : 0);
+  const fight = (k: MapKind): number => (k === 'combat' || k === 'elite' || k === 'boss' || k === 'cage' || k === 'sangre' ? 1 : 0);
   let best = m.layers[0]!.map((k) => fight(k));
   for (let l = 0; l < m.links.length; l++) {
     const next = m.layers[l + 1]!.map(() => Infinity);
@@ -69,8 +71,8 @@ export function pathStats(m: ActMap, path: number[]): PathStats {
   path.forEach((i, l) => {
     const k = m.layers[l]![i]!;
     if (k === 'boss') return;
-    const fight = k === 'combat' || k === 'cage' || k === 'elite';
-    if (k === 'combat' || k === 'cage') fights++;
+    const fight = k === 'combat' || k === 'cage' || k === 'elite' || k === 'sangre';
+    if (k === 'combat' || k === 'cage' || k === 'sangre') fights++;
     if (k === 'elite') elites++;
     if (k === 'rest') rests++;
     run = fight ? run + 1 : 0; streak = Math.max(streak, run);
@@ -139,6 +141,47 @@ function fallback(): ActMap {
  * con la misma semilla de la partida, así que el resultado es reproducible.
  */
 export function makeActMap(box: RngBox): ActMap {
+  return addRoutes(box, baseMap(box));
+}
+
+/** Probabilidad de que la zona tenga una Senda de sangre. */
+export const SANGRE_CHANCE = 0.7;
+
+/**
+ * G4: rutas alternativas sobre un mapa ya válido.
+ * - Senda de sangre: un combate normal (fuera de la primera fila) pasa a ser endurecido, con recompensa conocida. Cuenta como
+ *   combate para las garantías, así que no rompe ninguna ruta.
+ * - Pasaje secreto: un nodo extra al final de una fila intermedia, enlazado desde un nodo de la fila anterior (que conserva sus
+ *   caminos) hacia uno de la siguiente. Solo se coloca si todas las rutas que pasan por él siguen cumpliendo las garantías;
+ *   mientras está sellado no se puede elegir, así que nunca deja a nadie sin salida.
+ */
+export function addRoutes(box: RngBox, m: ActMap): ActMap {
+  const L = m.layers.length;
+  if (rand(box) < SANGRE_CHANCE) {
+    const cand = m.layers.flatMap((row, l) => row.map((k, i) => ({ l, i, k }))).filter((x) => x.k === 'combat' && x.l >= 1 && x.l < L - 2);
+    if (cand.length) { const c = cand[Math.floor(rand(box) * cand.length)]!; m.layers[c.l]![c.i] = 'sangre'; }
+  }
+  const tries: Array<{ l: number; from: number; to: number }> = [];
+  for (let l = 2; l <= L - 3; l++) if (m.layers[l]!.length < 4) m.layers[l - 1]!.forEach((_, from) => m.layers[l + 1]!.forEach((__, to) => tries.push({ l, from, to })));
+  for (let n = tries.length; n > 0; n--) {
+    const c = tries.splice(Math.floor(rand(box) * n), 1)[0]!;
+    const idx = m.layers[c.l]!.length;
+    m.layers[c.l]!.push('vault');
+    m.links[c.l - 1]![c.from]!.push(idx);
+    m.links[c.l]!.push([c.to]);
+    if (allPaths(m).every((p) => pathOk(pathStats(m, p)))) return m;
+    m.layers[c.l]!.pop(); m.links[c.l - 1]![c.from]!.pop(); m.links[c.l]!.pop();
+  }
+  return m;
+}
+
+/** Fila y nodo del pasaje secreto de la zona (si lo hay). */
+export function vaultAt(layers: readonly (readonly string[])[]): { l: number; i: number } | null {
+  for (let l = 0; l < layers.length; l++) { const i = layers[l]!.indexOf('vault'); if (i >= 0) return { l, i }; }
+  return null;
+}
+
+function baseMap(box: RngBox): ActMap {
   for (let t = 0; t < 400; t++) {
     const m = build(box);
     if (!mapOk(m)) continue;
