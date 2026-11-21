@@ -90,7 +90,7 @@ describe('Fase B · Crónicas', () => {
     expect(chronicleState(meta(), 'milestones', 'relics_100')).not.toBe('completed');
   });
   it('catálogo de historias con los textos del juego y sin duplicados', () => {
-    expect(CHRONICLES.stories.length).toBe(4 + 8 + 2);
+    expect(CHRONICLES.stories.length).toBe(4 + 8 + 2 + 1);
     expect(CHRONICLES.stories.every((s) => s.text.length > 10)).toBe(true);
     expect(CHRONICLES.milestones).toHaveLength(12);
   });

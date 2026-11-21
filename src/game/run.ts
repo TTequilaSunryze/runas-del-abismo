@@ -21,6 +21,7 @@ import { CORRIDOR_CHANCE, genTerrain } from './terrain';
 import type { ClassId, CombatState, GameEvent, Pos } from '../core/state';
 import { enterRoom, roomAction, roomDone, roomPending, type RoomOp, type RoomState } from './rooms';
 import { pactEnemyHp, pactEnemyPower } from '../content/pacts';
+import { SPECIAL_CHANCE, SPECIAL_EVENTS, specialCandidates, specialWeight } from '../content/specialEvents';
 import { validEmblem, validFrame, validTitle } from './cosmetics';
 
 /** Una opción de la recompensa del jefe. */
@@ -690,7 +691,7 @@ function enemyOpts(run: RunState, id: string, first: boolean) {
   return {
     affixes,
     laterList: run.kind !== 'boss' && run.zoneFight >= 1,
-    hpMul: 1 + boost + pactEnemyHp(run.pact, strong) + (run.mods.includes('riesgo') ? 0.12 * Math.min(3, run.zone) : 0) + (id === bossOf(run).id ? (run.asc >= 6 ? 0.2 : 0) + (run.mods.includes('jefes') ? 0.3 : 0) : 0),
+    hpMul: 1 + boost + pactEnemyHp(run.pact, strong) + (run.mods.includes('riesgo') ? 0.12 * Math.min(3, run.zone) : 0) + (id === bossOf(run).id ? (run.asc >= 6 ? 0.2 : 0) + (run.mods.includes('jefes') ? 0.3 : 0) + (run.flags.includes(`g2_carga_${run.zone}`) ? 0.25 : 0) : 0),
     power: boost * 5 + (run.mods.includes('frenesi') ? 1 : 0) + (run.mods.includes('riesgo') ? Math.min(3, run.zone) : 0) + pactEnemyPower(run.pact),
   };
 }
@@ -786,7 +787,15 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
   if (node === 'event') {
     const all = zoneOf(run).events;
     const options = all.filter((e) => !run.eventsSeen.includes(e.id));
-    const e = pick(run, options.length ? options : all);
+    // Fase G2: a veces la sala esconde un evento especial (como mucho uno por zona y sin repetir en la expedición)
+    const sp = run.arena || run.flags.includes(`g2z${run.zone}`) ? [] : specialCandidates(run);
+    let e: { id: string } = pick(run, options.length ? options : all);
+    if (sp.length && rand(run) < SPECIAL_CHANCE) {
+      const total = sp.reduce((n, x) => n + specialWeight(run, x), 0);
+      let r = rand(run) * total;
+      e = sp.find((x) => (r -= specialWeight(run, x)) < 0) ?? sp[0]!;
+      run.flags.push(`g2z${run.zone}`);
+    }
     run.eventsSeen.push(e.id);
     run.event = { id: e.id, votes: {} };
     run.phase = 'event';
@@ -850,7 +859,7 @@ export function leaveNode(run: RunState): void {
   }
 }
 
-export const eventDef = (run: RunState) => [...RELIC_EVENTS, ...ZONES.flatMap((z) => z.events)].find((e) => e.id === run.event?.id);
+export const eventDef = (run: RunState) => [...RELIC_EVENTS, ...ZONES.flatMap((z) => z.events), ...SPECIAL_EVENTS].find((e) => e.id === run.event?.id);
 
 export function vote(run: RunState, owner: string, idx: number): void {
   const def = eventDef(run);
@@ -890,6 +899,12 @@ export function finishFight(run: RunState): void {
   run.hexes = (run.hexes ?? []).map((x) => ({ ...x, fights: x.fights - 1 })).filter((x) => x.fights > 0);
   run.overload = null;
   const flawless = c.units.every((u) => u.team !== 'hero' || u.summoner !== undefined || u.hp > 0);
+  // Fase G2: el Desafío del Campeón se cobra al ganar la emboscada que provocó
+  if (run.flags.includes('g2_desafio')) {
+    run.flags = run.flags.filter((f) => f !== 'g2_desafio');
+    for (const h of run.heroes) giveRelic(run, h, true);
+    run.note = 'El campeón cae. Su estandarte os deja una reliquia rara a cada uno.';
+  }
   const extra: string[] = [];
   const loot: FightReport['loot'] = [];
   const found: Record<string, Item[]> = {};

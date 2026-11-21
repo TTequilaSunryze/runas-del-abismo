@@ -468,7 +468,9 @@ export function eventScreen(): void {
   const voters = (i: number): string => run.heroes.filter((h) => ev.votes[h.owner] === i).map((h) => esc(h.name)).join(', ');
   const canVote = !!mine(run) && !ev.result;
   const art = eventArt(def.id + ' ' + def.title);
-  frame(run, `<div class="panel evwin">
+  const sp = def.special;
+  frame(run, `<div class="panel evwin ${sp ? `evspecial ev-${sp}` : ''}">
+  ${sp ? `<div class="evbadge">${sp === 'raro' ? '✦ Encuentro poco frecuente' : '✦ Evento especial'}</div>` : ''}
   <div class="evart" style="--evc:${art.c}"><span>${art.i}</span></div>
   <h2 class="evtitle">${esc(def.title)}</h2>
   <p class="evtext">${esc(def.text)}</p>

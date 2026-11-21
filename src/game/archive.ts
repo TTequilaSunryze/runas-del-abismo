@@ -165,6 +165,7 @@ export function recordArchive(run: RunState | null, myId: string, events: readon
     }
     if (run.phase === 'won') { changed = registerSpecial(m, { t: 'won', cls: me.cls, pact: run.pact ?? null }) || changed; chron('stories', 'final_victoria', 1, id); chron('stories', `clase_${me.cls}`, 2, `${id}:won`); }
     if (run.phase === 'lost') chron('stories', 'final_derrota', 1, id);
+    if (run.flags.includes('lore_eco')) chron('stories', 'eco_perdido', 1, id);
 
     if (run.combat) {
       const k = combatKey(run);

@@ -16,6 +16,8 @@ export interface EventDef {
   title: string;
   text: string;
   options: EventOption[];
+  /** eventos especiales de la Fase G2 (se marcan en la interfaz) */
+  special?: 'especial' | 'raro';
 }
 
 export const boon = (h: HeroSave, k: StatKey, v: number): void => { h.boon[k] = (h.boon[k] ?? 0) + v; };

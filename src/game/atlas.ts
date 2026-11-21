@@ -4,6 +4,7 @@ import { PLAYABLE } from '../core/classes/classes';
 import { DAILY_MODS, OMENS } from '../content/modes';
 import { PACTS } from '../content/pacts';
 import { RELIC_EVENTS } from '../content/relics';
+import { SPECIAL_EVENTS } from '../content/specialEvents';
 import { ENDING_LOST, ENDING_WON, ZONE_STORY, CLASS_STORY } from '../content/story';
 import { ZONES } from '../content/zones';
 import { CLASSES } from '../core/classes/classes';
@@ -19,8 +20,8 @@ const zoneId = (i: number): string => `z${i + 1}`;
 /** Zonas (4), eventos de grupo (los de cada zona y los de reliquia), pactos y presagios del juego. */
 export const ATLAS: Record<AtlasCat, AtlasRef[]> = {
   zones: ZONES.map((z, i) => ({ id: zoneId(i), cat: 'zones', name: z.name, icon: ['🦴', '🌲', '🔥', '🕳️'][i] ?? '🗺️', text: ZONE_STORY[i] ?? z.intro, zone: i + 1 })),
-  events: [...ZONES.flatMap((z, i) => z.events.map((e) => ({ e, zone: i + 1 }))), ...RELIC_EVENTS.map((e) => ({ e, zone: 0 }))]
-    .map(({ e, zone }): AtlasRef => ({ id: e.id, cat: 'events', name: e.title, icon: '❓', text: e.text, ...(zone ? { zone } : {}) })),
+  events: [...ZONES.flatMap((z, i) => z.events.map((e) => ({ e, zone: i + 1 }))), ...RELIC_EVENTS.map((e) => ({ e, zone: 0 })), ...SPECIAL_EVENTS.map((e) => ({ e, zone: 0 }))]
+    .map(({ e, zone }): AtlasRef => ({ id: e.id, cat: 'events', name: e.title, icon: (e as { special?: string }).special ? '✦' : '❓', text: e.text, ...(zone ? { zone } : {}) })),
   pacts: PACTS.map((p) => ({ id: p.id, cat: 'pacts', name: p.name, icon: p.icon, text: `${p.boon} · ${p.bane}` })),
   omens: OMENS.map((o) => ({ id: o.id, cat: 'omens', name: o.name, icon: o.icon, text: o.text })),
   mods: DAILY_MODS.map((m) => ({ id: m.id, cat: 'mods', name: m.name, icon: ['', '🟢', '🟡', '🔴'][m.tier ?? 2]!, text: m.text })),
@@ -52,6 +53,7 @@ export const CHRONICLES: Record<ChronicleCat, ChronicleRef[]> = {
     ...PLAYABLE.map((c): ChronicleRef => ({ id: `clase_${c}`, cat: 'stories', name: CLASSES[c].name, goal: 2, text: CLASS_STORY[c] ?? '' })),
     { id: 'final_victoria', cat: 'stories', name: 'La última runa', goal: 1, text: ENDING_WON },
     { id: 'final_derrota', cat: 'stories', name: 'El Abismo os recuerda', goal: 1, text: ENDING_LOST },
+    { id: 'eco_perdido', cat: 'stories', name: 'La expedición perdida', goal: 1, text: 'Otro grupo bajó antes que vosotros. Sus últimas palabras quedaron grabadas en una runa: «No era una mazmorra. Era una boca. Y nosotros, lo que comía.» Nadie sabe cuántos grupos más ha devorado el Abismo.' },
   ],
   secrets: SECRETS,
   milestones: MILESTONE_CATS.flatMap((c) => MILESTONE_PCTS.map((p): ChronicleRef => ({ id: `${c}_${p}`, cat: 'milestones', name: `${p}% de ${CAT_LABEL[c]}`, goal: p, text: `Descubre el ${p}% de ${CAT_LABEL[c]}.` }))),
