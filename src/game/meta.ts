@@ -169,6 +169,9 @@ export const routeNeeds = (cls: ClassId, route: string): number => Math.max(0, C
  * suman por su tamaño fijo: ACT_ROOMS + 1 capas (la última es el jefe) y, en la primera zona, el Altar de Pactos
  * delante (salvo en la arena). Cada capa cuenta una sola vez: el jefe y el altar son capas como las demás.
  */
+/** Las zonas tenían 11 salas (10 + jefe) y ahora tienen 8: cada sala vale 11/8 para que una zona completa dé los mismos
+ * ecos y la misma experiencia de maestría que antes. */
+export const ROOM_SCALE = 11 / (ACT_ROOMS + 1);
 export function roomsCleared(run: RunState): number {
   const perZone = ACT_ROOMS + 1, first = perZone + (run.arena ? 0 : 1);
   const before = run.zone <= 0 ? 0 : first + (run.zone - 1) * perZone;
@@ -177,7 +180,7 @@ export function roomsCleared(run: RunState): number {
 }
 
 export function masteryXpFor(run: RunState): number {
-  const rooms = roomsCleared(run), bosses = run.flags.filter((f) => f.startsWith('boss_')).length;
+  const rooms = roomsCleared(run) * ROOM_SCALE, bosses = run.flags.filter((f) => f.startsWith('boss_')).length;
   return Math.round((rooms * 5 + bosses * 25 + (run.phase === 'won' ? 50 : 0)) * (1 + 0.2 * run.asc));
 }
 
@@ -256,7 +259,7 @@ export const achievementCount = (m: Pick<Meta, 'achievements'> = meta()): string
 
 /** Ecos que gana un jugador al terminar: por salas, jefes y victoria, más por ascensión. */
 export function ecosFor(run: RunState): number {
-  const rooms = roomsCleared(run);
+  const rooms = roomsCleared(run) * ROOM_SCALE;
   const bosses = run.flags.filter((f) => f.startsWith('boss_')).length;
   const base = rooms * 4 + bosses * 25 + (won(run) ? 60 : 0);
   return Math.round((base + (run.flags.includes('abyss_won') ? 80 : 0) + (run.abyss ? Math.max(0, run.zone - 2) * 30 : 0)) * (1 + 0.2 * run.asc) * (run.daily ? 1.3 : 1 + run.mods.reduce((n, id) => n + modEcos(id), 0)));

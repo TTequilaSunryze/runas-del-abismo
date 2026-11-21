@@ -7,7 +7,7 @@ import { ZONES } from '../src/content/zones';
 import { PATRONS } from '../src/content/boons';
 import { AFFIXES } from '../src/content/enemies';
 import { ACT_ROOMS } from '../src/game/map';
-import { ACHIEVEMENTS, achievementCount, ecosFor, listedAchievements, masteryXpFor, meta, roomsCleared } from '../src/game/meta';
+import { ACHIEVEMENTS, ROOM_SCALE, achievementCount, ecosFor, listedAchievements, masteryXpFor, meta, roomsCleared } from '../src/game/meta';
 import { buildBossOffer, dailyZone, newRun, newSpellPool, offerBoon, offerSize, type RunState } from '../src/game/run';
 
 const store: Record<string, string> = {};
@@ -51,20 +51,23 @@ describe('Fase 0 · salas recorridas, ecos y maestría', () => {
     expect(roomsCleared(r)).toBe(r.map.length);
   });
   it('ecos: derrota en 1, 2 y 3 zonas y victoria, con jefes y ascensión sin cambios', () => {
-    const per = ACT_ROOMS + 1;
-    expect(ecosFor(at(mk(), 0, 4))).toBe(4 * 4);
-    expect(ecosFor(at(mk(), 1, 5, 'lost', ['boss_0']))).toBe((per + 1 + 5) * 4 + 25);
-    expect(ecosFor(at(mk(), 2, 3, 'lost', ['boss_0', 'boss_1']))).toBe((2 * per + 1 + 3) * 4 + 50);
-    expect(ecosFor(at(mk(), 2, per, 'won', ['boss_0', 'boss_1', 'boss_2']))).toBe((3 * per + 1) * 4 + 75 + 60);
+    const per = ACT_ROOMS + 1, S = ROOM_SCALE;
+    expect(ecosFor(at(mk(), 0, 4))).toBe(Math.round(4 * S * 4));
+    expect(ecosFor(at(mk(), 1, 5, 'lost', ['boss_0']))).toBe(Math.round((per + 1 + 5) * S * 4 + 25));
+    expect(ecosFor(at(mk(), 2, 3, 'lost', ['boss_0', 'boss_1']))).toBe(Math.round((2 * per + 1 + 3) * S * 4 + 50));
+    const win = ecosFor(at(mk(), 2, per, 'won', ['boss_0', 'boss_1', 'boss_2']));
+    expect(win).toBe(Math.round((3 * per + 1) * S * 4 + 75 + 60));
+    // con zonas más cortas, una victoria sigue dando lo mismo que antes (271)
+    expect(Math.abs(win - 271)).toBeLessThanOrEqual(3);
     const asc = at(mk(), 0, 4); asc.asc = 5;
-    expect(ecosFor(asc)).toBe(Math.round(16 * 2));
+    expect(ecosFor(asc)).toBe(Math.round(4 * S * 4 * 2));
     const daily = at(mk(), 0, 4); daily.daily = '2026-11-21';
-    expect(ecosFor(daily)).toBe(Math.round(16 * (1 + 0.2 * daily.asc) * 1.3));
+    expect(ecosFor(daily)).toBe(Math.round(4 * S * 4 * (1 + 0.2 * daily.asc) * 1.3));
   });
   it('experiencia de maestría con la misma base de salas', () => {
-    const per = ACT_ROOMS + 1;
-    expect(masteryXpFor(at(mk(), 0, 4))).toBe(20);
-    expect(masteryXpFor(at(mk(), 2, per, 'won', ['boss_0', 'boss_1', 'boss_2']))).toBe((3 * per + 1) * 5 + 75 + 50);
+    const per = ACT_ROOMS + 1, S = ROOM_SCALE;
+    expect(masteryXpFor(at(mk(), 0, 4))).toBe(Math.round(4 * S * 5));
+    expect(masteryXpFor(at(mk(), 2, per, 'won', ['boss_0', 'boss_1', 'boss_2']))).toBe(Math.round((3 * per + 1) * S * 5 + 75 + 50));
   });
   it('perder antes de terminar la sala no cuenta esa sala dos veces', () => {
     const a = at(mk(), 0, 3), b = at(mk(), 0, 3);

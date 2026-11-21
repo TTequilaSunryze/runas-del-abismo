@@ -894,7 +894,8 @@ export function finishFight(run: RunState): void {
   if (run.arena) { run.phase = c.over === 'win' ? 'won' : 'lost'; run.note = `Gana el equipo de ${c.over === 'win' ? run.arena.nameA : run.arena.nameB}.`; return; }
   if (c.over === 'lose') { run.phase = 'lost'; return; }
   if (c.units.some((u) => u.name.startsWith('Némesis: '))) run.flags.push('nemesis');
-  const gold = Math.round((25 + run.fight * 8 + (run.kind === 'elite' ? 20 : run.kind === 'boss' ? 40 : 0)) * (run.mods.includes('codicia') ? 2 : 1) * (run.omen === 'oro' ? 2 : 1) * (run.mods.includes('pobreza') ? 0.5 : 1) * (run.pact === 'avaricia' ? 2 : 1) * (run.mods.includes('ecos_inestables') ? (run.kind === 'combat' ? 0.7 : 1.5) : 1));
+  // ×1.2 en combates normales y de élite: con zonas más cortas hay menos combates (y menos oro) hasta el jefe
+  const gold = Math.round((25 + run.fight * 8 + (run.kind === 'elite' ? 20 : run.kind === 'boss' ? 40 : 0)) * (run.kind === 'boss' ? 1 : 1.2) * (run.mods.includes('codicia') ? 2 : 1) * (run.omen === 'oro' ? 2 : 1) * (run.mods.includes('pobreza') ? 0.5 : 1) * (run.pact === 'avaricia' ? 2 : 1) * (run.mods.includes('ecos_inestables') ? (run.kind === 'combat' ? 0.7 : 1.5) : 1));
   // las maldiciones de cofre y el calor de la forja se gastan con el combate
   run.hexes = (run.hexes ?? []).map((x) => ({ ...x, fights: x.fights - 1 })).filter((x) => x.fights > 0);
   run.overload = null;
