@@ -15,11 +15,16 @@ export interface BossInfo {
   pillars?: number;
   /** máximo de invocados vivos a la vez */
   minionCap?: number;
+  /** máximo de invocaciones del jefe en todo el combate (G3.0) */
+  minionTotal?: number;
 }
 
 const RAISE_AP = 2;
 const DEVOUR_HEAL = 0.35;
-const PILLAR_HEAL = 0.05;
+/** G3.0: cada pilar cura un 3% de la vida del jefe por turno (antes 5%: con 3 pilares, un 15% por ronda). */
+const PILLAR_HEAL = 0.03;
+/** G3.0: el jefe invoca cada 3 rondas (antes cada 2). */
+const SUMMON_EVERY = 3;
 
 function attackAll(s: CombatState, u: Unit, def: SpellDef, ev: GameEvent[]): void {
   for (let i = 0; i < 6 && !s.over && alive(u); i++) {
@@ -147,7 +152,7 @@ function raise(s: CombatState, u: Unit, info: BossInfo | undefined, ev: GameEven
   if (!info || u.ap < RAISE_AP) return;
   const living = s.units.filter((e) => e.team === u.team && alive(e)).length;
   const heroes = s.units.filter((h) => h.team !== u.team).length;
-  if (living >= heroes + 4) return;
+  if (living >= heroes + 2) return;
   const c = corpses(s).filter((x) => dist(x.pos, u.pos) <= 5 && isFree(s, x.pos)).sort((a, b) => dist(a.pos, u.pos) - dist(b.pos, u.pos))[0];
   if (!c) return;
   c.used = true;
@@ -160,6 +165,10 @@ function bossTurn(s: CombatState, u: Unit, info: BossInfo | undefined, ev: GameE
   const heroes = s.units.filter((h) => h.team === 'hero').length;
   const minions = s.units.filter((m) => m.team === 'enemy' && alive(m) && m.id !== u.id && m.ai !== 'pillar').length;
   const cap = info?.minionCap ?? heroes;
+  // G3.0: invocaciones del jefe marcadas como suyas (mueren con él), con tope a la vez y en total por combate
+  const mine = s.units.filter((m) => m.summoner === u.id && m.ai !== 'pillar');
+  const room = (info?.minionTotal ?? Infinity) - mine.length;
+  const call = (k: number): void => { for (let i = 0; i < Math.min(k, room); i++) { const m = summon(s, info!.minion(u.pos), u.pos, ev); if (m) m.summoner = u.id; } };
   if ((u.phase ?? 1) === 1 && u.hp <= u.maxHp / 2) {
     // Segunda fase: más duro, más rápido, cuerpo a cuerpo, y levanta pilares que lo curan.
     u.phase = 2;
@@ -168,7 +177,7 @@ function bossTurn(s: CombatState, u: Unit, info: BossInfo | undefined, ev: GameE
     u.mp = 3;
     u.name = info?.phase2Name ?? u.name;
     ev.push({ t: 'phase', unit: u.id, phase: 2 });
-    if (info) for (let i = 0; i < Math.max(1, heroes - 1); i++) summon(s, info.minion(u.pos), u.pos, ev);
+    if (info) call(Math.max(1, Math.ceil(heroes / 2)));
     if (info?.pillar) {
       // pilares lejos del jefe, para obligar al grupo a repartirse
       const spots = [...reachable(s, u.pos, 30, true).cost.keys()]
@@ -180,8 +189,8 @@ function bossTurn(s: CombatState, u: Unit, info: BossInfo | undefined, ev: GameE
         if (at && isFree(s, at)) summon(s, info.pillar(at), at, ev);
       }
     }
-  } else if ((u.phase ?? 1) === 1 && info && s.round % 2 === 0 && minions < cap) {
-    summon(s, info.minion(u.pos), u.pos, ev);
+  } else if ((u.phase ?? 1) === 1 && info && s.round % SUMMON_EVERY === 0 && mine.filter(alive).length < cap && minions < heroes + 1 && room > 0) {
+    call(1);
     u.ap = Math.max(0, u.ap - 3);
   }
   const phase2 = u.phase === 2;

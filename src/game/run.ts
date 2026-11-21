@@ -523,7 +523,8 @@ function enemyList(run: RunState): string[] {
   const d = run.zoneFight;
   const z = zoneOf(run);
   const b = bossOf(run);
-  if (run.kind === 'boss') return [b.id, ...Array.from({ length: n }, () => pick(run, b.guard))];
+  // G3.0: escolta de n − 1 (mínimo 1); antes era una por jugador y se sumaba a las invocaciones y a la vida extra del jefe
+  if (run.kind === 'boss') return [b.id, ...Array.from({ length: bossEscorts(n) }, () => pick(run, b.guard))];
   const pool = z.pools[d < 1 ? 0 : d < 3 ? 1 : 2];
   const elite = run.kind === 'elite';
   const count = n + (d >= 1 ? 1 : 0) + (d >= 3 && n >= 3 ? 1 : 0) - (elite ? 1 : 0) + (run.ambush ? 2 : 0) + (run.asc >= 7 ? 1 : 0) + (run.mods.includes('horda') ? 1 : 0);
@@ -596,7 +597,7 @@ export function buildFight(run: RunState): CombatSetup {
     const traps = Array.from({ length: omen === 'puas' ? 6 : 0 }, () => free(3, w - 4));
     const puddles = [...(terrain?.puddles ?? []), ...(omen === 'pantano' ? Array.from({ length: 4 + n * 2 }, () => free(2, w - 4)) : [])];
     // el jefe no crece indefinidamente con los combates previos
-    const enemies = ids.map((id, i) => id.startsWith('nemesis:') ? nemesisUnit(run, id.slice(8), free(w - 4, w - 1)) : makeEnemy(id, free(w - 4, w - 1), Math.min(id === bossOf(run).id || (run.kind === 'elite' && i === 0) ? 2 : 5, run.zoneFight), n, enemyOpts(run, id, i === 0)));
+    const enemies = ids.map((id, i) => id.startsWith('nemesis:') ? nemesisUnit(run, id.slice(8), free(w - 4, w - 1)) : makeEnemy(id, free(w - 4, w - 1), Math.min(run.kind === 'boss' || (run.kind === 'elite' && i === 0) ? 2 : 5, run.zoneFight), n, enemyOpts(run, id, i === 0)));
     if (run.kind === 'elite' && enemies[0]) { enemies[0].rank = 'elite'; enemies[0].tackle = (enemies[0].tackle ?? 0) + 3; }
     // los enemigos salen repartidos a 5 casillas como mucho de alguna casilla de inicio; los que placan o se mueven poco, más cerca
     for (const e of enemies) taken.delete(`${e.pos.x},${e.pos.y}`);
@@ -669,12 +670,21 @@ function nemesisUnit(run: RunState, id: string, pos: Pos): UnitSpec {
   return championUnit(c, pos, 'enemy', null, { hpMul: 1.9 + 0.7 * (n - 1) + (run.asc >= 1 ? 0.2 : 0), powerMul: 0.5, level, name: `Némesis: ${c.name}` });
 }
 
+/** Escoltas del jefe según el número de jugadores (1→1, 2→1, 3→2, 4→3). */
+export const bossEscorts = (n: number): number => Math.max(1, n - 1);
+/** Refuerzo de zona, ascensión y tamaño del grupo (multiplica la vida y da daño plano). El Abismo es más duro que todo lo anterior. */
+export function zoneBoost(run: Pick<RunState, 'asc' | 'zone' | 'heroes'>): number {
+  const n = run.heroes.length;
+  return (run.asc >= 1 ? 0.1 : 0) + (run.asc >= 9 ? 0.1 : 0) + (run.zone >= 3 ? 0.4 : 0) + run.zone * DIFF.perZone + DIFF.base - Math.max(0, 3 - n) * 0.12;
+}
+/** G3.0: el jefe recibe el refuerzo de zona algo suavizado (×0.85 cuando es positivo): la subida de vida entre zonas era el mayor pico. */
+export const BOSS_BOOST = 0.85;
+
 /** Ascensión y reto diario sobre cada enemigo, y modificadores de élite. */
 function enemyOpts(run: RunState, id: string, first: boolean) {
   const n = run.heroes.length;
   const z = zoneOf(run);
-  // el Abismo es más duro que todo lo anterior
-  const boost = (run.asc >= 1 ? 0.1 : 0) + (run.asc >= 9 ? 0.1 : 0) + (run.zone >= 3 ? 0.4 : 0) + run.zone * DIFF.perZone + DIFF.base - Math.max(0, 3 - n) * 0.12;
+  const boost = zoneBoost(run);
   const affixes: string[] = [];
   const all = Object.keys(AFFIXES);
   if (run.kind === 'elite' && first && z.elites.includes(id)) {
@@ -691,19 +701,25 @@ function enemyOpts(run: RunState, id: string, first: boolean) {
   return {
     affixes,
     laterList: run.kind !== 'boss' && run.zoneFight >= 1,
-    hpMul: 1 + boost + pactEnemyHp(run.pact, strong) + (run.mods.includes('riesgo') ? 0.12 * Math.min(3, run.zone) : 0) + (id === bossOf(run).id ? (run.asc >= 6 ? 0.2 : 0) + (run.mods.includes('jefes') ? 0.3 : 0) + (run.flags.includes(`g2_carga_${run.zone}`) ? 0.25 : 0) : 0),
+    hpMul: 1 + (id === bossOf(run).id && boost > 0 ? boost * BOSS_BOOST : boost) + pactEnemyHp(run.pact, strong) + (run.mods.includes('riesgo') ? 0.12 * Math.min(3, run.zone) : 0) + (id === bossOf(run).id ? (run.asc >= 6 ? 0.2 : 0) + (run.mods.includes('jefes') ? 0.3 : 0) + (run.flags.includes(`g2_carga_${run.zone}`) ? 0.25 : 0) : 0),
     power: boost * 5 + (run.mods.includes('frenesi') ? 1 : 0) + (run.mods.includes('riesgo') ? Math.min(3, run.zone) : 0) + pactEnemyPower(run.pact),
   };
 }
 
 /** Lo que invoca el jefe de la zona, sus pilares y su nombre en la segunda fase. */
+/** Vida de los esbirros del jefe respecto a un enemigo normal de la zona. */
+export const MINION_HP = 0.6;
+/** Esbirros del jefe vivos a la vez (1, 1, 2, 2) y, en total por combate, n + 1. */
+export const minionCap = (n: number): number => Math.max(1, Math.ceil(n / 2));
 export const bossInfo = (run: RunState): BossInfo => {
   const b = bossOf(run), n = run.heroes.length;
   return {
-    minion: (pos: Pos) => makeEnemy(b.minion, pos, 1, 1, { hpMul: 1 + (run.asc >= 1 ? 0.1 : 0) }),
+    // G3.0: los esbirros siguen el refuerzo de zona (antes no, y en la zona 1 tenían más vida que un enemigo normal), con un 60% de vida
+    minion: (pos: Pos) => { const bo = zoneBoost(run); return makeEnemy(b.minion, pos, 0, 1, { hpMul: Math.max(0.3, (1 + bo) * MINION_HP), power: Math.round(bo * 2.5) }); },
     pillar: (pos: Pos) => makeEnemy(b.pillar, pos, 0, n),
     pillars: (n >= 3 ? 3 : 2) * (run.asc >= 10 ? 2 : 1),
-    minionCap: n,
+    minionCap: minionCap(n),
+    minionTotal: n + 1,
     phase2Name: b.phase2,
   };
 };
