@@ -26,6 +26,11 @@ const SPELL_ANIM: Record<string, Anim> = {
   r_arquitectonico: 'attack', r_sello: 'cast', r_sobrecarga: 'special', r_matriz: 'special', r_ciudadela: 'special',
   g_disparo: 'attack', g_rebote: 'attack', g_recarga: 'special', g_abanico: 'attack', g_trazadora: 'attack', g_rodilla: 'attack', g_danza: 'special',
   g_mina: 'cast', g_certero: 'attack', g_humo: 'cast', g_plata: 'cast', g_gancho: 'attack', g_tambor: 'attack',
+  // H1: habilidades del catálogo que no tenían gesto propio
+  z_colas: 'attack', z_maldicion: 'cast', t_pozo: 'special', t_vacio: 'attack', t_eclipse: 'cast',
+  s_kunai: 'special', s_hoja: 'attack', s_ejecucion: 'attack', k_grilletes: 'attack', k_condena: 'cast', k_azote: 'attack', k_alma: 'attack',
+  flecha: 'attack', tiro_rasante: 'attack', ojo_halcon: 'cast', a_letal: 'attack', a_abanico: 'attack', a_ignea: 'attack', a_campo: 'cast',
+  a_conmocion: 'attack', a_halcon: 'cast', perforante: 'attack', salto_atras: 'special', flecha_hielo: 'attack', red: 'cast', orden: 'cast',
   b_sed: 'special', b_tajo: 'attack', b_embiste: 'attack', b_grito: 'special', b_colosal: 'attack', b_pacto: 'special', b_cuchillada: 'attack', b_mirada: 'cast', b_frenesi: 'special',
 };
 

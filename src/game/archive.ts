@@ -9,6 +9,7 @@ import { ZONA3_ENEMIES } from '../content/zona3/enemies';
 import { ZONA4_ENEMIES } from '../content/zona4/enemies';
 import { patronsOf } from '../content/boons';
 import { RELICS } from '../content/relics';
+import { catalogSpells } from '../content/spellCatalog';
 import { ZONES } from '../content/zones';
 import { DOCUMENTED_KILLS, LV, PAST_MAX, emptyArchive, isDiscovered, levelOf, raise, type Archive, type ArchiveCat } from './archiveData';
 import { trackContract, type ContractEvent } from './contracts';
@@ -49,6 +50,8 @@ export const GRIMOIRE: GrimoireRef[] = (() => {
     for (const id of ids) if (SPELLS[id] && !out.has(id)) out.set(id, { id, kind: 'spell', cls: c });
   }
   for (const [id, sp] of Object.entries(SPELLS)) if (sp.route === 'boon' && !out.has(id) && PLAYABLE.some((c) => patronSpells(c).has(id))) out.set(id, { id, kind: 'spell', cls: PLAYABLE.find((c) => patronSpells(c).has(id))! });
+  // H1: también las habilidades del catálogo que hoy no salen en ninguna oferta (legado)
+  for (const c of PLAYABLE) for (const id of catalogSpells(c)) if (SPELLS[id] && !out.has(id)) out.set(id, { id, kind: 'spell', cls: c });
   for (const b of Object.values(BLESSINGS)) if ((PLAYABLE as string[]).includes(b.cls)) out.set(b.id, { id: b.id, kind: 'blessing', cls: b.cls as ClassId });
   return [...out.values()];
 })();
