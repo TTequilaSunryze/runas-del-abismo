@@ -31,6 +31,7 @@ export interface CombatSetup {
 export type ActionResult = { ok: true; events: GameEvent[] } | { ok: false; reason: string };
 
 const BURN_DMG = 3;
+const CHARM_DMG = 3;
 const POISON_DMG = 2;
 /** v12 daño plano: Marcado y crítico suman daño fijo. */
 const MARK_FLAT = 2;
@@ -371,6 +372,8 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     if (s.round >= SUDDEN_ROUND && u.ai !== 'pillar') hurt(s, u, u.maxHp * 0.05 * (s.round - SUDDEN_ROUND + 1), ev, 'abismo', { pierce: true });
     if (!alive(u) || s.over) continue;
     if (u.statuses.burn) hurt(s, u, BURN_DMG, ev, 'burn', { pierce: true, element: 'fire' });
+    // Encantado: 3 de daño al empezar cada turno mientras dure
+    if (u.statuses.charm && alive(u)) hurt(s, u, CHARM_DMG, ev, 'charm', { pierce: true });
     if (alive(u) && u.statuses.poison) hurt(s, u, POISON_DMG * u.statuses.poison.stacks, ev, 'poison', { pierce: true, element: 'poison' });
     if (alive(u) && u.statuses.bleed) hurt(s, u, BLEED_DMG * u.statuses.bleed.stacks, ev, 'bleed', { pierce: true });
     tick(u, 'burn');
@@ -980,6 +983,11 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
       const n = t.team !== u.team ? landed(s, t, def.drainAp) : def.drainAp;
       if (n < def.drainAp) ev.push({ t: 'resist', unit: t.id, what: `Resiste ${def.drainAp - n} PA` });
       if (n) { t.apMod -= n; ev.push({ t: 'drain', unit: t.id, ap: -n, mp: 0 }); }
+    }
+    if (def.drainMp && alive(t)) {
+      const n = t.team !== u.team ? landed(s, t, def.drainMp) : def.drainMp;
+      if (n < def.drainMp) ev.push({ t: 'resist', unit: t.id, what: `Resiste ${def.drainMp - n} PM` });
+      if (n) { t.mpMod -= n; ev.push({ t: 'drain', unit: t.id, ap: 0, mp: -n }); }
     }
     if (def.giveAp) t.apMod += def.giveAp;
     if (def.giveMp) t.mpMod += def.giveMp;

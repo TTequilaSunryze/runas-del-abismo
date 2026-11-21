@@ -115,6 +115,16 @@ export const CLASSES: Record<ClassId, ClassDef> = {
   },
 };
 
+/** Pasiva propia de cada clase (para la ficha y la comparación del grupo). */
+export const CLASS_PASSIVE: Partial<Record<ClassId, { name: string; icon: string; text: string }>> = {
+  zorro: { name: 'Robo de esencia', icon: '🦊', text: 'Cada habilidad que acierta da 1 carga de esencia. Con las cargas completas, tu siguiente habilidad de daño te cura el 15% de la vida.' },
+  esferas: { name: 'Esferas oscuras', icon: '🔮', text: 'Tus hechizos dejan esferas oscuras en el tablero (máx. 3). Otros hechizos las usan para golpear desde ellas o detonarlas.' },
+  acechador: { name: 'Sombra viviente', icon: '👤', text: 'Tus Sombras replican tus golpes y puedes intercambiarte con ellas ignorando el placaje. Rematar a un enemigo marcado te da ventaja.' },
+  carcelero: { name: 'Cosecha de almas', icon: '💀', text: 'Cada enemigo que muere cerca deja un alma. Cada 5 almas de la partida: +0,5 de armadura permanente. Las almas sin gastar alimentan hechizos como la Guadaña o la Siega.' },
+  barbaro: { name: 'Furia', icon: '🔥', text: '+20 de Furia al golpear y +10 al recibir daño. Cada 40: +1 de daño; cada 20: +6% de crítico. Si pasas un turno sin pelear, pierdes 20.' },
+  arquero: { name: 'Tirador', icon: '🏹', text: 'Sin recurso propio: daño constante a distancia y mucha movilidad.' },
+};
+
 /** Se elige un solo kit inicial. */
 export const MAX_ROUTES = 1;
 

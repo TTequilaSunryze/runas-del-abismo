@@ -26,7 +26,7 @@ describe('kit inicial', () => {
   it('la Hechicera Zorro: orbe y salto espiritual dañan, encanto controla', () => {
     const k = CLASSES.zorro.base.map((id) => SPELLS[id]!);
     expect(k[0]!.line && k[0]!.bounce).toBe(2);
-    expect(k[1]!.pull).toBe(2);
+    expect(k[1]!.drainMp).toBe(2);
     expect(k[2]!.followUp).toBeTruthy();
   });
   it('Sed de sangre cuesta vida y potencia el daño', () => {

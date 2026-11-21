@@ -53,7 +53,7 @@ export function addLog(events: GameEvent[]): void {
   ui.log.splice(0, Math.max(0, ui.log.length - 150));
 }
 
-const SOURCE_NAME: Record<string, string> = { burn: 'quemadura', poison: 'veneno', bleed: 'sangrado', thorns: 'espinas', bomb: 'explosión', vacio: 'estallido del vacío', volcan: 'estallido', marca: 'Marca de la muerte', fire: 'fuego', abyss: 'caída al abismo', trap: 'púas' };
+const SOURCE_NAME: Record<string, string> = { charm: 'encanto', burn: 'quemadura', poison: 'veneno', bleed: 'sangrado', thorns: 'espinas', bomb: 'explosión', vacio: 'estallido del vacío', volcan: 'estallido', marca: 'Marca de la muerte', fire: 'fuego', abyss: 'caída al abismo', trap: 'púas' };
 
 const TRAIT_TEXT: Record<string, string> = {
   incansable: 'Pegado a un enemigo al empezar el turno: +1 PM.', viuda: 'Si cae un aliado: +2 de daño.', espina: 'Sus golpes envenenan.', esporas: 'Quien le golpea cuerpo a cuerpo queda ralentizado.', alfa: 'Sus críticos le curan 4.', egida: 'El primer golpe de cada ronda le hace 6 menos.', pavesa: 'Quema a los enemigos pegados al empezar su turno.', volcan: 'Los enemigos que remata estallan.', primera: 'Su primer hechizo del turno cuesta 1 PA menos.', devorador: 'Rematar le cura el 5%.', lagrima: 'Una vez, al bajar del 30% se cura el 25%.', entremundos: 'El placaje no le afecta.',
@@ -69,11 +69,17 @@ export function combatScreen(events: GameEvent[]): void {
     ui.root.innerHTML = `<div id="info" class="bar cinfo"></div>
       <div class="cgrid"><div class="stage"><canvas id="cv"></canvas><div id="toast" class="casttoast"></div></div>
       <aside class="cside"><div class="cbox"><div class="cboxh">⏳ Orden de turnos <span id="rnd" class="dim sm"></span></div><div id="init" class="timeline"></div></div>
-      <div class="cbox grow"><div class="cboxh">📜 Registro de combate</div><div id="log" class="clog"></div></div></aside></div>
+      <div class="cbox grow"><div class="cboxh">📜 Registro de combate <span class="dim sm">G: señalar casilla</span></div><div id="log" class="clog"></div></div></aside></div>
       <div id="hud" class="dhud"></div>`;
     ui.board?.destroy();
     ui.board = new Board(document.getElementById('cv') as HTMLCanvasElement, s);
     ui.board.onSelect = () => ui.rerender();
+    s.onPing = (p) => {
+      const run2 = ui.session?.run; const i = run2 ? run2.heroes.findIndex((h) => h.owner === p.from) : -1;
+      const name = i >= 0 ? run2!.heroes[i]!.name : '?';
+      ui.board?.pings.push({ x: p.x, y: p.y, at: Date.now(), col: ['#e8607a', '#5a9cf0', '#5fcf70', '#e8bd40'][Math.max(0, i) % 4]!, name });
+      ui.log.push(`<div class="lfx lnote">❗ ${esc(name)} marca una casilla</div>`); ui.rerender();
+    };
   }
   ui.root.classList.add('combatmode');
   const board = ui.board!;
@@ -96,9 +102,9 @@ export function combatScreen(events: GameEvent[]): void {
   const mineTeam = me?.team ?? 'hero';
   document.getElementById('rnd')!.textContent = `ronda ${c.round}`;
   document.getElementById('init')!.innerHTML = c.order.map((id) => getUnit(c, id)!).filter((u) => u && u.hp > 0)
-    .map((u) => { const pct = Math.max(0, Math.min(100, (u.hp / u.maxHp) * 100)); const ally = u.team === mineTeam;
+    .map((u) => { const tot = Math.max(u.maxHp, u.hp + u.shield); const pct = Math.max(0, Math.min(100, (u.hp / tot) * 100)); const spct = (u.shield / tot) * 100; const ally = u.team === mineTeam;
       return `<div class="tl ${cur?.id === u.id ? 'on' : ''} ${ally ? 'ally' : 'foe'} ${u.id === me?.id ? 'isme' : ''} ${u.rank === 'elite' || u.ai === 'boss' ? 'big' : ''}" ${tip(`<b>${esc(u.name)}</b><div class="sm">${u.hp}/${u.maxHp} PV${u.shield ? ` · 🛡 ${u.shield}` : ''} · iniciativa ${u.initiative}</div><div class="sm"><span class="lap">${u.ap} PA</span> · <span class="lmp">${u.mp} PM</span> · armadura ${Math.floor(u.armor)}</div>${Object.entries(u.statuses).filter(([, v]) => v).map(([k, v]) => `<div class="sm lst">${esc(STATUS_NAME[k as keyof typeof STATUS_NAME] ?? k)} (${v!.turns} t.)</div>`).join('')}${(u.traits ?? []).map((t) => TRAIT_TEXT[t] ? `<div class="sm dim">${esc(TRAIT_TEXT[t]!)}</div>` : '').join('')}`)}>
-        <img src="${unitPortraitUrl(u.kind, u.team, u.team === 'hero' ? (heroIdx.get(u.id) ?? 0) % 4 : 0)}" alt=""><i class="tlhp"><b style="width:${pct}%"></b></i><span class="tln">${esc(u.name.split(' ')[0]!)}</span>${u.id === me?.id ? '<span class="tlme">TÚ</span>' : ''}</div>`; }).join('');
+        <img src="${unitPortraitUrl(u.kind, u.team, u.team === 'hero' ? (heroIdx.get(u.id) ?? 0) % 4 : 0)}" alt=""><i class="tlhp"><b style="width:${pct}%"></b>${u.shield ? `<s style="left:${pct}%;width:${spct}%"></s>` : ''}</i><span class="tln">${esc(u.name.split(' ')[0]!)}</span>${u.id === me?.id ? '<span class="tlme">TÚ</span>' : ''}</div>`; }).join('');
   // barra inferior al estilo Dofus: corazón de vida, PA y PM, hechizos, objetos y botón de turno
   const deploying = !!c.deploy;
   const ready = deploying && c.deploy!.ready.includes(s.myId);

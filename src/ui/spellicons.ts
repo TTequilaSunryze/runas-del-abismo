@@ -282,7 +282,7 @@ export function spellRows(d: SpellDef): Array<[string, string]> {
   rows.push(['Alcance', where.charAt(0).toUpperCase() + where.slice(1)]);
   rows.push(['Zona', spellShape(d).replace(/^./, (c) => c.toUpperCase())]);
   rows.push(['Usos', d.perTurn ? `${d.perTurn} por turno` : 'Sin límite por turno']);
-  rows.push(['Recarga', d.cd ? `${d.cd} turno${d.cd > 1 ? 's' : ''}` : 'Ninguna']);
+  rows.push(['Recarga', d.cd ? `${d.cd + 1} turnos (lo usas, y vuelve a estar listo ${d.cd + 1} turnos después)` : 'Ninguna']);
   return rows;
 }
 

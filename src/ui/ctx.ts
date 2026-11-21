@@ -49,6 +49,10 @@ export const ui = {
   mapOpen: false,
   /** móvil: ficha lateral (equipo, hechizos, grupo) desplegada */
   sideOpen: false,
+  /** ficha abierta: dueño del héroe o «*» para comparar el grupo */
+  statsOf: '',
+  /** «Estoy listo» en la sala de espera */
+  lobbyReady: false,
   /** forja: objeto, afijo y hechizo elegidos */
   forgeRef: '',
   forgeAffix: -1,

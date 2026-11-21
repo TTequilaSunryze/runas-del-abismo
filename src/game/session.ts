@@ -28,6 +28,8 @@ export interface LobbyPlayer {
   daily: string | null;
   /** maestría con la clase elegida */
   mastery: number;
+  /** ha pulsado «Estoy listo» en la sala */
+  ready?: boolean;
   /** su mejor héroe del Salón (puede volver como némesis) */
   nem: unknown;
   /** tiene equipo de duelo */
@@ -48,6 +50,14 @@ export class Session {
   /** se llama cuando cambia el estado; `events` trae lo ocurrido para animarlo */
   onChange: (events: GameEvent[]) => void = () => {};
   onError: (text: string) => void = () => {};
+  /** señal táctica (tecla G): casilla marcada por un jugador */
+  onPing: (p: { x: number; y: number; from: string }) => void = () => {};
+
+  /** Marca una casilla para todo el grupo. */
+  ping(x: number, y: number): void {
+    this.t.send('ping', { x, y });
+    this.onPing({ x, y, from: this.myId });
+  }
   /** cambió la lista de jugadores de la sala */
   onLobby: () => void = () => {};
   turnEndsAt = 0;
@@ -112,6 +122,7 @@ export class Session {
     t.onReconnect?.(() => { if (this.isHost) { if (this.run) this.broadcast([]); } else this.t.send('syncreq', null); this.t.send('here', this.mine); });
     t.on('syncreq', () => { if (this.isHost && this.run) this.broadcast([]); });
     // Cada jugador se anuncia también por mensaje: la lista no depende solo de la presencia del servidor.
+    t.on('ping', (p, from) => { const q = p as { x: number; y: number }; if (typeof q?.x === 'number' && typeof q?.y === 'number') this.onPing({ x: q.x, y: q.y, from }); });
     t.on('here', (p, from) => {
       if (p && typeof p === 'object') this.beacons.set(from, { data: p as Record<string, unknown>, at: Date.now() });
       this.checkLobby();
@@ -161,7 +172,7 @@ export class Session {
         unlocked: Array.isArray(p.data.unlocked) ? (p.data.unlocked as string[]).slice(0, 20).map(String) : [],
         asc: Number(p.data.asc) || 0, daily: typeof p.data.daily === 'string' ? p.data.daily : null,
         mastery: Number(p.data.mastery) || 0, nem: p.data.nem ?? null, hasTeam: !!p.data.hasTeam,
-        mods: Array.isArray(p.data.mods) ? (p.data.mods as unknown[]).slice(0, 3).map(String) : [], abyss: !!p.data.abyss,
+        mods: Array.isArray(p.data.mods) ? (p.data.mods as unknown[]).slice(0, 3).map(String) : [], abyss: !!p.data.abyss, ready: !!p.data.ready,
       }))
       .sort((a, b) => Number(b.host) - Number(a.host) || a.id.localeCompare(b.id));
   }

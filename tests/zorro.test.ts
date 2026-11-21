@@ -48,12 +48,14 @@ describe('Hechicera Zorro', () => {
     expect(h.essence).toBe(0);
   });
 
-  it('el encanto atrae 2 casillas al primer enemigo de la línea (alcance 1-7)', () => {
+  it('el encanto ya no atrae: quita 2 PM y encanta 2 turnos (3 de daño por turno)', () => {
     const s = board([zorro(), foe({ x: 8, y: 3 }, 60)]);
     const [h, en] = s.units;
     expect(cast(s, h!.id, 'z_encanto', { x: 8, y: 3 }).ok).toBe(true);
-    expect(en!.pos).toEqual({ x: 6, y: 3 });
-    expect(dist(en!.pos, h!.pos)).toBe(5);
+    expect(en!.pos).toEqual({ x: 8, y: 3 });
+    expect(en!.mpMod).toBe(-2);
+    expect(en!.statuses.charm?.turns).toBe(2);
+    expect(dist(en!.pos, h!.pos)).toBe(7);
   });
 
   it('el salto espiritual se desplaza en línea recta y golpea al enemigo más cercano', () => {

@@ -27,7 +27,7 @@ function publish(): void {
   const m = meta();
   ui.session?.announce({ name: ui.me.name, cls: ui.me.cls, routes: ui.me.routes, host: ui.session.isHost, perks: m.perks, unlocked: m.unlocked, asc: Math.min(ui.asc, m.maxAsc, MAX_ASC), daily: ui.daily ? today() : null,
     mastery: masteryOf(ui.me.cls), nem: myNemesis(), hasTeam: myTeam().length > 0,
-    mods: ui.daily ? [] : ui.mods, abyss: !ui.daily && m.stats.wins > 0 });
+    mods: ui.daily ? [] : ui.mods, abyss: !ui.daily && m.stats.wins > 0, ready: ui.session.isHost || !!ui.lobbyReady });
 }
 
 function home(msg = ''): void {
@@ -46,6 +46,7 @@ async function enter(code: string, isHost: boolean, local: boolean, resume = fal
   const nameEl = document.getElementById('name') as HTMLInputElement | null;
   ui.me.name = (nameEl?.value ?? ui.me.name).trim().slice(0, 14) || 'Héroe';
   store.set('rda_name', ui.me.name);
+  ui.lobbyReady = false;
   ui.root.innerHTML = `<div class="home"><p>Conectando a la sala ${code}…</p></div>`;
   let secret = '';
   if (isHost) {
@@ -97,7 +98,7 @@ function render(events: GameEvent[]): void {
   const run = s.run;
   const want = !run ? 'lobby' : run.phase === 'combat' && run.combat ? 'combat' : run.phase === 'event' && run.event ? 'event' : run.phase === 'shop' ? 'shop' : run.phase === 'room' && run.room ? 'room' : run.phase === 'map' ? 'map' : 'end';
   // sin cambios reales no se redibuja: así un latido de red no interrumpe un clic
-  const key = want + JSON.stringify([meta().ecos, ui.asc, ui.daily, ui.mods, ui.abyss, run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), s.t.connected(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selItem, ui.tab, ui.logOpen, ui.statsOpen, ui.mapOpen, ui.forgeRef, ui.forgeAffix, ui.forgeSpell, ui.sideOpen, ui.picked]);
+  const key = want + JSON.stringify([meta().ecos, ui.asc, ui.daily, ui.mods, ui.abyss, run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), s.t.connected(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selItem, ui.tab, ui.logOpen, ui.statsOpen, ui.mapOpen, ui.forgeRef, ui.forgeAffix, ui.forgeSpell, ui.sideOpen, ui.picked, ui.lobbyReady]);
   if (key === lastKey && want === ui.screen && !events.length) return;
   lastKey = key;
   if (want !== ui.screen) hideTip();
@@ -167,6 +168,8 @@ document.addEventListener('click', (e) => {
     case 'resume': { const h = JSON.parse(store.get('rda_host') ?? 'null') as { code: string } | null; if (h) void enter(h.code, true, false, true); break; }
     case 'doresume': if (ui.saved) { ui.log.length = 0; s?.resume(ui.saved); } break;
     case 'home': home(); break;
+    case 'statsof': ui.statsOf = String(id); lastKey = ''; render([]); break;
+    case 'lready': ui.lobbyReady = !ui.lobbyReady; publish(); render([]); break;
     case 'cls': ui.me.cls = id as ClassId; ui.me.routes = ['base']; ui.picked = { cls: String(id), at: Date.now() }; publish(); render([]); setTimeout(() => { ui.picked = null; lastKey = ''; render([]); }, 1500); break;
     case 'route':
       // un solo kit: elegir otro lo sustituye
@@ -311,6 +314,8 @@ document.addEventListener('keydown', (e) => {
   if ((e.target as HTMLElement).tagName !== 'INPUT' && s?.run && !s.run.arena && (e.key === 'm' || e.key === 'M' || (e.key === 'Escape' && ui.mapOpen))) { ui.mapOpen = e.key === 'Escape' ? false : !ui.mapOpen; lastKey = ''; render([]); return; }
   if ((e.target as HTMLElement).tagName !== 'INPUT' && s?.run && !s.run.arena && (e.key === 's' || e.key === 'S' || (e.key === 'Escape' && ui.statsOpen))) { ui.statsOpen = e.key === 'Escape' ? false : !ui.statsOpen; lastKey = ''; render([]); return; }
   if (ui.screen === 'combat' && (e.target as HTMLElement).tagName !== 'INPUT' && (e.key === 'v' || e.key === 'V')) { ui.hpBars = !ui.hpBars; if (ui.board) ui.board.showBars = ui.hpBars; lastKey = ''; render([]); return; }
+  // G: señal táctica en la casilla bajo el ratón (la ven todos)
+  if (ui.screen === 'combat' && (e.key === 'g' || e.key === 'G') && (e.target as HTMLElement).tagName !== 'INPUT') { const p = ui.board?.hoverCell(); if (p && s) s.ping(p.x, p.y); return; }
   // fase de colocación: E = «¡Listo!»
   if (ui.screen === 'combat' && s?.run?.combat?.deploy && (e.target as HTMLElement).tagName !== 'INPUT' && (e.key === 'e' || e.key === 'E')) { if (!s.run.combat.deploy.ready.includes(s.myId)) s.act({ a: 'deployready' }); return; }
   if (ui.screen !== 'combat' || !s?.isMyTurn() || (e.target as HTMLElement).tagName === 'INPUT') return;

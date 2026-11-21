@@ -148,12 +148,12 @@ export function lobbyScreen(): void {
   const cls = CLASSES[me.cls];
   const open = openRoutes(me.cls), mlv = masteryOf(me.cls);
   const canDuel = s.isHost && myTeam().length > 0;
-  const ready = players.slice(0, 4).filter((p) => p.routes.length > 0);
+  const ready = players.slice(0, 4).filter((p) => p.routes.length > 0 && (p.host || p.ready));
   const total = Math.min(4, players.length);
   ui.root.innerHTML = `<div class="bar"><span>Sala</span><b class="code">${esc(s.code)}</b>${s.t.kind === 'local' ? '<span class="dim">(local)</span>' : ''}
     <span class="dim sm">${!s.t.connected() ? '<b class="bad">⚠ Conexión perdida: reconectando…</b> ' : ''}${s.isHost ? 'Comparte el código. Cuando todos estén listos, pulsa Comenzar.' : s.hostPresent() ? 'Elige clase y kit inicial. El anfitrión comienza.' : 'Buscando al anfitrión… (puede tardar unos segundos)'}</span>
     ${ui.notice ? `<span class="bad">${esc(ui.notice)}</span>` : ''}<span class="grow"></span>
-    ${s.isHost ? `${ui.saved ? `<button data-act="doresume">Reanudar guardada (zona ${ui.saved.zone + 1}, sala ${ui.saved.step + 1})</button>` : ''}<button class="pri" data-act="start" ${ready.length && ready.length === total ? '' : 'disabled'}>⚔️ Comenzar (${ready.length}/${total})</button>` : ''}<button data-act="home">Salir</button></div>
+    ${s.isHost ? `${ui.saved ? `<button data-act="doresume">Reanudar guardada (zona ${ui.saved.zone + 1}, sala ${ui.saved.step + 1})</button>` : ''}<span class="pill ${ready.length === total ? 'good' : ''}">Listos ${ready.length}/${total}</span><button class="pri" data-act="start" ${ready.length ? '' : 'disabled'} ${ready.length < total ? tip('Aún no están todos listos: si comienzas, entran con lo que tengan elegido') : ''}>⚔️ Comenzar</button>` : `<button class="${ui.lobbyReady ? 'readyon' : 'pri'}" data-act="lready">${ui.lobbyReady ? '✔ Listo (deshacer)' : '✋ Estoy listo'}</button><span class="pill">Listos ${ready.length}/${total}</span>`}<button data-act="home">Salir</button></div>
   <div class="cols"><section class="main">
     ${s.isHost ? `<div class="panel"><div class="row"><b>Dificultad</b><span class="grow"></span><button class="mini" data-act="ascdown" ${ui.asc <= 0 || ui.daily ? 'disabled' : ''}>−</button><b class="pill">Ascensión ${ui.daily ? 3 : ui.asc}</b><button class="mini" data-act="ascup" ${ui.asc >= meta().maxAsc || ui.daily ? 'disabled' : ''}>+</button><label class="sm"><input type="checkbox" data-act="dailytoggle" ${ui.daily ? 'checked' : ''}> Reto diario</label></div>
       <div class="dim sm">${ui.daily ? dailyOf(today()).mods.map((id) => esc(DAILY_MODS.find((x) => x.id === id)!.name)).join(' + ') + ' · ranking compartido' : esc(ASCENSION.slice(0, ui.asc + 1).slice(-2).join(' '))}${meta().maxAsc < 1 && !ui.daily ? ' · Gana una partida para desbloquear la ascensión 1.' : ''}</div>
@@ -181,7 +181,7 @@ export function lobbyScreen(): void {
     }).join('')}</div>
   </section>
   <aside class="side"><div class="tabs"><button class="on">👥 Jugadores (${players.length}/4)</button></div><div class="tabbody">
-    ${players.map((p, i) => `<div class="member ${i > 3 ? 'off' : ''}"><div class="row"><b class="p${i % 4}">${esc(p.name)}</b>${p.host ? '<span>👑</span>' : ''}${p.id === ui.myId ? '<span class="dim sm">(tú)</span>' : ''}<span class="grow"></span><span class="sm ${p.routes.length ? 'good' : 'dim'}">${p.routes.length ? 'Listo' : 'Eligiendo'}</span></div>
+    ${players.map((p, i) => `<div class="member ${i > 3 ? 'off' : ''} ${p.ready && !p.host ? 'isready' : ''}"><div class="row"><b class="p${i % 4}">${esc(p.name)}</b>${p.host ? '<span>👑</span>' : ''}${p.id === ui.myId ? '<span class="dim sm">(tú)</span>' : ''}<span class="grow"></span>${p.host ? '<span class="rdy host">👑 Anfitrión</span>' : p.ready ? '<span class="rdy on">✔ LISTO</span>' : '<span class="rdy">⏳ Eligiendo…</span>'}</div>
       <div class="sm">${esc(CLASSES[p.cls]?.name ?? '?')} <span class="dim">${p.routes.map((r) => esc(findRoute(p.cls, r)?.name ?? r)).join(' + ') || 'eligiendo kit'}</span></div>${i > 3 ? '<div class="bad sm">Sala llena</div>' : ''}${canDuel && p.id !== ui.myId && p.hasTeam ? `<button class="mini" data-act="duel" data-id="${esc(p.id)}">🏟️ Retar a duelo 3 contra 3</button>` : p.hasTeam ? '<div class="dim sm">🏟️ Tiene equipo de duelo</div>' : ''}</div>`).join('')}
   </div></aside></div>`;
 }

@@ -2,7 +2,7 @@
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 body { margin: 0; background: var(--bg); color: var(--txt); font: 15px/1.35 ui-monospace, Menlo, Consolas, monospace; }
-#app { max-width: 1280px; min-height: 100vh; margin: 0 auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+#app { max-width: 1500px; min-height: 100vh; margin: 0 auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
 h1 { color: var(--gold); font-size: 26px; margin: 8px 0 4px; letter-spacing: 3px; }
 h2 { color: var(--gold); font-size: 18px; margin: 0; }
 h3 { color: #c9a8ff; font-size: 15px; margin: 0; }
@@ -512,7 +512,7 @@ button.big { font-size: 18px; padding: 10px 22px; }
 .forgeitems .cell canvas, .forgeitems .cell img, .forgeitems .cell svg { width: 40px !important; height: 40px !important; }
 
 /* ---------- v14: combate al estilo Dofus ---------- */
-#app.combatmode { max-width: 1680px; }
+#app.combatmode { max-width: 1500px; }
 .cgrid { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 8px; align-items: start; }
 .cgrid .stage { position: relative; min-width: 0; }
 .combatmode canvas#cv { width: min(100%, calc((100vh - 250px) * var(--ar))); }
@@ -623,3 +623,24 @@ button.big { font-size: 18px; padding: 10px 22px; }
 .p0b { background: #e8607a; } .p1b { background: #5a9cf0; } .p2b { background: #5fcf70; } .p3b { background: #e8bd40; }
 .pick.on.p0c { border-color: #e8607a; } .pick.on.p1c { border-color: #5a9cf0; } .pick.on.p2c { border-color: #5fcf70; } .pick.on.p3c { border-color: #e8bd40; }
 .pick.mate.m0 { box-shadow: inset 0 0 0 2px #e8607a; } .pick.mate.m1 { box-shadow: inset 0 0 0 2px #5a9cf0; } .pick.mate.m2 { box-shadow: inset 0 0 0 2px #5fcf70; } .pick.mate.m3 { box-shadow: inset 0 0 0 2px #e8bd40; }
+.hp u { position: absolute; top: 0; bottom: 0; height: auto; background: linear-gradient(180deg, #8cc8ff, #2f7fe0); border-left: 1px solid #d8ecff; text-decoration: none; }
+.hp .shv { color: #9fd4ff; }
+.tlhp { position: relative; }
+.tlhp s { position: absolute; top: 0; bottom: 0; background: #4aa0ff; text-decoration: none; }
+
+/* v15: barra superior de ancho y alto fijos (no salta al cambiar el texto) */
+#app { width: 100%; }
+@media (min-width: 761px) {
+  .bar { flex-wrap: nowrap; height: 48px; min-height: 48px; overflow: hidden; white-space: nowrap; }
+  .bar > button, .bar > .sq, .bar .pill, .bar .turn, .bar .hp, .bar #clock, .bar b, .bar .code, .bar .zone { flex-shrink: 0; }
+  .bar > span:not(.grow):not(.turn):not(.pill):not(.hp), .bar .blessbar, .bar .runchips { min-width: 0; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; }
+  .bar .blessbar { display: flex; flex-wrap: nowrap; }
+  .cinfo .turn { min-width: 170px; text-align: center; }
+  .cinfo #clock { min-width: 38px; text-align: right; }
+  .bar .hp { width: 220px; }
+}
+.passive { margin: 6px 0; padding: 8px 10px; border: 2px solid #6a4ab0; border-radius: 4px; background: rgba(60, 30, 100, .25); }
+.passive b { color: #d9b8ff; }
+.stabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.stattab.cmp td, .stattab.cmp th { text-align: center; }
+.stattab.cmp td:first-child, .stattab.cmp th:first-child { text-align: left; }

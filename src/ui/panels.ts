@@ -2,7 +2,7 @@
 import { HEAT_HOT, HEAT_OVERLOAD, curseOf, heatTier, pactOf } from '../content/pacts';
 import { FEATURES, schoolOf } from '../core/tuning';
 import { isMuted, musicVolume } from '../audio/sfx';
-import { CLASSES, findRoute } from '../core/classes/classes';
+import { CLASS_PASSIVE, CLASSES, findRoute } from '../core/classes/classes';
 import { SPELLS } from '../core/classes/spells';
 import { BAG_SIZE, PRICE, RARITY_NAME, SLOTS, SLOT_NAME, STAT_NAME, statDiff, statsText, type Item, type Slot, type StatKey } from '../core/items/items';
 import { RELICS } from '../content/relics';
@@ -29,7 +29,8 @@ export function sysButtons(): string {
 }
 
 export function hpBar(hp: number, max: number, shield = 0): string {
-  return `<span class="hp"><i style="width:${Math.max(0, Math.min(100, (hp / max) * 100))}%"></i>${shield ? `<u style="width:${Math.min(100, (shield / max) * 100)}%"></u>` : ''}<b>${hp}/${max}${max - hp > 0 ? ` <span class="miss">(−${max - hp})</span>` : ''}</b></span>`;
+  const total = Math.max(max, hp + shield);
+  return `<span class="hp"><i style="width:${Math.max(0, Math.min(100, (hp / total) * 100))}%"></i>${shield ? `<u style="left:${(hp / total) * 100}%;width:${Math.min(100, (shield / total) * 100)}%"></u>` : ''}<b>${hp}/${max}${shield ? ` <span class="shv">+${shield}🛡</span>` : ''}${max - hp > 0 ? ` <span class="miss">(−${max - hp})</span>` : ''}</b></span>`;
 }
 
 /** Escofinas de Eco (siempre a la vista). */
@@ -128,7 +129,7 @@ function bossCard(h: HeroSave, o: BossOption, i: number): string {
   if (o.kind === 'heal') return `<div class="lootcard r1"><div class="row"><span class="emo big">❤️</span><div><b>Curación</b><div class="pill sm">Opción ${n}</div></div></div><div class="sm">Recuperas el 50% de tu vida máxima.</div><button class="pri" data-act="bossreward" data-id="${i}">Elegir</button></div>`;
   if (o.kind === 'spell') {
     const d = SPELLS[o.id]!;
-    return `<div class="lootcard r3" ${tip(spellTip(d))}><div class="row">${spellIcon(d)}<div><b>${esc(d.name)}</b><div class="pill sm">Opción ${n} · Hechizo nuevo de ${esc(CLASSES[h.cls].name)}</div></div></div><div class="sm">${esc(d.text)}</div><div class="dim sm">${d.ap} PA · ${rangeText(d)}${d.perTurn ? ` · ${d.perTurn} por turno` : ''}${d.cd ? ` · espera ${d.cd}` : ''}</div><button class="pri" data-act="bossreward" data-id="${i}">Aprender</button></div>`;
+    return `<div class="lootcard r3" ${tip(spellTip(d))}><div class="row">${spellIcon(d)}<div><b>${esc(d.name)}</b><div class="pill sm">Opción ${n} · Hechizo nuevo de ${esc(CLASSES[h.cls].name)}</div></div></div><div class="sm">${esc(d.text)}</div><div class="dim sm">${d.ap} PA · ${rangeText(d)}${d.perTurn ? ` · ${d.perTurn} por turno` : ''}${d.cd ? ` · espera ${d.cd + 1}` : ''}</div><button class="pri" data-act="bossreward" data-id="${i}">Aprender</button></div>`;
   }
   const d = SPELLS[o.spell]!, g = UPGRADES[o.up], m = BOON_MODS[o.up];
   const have = [...h.boons.filter((b) => BOON_MODS[b]?.target === o.spell), ...(h.ups[o.spell] ?? [])];
@@ -184,13 +185,13 @@ export function boonRow(run: RunState): string {
       return `<div class="lootcard r2"><div class="row">${spellIcon(next)}<div><b>${esc(mod.name)}</b><div class="pill sm">Mejora: ${esc(base.name)}</div></div></div><div class="sm">${esc(mod.text)}</div><div class="dim sm">Ahora: ${now.ap} PA · ${esc(spellSummary(now))}</div><div class="good sm">Después: ${next.ap} PA · ${esc(spellSummary(next))}</div>${syn}<button class="pri" data-act="boon" data-id="${i}">Elegir</button></div>`;
     }
     const d = SPELLS[id]!;
-    return `<div class="lootcard r2" ${tip(spellTip(d))}><div class="row">${spellIcon(d)}<div><b>${esc(d.name)}</b><div class="pill sm">Hechizo nuevo de ${esc(CLASSES[h.cls].name)}</div></div></div><div class="sm">${esc(d.text)}</div><div class="dim sm">${d.ap} PA · ${rangeText(d)}${d.perTurn ? ` · ${d.perTurn} por turno` : ''}${d.cd ? ` · espera ${d.cd}` : ''}</div>${syn}<button class="pri" data-act="boon" data-id="${i}">Elegir</button></div>`;
+    return `<div class="lootcard r2" ${tip(spellTip(d))}><div class="row">${spellIcon(d)}<div><b>${esc(d.name)}</b><div class="pill sm">Hechizo nuevo de ${esc(CLASSES[h.cls].name)}</div></div></div><div class="sm">${esc(d.text)}</div><div class="dim sm">${d.ap} PA · ${rangeText(d)}${d.perTurn ? ` · ${d.perTurn} por turno` : ''}${d.cd ? ` · espera ${d.cd + 1}` : ''}</div>${syn}<button class="pri" data-act="boon" data-id="${i}">Elegir</button></div>`;
   };
   const allSpells = h.boonOffer.spells.every((x) => SPELLS[x]);
   return `<div class="panel loot boon"><div class="row"><h3>${p.icon} ${allSpells ? 'Hechizo nuevo' : 'Hechizo nuevo o bendición'}: elige uno</h3><span class="grow"></span><span class="dim sm">Aprendidos: ${h.boons.length}/${MAX_BOONS}</span></div>
   <div class="dim sm">${p.noSet ? `Hechizos únicos y bendiciones de ${esc(CLASSES[h.cls].name)}, al azar.` : `Mejoras de tus hechizos de ${esc(CLASSES[h.cls].name.toLowerCase())} o hechizos nuevos. Con 2 de ${esc(p.name)}: ${esc(p.twoText)} · con 3: ${esc(p.threeText)}.${counts[p.id] ? ` Ya tienes ${counts[p.id]}.` : ''}`}</div>
   <div class="cards c3">${h.boonOffer.spells.map(card).join('')}</div>
-  <button class="mini" data-act="boon" data-id="-1">Rechazar</button></div>`;
+  </div>`;
 }
 
 /** Todo lo que el jugador tiene pendiente de elegir. */
@@ -237,13 +238,28 @@ export function lootRow(run: RunState): string {
 
 /** Ficha del personaje: estadísticas base + todo lo que las modifica, habilidades, reliquias y bendiciones. */
 export function statsModal(run: RunState): string {
-  const h = mine(run);
+  const me = mine(run);
+  const h = run.heroes.find((x) => x.owner === ui.statsOf) ?? me ?? run.heroes[0];
   if (!h) return '';
+  const tabs = `<div class="tabs stabs">${run.heroes.map((x, i) => `<button class="${ui.statsOf !== '*' && x === h ? 'on' : ''}" data-act="statsof" data-id="${esc(x.owner)}"><span class="p${i % 4}">${esc(x.name)}</span>${x === me ? ' (tú)' : ''}</button>`).join('')}${run.heroes.length > 1 ? `<button class="${ui.statsOf === '*' ? 'on' : ''}" data-act="statsof" data-id="*">👥 Comparar grupo</button>` : ''}</div>`;
+  const passive = (x: HeroSave): string => { const p = CLASS_PASSIVE[x.cls]; return p ? `<div class="passive"><b>${p.icon} Pasiva: ${esc(p.name)}</b><div class="sm">${esc(p.text)}</div></div>` : ''; };
+  if (ui.statsOf === '*') {
+    const all = run.heroes.map((x) => ({ x, rows: statBreakdown(x) }));
+    const keys = all[0]!.rows.map((r) => r.key);
+    return `<div class="modal" id="statsmodal"><div class="panel wide">
+    <div class="row"><h2>👥 Comparar grupo</h2><span class="grow"></span><button class="mini" data-act="stats">Cerrar ✕</button></div>${tabs}
+    <table class="stattab cmp"><tr><th>Estadística</th>${all.map(({ x }, i) => `<th class="p${i % 4}">${esc(x.name)}<div class="dim sm">${esc(CLASSES[x.cls].name)}</div></th>`).join('')}</tr>
+    ${keys.map((k) => { const vals = all.map(({ x, rows }) => { const r = rows.find((y) => y.key === k)!; return { r, x }; }); const best = Math.max(...vals.map((v) => v.r.total)); return `<tr><td>${esc(vals[0]!.r.name)}</td>${vals.map(({ r, x }) => `<td class="${r.total === best && vals.length > 1 ? 'good' : ''}"><b>${k === 'hp' ? `${x.hp}/${r.total}` : r.total}</b></td>`).join('')}</tr>`; }).join('')}
+    <tr><td>Oro · Escofinas</td>${all.map(({ x }) => `<td>💰 ${x.gold} · 🔔 ${x.escofinas ?? 0}</td>`).join('')}</tr>
+    </table>
+    <div class="cards c${Math.min(4, run.heroes.length)}">${all.map(({ x }) => `<div class="panel">${passive(x)}<div class="lbl">Bendiciones</div>${x.boons.filter((b) => BLESSINGS[b]).map((b) => `<div class="sm good" ${tip(esc(BLESSINGS[b]!.text))}>${BLESSINGS[b]!.icon} ${esc(BLESSINGS[b]!.name)}</div>`).join('') || '<div class="dim sm">Ninguna</div>'}<div class="lbl">Habilidades</div><div class="chips">${heroSpec(x).spells.filter((sp) => sp.charges === undefined).map((sp) => { const d = tuned(SPELLS[sp.id]!, sp); return `<span class="chip" ${tip(spellTip(d))}>${spellIcon(d, false)}</span>`; }).join('')}</div></div>`).join('')}</div>
+    </div></div>`;
+  }
   const rows = statBreakdown(h);
   const spec = heroSpec(h);
   const pat = patronBonus(h.boons);
   return `<div class="modal" id="statsmodal"><div class="panel wide">
-  <div class="row"><h2>📊 ${esc(h.name)}</h2><span class="dim">${esc(findRoute(h.cls, h.routes[0] ?? '')?.name ?? '')}</span><span class="grow"></span><button class="mini" data-act="stats">Cerrar ✕</button></div>
+  <div class="row"><h2>📊 ${esc(h.name)}</h2><span class="dim">${esc(CLASSES[h.cls].name)} · ${esc(findRoute(h.cls, h.routes[0] ?? '')?.name ?? '')}</span><span class="grow"></span><button class="mini" data-act="stats">Cerrar ✕</button></div>${tabs}${passive(h)}
   <table class="stattab"><tr><th>Estadística</th><th>Base</th><th>Modificadores</th><th>Total</th></tr>
   ${rows.map((r) => `<tr><td>${esc(r.name)}</td><td class="dim">${r.base}</td><td class="sm">${r.parts.map(([n, v]) => `<span class="${v > 0 ? 'good' : 'bad'}">${v > 0 ? '+' : ''}${v} ${esc(n)}</span>`).join(' · ') || '<span class="dim">—</span>'}</td><td><b>${r.key === 'hp' ? `${h.hp}/${r.total}` : r.total}</b></td></tr>`).join('')}
   </table>

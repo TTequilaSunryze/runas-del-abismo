@@ -46,6 +46,10 @@ export class Board {
   onSelect: () => void = () => {};
   private g: CanvasRenderingContext2D;
   private hover: Pos | null = null;
+  /** señales tácticas (tecla G) */
+  pings: Array<{ x: number; y: number; at: number; col: string; name: string }> = [];
+  /** Casilla bajo el ratón (para la tecla G). */
+  hoverCell(): Pos | null { return this.hover; }
   private shown = new Map<number, Pos>();
   private flash = new Map<number, number>();
   private floats: Float[] = [];
@@ -317,6 +321,19 @@ export class Board {
       const [x, y] = k.split(',').map(Number) as [number, number];
       g.fillStyle = 'rgba(70,200,90,.38)'; g.beginPath(); g.ellipse((x + 0.5) * TILE, (y + 0.6) * TILE, TILE * 0.42, TILE * 0.28, 0, 0, 6.3); g.fill();
       g.fillStyle = 'rgba(190,255,150,.35)'; g.beginPath(); g.ellipse((x + 0.42) * TILE, (y + 0.55) * TILE, TILE * 0.14, TILE * 0.07, 0, 0, 6.3); g.fill();
+    }
+    // aliados caídos: charco, lápida y su nombre donde cayeron
+    for (const d of c.units.filter((x) => x.hp <= 0 && x.team === 'hero' && x.summoner === undefined && x.ai !== 'decoy' && !c.units.some((o) => o.hp > 0 && o.pos.x === x.pos.x && o.pos.y === x.pos.y))) {
+      const cx = (d.pos.x + 0.5) * TILE, cy = (d.pos.y + 0.5) * TILE;
+      g.fillStyle = 'rgba(110,10,18,.55)'; g.beginPath(); g.ellipse(cx + 3, cy + 12, TILE * 0.36, TILE * 0.17, 0.2, 0, 6.3); g.fill();
+      g.fillStyle = 'rgba(0,0,0,.45)'; g.beginPath(); g.ellipse(cx, cy + 14, 13, 4, 0, 0, 6.3); g.fill();
+      // lápida
+      g.fillStyle = '#1a1714'; g.fillRect(cx - 10, cy - 12, 20, 26); g.beginPath(); g.arc(cx, cy - 12, 10, Math.PI, 0); g.fill();
+      g.fillStyle = '#7a7268'; g.fillRect(cx - 8, cy - 11, 16, 23); g.beginPath(); g.arc(cx, cy - 11, 8, Math.PI, 0); g.fill();
+      g.fillStyle = '#9c948a'; g.fillRect(cx - 8, cy - 11, 3, 23);
+      g.fillStyle = '#3a342e'; g.fillRect(cx - 1, cy - 14, 3, 13); g.fillRect(cx - 5, cy - 10, 11, 3);
+      g.font = 'bold 9px "Pixelify Sans", ui-monospace, monospace'; g.textAlign = 'center';
+      g.lineWidth = 3; g.strokeStyle = '#000'; g.strokeText(`✝ ${d.name}`, cx, cy + 24); g.fillStyle = '#ff9a9a'; g.fillText(`✝ ${d.name}`, cx, cy + 24);
     }
     // marcadores en el suelo (esferas oscuras…)
     for (const m of c.marks ?? []) {
@@ -593,6 +610,18 @@ export class Board {
       g.strokeStyle = '#e3b04b'; g.lineWidth = 2; g.strokeRect(X - w / 2, Y - 18, w, 26);
       g.fillStyle = '#ffe2a0'; g.fillText(txt, X, Y);
     }
+    // señales tácticas: anillo que pulsa con el color y el nombre de quien marca
+    const tnow = Date.now();
+    this.pings = this.pings.filter((p) => tnow - p.at < 4000);
+    for (const p of this.pings) {
+      const t = (tnow - p.at) / 1000, cx = (p.x + 0.5) * TILE, cy = (p.y + 0.5) * TILE;
+      for (let r = 0; r < 2; r++) { const k = ((t * 1.3 + r * 0.5) % 1); g.strokeStyle = p.col; g.globalAlpha = 1 - k; g.lineWidth = 3; g.beginPath(); g.arc(cx, cy, 8 + k * TILE * 0.6, 0, 6.3); g.stroke(); }
+      g.globalAlpha = 1;
+      g.fillStyle = p.col; g.beginPath(); g.moveTo(cx, cy - 6); g.lineTo(cx - 9, cy - 24); g.lineTo(cx + 9, cy - 24); g.closePath(); g.fill();
+      g.strokeStyle = '#000'; g.lineWidth = 2; g.stroke();
+      g.font = 'bold 10px "Pixelify Sans", ui-monospace, monospace'; g.textAlign = 'center';
+      g.lineWidth = 3; g.strokeText(`❗ ${p.name}`, cx, cy - 28); g.fillStyle = '#fff'; g.fillText(`❗ ${p.name}`, cx, cy - 28);
+    }
   }
 
   /** el último toque fue con el dedo (o lápiz) y no con el ratón */
@@ -609,14 +638,18 @@ export class Board {
     g.fillStyle = '#0a0806'; g.fillRect(x - 2, top - 2, w + 4, bh + 4);
     g.fillStyle = '#5d544b'; g.fillRect(x - 1, top - 1, w + 2, bh + 2);
     g.fillStyle = '#2a0f0c'; g.fillRect(x, top, w, bh);
-    const hw = Math.max(0, (w * u.hp) / u.maxHp);
+    // el escudo va en azul a continuación de la vida (si la supera, la barra se escala)
+    const total = Math.max(u.maxHp, u.hp + u.shield);
+    const hw = Math.max(0, (w * u.hp) / total);
     g.fillStyle = u.team === 'hero' ? '#3f9a4a' : '#c23b3b'; g.fillRect(x, top, hw, bh);
     g.fillStyle = u.team === 'hero' ? '#6fd07a' : '#ef6a5e'; g.fillRect(x, top, hw, 3);
-    if (u.shield > 0) { g.fillStyle = '#6aa9ff'; g.fillRect(x, top + bh - 3, Math.min(w, (w * u.shield) / u.maxHp), 3); }
+    if (u.shield > 0) { const sw = Math.max(2, (w * u.shield) / total); g.fillStyle = '#2f7fe0'; g.fillRect(x + hw, top, sw, bh); g.fillStyle = '#8cc8ff'; g.fillRect(x + hw, top, sw, 3); g.fillStyle = '#d8ecff'; g.fillRect(x + hw, top, 1, bh); }
     g.font = 'bold 9px "Pixelify Sans", ui-monospace, monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    const label = `${u.hp}/${u.maxHp}${u.shield > 0 ? ` +${u.shield}` : ''}`;
-    g.lineWidth = 3; g.strokeStyle = '#000'; g.strokeText(label, cx, top + bh / 2 + 0.5);
-    g.fillStyle = '#fff'; g.fillText(label, cx, top + bh / 2 + 0.5);
+    const label = `${u.hp}/${u.maxHp}`;
+    const lx = u.shield > 0 ? cx - 8 : cx;
+    g.lineWidth = 3; g.strokeStyle = '#000'; g.strokeText(label, lx, top + bh / 2 + 0.5);
+    g.fillStyle = '#fff'; g.fillText(label, lx, top + bh / 2 + 0.5);
+    if (u.shield > 0) { const sl = `+${u.shield}`; const sx = lx + g.measureText(label).width / 2 + 3 + g.measureText(sl).width / 2; g.strokeText(sl, sx, top + bh / 2 + 0.5); g.fillStyle = '#9fd4ff'; g.fillText(sl, sx, top + bh / 2 + 0.5); }
     g.textBaseline = 'alphabetic';
     if (u.fury !== undefined) { g.fillStyle = '#000'; g.fillRect(x - 1, top - 6, w + 2, 5); g.fillStyle = '#ff6a20'; g.fillRect(x, top - 5, (w * u.fury) / 100, 3); }
     if (u.essence !== undefined) for (let i = 0; i < essenceNeed(u); i++) { g.fillStyle = i < u.essence ? '#ff8ad0' : '#3a2040'; g.fillRect(x + i * 7, top - 6, 5, 4); }
