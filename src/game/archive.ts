@@ -9,7 +9,10 @@ import { ZONA3_ENEMIES } from '../content/zona3/enemies';
 import { ZONA4_ENEMIES } from '../content/zona4/enemies';
 import { patronsOf } from '../content/boons';
 import { RELICS } from '../content/relics';
+import { ZONES } from '../content/zones';
 import { DOCUMENTED_KILLS, LV, emptyArchive, isDiscovered, levelOf, raise, type Archive, type ArchiveCat } from './archiveData';
+import { trackContract, type ContractEvent } from './contracts';
+import { evaluateSpecials, registerSpecial } from './specials';
 import { LIMITE_PCT, MILESTONE_CATS, MILESTONE_PCTS, RELAMPAGO_ROUNDS, registerAtlasDiscovery, registerChronicleProgress } from './atlas';
 import { meta, saveMeta } from './meta';
 import { heroSpec, type RunState } from './run';
@@ -127,8 +130,12 @@ export function recordArchive(run: RunState | null, myId: string, events: readon
     const m = meta(), a = archive(), id = runId(run);
     let changed = false;
     const atlas = (...args: Parameters<typeof registerAtlasDiscovery> extends [unknown, ...infer R] ? R : never): void => { changed = registerAtlasDiscovery(m, ...args) || changed; };
+    const contract = (e: ContractEvent): void => { changed = trackContract(m, e) || changed; };
     const chron = (...args: Parameters<typeof registerChronicleProgress> extends [unknown, ...infer R] ? R : never): void => { changed = registerChronicleProgress(m, ...args) || changed; };
-    for (const r of me.relics) if (RELICS[r] && !isDiscovered(a, 'relics', r)) changed = raise(a, 'relics', r, LV.found, { seen: 1 }) || changed;
+    for (const r of me.relics) {
+      if (RELICS[r] && !isDiscovered(a, 'relics', r)) changed = raise(a, 'relics', r, LV.found, { seen: 1 }) || changed;
+      if (RELICS[r]) contract({ t: 'relic', key: `${id}:relic:${r}` });
+    }
     const owned = [...heroSpec(me).spells.map((sp) => sp.id), ...me.boons];
     for (const g of owned) if (GRIM_IDS.has(g) && !isDiscovered(a, 'grimoire', g)) changed = raise(a, 'grimoire', g, LV.found, { seen: 1 }) || changed;
 
@@ -140,9 +147,9 @@ export function recordArchive(run: RunState | null, myId: string, events: readon
     if (run.pact) atlas('pacts', run.pact, 'unlocked', id);
     if (run.phase === 'event' && run.event) {
       atlas('events', run.event.id, 'unlocked', `${id}:${run.zone}:${run.step}`);
-      if (run.event.result) atlas('events', run.event.id, 'explored', `${id}:${run.zone}:${run.step}`);
+      if (run.event.result) { atlas('events', run.event.id, 'explored', `${id}:${run.zone}:${run.step}`); contract({ t: 'atlas', cat: 'events', key: `${id}:ev:${run.zone}:${run.step}` }); }
     }
-    if (run.phase === 'won') { chron('stories', 'final_victoria', 1, id); chron('stories', `clase_${me.cls}`, 2, `${id}:won`); }
+    if (run.phase === 'won') { changed = registerSpecial(m, { t: 'won', cls: me.cls, pact: run.pact ?? null }) || changed; chron('stories', 'final_victoria', 1, id); chron('stories', `clase_${me.cls}`, 2, `${id}:won`); }
     if (run.phase === 'lost') chron('stories', 'final_derrota', 1, id);
 
     if (run.combat) {
@@ -161,6 +168,7 @@ export function recordArchive(run: RunState | null, myId: string, events: readon
       }
       if (run.omen) atlas('omens', run.omen, 'unlocked', `${id}:${run.fight}`);
     }
+    const castSeen = new Map<string, number>();
     if (snap && a.cur?.k === snap.k) {
       for (const e of events) {
         if (e.t === 'death') {
@@ -171,18 +179,29 @@ export function recordArchive(run: RunState | null, myId: string, events: readon
           a.cur.dead.push(e.unit);
           raise(a, 'bestiary', u.kind, LV.studied, { n: 1 });
           if ((a.bestiary[u.kind]?.n ?? 0) >= DOCUMENTED_KILLS) raise(a, 'bestiary', u.kind, LV.documented);
+          contract({ t: 'kill', enemy: u.kind, zone: snap.zone + 1, key: `${snap.k}:k${e.unit}` });
           changed = true;
-        } else if (e.t === 'cast' && GRIM_IDS.has(e.spell) && snap.units.get(e.unit)?.owner === myId) {
-          changed = raise(a, 'grimoire', e.spell, LV.studied) || changed;
+        } else if (e.t === 'cast' && snap.units.get(e.unit)?.owner === myId) {
+          if (GRIM_IDS.has(e.spell)) changed = raise(a, 'grimoire', e.spell, LV.studied) || changed;
+          // héroe propio (no invocaciones): cada lanzamiento se identifica por ronda, turno, PA que le quedan y posición en el lote
+          const u = snap.units.get(e.unit)!, live = run.combat?.units.find((x) => x.id === e.unit);
+          if (u.kind in CLASSES) {
+            const tag = `${snap.k}:c${snap.round}:${run.combat?.turn ?? 'end'}:${e.unit}:${e.spell}:${live?.ap ?? '-'}`;
+            const nth = (castSeen.get(tag) ?? 0); castSeen.set(tag, nth + 1);
+            contract({ t: 'cast', cls: u.kind, key: `${tag}:${nth}` });
+          }
         }
       }
       // el combate acaba en victoria cuando desaparece y la cuenta de combates ganados sube en uno
       if (!run.combat && !a.cur.done && run.fight === snap.fight + 1) {
         a.cur.done = true; changed = true;
         const fid = `${id}:${snap.fight}`;
-        if (snap.omen) atlas('omens', snap.omen, 'explored', fid);
+        if (snap.omen) { atlas('omens', snap.omen, 'explored', fid); contract({ t: 'atlas', cat: 'omens', key: `${fid}:omen` }); }
         if (snap.kind === 'boss') {
           atlas('zones', `z${snap.zone + 1}`, 'explored', `${id}:${snap.zone}`);
+          contract({ t: 'atlas', cat: 'zones', key: `${id}:boss:${snap.zone}` });
+          const boss = ZONES[snap.zone]?.bosses[run.bossPick[snap.zone] ?? 0]?.id;
+          if (boss) changed = registerSpecial(m, { t: 'boss', boss, downs: a.cur.down ?? 0, rounds: snap.round, pact: run.pact ?? null }) || changed;
           chron('stories', `zona_${snap.zone + 1}`, 2, `${id}:${snap.zone}:boss`);
           if (run.pact) atlas('pacts', run.pact, 'explored', `${id}:${snap.zone}`);
         }
@@ -191,7 +210,7 @@ export function recordArchive(run: RunState | null, myId: string, events: readon
         if ((a.cur.low ?? 100) < LIMITE_PCT && snap.myAlive) chron('secrets', 'al_limite', 1, fid);
       }
     }
-    if (changed) { evaluateMilestones(); saveMeta(); }
+    if (changed) { evaluateMilestones(); evaluateSpecials(m); saveMeta(); }
     return changed;
   } catch {
     return false;

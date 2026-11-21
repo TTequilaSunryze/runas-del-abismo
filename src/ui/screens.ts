@@ -5,7 +5,7 @@ import { SPELLS } from '../core/classes/spells';
 import type { ClassId } from '../core/state';
 import { POTION_HEAL, POTION_PRICE, eventDef, heroMaxHp, type RunState } from '../game/run';
 import { TURN_SECONDS } from '../game/session';
-import { HALL_SIZE, achievementCount, listedAchievements, MASTERY_XP, ecosFor, masteryOf, masteryProgress, masteryText, meta, myTeam, openRoutes, routeNeeds, settle } from '../game/meta';
+import { HALL_SIZE, achievementCount, listedAchievements, MASTERY_XP, ecosFor, masteryOf, masteryProgress, masteryText, meta, myTeam, saveMeta, openRoutes, routeNeeds, settle } from '../game/meta';
 import { currentAccount } from '../net/account';
 import { friendsStatus } from '../net/social';
 import type { Champion } from '../game/run';
@@ -25,6 +25,9 @@ import { altarScene, chestScene, forgeScene, restScene, shrineScene } from './sc
 import { STAT_NAME, type Item } from '../core/items/items';
 import { MAX_SPELL_UPS, UPGRADES } from '../core/upgrades';
 import { BESTIARY, CATEGORIES, CAT_NAME, DOCUMENTED_KILLS, GRIMOIRE, LEVEL_NAME, beastDef, completion, completionAll, entriesOf } from '../game/archive';
+import { activeContracts, refreshContracts, type Contract } from '../game/contracts';
+import { FRAMES, SPECIALS, SPECIAL_TYPE_NAME, TITLES, evaluateSpecials, rewardName, specialRows } from '../game/specials';
+import { frameDef, titleName } from '../game/cosmetics';
 import { ATLAS_CATS, CHRONICLE_CATS, MAX_LV, MASTERED_AT, type AtlasCat, type ChronicleCat } from '../game/archiveData';
 import { ATLAS, ATLAS_DONE_TEXT, ATLAS_NAME, ATLAS_STATE_NAME, CHRONICLES, CHRONICLE_NAME, CHRONICLE_STATE_NAME, atlasEntry, atlasProgress, chronicleEntry, chronicleProgress } from '../game/atlas';
 import { BLESSINGS } from '../core/boonmods';
@@ -32,6 +35,58 @@ import { unitPortraitUrl } from '../render/sprites';
 import { NODE_NAME, heroSpec, upCount, upgradeChoices } from '../game/run';
 
 const RAR = ['ir0', 'ir1', 'ir2', 'ir3'];
+
+/** Renueva los contratos si cambió el día o la semana y lo guarda en el momento. */
+const ensureContracts = (m: ReturnType<typeof meta>): Contract[] => { if (refreshContracts(m)) saveMeta(); return activeContracts(m); };
+const contractsReady = (m: ReturnType<typeof meta>): number => ensureContracts(m).filter((c) => c.completed && !c.claimed).length;
+const leftText = (ms: number): string => { const h = Math.max(0, Math.floor(ms / 3_600_000)); return h >= 48 ? `${Math.floor(h / 24)} días` : h >= 1 ? `${h} h` : `${Math.max(1, Math.ceil(ms / 60_000))} min`; };
+
+/** Contratos del Abismo: diarios y semanales, con avance y cobro de ecos. */
+function contractsPanel(): string {
+  const m = meta();
+  ensureContracts(m);
+  const b = m.contracts!, now = Date.now();
+  const card = (c: Contract): string => {
+    const pct = Math.round((c.progress / c.requiredCount) * 100);
+    const btn = c.claimed ? '<span class="pill good sm">✔ Cobrado</span>' : c.completed ? `<button class="pri" data-act="cclaim" data-id="${esc(c.id)}">Cobrar ${c.rewardEcos} ✨</button>` : `<span class="dim sm">${c.rewardEcos} ✨ al completarlo</span>`;
+    return `<div class="lootcard ${c.claimed ? 'off' : c.completed ? 'r3' : ''}"><b>${esc(c.title)}</b><div class="sm">${esc(c.description)}</div><span class="mbar"><i style="width:${pct}%"></i><b>${c.progress}/${c.requiredCount}</b></span><div class="row">${btn}</div></div>`;
+  };
+  const section = (name: string, list: Contract[]): string => `<div class="row"><h3>${name}</h3><span class="grow"></span><span class="dim sm">Se renuevan en ${leftText((list[0]?.expiresAt ?? now) - now)} (UTC)</span></div><div class="cards c3">${list.map(card).join('')}</div>`;
+  const views = ([['periodic', 'Diarios y semanales'], ['special', `Especiales ${specialRows(m).filter((r) => r.claimed).length}/${SPECIALS().length}`], ['cosmetic', '🎖️ Títulos y marcos']] as const)
+    .map(([v, n]) => `<button class="${ui.cview === v ? 'on' : ''}" data-act="cview" data-id="${v}">${n}${v === 'special' && specialReady(m) ? ` (${specialReady(m)}!)` : ''}</button>`).join('');
+  const head = `<div class="panel"><div class="row"><h3>📋 Contratos del Abismo</h3><span class="grow"></span><b class="pill">✨ ${m.ecos} ecos</b></div><div class="tabs">${views}</div>`;
+  if (ui.cview === 'special') return head + specialsView(m) + '</div>';
+  if (ui.cview === 'cosmetic') return head + cosmeticView(m) + '</div>';
+  return `${head}
+  <div class="dim sm">Objetivos que cambian cada día y cada semana (iguales para todos). Avanzan solos mientras juegas; al terminarlos, cobra aquí sus ecos. Lo que no cobres antes de la renovación se pierde.</div>
+  ${section('Diarios', b.daily)}${section('Semanales', b.weekly)}</div>`;
+}
+
+const specialReady = (m: ReturnType<typeof meta>): number => specialRows(m).filter((r) => r.completed && !r.claimed).length;
+
+/** Contratos Especiales: permanentes, por tipo, con requisitos, avance y recompensa visual. */
+function specialsView(m: ReturnType<typeof meta>): string {
+  if (evaluateSpecials(m)) saveMeta();
+  const rows = specialRows(m);
+  return `<div class="dim sm">Desafíos permanentes. No caducan ni dan poder: cada uno desbloquea un título para tu nombre o un marco para tus héroes del Salón.</div>` +
+    (Object.keys(SPECIAL_TYPE_NAME) as Array<keyof typeof SPECIAL_TYPE_NAME>).map((t) => `<h3>${SPECIAL_TYPE_NAME[t]}</h3><div class="cards c3">${rows.filter((r) => r.def.type === t).map((r) => {
+      const btn = r.claimed ? '<span class="pill good sm">✔ Desbloqueado</span>' : r.completed ? `<button class="pri" data-act="sclaim" data-id="${esc(r.def.id)}">Reclamar</button>` : '<span class="dim sm">🔒 Requisito pendiente</span>';
+      const bar = r.def.requiredCount > 1 ? `<span class="mbar"><i style="width:${Math.round((r.progress / r.def.requiredCount) * 100)}%"></i><b>${r.progress}/${r.def.requiredCount}</b></span>` : '';
+      return `<div class="lootcard ${r.claimed ? 'r3' : r.completed ? 'r1' : 'off'}"><b>${esc(r.def.title)}</b><div class="sm">${esc(r.def.description)}</div>${bar}<div class="sm dim">Recompensa: ${esc(rewardName(r.def.reward))}</div><div class="row">${btn}</div></div>`;
+    }).join('')}</div>`).join('');
+}
+
+/** Selección de título y marco (solo los desbloqueados se pueden equipar). */
+function cosmeticView(m: ReturnType<typeof meta>): string {
+  const c = m.cosmetics ?? { titles: [] as string[], frames: [] as string[], title: null, frame: null };
+  const titles = TITLES.map((t) => { const has = c.titles.includes(t.id), on = c.title === t.id;
+    return `<button class="mini ${on ? 'on' : ''}" ${has ? `data-act="ctitle" data-id="${t.id}"` : 'disabled'}>${has ? '' : '🔒 '}${esc(has ? t.name : '???')}</button>`; }).join(' ');
+  const frames = FRAMES.map((f) => { const has = c.frames.includes(f.id), on = c.frame === f.id;
+    return `<button class="mini ${on ? 'on' : ''}" ${has ? `data-act="cframe" data-id="${f.id}"` : 'disabled'} style="${has ? `border-color:${f.color};color:${f.color}` : ''}">${has ? '' : '🔒 '}${esc(has ? f.name : '???')}</button>`; }).join(' ');
+  return `<div class="dim sm">Los títulos acompañan a tu nombre en el inicio y en los héroes que guardes en el Salón; los marcos rodean sus fichas. Se consiguen con los Contratos Especiales.</div>
+  <h3>Título ${c.title ? `· <span class="good">${esc(titleName(c.title))}</span>` : ''}</h3><div class="row" style="flex-wrap:wrap;gap:6px">${c.title ? '<button class="mini" data-act="ctitle" data-id="">Sin título</button> ' : ''}${titles}</div>
+  <h3>Marco ${c.frame ? `· <span style="color:${frameDef(c.frame)!.color}">${esc(frameDef(c.frame)!.name)}</span>` : ''}</h3><div class="row" style="flex-wrap:wrap;gap:6px">${c.frame ? '<button class="mini" data-act="cframe" data-id="">Sin marco</button> ' : ''}${frames}</div>`;
+}
 
 /** Atlas (zonas, eventos, pactos, presagios) y Crónicas (historias, secretos, hitos): mismas fichas, estados propios. */
 function archiveExtra(tabs: string): string {
@@ -106,6 +161,7 @@ function metaPanel(): string {
       return `<div class="lootcard ${on ? 'r3' : 'off'}"><b>${on ? '🏆' : '🔒'} ${esc(a.name)}</b><div class="sm">${esc(a.text)}</div><div class="sm dim">${[a.ecos ? `+${a.ecos} ✨` : ''].filter(Boolean).join(' · ') || ' '}</div></div>`; }).join('')}</div></div>`;
   }
   if (ui.homeTab === 'archivo') return archivePanel();
+  if (ui.homeTab === 'contratos') return contractsPanel();
   if (ui.homeTab === 'clases') {
     return `<div class="panel"><h3>Maestría de clase</h3><div class="dim sm">Jugar con una clase le da experiencia de maestría (más cuanto más lejos llegues y más alta sea la ascensión). Cada nivel abre rutas y ventajas de esa clase.</div>
     <div class="cards c2">${PLAYABLE.map((id) => { const c = CLASSES[id], { lv } = masteryProgress(id);
@@ -157,7 +213,8 @@ function metaPanel(): string {
 /** Ficha de un héroe guardado. */
 export function champCard(c: Champion, inTeam: boolean, actions = true): string {
   const ups = Object.values(c.ups).reduce((a, l) => a + l.length, 0);
-  return `<div class="lootcard ${c.won ? 'r3' : 'r1'}"><div class="row"><b>${esc(c.name)}</b><span class="dim sm">${CLASSES[c.cls].name}</span><span class="grow"></span>${c.won ? '<span>🏆</span>' : ''}${c.asc ? `<span class="pill sm">A${c.asc}</span>` : ''}</div>
+  const fr = frameDef(c.frame);
+  return `<div class="lootcard ${c.won ? 'r3' : 'r1'}"${fr ? ` style="border-color:${fr.color};box-shadow:0 0 8px ${fr.color}66"` : ''}><div class="row"><b>${esc(c.name)}</b>${c.title ? `<i class="sm good">${esc(titleName(c.title))}</i>` : ''}<span class="dim sm">${CLASSES[c.cls].name}</span><span class="grow"></span>${c.won ? '<span>🏆</span>' : ''}${c.asc ? `<span class="pill sm">A${c.asc}</span>` : ''}</div>
   <div class="sm dim">${c.routes.map((r) => esc(findRoute(c.cls, r)?.name ?? r)).join(' + ')}</div>
   <div class="cells tiny">${Object.values(c.equip).map((it) => `<span class="cell ${RAR[it.rarity]}" ${tip(itemHtml(it, true))}>${itemIcon(it)}</span>`).join('')}</div>
   <div class="sm dim">✨ ${ups} mejoras</div>
@@ -176,8 +233,8 @@ function reconnectBanner(): string {
 export function homeScreen(msg: string): void {
   const host = JSON.parse(store.get('rda_host') ?? 'null') as { code: string } | null;
   const m = meta();
-  const tabs: Array<[typeof ui.homeTab, string]> = [['jugar', '⚔️ Jugar'], ['mejoras', `✨ Mejoras (${m.ecos})`], ['clases', '🎓 Maestría'], ['logros', `🏆 Logros ${achievementCount(m)}`], ['archivo', `📚 Archivo ${completionAll().pct}%`], ['salon', `🏟️ Salón y duelos`], ['diario', '📅 Reto diario'], ['amigos', `👥 Amigos${currentAccount() ? ` (${friendsStatus().filter((f) => f.online).length}/${m.friends.length})` : ''}`], ['cuenta', currentAccount() ? `👤 ${esc(currentAccount()!.name)}` : '👤 Cuenta']];
-  ui.root.innerHTML = `<div class="home"><div class="row"><span class="grow"></span>${volumeControl()}</div><h1>RUNAS DEL ABISMO</h1><p class="dim">RPG táctico por turnos · cooperativo de 1 a 4 jugadores · 3 zonas</p>
+  const tabs: Array<[typeof ui.homeTab, string]> = [['jugar', '⚔️ Jugar'], ['mejoras', `✨ Mejoras (${m.ecos})`], ['clases', '🎓 Maestría'], ['logros', `🏆 Logros ${achievementCount(m)}`], ['archivo', `📚 Archivo ${completionAll().pct}%`], ['contratos', `📋 Contratos${contractsReady(m) + specialReady(m) ? ` (${contractsReady(m) + specialReady(m)}!)` : ''}`], ['salon', `🏟️ Salón y duelos`], ['diario', '📅 Reto diario'], ['amigos', `👥 Amigos${currentAccount() ? ` (${friendsStatus().filter((f) => f.online).length}/${m.friends.length})` : ''}`], ['cuenta', currentAccount() ? `👤 ${esc(currentAccount()!.name)}` : '👤 Cuenta']];
+  ui.root.innerHTML = `<div class="home"><div class="row"><span class="grow"></span>${volumeControl()}</div><h1>RUNAS DEL ABISMO</h1>${m.cosmetics?.title ? `<p class="good">${esc(ui.me.name)} · <i>${esc(titleName(m.cosmetics.title))}</i></p>` : ''}<p class="dim">RPG táctico por turnos · cooperativo de 1 a 4 jugadores · 3 zonas</p>
   ${msg ? `<p class="bad">${esc(msg)}</p>` : ''}
   ${reconnectBanner()}
   <div class="tabs htabs">${tabs.map(([id, n]) => `<button class="${ui.homeTab === id ? 'on' : ''}" data-act="htab" data-id="${id}">${n}</button>`).join('')}</div>

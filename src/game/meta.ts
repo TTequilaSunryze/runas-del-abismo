@@ -6,6 +6,10 @@ import type { ClassId } from '../core/state';
 import { ACT_ROOMS } from './map';
 import type { Champion, HeroSave, RunState } from './run';
 import { mergeArchive, normalizeArchive, type Archive } from './archiveData';
+import { mergeContracts, normalizeContracts, type ContractBook } from './contractsData';
+import { mergeCosmetics, normalizeCosmetics, type Cosmetics } from './cosmetics';
+export type { Cosmetics } from './cosmetics';
+export type { Contract, ContractBook, ContractPeriod, ContractTarget, SpecialRecord, SpecialType } from './contractsData';
 export type { Archive, AtlasEntryRecord, ChronicleEntryRecord, AtlasCat, AtlasState, ChronicleCat, ChronicleState } from './archiveData';
 
 export interface Meta {
@@ -34,17 +38,21 @@ export interface Meta {
   friends: string[];
   /** Archivo del Abismo (bestiario, grimorio, reliquias). Opcional: las Meta anteriores no lo tienen. */
   archive?: Archive;
+  /** Contratos del Abismo (diarios y semanales). Opcional: las Meta anteriores no lo tienen. */
+  contracts?: ContractBook;
+  /** títulos y marcos desbloqueados y equipados (solo visuales). Opcional. */
+  cosmetics?: Cosmetics;
 }
 
 const KEY = 'rda_meta';
-const fresh = (): Meta => ({ v: 1, ecos: 0, perks: {}, unlocked: [], maxAsc: 0, achievements: [], stats: { runs: 0, wins: 0, kills: 0, bosses: 0, bestZone: 0 }, seenTutorial: false, combats: 0, claimed: [], mastery: {}, hall: [], team: [], t: 0, acct: null, friends: [], archive: normalizeArchive(undefined) });
+const fresh = (): Meta => ({ v: 1, ecos: 0, perks: {}, unlocked: [], maxAsc: 0, achievements: [], stats: { runs: 0, wins: 0, kills: 0, bosses: 0, bestZone: 0 }, seenTutorial: false, combats: 0, claimed: [], mastery: {}, hall: [], team: [], t: 0, acct: null, friends: [], archive: normalizeArchive(undefined), contracts: normalizeContracts(undefined), cosmetics: normalizeCosmetics(undefined) });
 
 let cache: Meta | null = null;
 export function meta(): Meta {
   if (cache) return cache;
   try {
     const m = JSON.parse(localStorage.getItem(KEY) ?? 'null') as Meta | null;
-    cache = m && m.v === 1 ? { ...fresh(), ...m, stats: { ...fresh().stats, ...m.stats }, archive: normalizeArchive(m.archive) } : fresh();
+    cache = m && m.v === 1 ? { ...fresh(), ...m, stats: { ...fresh().stats, ...m.stats }, archive: normalizeArchive(m.archive), contracts: normalizeContracts(m.contracts), cosmetics: normalizeCosmetics(m.cosmetics) } : fresh();
     // quien ya jugaba antes de la maestría no empieza de cero
     if (m && m.v === 1 && !m.mastery && cache.stats.runs > 0) {
       for (const c of Object.keys(CLASSES)) cache.mastery[c] = cache.achievements.includes(`clase_${c}`) ? MASTERY_XP[1]! : MASTERY_XP[0]!;
@@ -67,7 +75,7 @@ export function saveMeta(touch = true): void {
 
 /** Sustituye el progreso local (al cargar el de la cuenta). */
 export function replaceMeta(m: Meta): void {
-  cache = { ...fresh(), ...m, stats: { ...fresh().stats, ...m.stats }, archive: normalizeArchive(m.archive) };
+  cache = { ...fresh(), ...m, stats: { ...fresh().stats, ...m.stats }, archive: normalizeArchive(m.archive), contracts: normalizeContracts(m.contracts), cosmetics: normalizeCosmetics(m.cosmetics) };
   saveMeta(false);
 }
 
@@ -86,6 +94,8 @@ export function mergeMeta(a: Meta, b: Partial<Meta>): Meta {
     claimed: uniq([...a.claimed, ...(b.claimed ?? [])]).slice(-40), mastery: maxRec(a.mastery, b.mastery), hall: hall.slice(-HALL_SIZE),
     team: (a.team?.length ? a.team : b.team) ?? [], t: Date.now(), acct: a.acct, friends: uniq([...(a.friends ?? []), ...(b.friends ?? [])]).slice(0, 30),
     archive: mergeArchive(a.archive, b.archive),
+    contracts: mergeContracts(a.contracts, b.contracts),
+    cosmetics: mergeCosmetics(a.cosmetics, b.cosmetics),
   };
 }
 

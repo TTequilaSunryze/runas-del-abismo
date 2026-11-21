@@ -21,6 +21,7 @@ import { CORRIDOR_CHANCE, genTerrain } from './terrain';
 import type { ClassId, CombatState, GameEvent, Pos } from '../core/state';
 import { enterRoom, roomAction, roomDone, roomPending, type RoomOp, type RoomState } from './rooms';
 import { pactEnemyHp, pactEnemyPower } from '../content/pacts';
+import { validFrame, validTitle } from './cosmetics';
 
 /** Una opción de la recompensa del jefe. */
 export type BossOption =
@@ -97,6 +98,9 @@ export interface Champion {
   asc: number;
   won: boolean;
   date: string;
+  /** título y marco del jugador al guardarlo (solo visuales; opcionales) */
+  title?: string;
+  frame?: string;
 }
 
 export interface HeroStats {
@@ -485,7 +489,7 @@ export function cleanChampion(x: unknown): Champion | null {
       if (list.length) ups[id] = list;
     }
     return { id: String(c.id ?? '').slice(0, 40) || 'x', name: String(c.name ?? 'Héroe').slice(0, 14), by: String(c.by ?? '').slice(0, 14), cls: c.cls, routes, level, equip, ups,
-      asc: Math.max(0, Math.min(10, Math.floor(Number(c.asc) || 0))), won: !!c.won, date: String(c.date ?? '').slice(0, 10) };
+      asc: Math.max(0, Math.min(10, Math.floor(Number(c.asc) || 0))), won: !!c.won, date: String(c.date ?? '').slice(0, 10), ...(validTitle(c.title) ? { title: validTitle(c.title) } : {}), ...(validFrame(c.frame) ? { frame: validFrame(c.frame) } : {}) };
   } catch {
     return null;
   }

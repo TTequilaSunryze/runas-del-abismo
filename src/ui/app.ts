@@ -13,6 +13,8 @@ import { addLog, combatScreen } from './combat';
 import { esc, mine, params, randomText, store, today, ui } from './ctx';
 import { BAG_SIZE, PRICE } from '../core/items/items';
 import { recordArchive } from '../game/archive';
+import { claimContractReward } from '../game/contracts';
+import { claimSpecialReward, equipCosmetic } from '../game/specials';
 import { buyPerk, masteryOf, meta, myNemesis, myTeam, openRoutes, removeChampion, saveChampion, saveMeta, toggleTeam } from '../game/meta';
 import { currentAccount, fetchTeam, restoreAccount, signIn, signOut, signUp } from '../net/account';
 import { addFriend, invite, removeFriend, setRoom, socialHandlers } from '../net/social';
@@ -205,6 +207,11 @@ document.addEventListener('click', (e) => {
     case 'buy': s?.act({ a: 'buy', idx: Number(id) }); sfx.coin(); break;
     case 'potion': s?.act({ a: 'potion' }); break;
     case 'arccat': ui.arcCat = id as typeof ui.arcCat; ui.arcOpen = ''; ui.arcSub = ''; homeScreen(''); break;
+    case 'cview': ui.cview = id as typeof ui.cview; homeScreen(''); break;
+    case 'sclaim': { if (claimSpecialReward(meta(), id)) { saveMeta(); sfx.myTurn(); } homeScreen(''); break; }
+    case 'ctitle': if (equipCosmetic(meta(), 'title', id || null)) saveMeta(); homeScreen(''); break;
+    case 'cframe': if (equipCosmetic(meta(), 'frame', id || null)) saveMeta(); homeScreen(''); break;
+    case 'cclaim': { if (claimContractReward(meta(), id)) { saveMeta(); sfx.myTurn(); } homeScreen(''); break; }
     case 'arcsub': ui.arcSub = id; ui.arcOpen = ''; homeScreen(''); break;
     case 'arcfilter': ui.arcFilter = id as typeof ui.arcFilter; homeScreen(''); break;
     case 'arcopen': ui.arcOpen = ui.arcOpen === id ? '' : id; homeScreen(''); break;
@@ -259,7 +266,7 @@ document.addEventListener('click', (e) => {
     case 'map': ui.mapOpen = !ui.mapOpen; lastKey = ''; render([]); break;
     case 'stats': ui.statsOpen = !ui.statsOpen; lastKey = ''; render([]); break;
     case 'mod': ui.mods = ui.mods.includes(id) ? ui.mods.filter((x) => x !== id) : ui.mods.length < 3 ? [...ui.mods, id] : ui.mods; publish(); render([]); break;
-    case 'champsave': { const h = s?.run?.heroes.find((x) => x.owner === ui.myId); if (s?.run && h) { saveChampion({ ...championOf(s.run, h), by: currentAccount()?.name ?? ui.me.name }); publish(); lastKey = ''; render([]); } break; }
+    case 'champsave': { const h = s?.run?.heroes.find((x) => x.owner === ui.myId); if (s?.run && h) { saveChampion({ ...championOf(s.run, h), by: currentAccount()?.name ?? ui.me.name, ...(meta().cosmetics?.title ? { title: meta().cosmetics!.title! } : {}), ...(meta().cosmetics?.frame ? { frame: meta().cosmetics!.frame! } : {}) }); publish(); lastKey = ''; render([]); } break; }
     case 'champdel': removeChampion(id); homeScreen(''); break;
     case 'champteam': toggleTeam(id); homeScreen(''); break;
     case 'duelmirror': void duel({ name: 'Tu reflejo', team: myTeam() }); break;

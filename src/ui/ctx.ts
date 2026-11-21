@@ -35,13 +35,15 @@ export const ui = {
   asc: 0,
   daily: false,
   /** pestaña de la pantalla de inicio */
-  homeTab: 'jugar' as 'jugar' | 'mejoras' | 'clases' | 'logros' | 'archivo' | 'salon' | 'diario' | 'cuenta' | 'amigos',
+  homeTab: 'jugar' as 'jugar' | 'mejoras' | 'clases' | 'logros' | 'archivo' | 'contratos' | 'salon' | 'diario' | 'cuenta' | 'amigos',
   /** Archivo del Abismo: categoría, filtro de estado y entrada abierta */
   arcCat: 'bestiary' as 'bestiary' | 'grimoire' | 'relics' | 'atlas' | 'chronicles',
   /** subcategoría del Atlas (zones/events/pacts/omens) o de las Crónicas (stories/secrets/milestones) */
   arcSub: '',
   arcFilter: 'all' as 'all' | 'found' | 'missing',
   arcOpen: '',
+  /** Contratos: periódicos, especiales o títulos y marcos */
+  cview: 'periodic' as 'periodic' | 'special' | 'cosmetic',
   /** mensajes de la pestaña de cuenta y del salón */
   acctMsg: '',
   /** lo escrito en el formulario de cuenta, para no perderlo al redibujar */
