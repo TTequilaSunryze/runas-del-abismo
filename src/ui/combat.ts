@@ -1,6 +1,6 @@
 // Pantalla de combate: tablero, orden de iniciativa, barra de hechizos y registro.
 import { SPELLS } from '../core/classes/spells';
-import { SOULS_PER_ARMOR, SOUL_ARMOR, apCost, current, essenceNeed, furyCrit, furyPower, getUnit, scytheBonus, spellOf, usableMp } from '../core/combat/engine';
+import { MAG_MAX, SOULS_PER_ARMOR, SOUL_ARMOR, apCost, current, essenceNeed, furyCrit, furyPower, getUnit, scytheBonus, spellOf, usableMp } from '../core/combat/engine';
 import { marksOf } from '../core/combat/marks';
 import type { CombatState, Unit } from '../core/state';
 import { OMENS } from '../content/modes';
@@ -163,5 +163,7 @@ function resourceHtml(c: CombatState, me: Unit): string {
   const marked = c.units.filter((u) => u.hp > 0 && u.statuses.deathmark?.from === me.id);
   if (marked.length) out.push(`<div class="sm res bad">☠ Marca de la muerte: ${marked.map((u) => `${esc(u.name.split(' ')[0]!)} guarda ${u.statuses.deathmark!.stacks} (${u.statuses.deathmark!.turns} t.)`).join(' · ')}</div>`);
   if (me.kind === 'acechador') { const n = marksOf(c, 'shadow', me.id).length; if (n) out.push(`<div class="sm res">👤 Sombras ${n}</div>`); }
+  if (me.magazine !== undefined) { const full = me.magazine >= MAG_MAX; out.push(`<div class="sm res mag ${full ? 'good' : ''}" ${tip(`Cargador arcano: cada disparo suma 1 carga. Con ${MAG_MAX}, el siguiente disparo es un crítico seguro con daño elemental extra y vacía el tambor.`)}>🔫 Cargador ${'●'.repeat(me.magazine)}${'○'.repeat(Math.max(0, MAG_MAX - me.magazine))}${full ? ' · ¡próximo disparo crítico!' : ''}</div>`); }
+  if (me.kind === 'arquitecto') { const n = marksOf(c, 'glyph', me.id).length; out.push(`<div class="sm res ${me.glyphBonus ? 'good' : ''}" ${tip('Geometría Bélica: al empezar tu turno sobre o junto a un glifo tuyo, ganas 4 de escudo y tu siguiente hechizo de daño hace +2.')}>🔷 Glifos ${n}/6${me.glyphBonus ? ` · +${me.glyphBonus} al próximo daño` : ''}</div>`); }
   return out.join('');
 }

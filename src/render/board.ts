@@ -13,8 +13,8 @@ import { ANIM_FRAMES, animFor, type Anim } from './models';
 const TILE = 56;
 /** margen superior: los muros y los personajes sobresalen por arriba de su casilla */
 const PAD = 22;
-const STATUS_COLOR: Record<string, string> = { burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0', charm: '#ff9ad8', vuln: '#c9a0ff', bleed: '#e03040', hobble: '#9ad0e8', guarded: '#7fe0b0', deathmark: '#ff3a4a', verdugo: '#ff8a30', frenzy: '#ff5030', orbita: '#b07cff', chained: '#a0a8c0' };
-export const STATUS_NAME: Record<string, string> = { burn: 'Quemadura', poison: 'Veneno', slow: 'Ralentizado', stun: 'Aturdido', mark: 'Marcado', empower: 'Potenciado', reach: 'Alcance+', invis: 'Invisible', exposed: 'Expuesto', charm: 'Encantado', vuln: 'Vulnerable', bleed: 'Sangrado', hobble: 'Atrapado', guarded: 'Protegido', deathmark: 'Marca de la muerte', verdugo: 'Presa', frenzy: 'Frenesí', orbita: 'Órbita', chained: 'Encadenado' };
+const STATUS_COLOR: Record<string, string> = { burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0', charm: '#ff9ad8', vuln: '#c9a0ff', bleed: '#e03040', hobble: '#9ad0e8', guarded: '#7fe0b0', deathmark: '#ff3a4a', verdugo: '#ff8a30', frenzy: '#ff5030', orbita: '#b07cff', chained: '#a0a8c0', rooted: '#c89a5a', anchor: '#5ac8ff', silver: '#e0e8ff', smoke: '#9a8ab8', immune: '#7ae8ff', kinetic: '#58a6ff', prism: '#c8a0ff' };
+export const STATUS_NAME: Record<string, string> = { burn: 'Quemadura', poison: 'Veneno', slow: 'Ralentizado', stun: 'Aturdido', mark: 'Marcado', empower: 'Potenciado', reach: 'Alcance+', invis: 'Invisible', exposed: 'Expuesto', charm: 'Encantado', vuln: 'Vulnerable', bleed: 'Sangrado', hobble: 'Atrapado', guarded: 'Protegido', deathmark: 'Marca de la muerte', verdugo: 'Presa', frenzy: 'Frenesí', orbita: 'Órbita', chained: 'Encadenado', rooted: 'Inmovilizado', anchor: 'Sello de anclaje', silver: 'Balas de plata', smoke: 'En el humo', immune: 'Inmune', kinetic: 'Barrera cinética', prism: 'Baluarte prismático' };
 
 interface Float { x: number; y: number; text: string; color: string; t0: number }
 interface Shot { x0: number; y0: number; x1: number; y1: number; color: string; t0: number; dur: number; orb?: boolean }
@@ -32,7 +32,7 @@ const ACT_MS = 480;
 /** duración de la animación de muerte de los modelos animados */
 const DEATH_MS = 900;
 
-const CLASS_KINDS = ['guerrero', 'mago', 'clerigo', 'picaro', 'arquero', 'zorro', 'esferas', 'carcelero', 'acechador', 'barbaro'];
+const CLASS_KINDS = ['guerrero', 'mago', 'clerigo', 'picaro', 'arquero', 'zorro', 'esferas', 'carcelero', 'acechador', 'barbaro', 'arquitecto', 'pistolero'];
 /** Índice de color y etiqueta: héroes de jugadores, y héroes rivales (némesis, duelos) dentro de su bando. */
 function teamIdx(c: CombatState): Map<number, number> {
   const m = new Map<number, number>();
@@ -284,6 +284,19 @@ export class Board {
   }
 
   /** Brasero: cuenco de hierro con llamas; se rompe con un golpe y deja una línea de fuego. */
+  /** Cercado de púas del Arquitecto: cristales de runas azules. */
+  private drawFence(x: number, y: number, now: number): void {
+    const g = this.g, bx = x * TILE, by = y * TILE;
+    g.fillStyle = 'rgba(0,0,0,.4)'; g.beginPath(); g.ellipse(bx + TILE / 2, by + TILE * 0.82, TILE * 0.42, TILE * 0.14, 0, 0, 6.3); g.fill();
+    const glow = 0.6 + 0.3 * Math.sin(now / 260 + x * 2 + y);
+    for (const [ox, h, w] of [[0.18, 0.62, 0.2], [0.42, 0.85, 0.24], [0.68, 0.55, 0.2]] as const) {
+      const cx = bx + TILE * (ox + w / 2), top = by + TILE * (0.85 - h), base = by + TILE * 0.85;
+      g.fillStyle = '#1a3a70'; g.beginPath(); g.moveTo(cx - TILE * w / 2, base); g.lineTo(cx, top); g.lineTo(cx + TILE * w / 2, base); g.closePath(); g.fill();
+      g.fillStyle = `rgba(110,200,255,${glow.toFixed(2)})`; g.beginPath(); g.moveTo(cx - TILE * w / 4, base); g.lineTo(cx, top + 4); g.lineTo(cx + 1, base); g.closePath(); g.fill();
+      g.fillStyle = '#e0f4ff'; g.fillRect(cx - 1, top + TILE * h * 0.45, 2, 4);
+    }
+  }
+
   private drawBrazier(x: number, y: number, now: number): void {
     const g = this.g, cx = (x + 0.5) * TILE, base = (y + 1) * TILE - 8;
     const sh = g.createRadialGradient(cx, base, 1, cx, base, TILE * 0.35); sh.addColorStop(0, 'rgba(0,0,0,.55)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
@@ -382,15 +395,44 @@ export class Board {
         g.fillStyle = '#3a3a2a'; g.fillRect(cx - TILE * 0.14, cy - TILE * 0.18, TILE * 0.28, TILE * 0.36);
         g.fillStyle = '#7fe05a'; g.fillRect(cx - TILE * 0.08, cy - TILE * 0.1, TILE * 0.16, TILE * 0.2 * pulse);
         g.fillStyle = '#e0ffb0'; g.fillRect(cx - 2, cy - 2, 4, 4);
+      } else if (m.kind === 'glyph' || m.kind === 'gravglyph') {
+        // glifos del Arquitecto: círculo rúnico que gira (fulminante cian, matriz magenta, gravedad violeta)
+        const col = m.sub === 'matriz' ? '255,90,220' : m.kind === 'gravglyph' ? '170,110,255' : '90,210,255';
+        const rot = now / (m.sub === 'matriz' ? 700 : 1100) + m.id;
+        const r = TILE * (m.sub === 'matriz' ? 0.42 : 0.34);
+        const gy = (m.pos.y + 0.55) * TILE;
+        const gl = g.createRadialGradient(cx, gy, 2, cx, gy, r * 1.2); gl.addColorStop(0, `rgba(${col},.35)`); gl.addColorStop(1, `rgba(${col},0)`);
+        g.fillStyle = gl; g.beginPath(); g.arc(cx, gy, r * 1.2, 0, 6.3); g.fill();
+        g.save(); g.translate(cx, gy); g.scale(1, 0.62); g.rotate(rot);
+        g.strokeStyle = `rgba(${col},.95)`; g.lineWidth = 2; g.beginPath(); g.arc(0, 0, r, 0, 6.3); g.stroke();
+        g.lineWidth = 1.5; g.beginPath(); for (let i = 0; i <= (m.sub === 'matriz' ? 6 : 4); i++) { const a = (i / (m.sub === 'matriz' ? 6 : 4)) * 6.283; const px = Math.cos(a) * r * 0.8, py = Math.sin(a) * r * 0.8; if (i) g.lineTo(px, py); else g.moveTo(px, py); } g.stroke();
+        g.fillStyle = `rgba(${col},1)`; for (let i = 0; i < 4; i++) { const a = i * 1.571; g.fillRect(Math.cos(a) * r - 2, Math.sin(a) * r - 2, 4, 4); }
+        g.restore();
+      } else if (m.kind === 'inertia') {
+        g.fillStyle = `rgba(80,170,255,${(0.12 + 0.05 * Math.sin(now / 400)).toFixed(3)})`; g.fillRect(m.pos.x * TILE + 2, m.pos.y * TILE + 2, TILE - 4, TILE - 4);
+        g.strokeStyle = 'rgba(140,210,255,.45)'; g.setLineDash([4, 4]); g.strokeRect(m.pos.x * TILE + 3, m.pos.y * TILE + 3, TILE - 6, TILE - 6); g.setLineDash([]);
+      } else if (m.kind === 'smoke') {
+        for (let i = 0; i < 4; i++) { const a = now / 900 + i * 1.6 + m.id; g.fillStyle = 'rgba(150,120,190,.32)'; g.beginPath(); g.arc(cx + Math.cos(a) * 9, (m.pos.y + 0.5) * TILE + Math.sin(a) * 6, TILE * 0.24, 0, 6.3); g.fill(); }
+      } else if (m.kind === 'fence') {
+        // se dibuja como obstáculo (drawFence)
       } else {
         g.strokeStyle = '#c8c8ff'; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, TILE * 0.2, 0, 6.3); g.stroke();
       }
-      g.fillStyle = '#f0d8ff'; g.font = 'bold 11px monospace'; g.fillText(String(m.turns), m.pos.x * TILE + TILE - 14, m.pos.y * TILE + 14);
+      if (m.kind !== 'inertia' && m.kind !== 'smoke' && m.kind !== 'fence' && m.kind !== 'gravglyph') { g.fillStyle = '#f0d8ff'; g.font = 'bold 11px monospace'; g.fillText(String(m.turns), m.pos.x * TILE + TILE - 14, m.pos.y * TILE + 14); }
     }
     for (const t of c.snares ?? []) {
       // los cepos rivales no se ven
       if (me0 && t.team !== me0.team) continue;
       const [x, y] = t.k.split(',').map(Number) as [number, number];
+      if (t.burn) {
+        // mina de proximidad: disco metálico con luces rojas
+        const mx = (x + 0.5) * TILE, my = (y + 0.6) * TILE;
+        g.fillStyle = '#2a2a30'; g.beginPath(); g.ellipse(mx, my, TILE * 0.24, TILE * 0.14, 0, 0, 6.3); g.fill();
+        g.fillStyle = '#4a4a54'; g.beginPath(); g.ellipse(mx, my - 3, TILE * 0.17, TILE * 0.09, 0, 0, 6.3); g.fill();
+        const on = Math.sin(now / 200) > 0;
+        g.fillStyle = on ? '#ff3a3a' : '#7a1a1a'; for (const dx of [-8, 0, 8]) g.fillRect(mx + dx - 1.5, my + 1, 3, 3);
+        continue;
+      }
       g.strokeStyle = '#d8b060'; g.lineWidth = 3; g.beginPath(); g.arc((x + 0.5) * TILE, (y + 0.6) * TILE, TILE * 0.26, 0, 6.3); g.stroke();
       g.fillStyle = '#d8b060'; for (let i = 0; i < 6; i++) { const a = i * 1.047; g.fillRect((x + 0.5) * TILE + Math.cos(a) * TILE * 0.26 - 2, (y + 0.6) * TILE + Math.sin(a) * TILE * 0.26 - 2, 4, 4); }
     }
@@ -476,9 +518,10 @@ export class Board {
 
     const heroIdx = teamIdx(c);
     // 2.5D: muros y braseros se dibujan por filas junto a las unidades, para que lo de delante tape lo de detrás
-    const props = [...c.obstacles].map((k) => { const [x, y] = k.split(',').map(Number) as [number, number]; return { x, y, brazier: (c.braziers ?? []).includes(k) }; }).sort((a, b) => a.y - b.y || a.x - b.x);
+    const fences = new Set((c.marks ?? []).filter((m) => m.kind === 'fence').map((m) => `${m.pos.x},${m.pos.y}`));
+    const props = [...c.obstacles].map((k) => { const [x, y] = k.split(',').map(Number) as [number, number]; return { x, y, brazier: (c.braziers ?? []).includes(k), fence: fences.has(k) }; }).sort((a, b) => a.y - b.y || a.x - b.x);
     let pi = 0;
-    const flushProps = (row: number): void => { while (pi < props.length && props[pi]!.y <= row) { const p = props[pi++]!; if (p.brazier) this.drawBrazier(p.x, p.y, now); else this.drawWall(c, zone, p.x, p.y); } };
+    const flushProps = (row: number): void => { while (pi < props.length && props[pi]!.y <= row) { const p = props[pi++]!; if (p.brazier) this.drawBrazier(p.x, p.y, now); else if (p.fence) this.drawFence(p.x, p.y, now); else this.drawWall(c, zone, p.x, p.y); } };
     for (const u of c.units.filter(alive).sort((a, b) => a.pos.y - b.pos.y)) {
       flushProps(u.pos.y);
       // posición mostrada: se acerca suavemente a la real

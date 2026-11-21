@@ -12,6 +12,8 @@ export const CLASS_STORY: Record<string, string> = {
   arquero: 'Nunca dejes que se acerquen. Un buen disparo vale más que diez golpes.',
   barbaro: 'La furia no se apaga: se gasta. Y yo tengo de sobra.',
   zorro: 'Nueve colas y ninguna prisa. Lo que te alcanza, ya te pertenece.',
+  arquitecto: 'Cada runa es una piedra; cada piedra, una muralla. Pisad con cuidado: el suelo es mío.',
+  pistolero: 'Seis balas, cuatro cargas y ninguna duda. El último disparo siempre es el bueno.',
   acechador: 'Dos filos, una sola sombra. Cuando me veas venir, ya habrás caído dos veces.',
   carcelero: 'Ninguna alma se escapa de mi linterna. Ni las de ellos, ni las vuestras.',
   esferas: 'Cada esfera es una promesa. Cuando las cumpla todas a la vez, no quedará nada en pie.',

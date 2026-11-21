@@ -4,7 +4,7 @@ import { FEATURES, schoolOf } from '../tuning';
 import { SPELLS, type SpellDef } from '../classes/spells';
 import { rand, randInt } from '../rng';
 import { tuned } from '../upgrades';
-import { key, type CombatState, type Element, type GameEvent, type Pos, type StatusKind, type Unit } from '../state';
+import { key, type BoardMark, type CombatState, type Element, type GameEvent, type Pos, type StatusKind, type Unit } from '../state';
 import { alive, dist, hasLineOfSight, isFree, lineCells, pathTo, reachable, same, unitAt } from './grid';
 import { addMark, clearMarksOf, coneCells, dirOf, marksAt, marksOf, removeMark, tickMarks } from './marks';
 
@@ -32,6 +32,16 @@ export type ActionResult = { ok: true; events: GameEvent[] } | { ok: false; reas
 
 const BURN_DMG = 3;
 const CHARM_DMG = 3;
+/** Estados perjudiciales (para la inmunidad de la Ciudadela de cristal). */
+const NEGATIVE = new Set<StatusKind>(['burn', 'poison', 'slow', 'stun', 'mark', 'exposed', 'charm', 'vuln', 'bleed', 'hobble', 'deathmark', 'verdugo', 'chained', 'rooted', 'anchor']);
+/** Pistolero Arcano: cargas del cargador y daño elemental del disparo con el cargador lleno. */
+export const MAG_MAX = 4;
+const MAG_FULL_FLAT = 6;
+/** Arquitecto Rúnico: escudo y daño extra de Geometría Bélica; glifos a la vez. */
+const GEO_SHIELD = 4;
+const GEO_FLAT = 2;
+const GLYPH_MAX = 6;
+const ANCHOR_FLAT = 4;
 const POISON_DMG = 2;
 /** v12 daño plano: Marcado y crítico suman daño fijo. */
 const MARK_FLAT = 2;
@@ -90,7 +100,9 @@ export function dmgFlat(u: Unit, t: Unit, extra = 0): number {
   const school = castingSchool === 'magic' ? (u.powerMagic ?? 0) : castingSchool === 'phys' ? (u.powerPhys ?? 0) : 0;
   return u.power + school + extra + (u.statuses.empower?.stacks ?? 0) + furyPower(u)
     + (t.statuses.mark ? MARK_FLAT : 0) + (t.statuses.vuln ? VULN_FLAT : 0) + (t.statuses.frenzy ? FRENZY_FLAT : 0)
-    + (hasTrait(u, 'desprecio') && t.hp < t.maxHp / 2 ? 3 : 0);
+    + (hasTrait(u, 'desprecio') && t.hp < t.maxHp / 2 ? 3 : 0)
+    // Sello de anclaje: +4 de daño de los hechizos de quien lo selló
+    + (t.statuses.anchor && t.statuses.anchor.from === u.id ? ANCHOR_FLAT : 0);
 }
 /** Daño extra de un crítico (Ejecutor: el doble). */
 export const critFlat = (u: Unit): number => (hasTrait(u, 'execute') ? EXECUTE_FLAT : CRIT_FLAT);
@@ -192,8 +204,15 @@ function checkOver(s: CombatState, ev: GameEvent[]): void {
 }
 
 /** Aplica daño ya calculado (antes de armadura). Devuelve la vida perdida. */
-function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: string, opts: { pierce?: boolean; crit?: boolean; element?: Element; armorPen?: number } = {}): number {
+function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: string, opts: { pierce?: boolean; crit?: boolean; element?: Element; armorPen?: number; armorFlat?: number } = {}): number {
   if (!alive(u)) return 0;
+  const attacker = casting !== null && SPELLS[source] ? getUnit(s, casting) : undefined;
+  // Cortina de humo: dentro de la nube se esquivan los ataques a distancia
+  if (attacker && attacker.team !== u.team && dist(attacker.pos, u.pos) > 1 && (u.statuses.smoke || (s.marks ?? []).some((m) => m.kind === 'smoke' && m.team === u.team && same(m.pos, u.pos)))) {
+    ev.push({ t: 'resist', unit: u.id, what: '¡Esquiva en el humo!' });
+    duelShot(s, u, attacker, ev);
+    return 0;
+  }
   // Sacrificio del guardián: parte del daño lo recibe el Carcelero (con su armadura)
   const gd = u.statuses.guarded;
   if (gd && source !== 'guardian') {
@@ -207,7 +226,9 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
   if (hasTrait(u, 'resiliencia') && !opts.element) raw = Math.max(0, raw - Math.min(2, Math.floor((u.fury ?? 0) / 40)));
   // Armadura de los condenados: +1 de armadura cada 2 almas sin gastar (máx. +6)
   const souls = hasTrait(u, 'condenados') ? Math.min(6, Math.floor((u.soulBank ?? 0) / 2)) : 0;
-  const armor = Math.floor(Math.max(0, u.armor + souls - (u.statuses.exposed?.stacks ?? 0)) * (1 - (opts.armorPen ?? 0)));
+  // Cimientos sólidos: +2 de armadura sobre o junto a un glifo propio
+  const found = hasTrait(u, 'cimientos') && nearOwnGlyph(s, u) ? 2 : 0;
+  const armor = Math.max(0, Math.floor(Math.max(0, u.armor + souls + found - (u.statuses.exposed?.stacks ?? 0)) * (1 - (opts.armorPen ?? 0))) - (opts.armorFlat ?? 0));
   let dmg = opts.pierce ? Math.max(1, Math.round(raw)) : Math.max(1, Math.round(raw) - armor);
   const absorbed = Math.min(u.shield, dmg);
   u.shield -= absorbed;
@@ -235,6 +256,14 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
   }
   u.hp = Math.max(0, u.hp - dmg);
   ev.push({ t: 'damage', unit: u.id, amount: dmg, absorbed, crit: !!opts.crit, source });
+  if (attacker && attacker.team !== u.team && alive(attacker)) {
+    // Baluarte prismático: devuelve el 15% de todo el daño recibido
+    if (u.statuses.prism && dmg + absorbed > 0) hurt(s, attacker, Math.max(1, (dmg + absorbed) * 0.15), ev, 'prism', { pierce: true });
+    // Barrera cinética: un golpe cuerpo a cuerpo contra el escudo hace retroceder al agresor
+    if (u.statuses.kinetic && absorbed > 0 && dist(attacker.pos, u.pos) <= 1 && alive(attacker)) { delete u.statuses.kinetic; push(s, u.pos, attacker, 1, ev); }
+    // Reflejos de duelo: al recibir un ataque a distancia, tiro rápido de vuelta
+    if (dist(attacker.pos, u.pos) > 1 && alive(u)) duelShot(s, u, attacker, ev);
+  }
   if (dmg > 0 && u.fury !== undefined) { u.furyHot = true; addFury(u, 10, ev); }
   // Lágrima del Eco: una vez por combate, al bajar del 30% se cura el 25%
   if (alive(u) && hasTrait(u, 'lagrima') && !u.tearUsed && u.hp < u.maxHp * 0.3) { u.tearUsed = true; heal(u, u.maxHp * 0.25, ev); }
@@ -323,6 +352,8 @@ function addStatus(u: Unit, kind: StatusKind, turns: number, stacks: number, ev:
   if (!alive(u)) return;
   // Sobrecarga de la forja: enemigos inmunes a las quemaduras
   if (kind === 'burn' && hasTrait(u, 'ignifugo')) return;
+  // Ciudadela de cristal: inmune a estados alterados
+  if (u.statuses.immune && NEGATIVE.has(kind)) { ev.push({ t: 'resist', unit: u.id, what: 'Inmune' }); return; }
   const cur = u.statuses[kind];
   const stackable = kind === 'poison';
   u.statuses[kind] = { turns: Math.max(turns, cur?.turns ?? 0), stacks: stackable ? (cur?.stacks ?? 0) + stacks : Math.max(stacks, cur?.stacks ?? 0) };
@@ -391,13 +422,18 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     u.mp = Math.max(0, u.maxMp + u.mpMod - (u.statuses.slow?.stacks ?? 0));
     u.apMod = 0;
     u.mpMod = 0;
+    u.gunKill = false;
+    // Inmovilizado: sin PM este turno
+    if (u.statuses.rooted) { u.mp = 0; ev.push({ t: 'resist', unit: u.id, what: 'Inmovilizado' }); }
+    zoneTurnStart(s, u, ev);
+    if (!alive(u) || s.over) continue;
     tick(u, 'slow');
     tick(u, 'mark');
     tick(u, 'empower');
     tick(u, 'reach');
     tick(u, 'invis');
     tick(u, 'exposed');
-    for (const k of ['charm', 'vuln', 'hobble', 'guarded', 'verdugo', 'frenzy', 'orbita', 'chained'] as const) tick(u, k);
+    for (const k of ['charm', 'vuln', 'hobble', 'guarded', 'verdugo', 'frenzy', 'orbita', 'chained', 'rooted', 'anchor', 'silver', 'smoke', 'immune', 'kinetic', 'prism'] as const) tick(u, k);
     // Mirada del verdugo: si su presa sigue marcada, el Bárbaro gana 1 PM para ir a por ella
     if (s.units.some((x) => alive(x) && x.statuses.verdugo?.from === u.id)) { u.mp++; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: 1 }); }
     turnStartBlessings(s, u, ev);
@@ -532,6 +568,12 @@ function stepOn(s: CombatState, u: Unit, ev: GameEvent[]): boolean {
       if (alive(o)) { const n = landed(s, o, 2); if (n) { o.mpMod -= n; if (current(s)?.id === o.id) o.mp = Math.max(0, o.mp - n); ev.push({ t: 'drain', unit: o.id, ap: 0, mp: -n }); } }
     }
   }
+  // glifos del Arquitecto: el fulminante explota (y se gasta); la matriz quita PA y sigue ahí
+  for (const g of (s.marks ?? []).filter((m) => m.kind === 'glyph' && m.team !== u.team && same(m.pos, u.pos) && (m.sub === 'fulminante' || m.sub === 'matriz'))) {
+    if (!alive(u)) break;
+    triggerGlyph(s, g, u, ev, true);
+    if (g.sub === 'fulminante') stop = true;
+  }
   const cage = (s.marks ?? []).find((m) => m.kind === 'cage' && m.team !== u.team && same(m.pos, u.pos));
   if (cage && alive(u)) {
     // La caja: tocar sus muros duele y deja sin PM
@@ -558,7 +600,8 @@ function springSnare(s: CombatState, u: Unit, ev: GameEvent[]): boolean {
   if (i < 0 || !alive(u)) return false;
   const t = s.snares!.splice(i, 1)[0]!;
   ev.push({ t: 'snare', unit: u.id });
-  hurt(s, u, t.dmg, ev, 'snare', { pierce: true });
+  hurt(s, u, t.dmg, ev, t.burn ? 'mina' : 'snare', { pierce: true, element: t.burn ? 'fire' : undefined });
+  if (t.burn && alive(u)) addStatus(u, 'burn', t.burn, 1, ev);
   return true;
 }
 
@@ -610,6 +653,7 @@ export function castProblem(s: CombatState, u: Unit, base: SpellDef, at: Pos): s
     return dead ? null : 'Necesitas un aliado caído';
   }
   if (def.atSphere) return marksAt(s, 'sphere', at).some((m) => m.owner === u.id) ? null : 'Apunta a una de tus esferas';
+  if (def.special === 'grapple') return grappleTarget(s, at) && !same(at, u.pos) ? null : 'Apunta a un muro, un brasero o un enemigo';
   if (def.target === 'ground') return s.obstacles.includes(key(at)) ? 'Hay un obstáculo' : at.x < 0 || at.y < 0 || at.x >= s.w || at.y >= s.h ? 'Fuera del tablero' : null;
   if (t && t.team !== u.team && t.statuses.invis) return 'No puedes ver al objetivo';
   if (def.target === 'cell') {
@@ -743,6 +787,8 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
   if (def.id === 'z_impulso' && hasTrait(u, 'danza')) u.discount = 1;
   slotUsed.uses = (slotUsed.uses ?? 0) + 1;
   slotUsed.cd = def.cd > 0 ? def.cd + 1 : 0;
+  // Recarga táctica: la Recarga acrobática no tiene espera
+  if (def.special === 'reload' && hasTrait(u, 'recargatac')) slotUsed.cd = 0;
   if (slotUsed.charges !== undefined) slotUsed.charges--;
   // atacar rompe la invisibilidad
   if (def.dmg && u.statuses.invis) delete u.statuses.invis;
@@ -852,7 +898,7 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
         if (!a.spells.some((sp) => sp.id === 'k_farol')) a.spells.push({ id: 'k_farol', cd: 0, temp: true });
       }
     }
-    if (def.snare) (s.snares ??= []).push({ k: key(at), team: u.team, dmg: Math.round(def.snare.dmg * (1 + u.power / 100)) });
+    if (def.snare) (s.snares ??= []).push({ k: key(at), team: u.team, dmg: Math.round(def.snare.dmg * (1 + u.power / 100)), ...(def.snare.burn ? { burn: def.snare.burn } : {}) });
     if (def.summon) {
       const m = def.summon, hp = Math.round(u.maxHp * m.hpPct);
       const pet = summon(s, { team: u.team, kind: m.kind, name: m.name, owner: null, pos: at, hp, maxHp: hp, shield: 0, armor: m.armor, power: u.power, crit: 5,
@@ -903,7 +949,16 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
   // Corte de Guadaña Espectral: +3 por turno sin usarlo (máx. 3) y +1 cada 5 almas del combate (máx. +3)
   const scythe = def.special === 'scythe' ? scytheBonus(u) : 0;
   if (def.special === 'scythe') { u.scytheCharge = 0; u.scytheUsed = true; }
-  const flatAll = spent * 6 + scythe;
+  // Pistolero: con el cargador lleno, crítico seguro y daño elemental extra (y se vacía al final)
+  const fullMag = !!def.gun && (u.magazine ?? 0) >= MAG_MAX;
+  // Sobrecarga de tambor: 10 por carga y vacía el cargador
+  const drum = def.special === 'drum' ? (u.magazine ?? 0) * 10 : 0;
+  if (def.special === 'drum') u.magazine = 0;
+  // Arquitecto: Geometría Bélica (+2 al siguiente hechizo de daño) y Resonancia geométrica (+3 con 2+ glifos)
+  let geo = 0;
+  if (def.dmg && u.glyphBonus) { geo = u.glyphBonus; u.glyphBonus = 0; }
+  if (def.dmg && hasTrait(u, 'resonanciag') && marksOf(s, 'glyph', u.id).length >= 2) geo += 3;
+  const flatAll = spent * 6 + scythe + drum + geo + (fullMag ? MAG_FULL_FLAT + (hasTrait(u, 'cargaench') ? 4 : 0) : 0);
   if (def.consume) {
     const mine = marksOf(s, 'sphere', u.id);
     flat = mine.length * def.consume.per;
@@ -931,7 +986,9 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
     if (def.dmg) {
       // Aura de astucia: los enemigos pegados a quien la tiene pierden un 10% de crítico
       const astute = s.units.some((z) => alive(z) && z.team !== u.team && hasTrait(z, 'astucia') && dist(z.pos, u.pos) <= 1) ? 10 : 0;
-      const crit = flank || rand(s) * 100 < u.crit + furyCrit(u) + (def.crit ?? 0) - astute;
+      // Tirador nato: a más de 4 casillas, +15% de crítico; Tiro certero: probabilidad doble
+      const far = hasTrait(u, 'tiradornato') && dist(u.pos, t.pos) > 4 ? 15 : 0;
+      const crit = flank || fullMag || rand(s) * 100 < (u.crit + furyCrit(u) + (def.crit ?? 0) + far) * (def.critMul ?? 1) - astute;
       const melee = dist(u.pos, t.pos) <= 1;
       const furyBefore = u.fury ?? 0;
       // Doble filo letal: con una Sombra al otro lado, los críticos ignoran la armadura
@@ -940,7 +997,11 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
       const pack = hasTrait(u, 'pack') ? s.units.filter((o) => o !== u && o.team === u.team && alive(o) && hasTrait(o, 'pack')).length * PACK_BONUS : 0;
       const fury = hasTrait(u, 'enrage') && u.hp < u.maxHp / 2 ? ENRAGE_POWER : 0;
       const raw = (randInt(s, def.dmg[0], def.dmg[1]) + (t === main ? flat : 0) + flatAll + dmgFlat(u, t, pack + fury) + (crit ? critFlat(u) : 0)) * (t === main || def.range[1] === 0 || def.line || def.cone || def.fullArea || square2.length ? 1 : 0.5);
-      const got = hurt(s, t, raw, ev, def.id, { crit, element: def.element, pierce: def.pierce || (crit && opposite), armorPen: pen });
+      // Lanza resonante: +4 contra enemigos sobre o junto a un glifo tuyo
+      const lres = def.id === 'r_lanza' && hasTrait(u, 'lanzares') && marksOf(s, 'glyph', u.id).some((m) => dist(m.pos, t.pos) <= 1) ? 4 : 0;
+      const got = hurt(s, t, raw + lres, ev, def.id, { crit, element: fullMag ? 'fire' : def.element, pierce: def.pierce || (crit && opposite) || (!!def.gun && !!u.statuses.silver), armorPen: pen, armorFlat: def.armorIgnore });
+      // Munición incendiaria: el disparo con el cargador lleno quema
+      if (fullMag && hasTrait(u, 'incendiaria') && alive(t) && !pass) addStatus(t, 'burn', 2, 1, ev);
       if (!pass) {
         // Zorro de fuego: lo que golpea en línea recta quema 2 turnos
         if (hasTrait(u, 'zfuego') && alive(t) && (def.line || def.straight || def.firstHit)) addStatus(t, 'burn', 2, 1, ev);
@@ -1015,6 +1076,7 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
   // Convergencia: la Sombra golpea con todo su daño (crítico si flanquea)
   if (def.special === 'converge' && main && alive(main) && def.dmg) { hurt(s, main, randInt(s, def.dmg[0], def.dmg[1]) + dmgFlat(u, main) + (flank ? critFlat(u) : 0), ev, 'sombra', { crit: flank, element: def.element, pierce: flank && hasTrait(u, 'doblefilo') }); if (!alive(main)) huntKill(u, ev); }
   if (def.special && TARGET_SPECIALS[def.special]) TARGET_SPECIALS[def.special]!(s, u, def, at, main, targets, hits, ev);
+  if (def.gun) gunAfter(s, u, def, main, targets, fullMag, ev);
   // Furia: +20 por lanzamiento que golpea (o por enemigo); el doble contra la presa de Mirada del verdugo
   if (u.fury !== undefined && hits > 0) {
     const prey = targets.some((t) => t.statuses.verdugo?.from === u.id) ? 2 : 1;
@@ -1131,7 +1193,7 @@ function applyStatuses(s: CombatState, u: Unit, t: Unit, def: SpellDef, ev: Game
     const extra = st.kind === 'charm' && hasTrait(u, 'mirada') && !t.rank ? 1 : 0;
     addStatus(t, st.kind, st.turns + extra + (st.kind === 'stun' || st.kind === 'deathmark' ? 0 : u.statusBonus), st.kind === 'deathmark' ? 0 : stacks, ev);
     const now = t.statuses[st.kind];
-    if (now && (st.kind === 'charm' || st.kind === 'deathmark' || st.kind === 'guarded' || st.kind === 'verdugo' || st.kind === 'chained')) now.from = u.id;
+    if (now && (st.kind === 'charm' || st.kind === 'deathmark' || st.kind === 'guarded' || st.kind === 'verdugo' || st.kind === 'chained' || st.kind === 'anchor')) now.from = u.id;
   }
 }
 
@@ -1469,6 +1531,15 @@ function illusion(s: CombatState, z: Unit, atk: Unit, ev: GameEvent[]): void {
 
 /** Efectos de bendición al empezar el turno (después de reponer PA y PM). */
 function turnStartBlessings(s: CombatState, u: Unit, ev: GameEvent[]): void {
+  // Geometría Bélica (Arquitecto Rúnico): sobre o junto a un glifo propio → escudo y daño extra
+  if (u.kind === 'arquitecto' && u.team === 'hero' && nearOwnGlyph(s, u)) {
+    const sh = Math.round((hasTrait(u, 'geomperf') ? 6 : GEO_SHIELD) * (hasTrait(u, 'mender') ? MENDER_MULT : 1));
+    u.shield += sh;
+    ev.push({ t: 'shield', unit: u.id, amount: sh });
+    u.glyphBonus = GEO_FLAT;
+  }
+  // Pies ligeros (Pistolero): +1 PM en el primer turno de cada combate
+  if (hasTrait(u, 'piesligeros') && s.round === 1) { u.mp++; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: 1 }); }
   // Voluntad indómita: por debajo del 25%, +1 carga de Esencia
   if (hasTrait(u, 'indomita') && u.hp < u.maxHp * 0.25) gainEssence(u, 1, ev);
   // Órbita protectora: con 2+ esferas, escudo del 10% de la vida máxima
@@ -1491,6 +1562,210 @@ function stepBlessings(s: CombatState, u: Unit, ev: GameEvent[]): void {
   if (u.statuses.frenzy && hasTrait(u, 'imparable'))
     for (const t of s.units.filter((x) => alive(x) && x.team !== u.team && !x.rank && x.ai !== 'pillar' && dist(x.pos, u.pos) === 1 && !x.statuses.slow)) addStatus(t, 'slow', 1, 1, ev);
 }
+
+// ---------------------------------------------------------------------------
+// v15: Arquitecto Rúnico (glifos, escudos) y Pistolero Arcano (cargador, disparos)
+// ---------------------------------------------------------------------------
+
+/** Daño plano de `owner` contra `t` fuera de su lanzamiento (glifos que explotan en otro turno). */
+function ownerFlat(owner: Unit | undefined, t: Unit): number {
+  if (!owner) return 0;
+  const prev = castingSchool;
+  castingSchool = owner.team === 'hero' ? schoolOf(owner.kind) : null;
+  try { return dmgFlat(owner, t); } finally { castingSchool = prev; }
+}
+
+/** ¿Está `u` sobre o junto (también en diagonal) a uno de sus glifos? */
+function nearOwnGlyph(s: CombatState, u: Unit): boolean {
+  return (s.marks ?? []).some((m) => (m.kind === 'glyph' || m.kind === 'gravglyph') && m.owner === u.id && Math.max(Math.abs(m.pos.x - u.pos.x), Math.abs(m.pos.y - u.pos.y)) <= 1);
+}
+
+/** Pone un glifo del Arquitecto. Si ya hay un enemigo encima, se activa al momento. */
+function placeGlyph(s: CombatState, u: Unit, at: Pos, sub: 'fulminante' | 'matriz', turns: number, dmg: number, ev: GameEvent[]): void {
+  if (s.obstacles.includes(key(at)) || at.x < 0 || at.y < 0 || at.x >= s.w || at.y >= s.h) return;
+  for (const old of marksAt(s, 'glyph', at).filter((m) => m.owner === u.id)) removeMark(s, old, ev);
+  const g = addMark(s, { kind: 'glyph', sub, pos: at, team: u.team, turns: turns + (hasTrait(u, 'persistente2') ? 1 : 0), owner: u.id, max: GLYPH_MAX, dmg }, ev);
+  const t = unitAt(s, at);
+  if (t && alive(t) && t.team !== u.team) triggerGlyph(s, g, t, ev, false);
+}
+
+/** Activa un glifo sobre `t`: el fulminante explota (−1 PM y se gasta), la matriz quita 2 PA (y sigue). */
+function triggerGlyph(s: CombatState, g: BoardMark, t: Unit, ev: GameEvent[], byEnemy: boolean, keep = false): void {
+  const owner = g.owner === undefined ? undefined : getUnit(s, g.owner);
+  ev.push({ t: 'markAdd', kind: 'pulse', at: { ...g.pos } });
+  hurt(s, t, (g.dmg ?? 8) + ownerFlat(owner, t), ev, g.sub === 'matriz' ? 'matriz' : 'glifo');
+  if (alive(t) && g.sub === 'fulminante') addStatus(t, 'slow', 1, owner && hasTrait(owner, 'gelidos') ? 2 : 1, ev);
+  if (alive(t) && g.sub === 'matriz') { const n = landed(s, t, 2); if (n) { t.apMod -= n; ev.push({ t: 'drain', unit: t.id, ap: -n, mp: 0 }); } }
+  // Blindaje rúnico: el Arquitecto gana 5 de escudo
+  if (owner && alive(owner) && hasTrait(owner, 'blindaje') && (byEnemy || g.sub === 'fulminante')) { owner.shield += 5; ev.push({ t: 'shield', unit: owner.id, amount: 5 }); }
+  if (g.sub === 'fulminante' && !keep) removeMark(s, g, ev);
+}
+
+/** Al empezar el turno de `u`: campo de inercia, glifo de gravedad y cercado de púas. */
+function zoneTurnStart(s: CombatState, u: Unit, ev: GameEvent[]): void {
+  const marks = s.marks ?? [];
+  const inertia = marks.find((m) => m.kind === 'inertia' && same(m.pos, u.pos));
+  if (inertia && u.ai !== 'pillar') {
+    if (inertia.team === u.team) { u.mp++; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: 1 }); }
+    else if (u.mp > 0) { u.mp--; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: -1 }); }
+  }
+  const grav = marks.find((m) => m.kind === 'gravglyph' && m.team !== u.team && same(m.pos, u.pos));
+  if (grav) {
+    const owner = grav.owner === undefined ? undefined : getUnit(s, grav.owner);
+    if (grav.c) stepToward(s, u, grav.c, ev);
+    if (alive(u)) hurt(s, u, (grav.dmg ?? 10) + ownerFlat(owner, u), ev, 'gravedad');
+  }
+  const fence = alive(u) ? marks.find((m) => m.kind === 'fence' && m.team !== u.team && dist(m.pos, u.pos) === 1) : undefined;
+  if (fence) { const owner = fence.owner === undefined ? undefined : getUnit(s, fence.owner); hurt(s, u, (fence.dmg ?? 12) + ownerFlat(owner, u), ev, 'cercado'); }
+}
+
+/** Reflejos de duelo: tiro rápido automático contra quien le ataca a distancia (una vez por ronda). */
+function duelShot(s: CombatState, u: Unit, atk: Unit, ev: GameEvent[]): void {
+  if (!hasTrait(u, 'duelo') || u.duelRound === s.round || !alive(u) || !alive(atk)) return;
+  u.duelRound = s.round;
+  ev.push({ t: 'resist', unit: u.id, what: 'Reflejos de duelo' });
+  hurt(s, atk, 8 + ownerFlat(u, atk), ev, 'duelo');
+}
+
+/** Tras un disparo: rebote, cargador, Pólvora rápida y Gatillo fácil. */
+function gunAfter(s: CombatState, u: Unit, def: SpellDef, main: Unit | undefined, targets: Unit[], fullMag: boolean, ev: GameEvent[]): void {
+  if (def.ricochet && main && def.dmg && !s.over) {
+    let from: Unit = main;
+    const hit = new Set<Unit>([main]);
+    for (let k = 0; k < (hasTrait(u, 'doblecanon') ? 2 : 1) && !s.over; k++) {
+      const next = s.units.filter((x) => alive(x) && x.team !== u.team && !hit.has(x) && x.ai !== 'pillar' && !x.statuses.invis && dist(x.pos, from.pos) <= def.ricochet!).sort((a, b) => dist(a.pos, from.pos) - dist(b.pos, from.pos))[0];
+      if (!next) break;
+      ev.push({ t: 'flame', unit: u.id, from: { ...from.pos }, at: { ...next.pos } });
+      hurt(s, next, randInt(s, def.dmg[0], def.dmg[1]) + dmgFlat(u, next), ev, def.id, { pierce: !!u.statuses.silver });
+      hit.add(next);
+      targets.push(next);
+      from = next;
+    }
+  }
+  // Bala explosiva: Disparo arcano con el cargador lleno salpica a los pegados al objetivo
+  if (fullMag && def.id === 'g_disparo' && hasTrait(u, 'explosiva') && main && def.dmg)
+    for (const t of s.units.filter((x) => alive(x) && x !== main && x.team !== u.team && dist(x.pos, main.pos) === 1)) { if (s.over) break; hurt(s, t, (randInt(s, def.dmg[0], def.dmg[1]) + dmgFlat(u, t) + MAG_FULL_FLAT) * 0.5, ev, def.id, { element: 'fire' }); }
+  if (fullMag) {
+    u.magazine = 0;
+    if (hasTrait(u, 'polvora')) { u.mp += 2; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: 2 }); }
+  } else u.magazine = Math.min(MAG_MAX, (u.magazine ?? 0) + 1);
+  // Gatillo fácil: rematar con un disparo devuelve 1 PA (una vez por turno)
+  if (hasTrait(u, 'gatillo') && !u.gunKill && targets.some((t) => !alive(t) && t.team !== u.team)) { u.gunKill = true; u.ap++; ev.push({ t: 'drain', unit: u.id, ap: 1, mp: 0 }); }
+}
+
+/** Celdas del Glifo de gravedad (2×2 desde la casilla elegida). */
+function square2Cells(s: CombatState, at: Pos): Pos[] {
+  return [at, { x: at.x + 1, y: at.y }, { x: at.x, y: at.y + 1 }, { x: at.x + 1, y: at.y + 1 }].filter((p) => p.x < s.w && p.y < s.h && !s.obstacles.includes(key(p)));
+}
+
+/** Para el Disparo de gancho: hay algo a lo que engancharse en la casilla. */
+export function grappleTarget(s: CombatState, at: Pos): boolean {
+  return !!unitAt(s, at) || s.obstacles.includes(key(at)) || (s.braziers ?? []).includes(key(at));
+}
+
+const V15_SELF: Record<string, SelfSpecial> = {
+  // Glifo fulminante
+  glyph: (s, u, d, at, ev) => {
+    const dmg = randInt(s, d.dmg![0], d.dmg![1]);
+    placeGlyph(s, u, at, 'fulminante', 2, dmg, ev);
+    // Red de glifos: otro glifo en una casilla libre pegada
+    if (hasTrait(u, 'redglifos')) { const p = [{ x: at.x + 1, y: at.y }, { x: at.x - 1, y: at.y }, { x: at.x, y: at.y + 1 }, { x: at.x, y: at.y - 1 }].find((q) => isFree(s, q) && !marksAt(s, 'glyph', q).length); if (p) placeGlyph(s, u, p, 'fulminante', 2, dmg, ev); }
+  },
+  // Glifo de gravedad (2×2)
+  gravglyph: (s, u, d, at, ev) => {
+    for (const p of square2Cells(s, at)) addMark(s, { kind: 'gravglyph', sub: 'gravedad', pos: p, team: u.team, turns: 2 + (hasTrait(u, 'persistente2') ? 1 : 0), owner: u.id, dmg: randInt(s, d.dmg![0], d.dmg![1]), c: at }, ev);
+  },
+  // Pulsar rúnico: detona todos tus glifos
+  pulsar: (s, u, d, _at, ev) => {
+    const mine = (s.marks ?? []).filter((m) => (m.kind === 'glyph' || m.kind === 'gravglyph') && m.owner === u.id);
+    for (const m of mine) {
+      ev.push({ t: 'markAdd', kind: 'pulse', at: { ...m.pos } });
+      for (const t of s.units.filter((x) => alive(x) && x.team !== u.team && dist(x.pos, m.pos) <= 1)) { if (s.over) break; hurt(s, t, d.dmg![0] + dmgFlat(u, t), ev, d.id); }
+      removeMark(s, m, ev);
+    }
+    const sh = Math.round(3 * mine.length * (hasTrait(u, 'mender') ? MENDER_MULT : 1));
+    if (sh) { u.shield += sh; ev.push({ t: 'shield', unit: u.id, amount: sh }); }
+  },
+  // Cercado de púas: valla de 3 casillas perpendicular a la dirección del lanzador
+  fence: (s, u, d, at, ev) => {
+    const [dx, dy] = dirOf(u.pos, at);
+    const px = dy, py = dx;
+    for (const k of [-1, 0, 1]) {
+      const p = { x: at.x + px * k, y: at.y + py * k };
+      if (p.x < 0 || p.y < 0 || p.x >= s.w || p.y >= s.h || !isFree(s, p)) continue;
+      s.obstacles.push(key(p));
+      addMark(s, { kind: 'fence', pos: p, team: u.team, turns: 2, owner: u.id, dmg: d.dmg![0] }, ev);
+    }
+  },
+  // Campo de inercia: 3×3 alrededor del lanzador
+  inertia: (s, u, _d, _at, ev) => {
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+      const p = { x: u.pos.x + dx, y: u.pos.y + dy };
+      if (p.x < 0 || p.y < 0 || p.x >= s.w || p.y >= s.h || s.obstacles.includes(key(p))) continue;
+      addMark(s, { kind: 'inertia', pos: p, team: u.team, turns: 2, owner: u.id }, ev);
+    }
+  },
+  // Sobrecarga defensiva: el escudo se convierte en daño a los enemigos pegados
+  overload: (s, u, _d, _at, ev) => {
+    const sh = u.shield;
+    if (sh <= 0) { ev.push({ t: 'resist', unit: u.id, what: 'Sin escudo que convertir' }); return; }
+    u.shield = 0;
+    const dmg = Math.min(50, sh * 4);
+    ev.push({ t: 'markAdd', kind: 'pulse', at: { ...u.pos } });
+    for (const t of s.units.filter((x) => alive(x) && x.team !== u.team && Math.max(Math.abs(x.pos.x - u.pos.x), Math.abs(x.pos.y - u.pos.y)) <= 1)) { if (s.over) break; hurt(s, t, dmg, ev, 'r_sobrecarga'); }
+  },
+  // Matriz de distorsión: glifo mayor 3 turnos
+  matrix: (s, u, d, at, ev) => placeGlyph(s, u, at, 'matriz', 3, d.dmg![0], ev),
+  // Ciudadela de cristal: escudo, inmunidad y glifos alrededor
+  citadel: (s, u, d, _at, ev) => {
+    const sh = Math.round(25 * (hasTrait(u, 'mender') ? MENDER_MULT : 1));
+    u.shield += sh;
+    ev.push({ t: 'shield', unit: u.id, amount: sh });
+    addStatus(u, 'immune', 1, 1, ev);
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const p = { x: u.pos.x + dx, y: u.pos.y + dy };
+      if (p.x >= 0 && p.y >= 0 && p.x < s.w && p.y < s.h && !s.obstacles.includes(key(p)) && !(unitAt(s, p)?.team === u.team)) placeGlyph(s, u, p, 'fulminante', 2, randInt(s, d.dmg![0], d.dmg![1]), ev);
+    }
+  },
+  // Recarga acrobática: cargador lleno (el PM ya lo dio selfMp)
+  reload: (_s, u, _d, _at, ev) => {
+    u.magazine = MAG_MAX;
+    ev.push({ t: 'resist', unit: u.id, what: '¡Cargador lleno!' });
+    if (hasTrait(u, 'polvora')) { u.mp += 2; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: 2 }); }
+  },
+  // Cortina de humo: nube en tu casilla y las 4 de alrededor hasta tu próximo turno
+  smoke: (s, u, _d, _at, ev) => {
+    for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const p = { x: u.pos.x + dx, y: u.pos.y + dy };
+      if (p.x < 0 || p.y < 0 || p.x >= s.w || p.y >= s.h || s.obstacles.includes(key(p))) continue;
+      addMark(s, { kind: 'smoke', pos: p, team: u.team, turns: 1, owner: u.id }, ev);
+    }
+    addStatus(u, 'smoke', 1, 1, ev);
+  },
+  // Disparo de gancho: atrae al enemigo normal; con muros, braseros o enemigos grandes, te arrastras tú
+  grapple: (s, u, _d, at, ev) => {
+    const t = unitAt(s, at);
+    if (t && t.team !== u.team && !t.rank && t.ai !== 'boss' && t.ai !== 'pillar') {
+      for (let i = 0; i < 6 && alive(t) && dist(t.pos, u.pos) > 1; i++) { const before = key(t.pos); stepToward(s, t, u.pos, ev); if (key(t.pos) === before) break; }
+      return;
+    }
+    const cell = dashCell(s, u, at);
+    if (!cell) { ev.push({ t: 'resist', unit: u.id, what: 'No hay hueco junto al objetivo' }); return; }
+    if (!same(cell, u.pos)) { u.pos = { ...cell }; ev.push({ t: 'move', unit: u.id, path: [{ ...cell }] }); springSnare(s, u, ev); stepOn(s, u, ev); }
+  },
+};
+for (const [k, f] of Object.entries(V15_SELF)) SELF_SPECIALS[k] = f;
+
+// Barrera compartida: el Arquitecto también gana escudo al proteger a un aliado
+TARGET_SPECIALS.barrier = (_s, u, _d, _at, main, _t, _h, ev) => {
+  if (main && main !== u && hasTrait(u, 'compartida')) { const sh = Math.round(6 * (hasTrait(u, 'mender') ? MENDER_MULT : 1)); u.shield += sh; ev.push({ t: 'shield', unit: u.id, amount: sh }); }
+};
+TARGET_SPECIALS.archshot = (s, u, _d, at, _m, _t, _h, ev) => {
+  // Disparo arquitectónico: activa un glifo tuyo de la casilla (a su alrededor) sin gastarlo
+  const g = marksAt(s, 'glyph', at).find((m) => m.owner === u.id);
+  if (!g) return;
+  for (const t of s.units.filter((x) => alive(x) && x.team !== u.team && dist(x.pos, at) <= 1)) { if (s.over) break; triggerGlyph(s, g, t, ev, false, true); }
+};
 
 /** Daño extra del Corte de Guadaña: +3 por turno de carga (máx. 3) y +1 cada 5 almas del combate (máx. +3). */
 export function scytheBonus(u: Unit): number {

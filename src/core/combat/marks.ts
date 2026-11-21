@@ -17,16 +17,18 @@ export function removeMark(s: CombatState, m: BoardMark, ev: GameEvent[]): void 
   const i = (s.marks ?? []).indexOf(m);
   if (i < 0) return;
   s.marks!.splice(i, 1);
+  // Cercado de púas: al desaparecer, la casilla vuelve a ser transitable
+  if (m.kind === 'fence') s.obstacles = s.obstacles.filter((k) => k !== `${m.pos.x},${m.pos.y}`);
   ev.push({ t: 'markGone', kind: m.kind, at: { ...m.pos } });
 }
 
 /** Pone un marcador. Con `max`, si el dueño ya tiene tantos de ese tipo, desaparece el más antiguo. */
-export function addMark(s: CombatState, o: { kind: string; pos: Pos; team: Team; turns: number; owner?: number; max?: number }, ev: GameEvent[]): BoardMark {
+export function addMark(s: CombatState, o: { kind: string; pos: Pos; team: Team; turns: number; owner?: number; max?: number; sub?: string; dmg?: number; c?: Pos }, ev: GameEvent[]): BoardMark {
   if (o.max !== undefined && o.owner !== undefined) {
     const mine = marksOf(s, o.kind, o.owner);
     for (let i = 0; i <= mine.length - o.max; i++) removeMark(s, mine[i]!, ev);
   }
-  const m: BoardMark = { id: s.nextId++, kind: o.kind, pos: { ...o.pos }, team: o.team, turns: o.turns, ...(o.owner !== undefined ? { owner: o.owner } : {}) };
+  const m: BoardMark = { id: s.nextId++, kind: o.kind, pos: { ...o.pos }, team: o.team, turns: o.turns, ...(o.owner !== undefined ? { owner: o.owner } : {}), ...(o.sub ? { sub: o.sub } : {}), ...(o.dmg !== undefined ? { dmg: o.dmg } : {}), ...(o.c ? { c: { ...o.c } } : {}) };
   (s.marks ??= []).push(m);
   ev.push({ t: 'markAdd', kind: m.kind, at: { ...m.pos } });
   return m;

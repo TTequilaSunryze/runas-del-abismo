@@ -38,6 +38,14 @@ export interface SpellDef {
   drainAp?: number;
   /** PM que quita al objetivo (para su próximo turno) */
   drainMp?: number;
+  /** arma de fuego del Pistolero: suma cargas al cargador; con el cargador lleno, crítico seguro y daño elemental extra */
+  gun?: boolean;
+  /** el disparo rebota a otro enemigo a esta distancia del primero */
+  ricochet?: number;
+  /** multiplica la probabilidad de crítico */
+  critMul?: number;
+  /** puntos de armadura que ignora */
+  armorIgnore?: number;
   /** vida que paga el lanzador */
   selfDmg?: number;
   /** fracción del daño hecho que cura al lanzador */
@@ -65,7 +73,7 @@ export interface SpellDef {
   /** casillas que retrocede el lanzador, alejándose del objetivo */
   retreat?: number;
   /** coloca un cepo en la casilla */
-  snare?: { dmg: number };
+  snare?: { dmg: number; burn?: number };
   /** solo se puede apuntar en línea recta (misma fila o columna) */
   straight?: boolean;
   /** veces que golpea a los enemigos de la línea (el orbe rebota) */
@@ -299,6 +307,34 @@ export const SPELLS: Record<string, SpellDef> = Object.fromEntries(
     S({ id: 'cuchillo', name: 'Cuchillo arrojadizo', route: 'base', ap: 3, cd: 1, range: [2, 4], los: true, target: 'enemy', dmg: [6, 9], text: 'Lanzas un cuchillo a media distancia.' }),
     S({ id: 'desvanecer', name: 'Desvanecerse', route: 'base', ap: 3, cd: 4, range: [0, 0], los: false, target: 'self', buff: { kind: 'invis', turns: 2 }, text: 'Invisible este turno y el siguiente: no te pueden apuntar ni placar. Atacar te hace visible.' }),
     // ---------- Consumibles ----------
+    // --- v15: Arquitecto Rúnico (glifos y escudos, daño mágico) ---
+    S({ id: 'r_glifo', name: 'Glifo fulminante', route: 'base', ap: 2, cd: 0, range: [1, 4], los: true, target: 'ground', dmg: [6, 8], special: 'glyph', text: 'Dibuja un glifo en la casilla durante 2 turnos. Si un enemigo lo pisa (o ya está encima), explota: daña y le quita 1 PM (Ralentizado 1 turno). Máximo 6 glifos.' }),
+    S({ id: 'r_barrera', name: 'Barrera cinética', route: 'base', ap: 2, cd: 1, range: [0, 3], los: true, target: 'ally', shield: 12, status: { kind: 'kinetic', turns: 1 }, special: 'barrier', text: 'Da 12 de escudo a ti o a un aliado. Mientras le dure el escudo, quien le golpee cuerpo a cuerpo retrocede 1 casilla.' }),
+    S({ id: 'r_lanza', name: 'Lanza de energía', route: 'base', ap: 2, cd: 0, range: [2, 5], los: true, target: 'enemy', dmg: [7, 9], armorIgnore: 2, text: 'Haz de luz enfocado: perfora la armadura del objetivo (ignora 2 puntos).' }),
+    S({ id: 'r_gravedad', name: 'Glifo de gravedad', route: 'boon', ap: 3, cd: 2, range: [1, 4], los: true, target: 'ground', dmg: [5, 7], special: 'gravglyph', text: 'Runa de 2×2 durante 2 turnos: el enemigo que empiece su turno dentro es atraído 1 casilla hacia su centro y sufre daño mágico.' }),
+    S({ id: 'r_baluarte', name: 'Baluarte prismático', route: 'boon', ap: 3, cd: 2, range: [0, 3], los: true, target: 'ally', shield: 18, status: { kind: 'prism', turns: 2 }, special: 'barrier', text: 'Gran escudo de 18 a ti o a un aliado. Durante 2 turnos devuelve el 15% de todo el daño que reciba al atacante.' }),
+    S({ id: 'r_pulsar', name: 'Pulsar rúnico', route: 'boon', ap: 2, cd: 1, range: [0, 0], los: false, target: 'self', dmg: [4, 4], special: 'pulsar', text: 'Detona todos tus glifos: cada uno daña a los enemigos a 1 casilla y te da 3 de escudo.' }),
+    S({ id: 'r_cercado', name: 'Cercado de púas', route: 'boon', ap: 3, cd: 2, range: [1, 3], los: true, target: 'ground', dmg: [6, 6], special: 'fence', text: 'Valla de 3 casillas de runas sólidas (perpendicular a ti) durante 2 turnos: nadie la atraviesa y el enemigo que empiece su turno pegado a ella sufre daño.' }),
+    S({ id: 'r_inercia', name: 'Campo de inercia', route: 'boon', ap: 3, cd: 3, range: [0, 0], los: false, target: 'self', special: 'inertia', text: 'Campo de 3×3 a tu alrededor durante 2 turnos: los aliados que empiecen su turno dentro ganan +1 PM y los enemigos pierden 1 PM.' }),
+    S({ id: 'r_arquitectonico', name: 'Disparo arquitectónico', route: 'boon', ap: 3, cd: 1, range: [2, 5], los: true, target: 'ground', dmg: [10, 12], special: 'archshot', text: 'Proyectil pesado. Si impacta en una casilla con un glifo tuyo, el glifo también se activa (a su alrededor) sin gastarse.' }),
+    S({ id: 'r_sello', name: 'Sello de anclaje', route: 'boon', ap: 2, cd: 2, range: [1, 4], los: true, target: 'enemy', status: { kind: 'rooted', turns: 2 }, extraStatus: { kind: 'anchor', turns: 2 }, text: 'Glifo flotante sobre un enemigo durante 2 turnos: queda Inmovilizado (0 PM) y recibe +4 de daño de tus hechizos.' }),
+    S({ id: 'r_sobrecarga', name: 'Sobrecarga defensiva', route: 'boon', ap: 1, cd: 2, range: [0, 0], los: false, target: 'self', special: 'overload', text: 'Consume todo tu escudo: 4 de daño mágico por cada punto a los enemigos pegados a ti (máx. 50).' }),
+    S({ id: 'r_matriz', name: 'Matriz de distorsión', route: 'boon', ap: 4, cd: 3, range: [1, 3], los: true, target: 'ground', dmg: [8, 8], special: 'matrix', text: 'Glifo mayor durante 3 turnos: cada enemigo que lo pise sufre daño y pierde 2 PA en su próximo turno. No se gasta.' }),
+    S({ id: 'r_ciudadela', name: 'Ciudadela de cristal', route: 'boon', ap: 5, cd: 4, range: [0, 0], los: false, target: 'self', dmg: [6, 8], special: 'citadel', text: 'Fortaleza de cristal: 25 de escudo, inmune a estados alterados 1 turno y un Glifo fulminante en cada casilla libre pegada a ti.' }),
+    // --- v15: Pistolero Arcano (pólvora y magia, daño físico) ---
+    S({ id: 'g_disparo', name: 'Disparo arcano', route: 'base', ap: 2, cd: 0, range: [2, 5], los: true, target: 'enemy', dmg: [6, 8], gun: true, text: 'Disparo a distancia. Añade 1 carga al Cargador arcano.' }),
+    S({ id: 'g_rebote', name: 'Tiro rebotado', route: 'base', ap: 3, cd: 0, range: [2, 4], los: true, target: 'enemy', dmg: [4, 6], gun: true, ricochet: 2, text: 'El disparo rebota a otro enemigo a 2 casillas o menos del primero, con el mismo daño. Añade 1 carga.' }),
+    S({ id: 'g_recarga', name: 'Recarga acrobática', route: 'base', ap: 1, cd: 1, range: [0, 0], los: false, target: 'self', selfMp: 1, special: 'reload', text: 'Llenas el cargador (4 cargas: el próximo disparo es crítico seguro con daño elemental extra) y ganas 1 PM. Vuelve a estar lista en 2 turnos.' }),
+    S({ id: 'g_abanico', name: 'Abanico de plomo', route: 'boon', ap: 3, cd: 1, range: [1, 1], los: false, straight: true, target: 'ground', cone: 2, dmg: [7, 9], push: 1, pushAll: true, gun: true, text: 'Perdigones a quemarropa: cono de 2 casillas que daña y empuja 1 casilla a todos.' }),
+    S({ id: 'g_trazadora', name: 'Bala trazadora', route: 'boon', ap: 2, cd: 1, range: [2, 6], los: false, target: 'enemy', dmg: [3, 4], gun: true, status: { kind: 'mark', turns: 99 }, text: 'Proyectil guiado que ignora obstáculos y deja al enemigo Marcado (+2 de daño recibido) hasta que muera.' }),
+    S({ id: 'g_rodilla', name: 'Disparo a la rodilla', route: 'boon', ap: 2, cd: 2, range: [2, 4], los: true, target: 'enemy', dmg: [4, 6], gun: true, status: { kind: 'rooted', turns: 1 }, text: 'Daña y deja al enemigo Inmovilizado (0 PM) en su próximo turno.' }),
+    S({ id: 'g_danza', name: 'Danza de balas', route: 'boon', ap: 4, cd: 2, range: [0, 0], los: false, target: 'self', area: 1, square: true, fullArea: true, dmg: [6, 8], gun: true, text: 'Giras disparando a todos los enemigos pegados a ti (también en diagonal).' }),
+    S({ id: 'g_mina', name: 'Mina de proximidad', route: 'boon', ap: 2, cd: 1, range: [1, 2], los: true, target: 'cell', snare: { dmg: 22, burn: 2 }, text: 'Trampa explosiva en una casilla libre: el enemigo que la pise sufre 22 de daño de fuego, se detiene y se quema 2 turnos.' }),
+    S({ id: 'g_certero', name: 'Tiro certero a la cabeza', route: 'boon', ap: 4, cd: 2, range: [2, 5], los: true, target: 'enemy', dmg: [14, 16], gun: true, critMul: 2, text: 'Disparo de alta precisión con el doble de probabilidad de crítico.' }),
+    S({ id: 'g_humo', name: 'Cortina de humo', route: 'boon', ap: 2, cd: 2, range: [0, 0], los: false, target: 'self', special: 'smoke', text: 'Nube de humo en tu casilla y las 4 de alrededor hasta tu próximo turno: quien esté dentro esquiva todos los ataques a distancia.' }),
+    S({ id: 'g_plata', name: 'Balas de plata imbuidas', route: 'boon', ap: 3, cd: 3, range: [0, 0], los: false, target: 'self', buff: { kind: 'silver', turns: 2 }, text: 'Durante 2 turnos tus disparos ignoran por completo la armadura.' }),
+    S({ id: 'g_gancho', name: 'Disparo de gancho', route: 'boon', ap: 3, cd: 1, range: [2, 5], los: true, target: 'ground', special: 'grapple', text: 'A un muro, brasero o enemigo grande: te arrastras junto a él. A un enemigo normal: lo atraes hasta ti.' }),
+    S({ id: 'g_tambor', name: 'Sobrecarga de tambor', route: 'boon', ap: 5, cd: 2, range: [2, 4], los: true, target: 'enemy', dmg: [0, 0], special: 'drum', text: 'Descargas todo el cargador en una ráfaga: 10 de daño por cada carga (máx. 40) y lo vacías.' }),
     S({ id: 'c_vida', name: 'Poción de curación', route: 'item', ap: 2, cd: 0, range: [0, 0], los: false, target: 'self', healPct: 0.35, text: 'Recuperas el 35% de tu vida.' }),
     S({ id: 'c_resu', name: 'Poción de resurrección', route: 'item', ap: 4, cd: 0, range: [1, 2], los: false, target: 'ally', revive: 0.4, text: 'Levanta a un aliado caído con el 40% de su vida. Apunta a su casilla.' }),
     S({ id: 'c_fuego', name: 'Bomba de fuego', route: 'item', ap: 3, cd: 0, range: [1, 4], los: true, target: 'ground', area: 1, dmg: [12, 16], status: { kind: 'burn', turns: 2 }, text: 'Se lanza a cualquier casilla, aunque esté vacía: explota en área 1 y quema 2 turnos.' }),

@@ -17,10 +17,10 @@ const board = (units: UnitSpec[]) => createCombat({ seed: 5, w: 14, h: 7, obstac
 const turnOf = (s: ReturnType<typeof board>, id: number) => { for (let i = 0; i < 40 && current(s)!.id !== id; i++) endTurn(s, current(s)!.id); };
 
 describe('v8', () => {
-  it('se juega con 6 clases, todas con 60 de vida y 6 PA (Tejedora y Carcelero con 4 PM, el resto 3)', () => {
-    expect(PLAYABLE).toEqual(['zorro', 'esferas', 'acechador', 'carcelero', 'barbaro', 'arquero']);
+  it('se juega con 8 clases, todas con 60 de vida y 6 PA (Tejedora, Carcelero y Pistolero con 4 PM, el resto 3)', () => {
+    expect(PLAYABLE).toEqual(['zorro', 'esferas', 'acechador', 'carcelero', 'barbaro', 'arquitecto', 'pistolero', 'arquero']);
     for (const c of ['guerrero', 'mago', 'picaro', 'clerigo'] as const) expect(CLASSES[c].hidden).toBe(true);
-    for (const c of PLAYABLE) expect([CLASSES[c].hp, CLASSES[c].ap, CLASSES[c].mp], c).toEqual([60, 6, c === 'esferas' || c === 'carcelero' ? 4 : 3]);
+    for (const c of PLAYABLE) expect([CLASSES[c].hp, CLASSES[c].ap, CLASSES[c].mp], c).toEqual([60, 6, c === 'esferas' || c === 'carcelero' || c === 'pistolero' ? 4 : 3]);
     // los hechizos de las clases retiradas siguen existiendo
     expect(SPELLS.tajo && SPELLS.dardo && SPELLS.maza && SPELLS.punalada).toBeTruthy();
   });

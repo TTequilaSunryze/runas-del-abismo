@@ -23,5 +23,5 @@ export const ENEMY_SCALING = {
 };
 
 /** Clases que suman el Daño mágico a sus golpes; el resto suman el Daño físico. */
-export const MAGIC_CLASSES: readonly string[] = ['zorro', 'esferas', 'carcelero', 'mago', 'clerigo'];
+export const MAGIC_CLASSES: readonly string[] = ['zorro', 'esferas', 'carcelero', 'arquitecto', 'mago', 'clerigo'];
 export const schoolOf = (kind: string): 'magic' | 'phys' => (MAGIC_CLASSES.includes(kind) ? 'magic' : 'phys');

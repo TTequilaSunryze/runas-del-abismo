@@ -9,8 +9,10 @@ export interface Pos {
 export type Team = 'hero' | 'enemy';
 /** empower: +daño (stacks = %); reach: +alcance; invis: no se le puede apuntar; exposed: -armadura (stacks). */
 export type StatusKind = 'burn' | 'poison' | 'slow' | 'stun' | 'mark' | 'empower' | 'reach' | 'invis' | 'exposed' | 'charm'
-  | 'vuln' | 'bleed' | 'hobble' | 'guarded' | 'deathmark' | 'verdugo' | 'frenzy' | 'orbita' | 'chained';
-export type ClassId = 'guerrero' | 'mago' | 'clerigo' | 'picaro' | 'arquero' | 'zorro' | 'esferas' | 'carcelero' | 'acechador' | 'barbaro';
+  | 'vuln' | 'bleed' | 'hobble' | 'guarded' | 'deathmark' | 'verdugo' | 'frenzy' | 'orbita' | 'chained'
+  // v15: Arquitecto Rúnico y Pistolero Arcano
+  | 'rooted' | 'anchor' | 'silver' | 'smoke' | 'immune' | 'kinetic' | 'prism';
+export type ClassId = 'guerrero' | 'mago' | 'clerigo' | 'picaro' | 'arquero' | 'zorro' | 'esferas' | 'carcelero' | 'acechador' | 'barbaro' | 'arquitecto' | 'pistolero';
 
 export interface StatusState {
   turns: number;
@@ -117,6 +119,14 @@ export interface Unit {
   egidaRound?: number;
   /** Corte de Guadaña: turnos seguidos sin usarlo (0-3) y si se usó en este turno */
   scytheCharge?: number;
+  /** Pistolero Arcano: cargas del cargador (0-4) */
+  magazine?: number;
+  /** Arquitecto Rúnico: daño plano extra para su siguiente hechizo de daño (Geometría Bélica) */
+  glyphBonus?: number;
+  /** ya ganó el PA de Gatillo fácil este turno */
+  gunKill?: boolean;
+  /** ronda del último contraataque de Reflejos de duelo */
+  duelRound?: number;
   scytheUsed?: boolean;
   firstCast?: boolean;
   tearUsed?: boolean;
@@ -144,6 +154,8 @@ export interface Snare {
   k: string;
   team: Team;
   dmg: number;
+  /** turnos de quemadura que deja (Mina de proximidad) */
+  burn?: number;
 }
 
 /**
@@ -160,6 +172,12 @@ export interface BoardMark {
   owner?: number;
   /** turnos que le quedan */
   turns: number;
+  /** variante (glifos: fulminante, gravedad, matriz) */
+  sub?: string;
+  /** daño que hace al activarse (ya escalado) */
+  dmg?: number;
+  /** casilla central (glifo de gravedad 2×2) */
+  c?: Pos;
 }
 
 export interface CombatState extends RngBox {

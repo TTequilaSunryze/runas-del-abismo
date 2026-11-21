@@ -3,6 +3,11 @@
 import { dmgText, type SpellDef } from '../core/classes/spells';
 
 export const GLYPHS: Record<string, string[]> = {
+  rune: ['....aaaa....', '..aa....aa..', '.a...bb...a.', '.a..bwwb..a.', 'a..bw..wb..a', 'a.bw.cc.wb.a', 'a.bw.cc.wb.a', 'a..bw..wb..a', '.a..bwwb..a.', '.a...bb...a.', '..aa....aa..', '....aaaa....'],
+  pistol: ['............', '............', '.cccccccccc.', '.cbbbbbbbbbw', '.cbwwwwbccc.', '..ccbbac....', '....cbac....', '....caac....', '...caac.....', '...cac......', '...cc.......', '............'],
+  bullet: ['............', '......ww....', '.....wbbw...', '....wbbbbc..', '....abbbbc..', '....abbbbc..', '....abbbbc..', '....cccccc..', '....acccac..', '....aaaaaa..', '............', '............'],
+  mine: ['............', '............', '.....cc.....', '....cwwc....', '..cccccccc..', '.cbbbbbbbbc.', 'cbbabbabbabc', '.cbbbbbbbbc.', '..cccccccc..', '............', '............', '............'],
+  fence: ['............', '..w....w....', '..a..w.a..w.', '.aba.a.aba.a', '.aba.ab.ab.a', '.aba.ab.ab.a', 'abbbaabbbaab', 'abbbaabbbaab', 'abwbaabwbaab', 'abbbaabbbaab', 'cccccccccccc', '............'],
   star: ['............', '.....aa.....', '.....ab.....', '....abba....', '....abba....', '.aabbwwbbaa.', '.aabbwwbbaa.', '....abba....', '....abba....', '.....ba.....', '.....aa.....', '............'],
   lantern: ['.....cc.....', '....c..c....', '...cccccc...', '...abbbba...', '..abbwwbba..', '..abwwwwba..', '..abwwwwba..', '..abbwwbba..', '...abbbba...', '...cccccc...', '....cccc....', '............'],
   orbs: ['............', '....aaa.....', '...abbba....', '...abwba....', '...abbba....', '....aaa.....', '.aaa...aaa..', 'abbba.abbba.', 'abwba.abwba.', 'abbba.abbba.', '.aaa...aaa..', '............'],
@@ -123,6 +128,12 @@ const LOOK: Record<string, [string, string]> = {
   z_fuego: ['flame', 'ice'], z_espejismo: ['twin', 'arcane'], z_vortice: ['vortex', 'arcane'], z_seduccion: ['heart', 'blood'], z_estallido: ['wind', 'fire'], z_vinculo: ['leap', 'arcane'],
   t_voluntad: ['orbs', 'arcane'], t_gravedad: ['vortex', 'shadow'], t_orbita: ['circle', 'shadow'], t_resonancia: ['sun', 'shadow'], t_singularidad: ['vortex', 'blood'], t_transfusion: ['drop', 'shadow'],
   k_caja: ['cage', 'poison'], k_explosion: ['skull', 'poison'], k_vinculo: ['link', 'arcane'], k_atraccion: ['whirl', 'poison'], k_tormento: ['scythe', 'steel'], k_siega: ['link', 'poison'], k_sacrificio: ['hexshield', 'poison'],
+  r_glifo: ['rune', 'arcane'], r_barrera: ['hexshield', 'storm'], r_lanza: ['pierce', 'arcane'], r_gravedad: ['vortex', 'arcane'], r_baluarte: ['hexshield', 'arcane'],
+  r_pulsar: ['sun', 'arcane'], r_cercado: ['fence', 'arcane'], r_inercia: ['circle', 'storm'], r_arquitectonico: ['bolt', 'arcane'], r_sello: ['link', 'arcane'],
+  r_sobrecarga: ['bash', 'arcane'], r_matriz: ['rune', 'shadow'], r_ciudadela: ['dome', 'arcane'],
+  g_disparo: ['pistol', 'arcane'], g_rebote: ['multi', 'arcane'], g_recarga: ['bullet', 'gold'], g_abanico: ['multi', 'fire'], g_trazadora: ['crosshair', 'arcane'],
+  g_rodilla: ['bullet', 'blood'], g_danza: ['whirl', 'arcane'], g_mina: ['mine', 'fire'], g_certero: ['crosshair', 'blood'], g_humo: ['cloud', 'shadow'],
+  g_plata: ['bullet', 'ice'], g_gancho: ['link', 'steel'], g_tambor: ['pistol', 'fire'],
   s_danza: ['whirl', 'blood'], s_velo: ['mask', 'shadow'], s_convergencia: ['twin', 'blood'], s_cosecha: ['bloodfx', 'shadow'],
   b_sed: ['heart', 'blood'], b_tajo: ['bigsword', 'blood'], b_embiste: ['whirl', 'steel'], b_grito: ['horn', 'blood'], b_colosal: ['hammer', 'blood'], b_pacto: ['bloodfx', 'blood'], b_cuchillada: ['whirl', 'blood'], b_mirada: ['eye', 'fire'], b_frenesi: ['flame', 'blood'],
 };

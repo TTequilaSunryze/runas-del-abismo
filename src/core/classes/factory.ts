@@ -37,5 +37,7 @@ export function makeHero(opts: HeroBuild): UnitSpec {
     ...(opts.cls === 'carcelero' ? { souls: 0, soulBank: 0, soulsFight: 0 } : {}),
     // el Bárbaro acumula Furia (0 a 100)
     ...(opts.cls === 'barbaro' ? { fury: 0 } : {}),
+    // el Pistolero empieza con el cargador vacío
+    ...(opts.cls === 'pistolero' ? { magazine: 0 } : {}),
   };
 }

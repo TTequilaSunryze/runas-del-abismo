@@ -107,6 +107,18 @@ export const CLASSES: Record<ClassId, ClassDef> = {
       R('base', 'Clásico', '', ['b_sed', 'b_tajo', 'b_embiste'], 'El kit inicial: cúrate con tu Furia, golpea con el Tajo y entra en combate con el Embiste.'),
     ],
   },
+  arquitecto: {
+    id: 'arquitecto', name: 'Arquitecto Rúnico', hp: 60, armor: 1, power: 0, crit: 5, ap: 6, mp: 3, initiative: 9, base: ['r_glifo', 'r_barrera', 'r_lanza'], tackle: 4, dodge: 3,
+    routes: [
+      R('base', 'Clásico', '', ['r_glifo', 'r_barrera', 'r_lanza'], 'El kit inicial: un glifo explosivo, una barrera para el grupo y una lanza que perfora armadura.'),
+    ],
+  },
+  pistolero: {
+    id: 'pistolero', name: 'Pistolero Arcano', hp: 60, armor: 0, power: 0, crit: 12, ap: 6, mp: 4, initiative: 17, base: ['g_disparo', 'g_rebote', 'g_recarga'], tackle: 2, dodge: 7,
+    routes: [
+      R('base', 'Clásico', '', ['g_disparo', 'g_rebote', 'g_recarga'], 'El kit inicial: un disparo que carga el tambor, un tiro que rebota y una recarga acrobática.'),
+    ],
+  },
   carcelero: {
     id: 'carcelero', name: 'Carcelero de Almas', hp: 60, armor: 1, power: 0, crit: 5, ap: 6, mp: 4, initiative: 9, base: ['k_sentencia', 'k_linterna', 'k_guadana'], tackle: 6, dodge: 2,
     routes: [
@@ -122,6 +134,8 @@ export const CLASS_PASSIVE: Partial<Record<ClassId, { name: string; icon: string
   acechador: { name: 'Sombra viviente', icon: '👤', text: 'Tus Sombras replican tus golpes y puedes intercambiarte con ellas ignorando el placaje. Rematar a un enemigo marcado te da ventaja.' },
   carcelero: { name: 'Cosecha de almas', icon: '💀', text: 'Cada enemigo que muere cerca deja un alma. Cada 5 almas de la partida: +0,5 de armadura permanente. Las almas sin gastar alimentan hechizos como la Guadaña o la Siega.' },
   barbaro: { name: 'Furia', icon: '🔥', text: '+20 de Furia al golpear y +10 al recibir daño. Cada 40: +1 de daño; cada 20: +6% de crítico. Si pasas un turno sin pelear, pierdes 20.' },
+  arquitecto: { name: 'Geometría Bélica', icon: '🔷', text: 'Al empezar tu turno sobre o junto a uno de tus glifos: ganas 4 de escudo y tu siguiente hechizo de daño hace +2.' },
+  pistolero: { name: 'Cargador arcano', icon: '🔫', text: 'Cada disparo suma 1 carga (máx. 4). Con el cargador lleno, el siguiente disparo es un crítico seguro con +6 de daño elemental y vacía el tambor.' },
   arquero: { name: 'Tirador', icon: '🏹', text: 'Sin recurso propio: daño constante a distancia y mucha movilidad.' },
 };
 
@@ -150,4 +164,4 @@ export function spellsFor(cls: ClassId, chosen: readonly string[], _level = 1): 
 }
 
 /** Clases que se pueden elegir. */
-export const PLAYABLE: ClassId[] = (['zorro', 'esferas', 'acechador', 'carcelero', 'barbaro', 'arquero'] as ClassId[]).filter((c) => !CLASSES[c].hidden);
+export const PLAYABLE: ClassId[] = (['zorro', 'esferas', 'acechador', 'carcelero', 'barbaro', 'arquitecto', 'pistolero', 'arquero'] as ClassId[]).filter((c) => !CLASSES[c].hidden);

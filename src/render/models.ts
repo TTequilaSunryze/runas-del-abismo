@@ -9,7 +9,7 @@ export type Anim = 'idle' | 'walk' | 'attack' | 'cast' | 'special' | 'death';
 export type Grid = (string | null)[][];
 
 export const MODEL_SIZE = 32;
-export const MODEL_CLASSES = ['zorro', 'esferas', 'carcelero', 'acechador', 'barbaro'];
+export const MODEL_CLASSES = ['zorro', 'esferas', 'carcelero', 'acechador', 'barbaro', 'arquitecto', 'pistolero'];
 export const ANIM_FRAMES: Record<Anim, number> = { idle: 4, walk: 4, attack: 4, cast: 4, special: 4, death: 5 };
 
 /** Qué animación usa cada hechizo (por defecto: ataque si daña, lanzamiento si no). */
@@ -22,6 +22,10 @@ const SPELL_ANIM: Record<string, Anim> = {
   t_voluntad: 'attack', t_gravedad: 'special', t_orbita: 'cast', t_resonancia: 'special', t_singularidad: 'special', t_transfusion: 'cast',
   k_caja: 'cast', k_explosion: 'attack', k_vinculo: 'attack', k_atraccion: 'cast', k_tormento: 'attack', k_siega: 'attack', k_sacrificio: 'cast',
   s_danza: 'attack', s_paso: 'special', s_velo: 'special', s_convergencia: 'attack', s_cosecha: 'cast',
+  r_glifo: 'cast', r_barrera: 'cast', r_lanza: 'attack', r_gravedad: 'special', r_baluarte: 'cast', r_pulsar: 'special', r_cercado: 'cast', r_inercia: 'special',
+  r_arquitectonico: 'attack', r_sello: 'cast', r_sobrecarga: 'special', r_matriz: 'special', r_ciudadela: 'special',
+  g_disparo: 'attack', g_rebote: 'attack', g_recarga: 'special', g_abanico: 'attack', g_trazadora: 'attack', g_rodilla: 'attack', g_danza: 'special',
+  g_mina: 'cast', g_certero: 'attack', g_humo: 'cast', g_plata: 'cast', g_gancho: 'attack', g_tambor: 'attack',
   b_sed: 'special', b_tajo: 'attack', b_embiste: 'attack', b_grito: 'special', b_colosal: 'attack', b_pacto: 'special', b_cuchillada: 'attack', b_mirada: 'cast', b_frenesi: 'special',
 };
 
@@ -450,7 +454,179 @@ function barbaro(p: Pen, a: Anim, f: number): void {
   if (a === 'special') { for (let i = 0; i < 4; i++) p.glow(8 + i * 5 + (f % 2), y0 - 1 + (i % 2) * 2, 2.2, 'rgba(255,90,40,.5)'); p.glow(16, y0 + 14, 9, 'rgba(255,60,30,.18)'); }
 }
 
-const DRAW: Record<string, (p: Pen, a: Anim, f: number) => void> = { zorro, esferas: tejedora, carcelero, acechador, barbaro };
+// ---------------------------------------------------------------------------
+// Pistolero Arcano: sombrero ancho con pluma, pañuelo rojo, gabardina de forro rojo y revólver arcano
+// ---------------------------------------------------------------------------
+
+const PC = { hat: '#2a2a44', hatD: '#1a1a2e', hatL: '#3e3e62', band: '#c0283a', feather: '#f0e8f0', featherD: '#b8a8c8', skin: '#c08a68', mask: '#c0283a', maskD: '#8a1a28', eye: '#7ad0ff', coat: '#2e2a4a', coatD: '#1e1a34', coatL: '#46406a', lining: '#b8243a', belt: '#4a3424', buckle: '#d8b060', pants: '#2a2230', boot: '#4a3426', bootD: '#30221a', gun: '#8a8aa0', gunD: '#4a4a60', gunL: '#d8d8f0', magic: '#b070ff', out: '#120c18' };
+
+/** Revólver: empuñadura en (hx, hy), cañón hacia la derecha inclinado `up` píxeles. */
+function revolver(p: Pen, hx: number, hy: number, up = 0, glow = false): void {
+  p.rect(hx - 1, hy, 2, 3, PC.belt);
+  p.rect(hx - 1, hy - 2, 5, 2, PC.gunD);
+  p.px(hx + 1, hy - 3, PC.gunL);
+  for (let k = 0; k < 6; k++) p.px(hx + 4 + k, hy - 2 - Math.round((up * k) / 6), k % 2 ? PC.gun : PC.gunL);
+  p.px(hx + 10, hy - 2 - up, PC.magic);
+  if (glow) p.glow(hx + 11, hy - 2 - up, 3, 'rgba(176,112,255,.55)');
+}
+
+function pistolero(p: Pen, a: Anim, f: number): void {
+  const n = ANIM_FRAMES[a], t = f / n;
+  const death = a === 'death' ? f / (n - 1) : 0;
+  if (death >= 0.7) {
+    const y = 25;
+    p.rect(5, y, 20, 4, PC.coat); p.rect(5, y + 3, 20, 1, PC.coatD); p.rect(8, y + 1, 6, 2, PC.lining);
+    p.rect(24, y - 1, 5, 4, PC.skin); p.rect(24, y + 1, 5, 2, PC.mask);
+    p.rect(22, y - 3, 9, 2, PC.hat); p.rect(25, y - 5, 4, 2, PC.hat);
+    p.rect(2, y + 1, 4, 3, PC.boot);
+    revolver(p, 14, y + 5, 0);
+    p.outline(PC.out);
+    return;
+  }
+  const kneel = a === 'death' ? Math.round(death * 7) : 0;
+  const bob = a === 'idle' ? (f % 2) : a === 'walk' ? (f % 2 ? -1 : 0) : a === 'special' ? -[0, 2, 3, 1][f]! : 0;
+  const y0 = 3 + bob + kneel;
+  const recoil = a === 'attack' ? [0, -1, 1, 0][f]! : 0;
+  // gabardina que ondea detrás (forro rojo)
+  const sway = a === 'walk' ? Math.round(wave(t) * 2) : a === 'special' ? Math.round(wave(t) * 3) : Math.round(wave(t, 1) * 1);
+  p.trap(14 + recoil, y0 + 14, y0 + 24 - kneel, 8, 12 + Math.abs(sway), PC.coatD);
+  for (let y = y0 + 16; y <= y0 + 23 - kneel; y++) p.px(9 + recoil - sway + Math.floor((y - y0 - 16) / 3), y, PC.lining);
+  // piernas y botas
+  if (a === 'walk') {
+    const st = f % 2 ? 2 : -2;
+    p.rect(13 + st, y0 + 19, 3, 6, PC.pants); p.rect(17 - st, y0 + 19, 3, 6, PC.pants);
+    p.rect(12 + st, y0 + 23, 5, 3, PC.boot); p.rect(17 - st, y0 + 23, 5, 3, PC.boot);
+  } else {
+    p.rect(13, y0 + 19, 3, 6 - kneel, PC.pants); p.rect(17, y0 + 19, 3, 6 - kneel, PC.pants);
+    p.rect(12, y0 + 23 - kneel, 5, 3, PC.boot); p.rect(17, y0 + 23 - kneel, 5, 3, PC.boot);
+    p.rect(12, y0 + 23 - kneel, 5, 1, PC.bootD); p.rect(17, y0 + 23 - kneel, 5, 1, PC.bootD);
+  }
+  // torso con gabardina, solapas rojas y cinturón con hebilla
+  const tx = 12 + recoil;
+  p.rect(tx, y0 + 10, 9, 10, PC.coat);
+  p.rect(tx, y0 + 10, 9, 1, PC.coatL);
+  p.rect(tx + 3, y0 + 10, 3, 6, PC.lining);
+  p.rect(tx + 4, y0 + 10, 1, 6, PC.maskD);
+  p.rect(tx, y0 + 16, 9, 2, PC.belt); p.rect(tx + 3, y0 + 16, 3, 2, PC.buckle);
+  p.rect(tx + 7, y0 + 11, 2, 8, PC.coatD);
+  // brazo de atrás
+  p.rect(tx - 2, y0 + 11, 2, 6, PC.coatD); p.rect(tx - 2, y0 + 17, 2, 1, PC.skin);
+  // cabeza: pañuelo rojo y ojos que brillan
+  const hx = 13 + recoil;
+  p.rect(hx, y0 + 5, 7, 5, PC.skin);
+  p.rect(hx, y0 + 8, 7, 2, PC.mask); p.rect(hx, y0 + 9, 7, 1, PC.maskD);
+  p.px(hx + 6, y0 + 10, PC.mask); p.px(hx + 7, y0 + 11, PC.maskD);
+  if (death < 0.6) { p.px(hx + 3, y0 + 6, PC.eye); p.px(hx + 5, y0 + 6, PC.eye); }
+  // sombrero de ala ancha con cinta roja y pluma
+  p.rect(hx - 4, y0 + 4, 15, 2, PC.hat); p.rect(hx - 4, y0 + 5, 15, 1, PC.hatD);
+  p.rect(hx, y0, 7, 4, PC.hat); p.rect(hx + 1, y0, 5, 1, PC.hatL);
+  p.rect(hx, y0 + 3, 7, 1, PC.band);
+  const fl = a === 'idle' ? (f % 2) : a === 'walk' ? (f % 2) : 0;
+  p.line(hx - 1, y0 + 3, hx - 4, y0 - 3 + fl, PC.feather); p.line(hx - 2, y0 + 3, hx - 5, y0 - 2 + fl, PC.featherD);
+  p.px(hx - 3, y0 - 1 + fl, PC.featherD);
+  // brazo del arma y revólver según la animación
+  if (a === 'attack') {
+    p.rect(tx + 8, y0 + 11, 3, 2, PC.coat); p.rect(tx + 10, y0 + 11, 2, 2, PC.skin);
+    revolver(p, tx + 10, y0 + 12, f === 1 ? 2 : 0, f === 1 || f === 2);
+    p.outline(PC.out);
+    if (f === 1) { p.glow(tx + 19, y0 + 8, 3.5, 'rgba(255,210,120,.85)'); p.glow(tx + 18, y0 + 8, 2, 'rgba(176,112,255,.7)'); }
+    return;
+  }
+  if (a === 'cast') {
+    // recarga: el tambor se abre y brilla
+    p.rect(tx + 7, y0 + 12, 4, 2, PC.coat); p.rect(tx + 10, y0 + 12, 2, 2, PC.skin);
+    revolver(p, tx + 11, y0 + 14, -2 + f, true);
+    p.outline(PC.out);
+    for (let i = 0; i < 3; i++) p.glow(tx + 13 + ((f + i) % 3) * 2, y0 + 10 - i, 1.6, 'rgba(176,112,255,.6)');
+    return;
+  }
+  if (a === 'special') {
+    // voltereta acrobática: el revólver gira en la mano y deja estela violeta
+    p.rect(tx + 8, y0 + 11, 3, 2, PC.coat);
+    revolver(p, tx + 10, y0 + 12 - f, [2, -2, 1, 0][f]!, true);
+    p.outline(PC.out);
+    for (let i = 0; i < 4; i++) p.glow(6 + i * 6, y0 + 22 - ((f + i) % 2) * 2, 2, 'rgba(150,90,230,.4)');
+    return;
+  }
+  // reposo / andar: revólver bajo, junto a la cadera
+  p.rect(tx + 8, y0 + 11, 2, 6, PC.coat); p.rect(tx + 8, y0 + 17, 2, 1, PC.skin);
+  revolver(p, tx + 9, y0 + 19, a === 'walk' ? (f % 2) : 0);
+  p.outline(PC.out);
+  p.glow(tx + 19, y0 + 17, 2, 'rgba(176,112,255,.35)');
+}
+
+// ---------------------------------------------------------------------------
+// Arquitecto Rúnico: túnica con capucha azul, runa brillante en el rostro, báculo rúnico y losas flotantes
+// ---------------------------------------------------------------------------
+
+const RC = { robe: '#24305e', robeD: '#161e40', robeL: '#3a4c8e', trim: '#5ac8ff', face: '#0a0e20', rune: '#7ae8ff', runeL: '#e0fbff', staff: '#6a4a2c', staffD: '#45301c', head: '#3a8ad8', tile: '#1e3c78', tileL: '#58b8ff', hand: '#9a8070', out: '#070a18' };
+
+/** Losa rúnica flotante (3×4) con su letra brillante. */
+function runeTile(p: Pen, x: number, y: number, lit: boolean): void {
+  p.rect(x, y, 3, 4, RC.tile);
+  p.px(x + 1, y + 1, lit ? RC.runeL : RC.tileL); p.px(x + 1, y + 2, RC.tileL);
+}
+
+function arquitecto(p: Pen, a: Anim, f: number): void {
+  const n = ANIM_FRAMES[a], t = f / n;
+  const death = a === 'death' ? f / (n - 1) : 0;
+  if (death >= 0.7) {
+    const y = 25;
+    p.rect(5, y, 21, 4, RC.robe); p.rect(5, y + 3, 21, 1, RC.robeD); p.rect(5, y, 21, 1, RC.trim);
+    p.rect(24, y - 2, 6, 5, RC.robe); p.rect(25, y - 1, 3, 3, RC.face);
+    p.line(3, y + 5, 28, y + 5, RC.staff); p.rect(1, y + 3, 3, 3, RC.head);
+    p.outline(RC.out);
+    return;
+  }
+  const kneel = a === 'death' ? Math.round(death * 7) : 0;
+  const bob = a === 'idle' ? (f % 2) : a === 'walk' ? (f % 2 ? -1 : 0) : 0;
+  const y0 = 3 + bob + kneel;
+  const lift = a === 'cast' ? [0, 2, 3, 2][f]! : a === 'special' ? 3 : 0;
+  // losas rúnicas que orbitan detrás
+  const orbit = a === 'special' ? 2 : 1;
+  for (let i = 0; i < 3; i++) {
+    const ang = t * TAU * (a === 'special' ? 1 : 0.5) + i * 2.1;
+    const rx = 15 + Math.cos(ang) * (11 + orbit), ry = y0 + 12 + Math.sin(ang) * 5 - lift;
+    if (Math.sin(ang) < 0) runeTile(p, Math.round(rx), Math.round(ry), a !== 'idle' || f % 2 === i % 2);
+  }
+  // túnica en trapecio con ribete luminoso
+  p.trap(16, y0 + 9, y0 + 25 - kneel, 9, 15, RC.robe);
+  p.trap(16, y0 + 9, y0 + 25 - kneel, 3, 5, RC.robeL);
+  for (let y = y0 + 12; y <= y0 + 24 - kneel; y += 3) p.px(16, y, RC.trim);
+  p.rect(9, y0 + 25 - kneel, 15, 1, RC.trim);
+  if (a === 'walk') { const st = f % 2 ? 2 : -2; p.rect(13 + st, y0 + 25, 3, 1, RC.robeD); p.rect(17 - st, y0 + 25, 3, 1, RC.robeD); }
+  p.rect(20, y0 + 11, 3, 13 - kneel, RC.robeD);
+  // capucha con la runa en el rostro
+  p.rect(12, y0 + 1, 9, 9, RC.robe); p.rect(13, y0, 7, 1, RC.robeL); p.rect(12, y0 + 1, 1, 8, RC.robeD);
+  p.rect(14, y0 + 3, 5, 6, RC.face);
+  const glowOn = death < 0.6;
+  if (glowOn) { p.rect(15, y0 + 4, 3, 1, RC.rune); p.rect(16, y0 + 5, 1, 3, RC.rune); p.px(16, y0 + 4, RC.runeL); }
+  // runas del pecho
+  p.px(15, y0 + 13, RC.trim); p.px(17, y0 + 13, RC.trim); p.px(16, y0 + 14, RC.rune);
+  // brazo y báculo rúnico
+  const sx = a === 'attack' ? [24, 25, 27, 25][f]! : 24;
+  const top = y0 + 1 - lift - (a === 'attack' && f === 2 ? 1 : 0);
+  p.rect(20, y0 + 11, 4, 2, RC.robe); p.rect(sx - 1, y0 + 11, 2, 2, RC.hand);
+  p.line(sx, top + 4, sx - (a === 'attack' ? 1 : 0), y0 + 26 - kneel, RC.staff);
+  p.line(sx + 1, top + 5, sx, y0 + 26 - kneel, RC.staffD);
+  // cabeza del báculo: anillo con la runa
+  p.rect(sx - 2, top, 5, 1, RC.head); p.rect(sx - 2, top + 4, 5, 1, RC.head); p.rect(sx - 2, top, 1, 5, RC.head); p.rect(sx + 2, top, 1, 5, RC.head);
+  p.px(sx, top + 2, RC.runeL); p.px(sx, top + 1, RC.rune); p.px(sx, top + 3, RC.rune);
+  // losas por delante
+  for (let i = 0; i < 3; i++) {
+    const ang = t * TAU * (a === 'special' ? 1 : 0.5) + i * 2.1;
+    const rx = 15 + Math.cos(ang) * (11 + orbit), ry = y0 + 12 + Math.sin(ang) * 5 - lift;
+    if (Math.sin(ang) >= 0) runeTile(p, Math.round(rx), Math.round(ry), a !== 'idle' || f % 2 === i % 2);
+  }
+  p.outline(RC.out);
+  // brillos: rostro, báculo y círculo rúnico a los pies
+  if (glowOn) p.glow(16.5, y0 + 5.5, 3, 'rgba(122,232,255,.35)');
+  p.glow(sx, top + 2, a === 'cast' || a === 'attack' ? 4.5 : 3, 'rgba(90,200,255,.45)');
+  if (a === 'attack' && f >= 1 && f <= 2) for (let k = 0; k < 4; k++) p.glow(sx + 3 + k * 2, top + 2, 1.6, 'rgba(160,230,255,.7)');
+  if (a === 'special' || a === 'cast') for (let i = 0; i < 6; i++) { const ang = i * 1.047 + t * TAU; p.glow(16 + Math.cos(ang) * 9, 28 + Math.sin(ang) * 2, 1.8, 'rgba(90,200,255,.5)'); }
+}
+
+const DRAW: Record<string, (p: Pen, a: Anim, f: number) => void> = { zorro, esferas: tejedora, carcelero, acechador, barbaro, pistolero, arquitecto };
 
 /** Paleta de la Sombra del Acechador: todo morado oscuro, solo los ojos siguen rojos. */
 function shadowTint(c: string): string {
