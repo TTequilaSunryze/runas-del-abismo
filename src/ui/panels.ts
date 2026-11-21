@@ -290,21 +290,24 @@ export function mapSvg(run: RunState, pick = false): string {
   const lines = run.links.map((rows, l) => rows.map((to, i) => to.map((j) => {
     const [x1, y1] = pos(l, i), [x2, y2] = pos(l + 1, j);
     const walked = run.trail[l] === i && (run.trail[l + 1] === j && l + 1 < run.step || (l + 1 === run.step && avail.includes(j)));
-    return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${walked ? '#f2c14e' : '#5a4a6e'}" stroke-width="${walked ? 3 : 2}" opacity="${walked ? 1 : 0.6}"/>`;
+    return walked ? `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#ffd36a" stroke-width="4" filter="url(#mglow)"/>`
+      : `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#4a3622" stroke-width="3" stroke-linecap="round" opacity=".75"/>`;
   }).join('')).join('')).join('');
   const nodes = run.map.map((row, l) => row.map((k, i) => {
     const [x, y] = pos(l, i);
     const can = l === run.step && avail.includes(i), done = here(l, i) || current(l, i);
-    const stroke = can ? '#f2c14e' : done ? '#6fcf6f' : '#5a4a6e';
+    const stroke = can ? '#ffcf5a' : done ? '#7fe07a' : '#7a6a52';
     const click = pick && can ? `data-act="node" data-id="${i}" style="cursor:${canPick ? 'pointer' : 'not-allowed'}"` : '';
-    const label = can ? `<text x="${x}" y="${y + 36}" text-anchor="middle" font-size="12" fill="#f2c14e">${esc(NODE_NAME[k].replace(/^\S+\s/, ''))}</text>` : '';
+    const label = can ? `<text x="${x}" y="${y + 37}" text-anchor="middle" font-size="12" font-weight="700" fill="#3a2410" class="mlabel">${esc(NODE_NAME[k].replace(/^\S+\s/, ''))}</text>` : '';
     const vs = can ? votesAt(i) : [];
     const voteMarks = vs.map((v, n) => `<g><circle cx="${x - 18 + n * 12}" cy="${y - 24}" r="7" fill="${v.col}" stroke="#000" stroke-width="2"/><text x="${x - 18 + n * 12}" y="${y - 20.5}" text-anchor="middle" font-size="9" font-weight="bold" fill="#000" pointer-events="none">${esc(v.name.charAt(0).toUpperCase())}</text></g>`).join('');
     const ring = vs.length ? `<circle cx="${x}" cy="${y}" r="29" fill="none" stroke="${vs.find((v) => v.mine)?.col ?? vs[0]!.col}" stroke-width="2" stroke-dasharray="4 3" class="voting"/>` : '';
     const tipHtml = `<b>${esc(NODE_NAME[k])}</b><div class="sm">${esc(NODE_HINT[k] ?? '')}</div>${vs.length ? `<div class="sm">Quieren ir: ${vs.map((v) => `<b style="color:${v.col}">${esc(v.name)}</b>`).join(', ')}</div>` : ''}${can && pick ? '<div class="sm good">Haz clic para votar este camino</div>' : ''}`;
-    return `<g ${click} ${tip(tipHtml)} opacity="${l < run.step && !done ? 0.35 : 1}">${ring}<circle cx="${x}" cy="${y}" r="${can ? 24 : 20}" fill="${can ? '#3a2c1a' : '#241a33'}" stroke="${stroke}" stroke-width="${can || done ? 3 : 2}"/><text x="${x}" y="${y + 7}" text-anchor="middle" font-size="20" pointer-events="none">${NODE_ICON[k]}</text>${label}${voteMarks}</g>`;
+    return `<g ${click} ${tip(tipHtml)} opacity="${l < run.step && !done ? 0.35 : 1}">${ring}${can ? `<circle cx="${x}" cy="${y}" r="27" fill="#ff9a3a" opacity=".35" class="mpulse"/>` : ''}<circle cx="${x}" cy="${y}" r="${can ? 23 : 19}" fill="${can ? '#3b2a18' : '#24201c'}" stroke="${stroke}" stroke-width="${can || done ? 3 : 2}"${can || done ? ' filter="url(#mglow)"' : ''}/><circle cx="${x}" cy="${y}" r="${can ? 18 : 15}" fill="none" stroke="#000" stroke-opacity=".45"/><text x="${x}" y="${y + 7}" text-anchor="middle" font-size="20" pointer-events="none">${NODE_ICON[k]}</text>${label}${voteMarks}</g>`;
   }).join('')).join('');
-  return `<div class="mapscroll"><svg class="actmap" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${lines}${nodes}</svg></div>`;
+  const grid = Array.from({ length: Math.ceil(W / 40) }, (_, i) => `<line x1="${i * 40}" y1="0" x2="${i * 40}" y2="${H}"/>`).join('') + Array.from({ length: Math.ceil(H / 40) }, (_, i) => `<line x1="0" y1="${i * 40}" x2="${W}" y2="${i * 40}"/>`).join('');
+  const defs = '<defs><filter id="mglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>';
+  return `<div class="mapscroll parchment"><svg class="actmap" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${defs}<g class="mgrid">${grid}</g>${lines}${nodes}</svg></div>`;
 }
 
 const mapLegend = (): string => (['combat', 'elite', 'event', 'shrine', 'shop', 'treasure', 'forge', 'rest', 'altar', 'boss'] as const).map((k) => `<span class="chip">${NODE_ICON[k]} ${esc(NODE_NAME[k].replace(/^\S+\s/, ''))}</span>`).join('');

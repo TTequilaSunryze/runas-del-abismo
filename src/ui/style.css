@@ -685,3 +685,115 @@ button.big { font-size: 18px; padding: 10px 22px; }
 .arc-t-ceniza .lootcard { background: linear-gradient(180deg, #3a2a24, #261c19) !important; }
 .arc-t-bosque .lootcard { background: linear-gradient(180deg, #273826, #1a261a) !important; }
 .arc-t-abisal .lootcard { background: linear-gradient(180deg, #2f2045, #1d132b) !important; }
+
+/* =====================================================================
+   v18 · Estética de los menús: fondo animado en pixel art, marcos de piedra con gema,
+   botones biselados, título dorado y menú vertical. Solo en pantallas con fondo (no en combate).
+   ===================================================================== */
+#menubg { position: fixed; inset: 0; width: 100vw; height: 100vh; object-fit: cover; image-rendering: pixelated; z-index: 0; display: none; pointer-events: none; background: #05060a center / cover no-repeat; }
+body.has-menubg { background: #05060a; }
+body.has-menubg::before { content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+body[data-scene="home"]::before { background: linear-gradient(90deg, rgba(4, 5, 9, .78) 0%, rgba(4, 5, 9, .55) 38%, rgba(4, 5, 9, .08) 62%, rgba(4, 5, 9, 0) 100%), linear-gradient(0deg, rgba(4, 5, 9, .6), transparent 30%); }
+body[data-scene="game"]::before { background: radial-gradient(ellipse at 50% 45%, rgba(4, 6, 9, .45), rgba(4, 6, 9, .72)); }
+#app { position: relative; z-index: 1; }
+
+/* marcos de piedra */
+body.has-menubg .panel, body.has-menubg .side, body.has-menubg .bar, body.has-menubg .path {
+  background: linear-gradient(180deg, rgba(36, 33, 38, .95), rgba(19, 18, 22, .96));
+  border: 3px solid #57535d; border-radius: 6px;
+  box-shadow: inset 0 0 0 1px #121115, inset 0 2px 0 rgba(255, 255, 255, .07), 0 0 0 1px #0a090c, 0 10px 24px rgba(0, 0, 0, .6);
+}
+body.has-menubg .panel.note, body.has-menubg .reconnect { background: linear-gradient(180deg, rgba(64, 46, 26, .96), rgba(34, 24, 14, .97)); border-color: #b8873a; }
+body.has-menubg .lootcard { background: linear-gradient(180deg, rgba(40, 36, 42, .95), rgba(22, 20, 25, .96)); border-color: #4c4852; }
+body.has-menubg h3 { font-family: var(--head); color: #f0d79c; letter-spacing: 1px; text-shadow: 0 2px 0 #000; }
+.panel.orn { margin-top: 10px; }
+.panel.orn::after { content: ''; position: absolute; top: -10px; left: 50%; width: 14px; height: 14px; transform: translateX(-50%) rotate(45deg); background: linear-gradient(135deg, #b9f6ff, #2a8fbf 60%, #135070); border: 3px solid #57535d; box-shadow: 0 0 10px rgba(95, 216, 255, .55); }
+
+/* botones biselados de piedra; el principal, latón y brasa */
+body.has-menubg button:not(.pick):not(.chip):not(.hbtn):not(.sq) {
+  background: linear-gradient(180deg, #4d4a54, #2e2c33 55%, #25232a); border: 2px solid #151418; border-radius: 4px; color: #efe4cc;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), inset 0 -2px 0 rgba(0, 0, 0, .45), 0 0 0 1px #5d5966, 0 3px 0 #000; text-shadow: 0 1px 0 #000;
+}
+body.has-menubg button.pri:not(.pick):not(.chip):not(.hbtn) {
+  background: linear-gradient(180deg, #e0a24a, #b0601f 55%, #8a4514); border-color: #3a1c06; color: #fff4dc;
+  box-shadow: inset 0 1px 0 rgba(255, 240, 200, .55), inset 0 -2px 0 rgba(60, 20, 0, .5), 0 0 0 2px #f2c14e, 0 3px 0 #1a0c02, 0 0 14px rgba(242, 160, 60, .35);
+}
+body.has-menubg button:disabled { filter: grayscale(.6) brightness(.7); }
+body.has-menubg .tabs button { background: transparent !important; box-shadow: none !important; border: 0 !important; border-bottom: 2px solid #3a3740 !important; border-radius: 0 !important; }
+body.has-menubg .tabs button.on { border-bottom-color: var(--gold) !important; color: var(--gold); background: rgba(227, 176, 75, .08) !important; }
+body.has-menubg input { background: #0b0a0e; border: 2px solid #4a4652; box-shadow: inset 0 2px 4px #000; }
+
+/* inicio */
+.home2 { max-width: 1240px; margin: 0 auto; padding: 18px 22px 30px; display: flex; flex-direction: column; gap: 14px; min-height: 100vh; box-sizing: border-box; }
+.hhead { display: flex; align-items: flex-start; gap: 12px; }
+.ptitle { font-family: var(--head); font-weight: 700; font-size: clamp(34px, 5.2vw, 68px); line-height: 1; letter-spacing: 4px; margin: 0; text-shadow: none;
+  background: linear-gradient(180deg, #fff3c4 0%, #f7c757 42%, #d98a28 66%, #8e4a12 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 3px 0 #2b1405) drop-shadow(0 0 1px #2b1405) drop-shadow(0 0 16px rgba(255, 170, 60, .35)); }
+.hhead .sub { margin: 8px 0 0 4px; color: #b8b2c4; font-size: 16px; letter-spacing: .3px; text-shadow: 0 2px 0 #000; }
+.hright { display: flex; align-items: center; gap: 10px; }
+.acctbadge { display: flex; align-items: center; gap: 10px; padding: 4px 4px 4px 14px; cursor: pointer; background: linear-gradient(180deg, rgba(40, 37, 44, .95), rgba(20, 19, 23, .96)); border: 3px solid #57535d; border-radius: 6px; box-shadow: inset 0 0 0 1px #121115, 0 6px 16px #000a; }
+.acctbadge:hover { border-color: var(--gold); }
+.acctname { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
+.acctname b { font-family: var(--head); font-size: 18px; color: #f3e6c8; }
+.acctname i { font-size: 12px; color: var(--gold); }
+.acctport { width: 48px; height: 48px; image-rendering: pixelated; background: radial-gradient(circle, #2b2633, #121016); border: 2px solid #8a7a5a; border-radius: 4px; }
+.home2 .reconnect { max-width: 600px; }
+.hbody { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 22px; align-items: start; }
+.hnav { display: flex; flex-direction: column; gap: 8px; }
+.hbtn { --e: #6a6672; position: relative; height: 44px; width: 100%; padding: 0; border: 0; border-radius: 0; background: var(--e); box-shadow: none; cursor: pointer;
+  clip-path: polygon(16px 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 16px 100%, 0 50%); }
+.hbtn > span { position: absolute; inset: 3px; display: flex; align-items: center; justify-content: center; gap: 8px; background: linear-gradient(180deg, #4b4852, #2c2a31 58%, #222026);
+  clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 14px 100%, 0 50%);
+  font-family: var(--head); font-size: 19px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: #eadfc8; text-shadow: 0 2px 0 #000; }
+.hbtn > span i { font-family: var(--body); font-style: normal; font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--gold); background: rgba(0, 0, 0, .45); padding: 1px 6px; border-radius: 8px; }
+.hbtn:hover { --e: #9a93a4; filter: brightness(1.12); }
+.hbtn.on { --e: #f2c14e; }
+.hbtn.on > span { background: linear-gradient(180deg, #8a5a22, #5a3712 58%, #3e250c); color: #fff0c8; }
+.hbtn.tuto { --e: #4f4b57; margin-top: 10px; height: 38px; }
+.hbtn.tuto > span { font-size: 16px; }
+.hmain { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.hmain.narrow { max-width: 430px; }
+.hmain .panel { text-align: left; }
+.playbox { text-align: center !important; padding: 14px 16px 16px !important; }
+.playbox h3 { font-size: 22px; margin: 2px 0 4px; text-transform: uppercase; letter-spacing: 2px; }
+.playbox p { margin: 0 0 10px; color: #cfc6b4 !important; }
+.playbox button { font-size: 16px; padding: 8px 20px; }
+.playbox .codein { width: 110px; font-size: 18px; letter-spacing: 6px; text-align: center; padding: 6px; }
+.row.center { justify-content: center; gap: 8px; }
+.namebox label { display: flex; align-items: center; gap: 10px; font-family: var(--head); color: #f0d79c; }
+.namebox input { flex: 1; font-size: 16px; padding: 6px 8px; }
+.resumebtn { align-self: stretch; font-size: 15px; padding: 10px; }
+.howto { max-width: 950px; align-self: center; text-align: center; color: #d8cfbd !important; }
+@media (max-width: 860px) {
+  .hbody { grid-template-columns: 1fr; }
+  .hnav { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .hhead { flex-direction: column; } .hright { align-self: stretch; justify-content: space-between; }
+  .hmain.narrow { max-width: none; }
+}
+
+/* sala: barra de piedra, código en cian, cartas de campeón con marco dorado */
+body.has-menubg .bar .code { font-family: var(--head); font-size: 28px; color: #8ff0ff; letter-spacing: 4px; text-shadow: 0 0 12px rgba(80, 210, 255, .6), 0 2px 0 #000; background: none; border: 0; }
+body.has-menubg .pick { background: linear-gradient(180deg, rgba(34, 30, 34, .96), rgba(16, 14, 18, .97)); border: 2px solid #7a6440; border-radius: 6px;
+  box-shadow: inset 0 0 0 1px #000, inset 0 0 0 3px rgba(242, 193, 78, .12), 0 8px 18px #000a; }
+body.has-menubg .pick > b { font-family: var(--head); font-size: 17px; color: #f6e6c0; text-shadow: 0 2px 0 #000; }
+body.has-menubg .pick:hover { border-color: #e3b04b; transform: translateY(-2px); }
+body.has-menubg .pick.on { border-color: #ffb3d9; box-shadow: inset 0 0 0 1px #000, 0 0 0 2px #f2c14e, 0 0 22px rgba(255, 150, 200, .45), 0 8px 18px #000a; }
+body.has-menubg .pick.on { padding-top: 20px; }
+body.has-menubg .pick.on::after { content: 'SELECCIONADO'; position: absolute; top: 4px; left: 0; right: 0; text-align: center; font: 700 10px var(--head); letter-spacing: 1px; color: #f2c14e; text-shadow: 0 1px 0 #000; }
+body.has-menubg .pick .portrait { filter: drop-shadow(0 4px 0 rgba(0, 0, 0, .5)); }
+body.has-menubg .lbl { color: #f0d79c; border-bottom-color: rgba(242, 193, 78, .3); text-shadow: 0 2px 0 #000; }
+
+/* mapa de la zona: pergamino con caminos dorados */
+.mapscroll.parchment {
+  background:
+    radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(60, 36, 12, .55) 100%),
+    var(--noise),
+    linear-gradient(180deg, #d9bd8a, #c4a26c 45%, #b08a54);
+  border: 3px solid #5a4024; border-radius: 6px; padding: 6px 4px;
+  box-shadow: inset 0 0 0 2px #e8d2a2, inset 0 0 24px rgba(70, 40, 10, .55), 0 0 0 2px #1a120a, 0 10px 24px rgba(0, 0, 0, .6);
+}
+.mapscroll.parchment .mgrid line { stroke: #6b4a22; stroke-opacity: .18; stroke-width: 1; }
+.mapscroll.parchment .mlabel { paint-order: stroke; stroke: #e8d2a2; stroke-width: 3px; }
+.mapscroll.parchment .mpulse { animation: mpulse 1.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes mpulse { 50% { opacity: .1; transform: scale(1.18); } }
+body.has-menubg .cards.c5 { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }

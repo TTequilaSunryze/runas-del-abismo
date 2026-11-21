@@ -34,6 +34,7 @@ import { ATLAS_CATS, CHRONICLE_CATS, MAX_LV, MASTERED_AT, type AtlasCat, type Ch
 import { ATLAS, ATLAS_DONE_TEXT, ATLAS_NAME, ATLAS_STATE_NAME, CHRONICLES, CHRONICLE_NAME, CHRONICLE_STATE_NAME, atlasEntry, atlasProgress, chronicleEntry, chronicleProgress } from '../game/atlas';
 import { BLESSINGS } from '../core/boonmods';
 import { unitPortraitUrl } from '../render/sprites';
+import { setMenuScene } from '../render/menubg';
 import { NODE_NAME, heroSpec, upCount, upgradeChoices } from '../game/run';
 
 const RAR = ['ir0', 'ir1', 'ir2', 'ir3'];
@@ -298,21 +299,32 @@ function reconnectBanner(): string {
 }
 
 export function homeScreen(msg: string): void {
+  setMenuScene('home');
   const host = JSON.parse(store.get('rda_host') ?? 'null') as { code: string } | null;
   const m = meta();
-  const tabs: Array<[typeof ui.homeTab, string]> = [['jugar', '⚔️ Jugar'], ['tienda', `✨ Tienda (${m.ecos})${unseenOwned(m).length || (m.perksRefundEcos && !m.refundSeen) ? ' (!)' : ''}`], ['clases', '🎓 Maestría'], ['logros', `🏆 Logros ${achievementCount(m)}`], ['archivo', `📚 Archivo ${archiveTotal().pct}%${contractsReady(m) + specialReady(m) ? ` (${contractsReady(m) + specialReady(m)}!)` : ''}`], ['salon', `🏟️ Salón y duelos`], ['diario', '📅 Reto diario'], ['amigos', `👥 Amigos${currentAccount() ? ` (${friendsStatus().filter((f) => f.online).length}/${m.friends.length})` : ''}`], ['cuenta', currentAccount() ? `👤 ${esc(currentAccount()!.name)}` : '👤 Cuenta']];
-  ui.root.innerHTML = `<div class="home"><div class="row"><span class="grow"></span>${volumeControl()}</div><h1>RUNAS DEL ABISMO</h1>${m.cosmetics?.title || emblemOf(m) ? `<p class="good">${emblemOf(m)} ${esc(ui.me.name)}${m.cosmetics?.title ? ` · <i>${esc(titleName(m.cosmetics.title))}</i>` : ''}</p>` : ''}<p class="dim">RPG táctico por turnos · cooperativo de 1 a 4 jugadores · 3 zonas</p>
+  const pend = contractsReady(m) + specialReady(m), shopNew = unseenOwned(m).length || (m.perksRefundEcos && !m.refundSeen);
+  const tabs: Array<[typeof ui.homeTab, string, string]> = [
+    ['jugar', 'Jugar', ''], ['tienda', 'Tienda', `${m.ecos} ✨${shopNew ? ' !' : ''}`], ['clases', 'Maestría', ''], ['logros', 'Logros', achievementCount(m)],
+    ['archivo', 'Archivo', `${archiveTotal().pct}%${pend ? ` · ${pend}!` : ''}`], ['salon', 'Salón y duelos', ''], ['diario', 'Reto diario', ''], ['amigos', 'Amigos', ''], ['cuenta', 'Cuenta', ''],
+  ];
+  const acct = currentAccount(), em = emblemOf(m), title = m.cosmetics?.title ? titleName(m.cosmetics.title) : '';
+  const badge = `<div class="acctbadge" data-act="htab" data-id="cuenta" ${tip(acct ? 'Tu cuenta' : 'Sin cuenta: tu progreso se guarda en este navegador')}><div class="acctname">${em ? `${em} ` : ''}<b>${esc(acct?.name ?? ui.me.name)}</b>${title ? `<i>${esc(title)}</i>` : ''}</div><img class="acctport" src="${unitPortraitUrl(ui.me.cls, 'hero', 0, currentLook(m, ui.me.cls).skin)}" alt=""></div>`;
+  const play = `<div class="panel orn namebox"><label>Tu nombre <input id="name" maxlength="14" value="${esc(ui.me.name)}"></label></div>
+    <div class="panel orn playbox"><h3>Crear sala</h3><p class="dim sm">Serás el anfitrión. Comparte el código de 4 letras.</p><button class="pri" data-act="create">Crear sala</button></div>
+    <div class="panel orn playbox"><h3>Unirse</h3><p class="dim sm">Con el código que te pase el anfitrión.</p><div class="row center"><input id="code" maxlength="4" placeholder="ABCD" class="codein"><button class="pri" data-act="join">Unirse</button></div></div>
+    <div class="panel orn playbox"><h3>Un jugador</h3><p class="dim sm">Sin conexión con otros.</p><button data-act="solo">Jugar solo</button></div>
+    ${host ? `<button class="resumebtn" data-act="resume">Continuar la partida guardada de la sala ${esc(host.code)}</button>` : ''}`;
+  ui.root.innerHTML = `<div class="home2">
+  <header class="hhead"><div><h1 class="ptitle">RUNAS DEL ABISMO</h1><p class="sub">RPG táctico por turnos · cooperativo de 1 a 4 jugadores · 3 zonas</p></div><span class="grow"></span><div class="hright">${volumeControl()}${badge}</div></header>
   ${msg ? `<p class="bad">${esc(msg)}</p>` : ''}
   ${reconnectBanner()}
-  <div class="tabs htabs">${tabs.map(([id, n]) => `<button class="${ui.homeTab === id ? 'on' : ''}" data-act="htab" data-id="${id}">${n}</button>`).join('')}</div>
-  ${ui.homeTab === 'jugar' ? `<div class="panel"><label>Tu nombre <input id="name" maxlength="14" value="${esc(ui.me.name)}"></label></div>
-  <div class="cards">
-    <div class="panel"><h3>Crear sala</h3><p class="dim sm">Serás el anfitrión. Comparte el código de 4 letras.</p><button class="pri" data-act="create">Crear sala</button></div>
-    <div class="panel"><h3>Unirse</h3><p class="dim sm">Con el código que te pase el anfitrión.</p><input id="code" maxlength="4" placeholder="ABCD" class="codein"> <button class="pri" data-act="join">Unirse</button></div>
-    <div class="panel"><h3>Un jugador</h3><p class="dim sm">Sin conexión con otros.</p><button data-act="solo">Jugar solo</button></div>
+  <div class="hbody">
+    <nav class="hnav">${tabs.map(([id, n, b]) => `<button class="hbtn ${ui.homeTab === id ? 'on' : ''}" data-act="htab" data-id="${id}"><span>${n}${b ? `<i>${esc(b)}</i>` : ''}</span></button>`).join('')}
+      <button class="hbtn tuto" data-act="tuto"><span>Ver tutorial</span></button></nav>
+    <section class="hmain ${ui.homeTab === 'jugar' ? 'narrow' : ''}">${ui.homeTab === 'jugar' ? play : metaPanel()}</section>
   </div>
-  ${host ? `<p><button data-act="resume">Continuar la partida guardada de la sala ${esc(host.code)}</button></p>` : ''}
-  <div class="panel dim sm"><b>Cómo se juega:</b> cada unidad juega en su turno, por iniciativa. Clic en una casilla azul para moverte (PM). Elige un hechizo y haz clic en un objetivo con borde dorado (PA). Los obstáculos tapan la línea de visión. Cada turno dura como máximo ${TURN_SECONDS} segundos. <button class="mini" data-act="tuto">Ver tutorial</button></div>` : metaPanel()}</div>${tutorialHtml()}`;
+  ${ui.homeTab === 'jugar' ? `<div class="panel howto sm"><b>Cómo se juega:</b> cada unidad juega en su turno, por iniciativa. Clic en una casilla azul para moverte (PM). Elige un hechizo y haz clic en un objetivo con borde dorado (PA). Los obstáculos tapan la línea de visión. Cada turno dura como máximo ${TURN_SECONDS} segundos.</div>` : ''}
+  </div>${tutorialHtml()}`;
 }
 
 export function tutorialHtml(): string {
