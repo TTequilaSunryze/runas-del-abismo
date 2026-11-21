@@ -57,7 +57,7 @@ describe('arquero', () => {
 });
 
 describe('mejoras de hechizo', () => {
-  it('los hechizos solo se ofrecen al vencer al jefe: 3 hechizos nuevos', () => {
+  it('H4: la recompensa solo llega al vencer al jefe: 3 bendiciones de clase', () => {
     const run = newRun('T', 3, [{ owner: 'a', name: 'A', cls: 'zorro', routes: [] }]);
     const h = run.heroes[0]!;
     expect(h.boonOffer).toBeNull(); expect(h.bossOffer).toBeNull();
@@ -71,14 +71,14 @@ describe('mejoras de hechizo', () => {
     run.combat = createCombat({ seed: 1, w: 8, h: 5, obstacles: [], units: [heroSpec(h, { x: 1, y: 1 })] }).state;
     run.combat.over = 'win'; run.phase = 'combat'; run.kind = 'boss';
     finishFight(run);
-    const o = h.bossOffer!;
-    expect(o).toHaveLength(3);
-    for (const x of o) expect(x.kind).toBe('spell');
-    expect(new Set(o.map((x) => (x as { id: string }).id)).size).toBe(3);
-    expect(run.report?.turns).toBeGreaterThan(0);
-    expect(metaAction(run, 'a', { a: 'bossreward', idx: 0 })).toBeNull();
     expect(h.bossOffer).toBeNull();
-    expect(h.boons).toContain((o[0] as { id: string }).id);
+    const o = h.boonOffer!.spells;
+    expect(o).toHaveLength(3);
+    expect(new Set(o).size).toBe(3);
+    expect(run.report?.turns).toBeGreaterThan(0);
+    expect(metaAction(run, 'a', { a: 'boon', idx: 0 })).toBeNull();
+    expect(h.boonOffer).toBeNull();
+    expect(h.boons).toContain(o[0]);
   });
   it('potenciado suma +3 de daño', () => {
     const d = tuned(SPELLS.tajo!, { ups: ['pot'] });

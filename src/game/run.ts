@@ -6,7 +6,7 @@ import { DAILY_ASC, DAILY_POOL, OMENS, cleanMods } from '../content/modes';
 import { BASE_ZONES, ZONES, type BossDef, type ZoneDef } from '../content/zones';
 import type { BossInfo } from '../core/combat/ai';
 import { RELIC_EVENTS, RELICS } from '../content/relics';
-import { CONSUMABLES, MAX_CONSUMABLE, patronBonus, patronsOf } from '../content/boons';
+import { CONSUMABLES, MAX_CONSUMABLE, patronBonus, patronOf, patronsOf } from '../content/boons';
 import { BLESSINGS, BOON_MODS } from '../core/boonmods';
 import { CLASSES, MAX_LEVEL, canPickRoute } from '../core/classes/classes';
 import { SPELLS } from '../core/classes/spells';
@@ -136,7 +136,7 @@ export const NODE_HINT: Record<NodeKind, string> = {
   event: 'Una decisión que se vota y afecta a todos.', rest: 'Cada uno elige: descansar (40% de vida) o meditar (2 Escofinas de Eco).',
   shop: 'Gastad vuestro oro en objetos y pociones.', boss: 'El guardián de la zona. Dos fases. Objetos, una reliquia y una mejora o un hechizo nuevo.',
   cage: 'Un prisionero vigilado: venced a sus captores y luchará con vosotros hasta el final de la zona.',
-  shrine: 'Cada uno elige una de las bendiciones pasivas de su clase.',
+  shrine: 'Cada uno elige una mejora para uno de sus hechizos.',
   sangre: `Riesgo: combate endurecido (enemigos con +${Math.round(SANGRE_HP * 100)}% de vida y +${SANGRE_POWER} de daño). Recompensa: +50% de oro y una reliquia para cada uno.`,
   vault: 'Pasaje sellado: se abre con una llave rúnica (decisiones de eventos) o si el jefe anterior cayó sin bajas. Lleva a la Cámara Rúnica: reliquias raras, hechizos o descanso.',
 };
@@ -365,27 +365,51 @@ export const offerSize = (h: Pick<HeroSave, 'mastery'>): number => ((h.mastery ?
 /**
  * Santuario: bendiciones pasivas de la clase (hasta 3 en total). Elige una o rechaza.
  */
-export function offerBoon(run: RunState, h: HeroSave): void {
-  if (h.boonOffer) return;
-  const mineCls = patronsOf(h.cls);
-  const left = mineCls.flatMap((p) => p.spells.filter((id) => !!BLESSINGS[id] && !h.boons.includes(id)).map((id) => ({ p: p.id, id })));
-  if (!left.length) return;
-  const patron = left[0]!.p;
-  h.boonOffer = { patron, spells: shuffle(run, left.map((x) => x.id)).slice(0, Math.max(2, offerSize(h) - (run.mods.includes('agrietado') ? 1 : 0))) };
+export function offerBoon(run: RunState, h: HeroSave, size = offerSize(h)): boolean {
+  if (h.boonOffer) return true;
+  const left = blessingPool(h);
+  if (!left.length) return false;
+  h.boonOffer = { patron: patronOf(left[0]!)?.id ?? patronsOf(h.cls)[0]!.id, spells: shuffle(run, left).slice(0, Math.max(2, size)) };
+  return true;
+}
+
+/**
+ * H4: bendiciones de clase que puede recibir el héroe: las pasivas de su clase y, en el Arquero, sus mejoras de hechizo
+ * (`am_*`). Solo las que encajan con lo que lleva: las que modifican una habilidad concreta exigen tenerla.
+ */
+export function blessingPool(h: HeroSave): string[] {
+  const have = new Set(heroSpec(h).spells.map((sp) => sp.id));
+  const ok = (id: string): boolean => {
+    if (h.boons.includes(id)) return false;
+    const bl = BLESSINGS[id];
+    if (bl) return (!bl.mod || have.has(bl.mod.target)) && (!bl.needs || bl.needs.some((s) => have.has(s)));
+    const mod = BOON_MODS[id];
+    return !!mod && have.has(mod.target) && upCount(h, mod.target) < MAX_SPELL_UPS;
+  };
+  return [...new Set(patronsOf(h.cls).flatMap((p) => p.spells))].filter(ok);
+}
+
+/** H4: opciones del Santuario (una menos con el modificador Santuario agrietado; mínimo 2). */
+export const shrineSize = (run: RunState, h: HeroSave): number => Math.max(2, offerSize(h) - (run.mods.includes('agrietado') ? 1 : 0));
+
+/** H4: recompensa de jefe (y de los eventos que la imitan): una bendición de clase; si no queda ninguna, una mejora de hechizo. */
+export function offerBossReward(run: RunState, h: HeroSave): void {
+  if (!offerBoon(run, h)) h.bossOffer = buildBossOffer(run, h);
 }
 
 /**
  * Recompensa del jefe, siempre en este orden: 1) mejora de un hechizo que tienes, 2) mejora de otro hechizo que tienes,
  * 3) hechizo nuevo del pool de tu clase. Si no hay mejoras posibles se sustituyen por hechizos nuevos, oro o curación.
  */
-export function buildBossOffer(run: RunState, h: HeroSave): BossOption[] {
+export function buildBossOffer(run: RunState, h: HeroSave, opts: { spells?: boolean; size?: number } = {}): BossOption[] {
   const spells = heroSpec(h).spells.filter((sp) => sp.charges === undefined).map((sp) => sp.id);
   const choices = (id: string): string[] => upCount(h, id) >= MAX_SPELL_UPS ? [] : [...upgradeChoices(h, id), ...Object.keys(BOON_MODS).filter((m) => BOON_MODS[m]!.target === id && !h.boons.includes(m) && !(h.ups[id] ?? []).includes(m))];
   // v12: el jefe ofrece 3 hechizos nuevos de la clase (4 con maestría 5). Si ya no quedan, mejoras de los que tienes;
   // y si tampoco, oro o curación hasta las 3 de base. La 4.ª opción de la maestría nunca se rellena con oro o curación:
   // si no hay un hechizo o una mejora distintos que ofrecer, la oferta se queda en 3 (así no hay duplicados ni relleno).
-  const n = offerSize(h);
-  const out: BossOption[] = shuffle(run, newSpellPool(h)).slice(0, n).map((id) => ({ kind: 'spell', id }));
+  const n = opts.size ?? offerSize(h);
+  // H4: las habilidades nuevas ya no salen de recompensas (se desbloquean en la tienda); solo si se pide expresamente
+  const out: BossOption[] = opts.spells ? shuffle(run, newSpellPool(h)).slice(0, n).map((id) => ({ kind: 'spell', id })) : [];
   for (const id of shuffle(run, spells.filter((id) => choices(id).length))) { if (out.length >= n) break; out.push({ kind: 'up', spell: id, up: pick(run, choices(id)) }); }
   if (out.length < OFFER_BASE) out.push({ kind: 'gold', amount: 60 + 40 * run.zone });
   if (out.length < OFFER_BASE) out.push({ kind: 'heal' });
@@ -870,7 +894,8 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
   } else if (node === 'altar') {
     enterRoom(run, 'altar');
   } else if (node === 'shrine') {
-    for (const h of run.heroes) offerBoon(run, h);
+    // H4: el Santuario mejora uno de tus hechizos (las bendiciones de clase pasan a ser la recompensa de los jefes)
+    for (const h of run.heroes) h.bossOffer ??= buildBossOffer(run, h, { size: shrineSize(run, h) });
     enterRoom(run, 'shrine');
   }
   return [];
@@ -990,7 +1015,7 @@ export function finishFight(run: RunState): void {
     }
     // objetos según la sala; los hechizos solo llegan al vencer al jefe de la zona
     dropLoot(run, h, dropKindOf(run), (found[h.owner] ??= []));
-    if (run.kind === 'boss' && run.zone < lastZone(run)) h.bossOffer = buildBossOffer(run, h);
+    if (run.kind === 'boss' && run.zone < lastZone(run)) offerBossReward(run, h);
     const max = heroMaxHp(h);
     // no hay curación gratis tras un combate: solo tras vencer al jefe (o en hogueras, eventos y habilidades).
     // Los caídos se levantan con el 30% de la vida para poder seguir jugando.

@@ -81,7 +81,7 @@ describe('Fase 0 · maestría 5: cuatro opciones', () => {
     for (const m of [0, 1, 4]) {
       const run = mk(m), h = run.heroes[0]!;
       expect(offerSize(h)).toBe(3);
-      expect(buildBossOffer(run, h)).toHaveLength(3);
+      expect(buildBossOffer(run, h, { spells: true })).toHaveLength(3);
       const rb = mk(m, 'arquitecto'), hb = rb.heroes[0]!;
       offerBoon(rb, hb);
       expect(hb.boonOffer!.spells).toHaveLength(3);
@@ -91,7 +91,7 @@ describe('Fase 0 · maestría 5: cuatro opciones', () => {
     const run = mk(5), h = run.heroes[0]!;
     expect(offerSize(h)).toBe(4);
     for (let i = 0; i < 40; i++) {
-      const o = buildBossOffer(run, h);
+      const o = buildBossOffer(run, h, { spells: true });
       expect(o).toHaveLength(4);
       const keys = o.map((x) => x.kind === 'spell' ? `s:${x.id}` : x.kind === 'up' ? `u:${x.spell}` : x.kind);
       expect(new Set(keys).size).toBe(4);

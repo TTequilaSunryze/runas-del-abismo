@@ -46,7 +46,7 @@ describe('pool de cada clase', () => {
       expect(h.boonOffer!.spells, c).toHaveLength(3);
       for (const o of h.boonOffer!.spells) expect(BLESSINGS[o]?.cls).toBe(c);
       const got = new Set<string>();
-      for (let i = 0; i < 60; i++) for (const o of buildBossOffer(run, h)) { if (o.kind === 'spell') { expect(pool.has(o.id), `${c} ${o.id}`).toBe(true); expect(SPELLS[o.id]).toBeTruthy(); got.add(o.id); } }
+      for (let i = 0; i < 60; i++) for (const o of buildBossOffer(run, h, { spells: true })) { if (o.kind === 'spell') { expect(pool.has(o.id), `${c} ${o.id}`).toBe(true); expect(SPELLS[o.id]).toBeTruthy(); got.add(o.id); } }
       expect(got.size, c).toBe(6);
     }
   });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DAILY_MODS, DAILY_POOL, MOD_ECOS, cleanMods, modConflict, modEcos } from '../src/content/modes';
 import { ecosFor } from '../src/game/meta';
-import { chooseNode, heroMaxHp, newRun, offerBoon } from '../src/game/run';
+import { chooseNode, heroMaxHp, newRun, shrineSize } from '../src/game/run';
 import { roomStep } from './helpers';
 
 const store: Record<string, string> = {};
@@ -42,10 +42,9 @@ describe('Fase G1 · modificadores de expedición', () => {
     const n0 = roomStep(newRun('RSK', 3, P)); chooseNode(n0, 0);
     expect(z0.combat!.units.filter((u) => u.team === 'enemy').map((u) => u.maxHp)).toEqual(n0.combat!.units.filter((u) => u.team === 'enemy').map((u) => u.maxHp));
   });
-  it('santuario agrietado: una bendición menos (mínimo 2)', () => {
+  it('santuario agrietado: una opción menos (mínimo 2)', () => {
     const P2 = [{ owner: 'a', name: 'A', cls: 'arquitecto' as const, routes: [] as string[] }];
     const n = newRun('SAN', 3, P2), m = newRun('SAN', 3, P2, { mods: ['agrietado'] });
-    offerBoon(n, n.heroes[0]!); offerBoon(m, m.heroes[0]!);
-    expect(m.heroes[0]!.boonOffer!.spells.length).toBe(Math.max(2, n.heroes[0]!.boonOffer!.spells.length - 1));
+    expect(shrineSize(m, m.heroes[0]!)).toBe(Math.max(2, shrineSize(n, n.heroes[0]!) - 1));
   });
 });

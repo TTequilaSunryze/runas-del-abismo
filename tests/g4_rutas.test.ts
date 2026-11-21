@@ -161,7 +161,7 @@ describe('G4 · decisiones y acontecimientos ramificados', () => {
   it('el trato del heraldo da una recompensa de jefe a cada uno y refuerza al jefe', () => {
     const r = mk(); r.zone = 1;
     decide(r, 'g4_heraldo', 0);
-    expect(r.heroes.every((h) => !!h.bossOffer)).toBe(true);
+    expect(r.heroes.every((h) => !!h.boonOffer || !!h.bossOffer)).toBe(true);
     expect(r.flags).toContain('g2_carga_1');
   });
 });

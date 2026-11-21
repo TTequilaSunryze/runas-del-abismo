@@ -7,7 +7,7 @@ import { CLASS_PASSIVE, CLASSES, findRoute } from '../core/classes/classes';
 import { SPELLS } from '../core/classes/spells';
 import { BAG_SIZE, PRICE, RARITY_NAME, SLOTS, SLOT_NAME, STAT_NAME, statDiff, statShown, statsText, type Item, type Slot, type StatKey } from '../core/items/items';
 import { RELICS } from '../content/relics';
-import { MAX_BOONS, PATRONS, patronBonus, patronOf } from '../content/boons';
+import { PATRONS, patronBonus, patronOf } from '../content/boons';
 import { BLESSINGS, BOON_MODS } from '../core/boonmods';
 import { MAX_SPELL_UPS, UPGRADES, tuned } from '../core/upgrades';
 import { SOULS_PER_ARMOR, SOUL_ARMOR } from '../core/combat/engine';
@@ -144,8 +144,10 @@ function bossCard(h: HeroSave, o: BossOption, i: number): string {
 export function bossRow(run: RunState): string {
   const h = mine(run);
   if (!h?.bossOffer) return '';
-  return `<div class="panel loot boon"><div class="row"><h3>👑 Recompensa del jefe: elige una</h3><span class="grow"></span><span class="dim sm">Aprendidos: ${h.boons.length}/${MAX_BOONS}</span></div>
-  <div class="dim sm">Elige uno de estos hechizos nuevos de ${esc(CLASSES[h.cls].name)}.</div>
+  // H4: el Santuario y la recompensa de jefe sin bendiciones disponibles ofrecen mejoras de hechizo
+  const shrine = run.room?.kind === 'shrine', spells = h.bossOffer.some((o) => o.kind === 'spell');
+  return `<div class="panel loot boon"><div class="row"><h3>${shrine ? '✨ Santuario: mejora un hechizo' : spells ? '👑 Recompensa: elige una' : '🔧 Mejora de hechizo: elige una'}</h3><span class="grow"></span></div>
+  <div class="dim sm">${spells ? `Hechizos nuevos de ${esc(CLASSES[h.cls].name)}.` : 'Mejora para una de tus habilidades equipadas: dura toda la expedición.'}</div>
   <div class="cards c${Math.min(4, h.bossOffer.length)}">${h.bossOffer.map((o, i) => bossCard(h, o, i)).join('')}</div></div>`;
 }
 
@@ -163,6 +165,7 @@ export function victoryModal(run: RunState): string {
   <div class="lbl">Has encontrado…</div>
   <div class="cells loot-icons">${chip('💰', `<b>Oro</b><div class="sm">+${r.gold} de oro para cada uno.</div>`)}${items}${mineLoot.map((l) => chip(l.icon, `<b>${esc(l.name)}</b><div class="sm">${esc(l.text)}</div>`, l.rare ? 'ir3' : 'ir1')).join('')}</div>
   ${stashRow(run)}
+  ${boonRow(run)}
   ${bossRow(run)}
   <div class="lbl">Resumen</div>
   <div class="vsum sm"><span>⏱️ ${r.turns} ronda${r.turns === 1 ? '' : 's'}</span><span>⚔️ ${r.damage.reduce((a, x) => a + x.dmg, 0)} de daño</span></div>
@@ -189,9 +192,9 @@ export function boonRow(run: RunState): string {
     const d = SPELLS[id]!;
     return `<div class="lootcard r2" ${tip(spellTip(d))}><div class="row">${spellIcon(d)}<div><b>${esc(d.name)}</b><div class="pill sm">Hechizo nuevo de ${esc(CLASSES[h.cls].name)}</div></div></div><div class="sm">${esc(d.text)}</div><div class="dim sm">${d.ap} PA · ${rangeText(d)}${d.perTurn ? ` · ${d.perTurn} por turno` : ''}${d.cd ? ` · espera ${d.cd + 1}` : ''}</div>${syn}<button class="pri" data-act="boon" data-id="${i}">Elegir</button></div>`;
   };
-  const allSpells = h.boonOffer.spells.every((x) => SPELLS[x]);
-  return `<div class="panel loot boon"><div class="row"><h3>${p.icon} ${allSpells ? 'Hechizo nuevo' : 'Hechizo nuevo o bendición'}: elige uno</h3><span class="grow"></span><span class="dim sm">Aprendidos: ${h.boons.length}/${MAX_BOONS}</span></div>
-  <div class="dim sm">${p.noSet ? `Hechizos únicos y bendiciones de ${esc(CLASSES[h.cls].name)}, al azar.` : `Mejoras de tus hechizos de ${esc(CLASSES[h.cls].name.toLowerCase())} o hechizos nuevos. Con 2 de ${esc(p.name)}: ${esc(p.twoText)} · con 3: ${esc(p.threeText)}.${counts[p.id] ? ` Ya tienes ${counts[p.id]}.` : ''}`}</div>
+  const nBless = h.boons.filter((b) => BLESSINGS[b] || BOON_MODS[b]).length;
+  return `<div class="panel loot boon"><div class="row"><h3>🌟 Bendición de ${esc(CLASSES[h.cls].name)}: elige una</h3><span class="grow"></span><span class="dim sm">Bendiciones: ${nBless}</span></div>
+  <div class="dim sm">Modifican tus mecánicas de clase o tus habilidades equipadas y duran toda la expedición.${p.noSet ? '' : ` Con 2 de ${esc(p.name)}: ${esc(p.twoText)} · con 3: ${esc(p.threeText)}.`}</div>
   <div class="cards c${Math.min(4, h.boonOffer.spells.length)}">${h.boonOffer.spells.map(card).join('')}</div>
   </div>`;
 }

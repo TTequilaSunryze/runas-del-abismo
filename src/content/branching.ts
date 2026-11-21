@@ -5,7 +5,7 @@
 // - la llave rúnica que abre el pasaje secreto de la zona y la Cámara a la que lleva.
 import { CAGE_ALLY } from './enemies';
 import type { RunState } from '../game/run';
-import { addAlly, buildBossOffer, giveRelic } from '../game/run';
+import { addAlly, giveRelic, offerBossReward } from '../game/run';
 import { MAX_CONSUMABLE } from './boons';
 import { boon, healPct, losePct, type EventDef, type EventOption } from './zona1/events';
 
@@ -132,7 +132,7 @@ export const BRANCH_EVENTS: BranchEventDef[] = [
     id: 'g4_heraldo', starter: true, zones: [1, 2], title: 'El Heraldo del Guardián',
     text: 'Un emisario del guardián de la zona os ofrece un trato: conocimiento a cambio de que su señor os reciba en plena forma.',
     options: [
-      { label: 'Aceptar el trato', hint: 'Cada uno elige ahora un hechizo nuevo o una mejora (como la recompensa de un jefe), pero el jefe de esta zona tendrá +25% de vida.', apply: (run) => { each(run, (h) => { h.bossOffer = buildBossOffer(run, h); }); if (!run.flags.includes(`g2_carga_${run.zone}`)) run.flags.push(`g2_carga_${run.zone}`); return 'El heraldo sonríe y desaparece. Su señor os estará esperando.'; } },
+      { label: 'Aceptar el trato', hint: 'Cada uno elige ahora una bendición de su clase (como la recompensa de un jefe), pero el jefe de esta zona tendrá +25% de vida.', apply: (run) => { each(run, (h) => offerBossReward(run, h)); if (!run.flags.includes(`g2_carga_${run.zone}`)) run.flags.push(`g2_carga_${run.zone}`); return 'El heraldo sonríe y desaparece. Su señor os estará esperando.'; } },
       { label: 'Ofrecer sangre en su lugar', hint: 'Todos: −8 de vida máxima hasta el final; cada uno recibe una reliquia.', apply: (run) => { each(run, (h) => { boon(h, 'hp', -8); giveRelic(run, h); }); return 'Acepta el pago con una reverencia burlona.'; } },
       { label: 'Romperle el cuerno', hint: '+50 de oro cada uno, pero el próximo élite sale con dos modificadores más.', apply: (run) => { each(run, (h) => { h.gold += 50; }); if (!run.flags.includes('cursed_elite')) run.flags.push('cursed_elite'); return 'El cuerno se parte. A lo lejos, algo responde con un rugido.'; } },
     ],
@@ -143,7 +143,7 @@ export const BRANCH_EVENTS: BranchEventDef[] = [
     text: 'Tras el pasaje sellado, una sala que nadie ha pisado en siglos. Tres cosas brillan; solo hay tiempo para una.',
     options: [
       { label: 'Llevarse el ajuar', hint: 'Cada uno recibe una reliquia rara.', apply: (run) => { const n = run.heroes.map((h) => giveRelic(run, h, true)).filter(Boolean).length; return n ? 'Cada uno sale con algo que no debería existir.' : 'Las vitrinas están vacías para vosotros.'; } },
-      { label: 'Leer los grabados', hint: 'Cada uno elige un hechizo nuevo o una mejora (como la recompensa de un jefe).', apply: (run) => { each(run, (h) => { h.bossOffer = buildBossOffer(run, h); }); return 'Las runas se graban también en vuestra memoria.'; } },
+      { label: 'Leer los grabados', hint: 'Cada uno elige una bendición de su clase (como la recompensa de un jefe).', apply: (run) => { each(run, (h) => offerBossReward(run, h)); return 'Las runas se graban también en vuestra memoria.'; } },
       { label: 'Ofrecerle la sed de la fuente', hint: 'La fuente ya no os cobrará: conserváis el daño y todos recuperan un 25% de vida.', need: 'Requiere haber bebido de la Fuente de las Ánimas.', when: (run) => hasMark(run, 'g4_fuente_bebida'),
         apply: (run) => { clear(run, 'g4_fuente_bebida'); each(run, (h) => healPct(h, 0.25)); return 'La cámara bebe por vosotros. La deuda se borra.'; } },
       { label: 'Descansar en la cámara', hint: 'Todos recuperan un 50% de vida y se rompen las maldiciones activas.', apply: (run) => { each(run, (h) => healPct(h, 0.5)); run.hexes = []; return 'El silencio de la cámara deshace lo que os perseguía.'; } },
