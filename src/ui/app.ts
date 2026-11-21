@@ -12,7 +12,7 @@ import { readSnapshot } from '../game/snapshot';
 import { addLog, combatScreen } from './combat';
 import { esc, mine, params, randomText, store, today, ui } from './ctx';
 import { BAG_SIZE, PRICE } from '../core/items/items';
-import { recordArchive } from '../game/archive';
+import { drainArchiveNotices, recordArchive, type ArchiveNotice } from '../game/archive';
 import { claimContractReward } from '../game/contracts';
 import { claimSpecialReward, equipCosmetic } from '../game/specials';
 import { buyPerk, masteryOf, meta, myNemesis, myTeam, openRoutes, removeChampion, saveChampion, saveMeta, toggleTeam } from '../game/meta';
@@ -80,6 +80,8 @@ async function enter(code: string, isHost: boolean, local: boolean, resume = fal
   let wasMyTurn = false;
   session.onChange = (ev) => {
     recordArchive(session.run, ui.myId, ev);
+    const found = drainArchiveNotices();
+    if (found.length && session.run) { if (ui.runFinds.code !== session.run.code) ui.runFinds = { code: session.run.code, list: [] }; ui.runFinds.list.push(...found.filter((n) => n.kind !== 'contract')); showArchiveNotices(found); }
     addLog(ev);
     playEvents(ev);
     const now = session.isMyTurn();
@@ -93,6 +95,20 @@ async function enter(code: string, isHost: boolean, local: boolean, resume = fal
   render([]);
   // sala inexistente: nadie es anfitrión
   if (!isHost) setTimeout(() => { if (ui.session === session && !session.run && !session.hostPresent()) home(`No hay ninguna sala abierta con el código ${code}. Comprueba el código y que el anfitrión siga en la sala.`); }, 15000);
+}
+
+/** Avisos del Archivo: pila discreta arriba a la derecha que se desvanece sola (no bloquea clics). */
+function showArchiveNotices(list: ArchiveNotice[]): void {
+  let box = document.getElementById('archnotes');
+  if (!box) { document.body.insertAdjacentHTML('beforeend', '<div id="archnotes" class="archnotes"></div>'); box = document.getElementById('archnotes')!; }
+  const shown = list.slice(0, 4), rest = list.length - shown.length;
+  const items = [...shown.map((n) => `<div class="archnote ${n.kind}">${n.icon} ${esc(n.text)}</div>`), ...(rest > 0 ? [`<div class="archnote">📚 y ${rest} descubrimiento${rest > 1 ? 's' : ''} más</div>`] : [])];
+  for (const html of items) {
+    box.insertAdjacentHTML('beforeend', html);
+    const el = box.lastElementChild as HTMLElement;
+    setTimeout(() => el.remove(), 5200);
+  }
+  while (box.children.length > 6) box.firstElementChild!.remove();
 }
 
 let lastKey = '';
@@ -206,13 +222,14 @@ document.addEventListener('click', (e) => {
     case 'drop': s?.act({ a: 'drop', idx: Number(id) }); ui.selItem = ''; break;
     case 'buy': s?.act({ a: 'buy', idx: Number(id) }); sfx.coin(); break;
     case 'potion': s?.act({ a: 'potion' }); break;
-    case 'arccat': ui.arcCat = id as typeof ui.arcCat; ui.arcOpen = ''; ui.arcSub = ''; homeScreen(''); break;
+    case 'arccat': ui.arcCat = id as typeof ui.arcCat; ui.arcOpen = ''; ui.arcSub = ''; ui.arcF2 = ''; homeScreen(''); break;
     case 'cview': ui.cview = id as typeof ui.cview; homeScreen(''); break;
     case 'sclaim': { if (claimSpecialReward(meta(), id)) { saveMeta(); sfx.myTurn(); } homeScreen(''); break; }
     case 'ctitle': if (equipCosmetic(meta(), 'title', id || null)) saveMeta(); homeScreen(''); break;
     case 'cframe': if (equipCosmetic(meta(), 'frame', id || null)) saveMeta(); homeScreen(''); break;
     case 'cclaim': { if (claimContractReward(meta(), id)) { saveMeta(); sfx.myTurn(); } homeScreen(''); break; }
     case 'arcsub': ui.arcSub = id; ui.arcOpen = ''; homeScreen(''); break;
+    case 'arcf2': ui.arcF2 = id; homeScreen(''); break;
     case 'arcfilter': ui.arcFilter = id as typeof ui.arcFilter; homeScreen(''); break;
     case 'arcopen': ui.arcOpen = ui.arcOpen === id ? '' : id; homeScreen(''); break;
     case 'htab':

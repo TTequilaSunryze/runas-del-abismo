@@ -10,9 +10,11 @@ import { ZONA4_ENEMIES } from '../content/zona4/enemies';
 import { patronsOf } from '../content/boons';
 import { RELICS } from '../content/relics';
 import { ZONES } from '../content/zones';
-import { DOCUMENTED_KILLS, LV, emptyArchive, isDiscovered, levelOf, raise, type Archive, type ArchiveCat } from './archiveData';
+import { DOCUMENTED_KILLS, LV, PAST_MAX, emptyArchive, isDiscovered, levelOf, raise, type Archive, type ArchiveCat } from './archiveData';
 import { trackContract, type ContractEvent } from './contracts';
-import { evaluateSpecials, registerSpecial } from './specials';
+import { SPECIALS, evaluateSpecials, registerSpecial } from './specials';
+import { ATLAS, CHRONICLES, atlasProgress, chronicleProgress } from './atlas';
+import { ATLAS_CATS, CHRONICLE_CATS } from './archiveData';
 import { LIMITE_PCT, MILESTONE_CATS, MILESTONE_PCTS, RELAMPAGO_ROUNDS, registerAtlasDiscovery, registerChronicleProgress } from './atlas';
 import { meta, saveMeta } from './meta';
 import { heroSpec, type RunState } from './run';
@@ -98,6 +100,12 @@ export function completion(cat: ArchiveCat): Progress {
   const a = archive(), ids = catalogIds(cat);
   return prog(ids.filter((id) => isDiscovered(a, cat, id)).length, ids.length);
 }
+/** Colección global del Archivo: Bestiario, Grimorio, Reliquias, entradas del Atlas y Crónicas completadas. */
+export function archiveTotal(): Progress {
+  const m = meta();
+  const parts = [...CATEGORIES.map(completion), ...ATLAS_CATS.map((c) => atlasProgress(m, c)), ...CHRONICLE_CATS.map((c) => chronicleProgress(m, c))];
+  return prog(parts.reduce((n, p) => n + p.found, 0), parts.reduce((n, p) => n + p.total, 0));
+}
 export function completionAll(): Progress {
   const ps = CATEGORIES.map(completion);
   return prog(ps.reduce((n, p) => n + p.found, 0), ps.reduce((n, p) => n + p.total, 0));
@@ -112,7 +120,8 @@ export function entriesOf(cat: ArchiveCat): ArchiveRow[] {
 
 // ---------- registro automático ----------
 interface Snap { k: string; units: Map<number, { kind: string; team: string; owner: string | null }>; fight: number; zone: number; kind: string; omen: string | null; round: number; myAlive: boolean }
-let snap: Snap | null = null;
+/** Seguimiento en memoria del combate en curso, por jugador local (en el juego hay uno por cliente). */
+const snaps = new Map<string, Snap>();
 const combatKey = (run: RunState): string => `${run.code}:${run.zone}:${run.step}:${run.fight}`;
 /** Identifica la expedición (código de sala + jefes sorteados) para no contar dos veces lo mismo en ella. */
 const runId = (run: RunState): string => `${run.code}:${run.bossPick.join('')}`;
@@ -128,6 +137,8 @@ export function recordArchive(run: RunState | null, myId: string, events: readon
     const me = run?.heroes.find((h) => h.owner === myId);
     if (!run || !me || run.arena) return false;
     const m = meta(), a = archive(), id = runId(run);
+    let snap = snaps.get(myId) ?? null;
+    const before = progressKeys();
     let changed = false;
     const atlas = (...args: Parameters<typeof registerAtlasDiscovery> extends [unknown, ...infer R] ? R : never): void => { changed = registerAtlasDiscovery(m, ...args) || changed; };
     const contract = (e: ContractEvent): void => { changed = trackContract(m, e) || changed; };
@@ -154,8 +165,15 @@ export function recordArchive(run: RunState | null, myId: string, events: readon
 
     if (run.combat) {
       const k = combatKey(run);
-      if (snap?.k !== k) snap = { k, units: new Map(), fight: run.fight, zone: run.zone, kind: run.kind, omen: run.omen, round: 0, myAlive: true };
-      if (a.cur?.k !== k) { a.cur = { k, seen: [], dead: [], done: false, down: 0, low: 100 }; changed = true; }
+      if (snap?.k !== k) { snap = { k, units: new Map(), fight: run.fight, zone: run.zone, kind: run.kind, omen: run.omen, round: 0, myAlive: true }; snaps.set(myId, snap); }
+      // un combate ya cerrado que vuelve a llegar (estado antiguo repetido) no cuenta nada
+      if ((a.past ?? []).includes(k)) { snaps.delete(myId); snap = null; }
+      else if (a.cur?.k !== k) {
+        if (a.cur) a.past = [...(a.past ?? []).filter((x) => x !== a.cur!.k), a.cur.k].slice(-PAST_MAX);
+        a.cur = { k, seen: [], dead: [], done: false, down: 0, low: 100 }; changed = true;
+      }
+    }
+    if (run.combat && snap && a.cur?.k === snap.k) {
       snap.round = run.combat.round; snap.omen = run.omen ?? snap.omen; snap.myAlive = false;
       for (const u of run.combat.units) {
         snap.units.set(u.id, { kind: u.kind, team: u.team, owner: u.owner });
@@ -210,12 +228,45 @@ export function recordArchive(run: RunState | null, myId: string, events: readon
         if ((a.cur.low ?? 100) < LIMITE_PCT && snap.myAlive) chron('secrets', 'al_limite', 1, fid);
       }
     }
-    if (changed) { evaluateMilestones(); evaluateSpecials(m); saveMeta(); }
+    if (changed) { evaluateMilestones(); evaluateSpecials(m); saveMeta(); pushNotices(before, progressKeys()); }
     return changed;
   } catch {
     return false;
   }
 }
+
+// ---------- notificaciones ----------
+/** Todo lo conseguido, como claves `tipo:id`, para saber qué es nuevo tras un registro. */
+function progressKeys(): Set<string> {
+  const m = meta(), a = archive(), out = new Set<string>();
+  for (const c of ['bestiary', 'grimoire', 'relics'] as const) for (const id of Object.keys(a[c])) out.add(`${c}:${id}`);
+  for (const [c, rec] of Object.entries(a.atlas)) for (const id of Object.keys(rec)) out.add(`atlas:${c}:${id}`);
+  for (const [c, rec] of Object.entries(a.chronicles)) for (const [id, e] of Object.entries(rec)) if (e.state === 'completed') out.add(`chron:${c}:${id}`);
+  for (const c of [...(m.contracts?.daily ?? []), ...(m.contracts?.weekly ?? [])]) if (c.completed) out.add(`contract:${c.id}`);
+  for (const [id, r] of Object.entries(m.contracts?.special ?? {})) if (r.completed) out.add(`special:${id}`);
+  return out;
+}
+export interface ArchiveNotice { icon: string; text: string; kind: 'archive' | 'chronicle' | 'contract' | 'special' }
+let notices: ArchiveNotice[] = [];
+function pushNotices(before: Set<string>, after: Set<string>): void {
+  const fresh = [...after].filter((k) => !before.has(k));
+  if (!fresh.length) return;
+  const m = meta(), count = (p: string): number => fresh.filter((k) => k.startsWith(p)).length;
+  for (const k of fresh) {
+    const [t, x, y] = k.split(':');
+    if (t === 'bestiary') notices.push({ icon: '📖', kind: 'archive', text: `Bestiario: ${beastDef(x!)?.name ?? x}` });
+    else if (t === 'relics') notices.push({ icon: '🏺', kind: 'archive', text: `Reliquia: ${RELICS[x!]?.name ?? x}` });
+    else if (t === 'atlas') { const r = ATLAS[x as keyof typeof ATLAS]?.find((e) => e.id === y); if (r) notices.push({ icon: '🗺️', kind: 'archive', text: `Atlas: ${r.name}` }); }
+    else if (t === 'chron') { const r = CHRONICLES[x as keyof typeof CHRONICLES]?.find((e) => e.id === y); if (r) notices.push({ icon: x === 'secrets' ? '🔓' : x === 'milestones' ? '🏆' : '📜', kind: 'chronicle', text: `${x === 'secrets' ? 'Secreto' : x === 'milestones' ? 'Hito' : 'Crónica'}: ${r.name}` }); }
+    else if (t === 'contract') { const c = [...(m.contracts?.daily ?? []), ...(m.contracts?.weekly ?? [])].find((e) => e.id === k.slice(9)); if (c) notices.push({ icon: '📋', kind: 'contract', text: `Contrato cumplido: ${c.title} (cóbralo en el Archivo)` }); }
+    else if (t === 'special') { const d = SPECIALS().find((e) => e.id === x); if (d) notices.push({ icon: '🏅', kind: 'special', text: `Desafío especial: ${d.title}` }); }
+  }
+  const g = count('grimoire:');
+  if (g) notices.push({ icon: '✨', kind: 'archive', text: `Grimorio: ${g === 1 ? '1 entrada nueva' : `${g} entradas nuevas`}` });
+  notices = notices.slice(-12);
+}
+/** Avisos pendientes de mostrar (y los vacía). */
+export function drainArchiveNotices(): ArchiveNotice[] { const n = notices; notices = []; return n; }
 
 /** Hitos de colección: avance = % descubierto de Bestiario, Grimorio y Reliquias. */
 export function evaluateMilestones(): boolean {
@@ -227,4 +278,4 @@ export function evaluateMilestones(): boolean {
   return changed;
 }
 /** Solo para pruebas: olvida el estado de seguimiento en memoria. */
-export const resetArchiveTracking = (): void => { snap = null; };
+export const resetArchiveTracking = (): void => { snaps.clear(); };

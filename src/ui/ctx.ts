@@ -35,14 +35,18 @@ export const ui = {
   asc: 0,
   daily: false,
   /** pestaña de la pantalla de inicio */
-  homeTab: 'jugar' as 'jugar' | 'mejoras' | 'clases' | 'logros' | 'archivo' | 'contratos' | 'salon' | 'diario' | 'cuenta' | 'amigos',
+  homeTab: 'jugar' as 'jugar' | 'mejoras' | 'clases' | 'logros' | 'archivo' | 'salon' | 'diario' | 'cuenta' | 'amigos',
   /** Archivo del Abismo: categoría, filtro de estado y entrada abierta */
-  arcCat: 'bestiary' as 'bestiary' | 'grimoire' | 'relics' | 'atlas' | 'chronicles',
+  arcCat: 'bestiary' as 'bestiary' | 'grimoire' | 'relics' | 'atlas' | 'chronicles' | 'contracts',
+  /** filtro secundario: zona (z1…z4) en el Bestiario, clase en el Grimorio, rareza en las Reliquias */
+  arcF2: '',
   /** subcategoría del Atlas (zones/events/pacts/omens) o de las Crónicas (stories/secrets/milestones) */
   arcSub: '',
   arcFilter: 'all' as 'all' | 'found' | 'missing',
   arcOpen: '',
   /** Contratos: periódicos, especiales o títulos y marcos */
+  /** descubrimientos de la expedición en curso (para la pantalla final): código de sala → avisos */
+  runFinds: { code: '', list: [] as Array<{ icon: string; text: string }> },
   cview: 'periodic' as 'periodic' | 'special' | 'cosmetic',
   /** mensajes de la pestaña de cuenta y del salón */
   acctMsg: '',

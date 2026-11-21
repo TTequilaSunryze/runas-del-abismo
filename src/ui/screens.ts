@@ -24,7 +24,7 @@ import { REST_OPTIONS, itemByRef, recalStats, restHeal, restText } from '../game
 import { altarScene, chestScene, forgeScene, restScene, shrineScene } from './scenes';
 import { STAT_NAME, type Item } from '../core/items/items';
 import { MAX_SPELL_UPS, UPGRADES } from '../core/upgrades';
-import { BESTIARY, CATEGORIES, CAT_NAME, DOCUMENTED_KILLS, GRIMOIRE, LEVEL_NAME, beastDef, completion, completionAll, entriesOf } from '../game/archive';
+import { archiveTotal, BESTIARY, CATEGORIES, CAT_NAME, DOCUMENTED_KILLS, GRIMOIRE, LEVEL_NAME, beastDef, completion, entriesOf } from '../game/archive';
 import { activeContracts, refreshContracts, type Contract } from '../game/contracts';
 import { FRAMES, SPECIALS, SPECIAL_TYPE_NAME, TITLES, evaluateSpecials, rewardName, specialRows } from '../game/specials';
 import { frameDef, titleName } from '../game/cosmetics';
@@ -38,6 +38,18 @@ const RAR = ['ir0', 'ir1', 'ir2', 'ir3'];
 
 /** Renueva los contratos si cambió el día o la semana y lo guarda en el momento. */
 const ensureContracts = (m: ReturnType<typeof meta>): Contract[] => { if (refreshContracts(m)) saveMeta(); return activeContracts(m); };
+/** Cabecera común del Archivo: colección global y navegación entre todas sus secciones (incluidos los Contratos). */
+function archiveHeader(desc: string): string {
+  const m = meta(), t = archiveTotal(), pend = contractsReady(m) + specialReady(m);
+  const nav: Array<[typeof ui.arcCat, string]> = [
+    ...CATEGORIES.map((c): [typeof ui.arcCat, string] => { const p = completion(c); return [c, `${CAT_NAME[c]} ${p.found}/${p.total}`]; }),
+    ['atlas', '🗺️ Atlas'], ['chronicles', '📜 Crónicas'], ['contracts', `📋 Contratos${pend ? ` (${pend}!)` : ''}`],
+  ];
+  return `<div class="panel"><div class="row"><h3>📚 Archivo del Abismo</h3><span class="grow"></span><b class="pill" ${tip('<b>Colección global</b><div class="sm">Bestiario, Grimorio, Reliquias, entradas del Atlas y Crónicas completadas.</div>')}>${t.pct}% · ${t.found}/${t.total}</b></div>
+  <span class="mbar"><i style="width:${t.pct}%"></i><b>Colección global ${t.pct}%</b></span><div class="dim sm">${esc(desc)}</div>
+  <div class="tabs">${nav.map(([c, n]) => `<button class="${ui.arcCat === c ? 'on' : ''}" data-act="arccat" data-id="${c}">${n}</button>`).join('')}</div>`;
+}
+
 const contractsReady = (m: ReturnType<typeof meta>): number => ensureContracts(m).filter((c) => c.completed && !c.claimed).length;
 const leftText = (ms: number): string => { const h = Math.max(0, Math.floor(ms / 3_600_000)); return h >= 48 ? `${Math.floor(h / 24)} días` : h >= 1 ? `${h} h` : `${Math.max(1, Math.ceil(ms / 60_000))} min`; };
 
@@ -53,12 +65,12 @@ function contractsPanel(): string {
   };
   const section = (name: string, list: Contract[]): string => `<div class="row"><h3>${name}</h3><span class="grow"></span><span class="dim sm">Se renuevan en ${leftText((list[0]?.expiresAt ?? now) - now)} (UTC)</span></div><div class="cards c3">${list.map(card).join('')}</div>`;
   const views = ([['periodic', 'Diarios y semanales'], ['special', `Especiales ${specialRows(m).filter((r) => r.claimed).length}/${SPECIALS().length}`], ['cosmetic', '🎖️ Títulos y marcos']] as const)
-    .map(([v, n]) => `<button class="${ui.cview === v ? 'on' : ''}" data-act="cview" data-id="${v}">${n}${v === 'special' && specialReady(m) ? ` (${specialReady(m)}!)` : ''}</button>`).join('');
-  const head = `<div class="panel"><div class="row"><h3>📋 Contratos del Abismo</h3><span class="grow"></span><b class="pill">✨ ${m.ecos} ecos</b></div><div class="tabs">${views}</div>`;
+    .map(([v, n]) => `<button class="mini ${ui.cview === v ? 'on' : ''}" data-act="cview" data-id="${v}">${n}${v === 'special' && specialReady(m) ? ` (${specialReady(m)}!)` : ''}</button>`).join('');
+  const head = `${archiveHeader('Objetivos diarios, semanales y especiales. Avanzan solos mientras juegas.')}<div class="row"><b>📋 Contratos</b><span class="grow"></span>${views}<b class="pill">✨ ${m.ecos} ecos</b></div>`;
   if (ui.cview === 'special') return head + specialsView(m) + '</div>';
   if (ui.cview === 'cosmetic') return head + cosmeticView(m) + '</div>';
   return `${head}
-  <div class="dim sm">Objetivos que cambian cada día y cada semana (iguales para todos). Avanzan solos mientras juegas; al terminarlos, cobra aquí sus ecos. Lo que no cobres antes de la renovación se pierde.</div>
+  <div class="dim sm">Cambian cada día y cada semana (iguales para todos). Cobra sus ecos aquí; lo que no cobres antes de la renovación se pierde.</div>
   ${section('Diarios', b.daily)}${section('Semanales', b.weekly)}</div>`;
 }
 
@@ -89,7 +101,7 @@ function cosmeticView(m: ReturnType<typeof meta>): string {
 }
 
 /** Atlas (zonas, eventos, pactos, presagios) y Crónicas (historias, secretos, hitos): mismas fichas, estados propios. */
-function archiveExtra(tabs: string): string {
+function archiveExtra(): string {
   const m = meta(), mbar = (v: number, max: number): string => `<span class="mbar"><i style="width:${Math.min(100, Math.round((v / Math.max(1, max)) * 100))}%"></i><b>${Math.min(v, max)}/${max}</b></span>`;
   const atlas = ui.arcCat === 'atlas';
   const subs = (atlas ? ATLAS_CATS : CHRONICLE_CATS) as readonly string[];
@@ -105,20 +117,28 @@ function archiveExtra(tabs: string): string {
     const body = secretLocked ? `<div class="sm dim">${esc(r.hint ?? 'Un secreto por descubrir.')}</div>` : st === 'locked' ? '<div class="sm">Aún no la has descubierto.</div>' : `<div class="sm">${esc(r.text)}</div>`;
     return `<div class="lootcard ${st === 'completed' ? 'r3' : st === 'discovered' ? 'r1' : 'off'}" data-act="arcopen" data-id="${sub}:${r.id}"><div class="row"><div class="grow"><b>${shown ? esc(r.name) : '???'}</b><div class="pill sm">${st === 'locked' ? '🔒 ' : ''}${CHRONICLE_STATE_NAME[st]}</div></div></div>${r.cat === 'milestones' || r.goal > 1 ? mbar(e?.progress ?? 0, r.goal) : ''}${open || st === 'locked' || r.cat !== 'stories' ? body : ''}</div>`;
   });
-  return `<div class="panel"><div class="row"><h3>📚 Archivo del Abismo</h3><span class="grow"></span></div>
-  <div class="dim sm">${atlas ? 'El mapa de lo que has encontrado: zonas, eventos, pactos y presagios.' : 'Historias que se desvelan al jugar, secretos de combate y hitos de tu colección. Sin recompensas por ahora.'}</div>
-  <div class="tabs">${tabs}</div><div class="row sm">${subTabs}</div><div class="cards c3">${cards.join('')}</div></div>`;
+  return `${archiveHeader(atlas ? 'El mapa de lo que has encontrado: zonas, eventos, pactos y presagios.' : 'Historias que se desvelan al jugar, secretos de combate y hitos de tu colección.')}<div class="row sm">${subTabs}</div><div class="cards c3">${cards.join('')}</div></div>`;
 }
 
 /** Archivo del Abismo: Bestiario, Grimorio y Reliquias con filtros, progreso y fichas (lo no descubierto sale bloqueado). */
 function archivePanel(): string {
-  const tabs = [...CATEGORIES.map((c) => { const p = completion(c); return `<button class="${ui.arcCat === c ? 'on' : ''}" data-act="arccat" data-id="${c}">${CAT_NAME[c]} ${p.found}/${p.total}</button>`; }),
-    `<button class="${ui.arcCat === 'atlas' ? 'on' : ''}" data-act="arccat" data-id="atlas">🗺️ Atlas</button>`, `<button class="${ui.arcCat === 'chronicles' ? 'on' : ''}" data-act="arccat" data-id="chronicles">📜 Crónicas</button>`].join('');
-  if (ui.arcCat === 'atlas' || ui.arcCat === 'chronicles') return archiveExtra(tabs);
-  const cat = ui.arcCat, rows = entriesOf(cat).filter((r) => ui.arcFilter === 'all' || (ui.arcFilter === 'found') === (r.lv > 0));
+  if (ui.arcCat === 'contracts') return contractsPanel();
+  if (ui.arcCat === 'atlas' || ui.arcCat === 'chronicles') return archiveExtra();
+  const cat = ui.arcCat;
+  const f2: Array<[string, string]> = cat === 'bestiary' ? [['', 'Todas las zonas'], ['z1', 'Zona 1'], ['z2', 'Zona 2'], ['z3', 'Zona 3'], ['z4', 'Abismo']]
+    : cat === 'grimoire' ? [['', 'Todas las clases'], ...PLAYABLE.map((c): [string, string] => [c, CLASSES[c].name]), ['blessing', 'Solo bendiciones']]
+    : [['', 'Todas'], ['rare', 'Raras'], ['common', 'Comunes']];
+  const pass2 = (id: string): boolean => {
+    const f = ui.arcF2;
+    if (!f || !f2.some(([k]) => k === f)) return true;
+    if (cat === 'bestiary') return `z${BESTIARY.find((b) => b.id === id)?.zone}` === f;
+    if (cat === 'grimoire') { const g = GRIMOIRE.find((x) => x.id === id); return f === 'blessing' ? g?.kind === 'blessing' : g?.cls === f; }
+    return f === 'rare' ? !!RELICS[id]?.rare : !RELICS[id]?.rare;
+  };
+  const subFilters = f2.map(([k, n]) => `<button class="mini ${(ui.arcF2 || '') === k || (!f2.some(([x]) => x === ui.arcF2) && !k) ? 'on' : ''}" data-act="arcf2" data-id="${k}">${esc(n)}</button>`).join('');
+  const rows = entriesOf(cat).filter((r) => (ui.arcFilter === 'all' || (ui.arcFilter === 'found') === (r.lv > 0)) && pass2(r.id));
   const filters = ([['all', 'Todo'], ['found', 'Descubierto'], ['missing', 'Sin descubrir']] as const).map(([f, n]) => `<button class="mini ${ui.arcFilter === f ? 'on' : ''}" data-act="arcfilter" data-id="${f}">${n}</button>`).join('');
-  const total = completionAll(), cur = completion(cat);
-  const bar = (p: number): string => `<span class="mbar"><i style="width:${p}%"></i><b>${p}%</b></span>`;
+  const cur = completion(cat);
   const card = (r: { id: string; lv: number; seen: number; n: number }): string => {
     const open = ui.arcOpen === `${cat}:${r.id}`, lvName = LEVEL_NAME[cat][r.lv] ?? '', on = r.lv > 0;
     let icon = '<span class="emo">❔</span>', name = '???', text = 'Aún no la has encontrado.', extra = '';
@@ -139,9 +159,8 @@ function archivePanel(): string {
     }
     return `<div class="lootcard ${on ? (r.lv >= (cat === 'bestiary' ? 3 : MAX_LV[cat]) ? 'r3' : 'r1') : 'off'}" data-act="arcopen" data-id="${cat}:${r.id}"><div class="row"><div class="cell big">${icon}</div><div class="grow"><b>${esc(name)}</b><div class="pill sm">${on ? '' : '🔒 '}${esc(lvName)}</div></div></div>${open || !on ? `<div class="sm">${esc(text)}</div>${extra}` : ''}</div>`;
   };
-  return `<div class="panel"><div class="row"><h3>📚 Archivo del Abismo</h3><span class="grow"></span><b class="pill">${total.pct}% · ${total.found}/${total.total}</b></div>
-  <div class="dim sm">Lo que descubres en tus partidas se guarda aquí para siempre. Sin recompensas por ahora: es tu registro de la expedición.</div>${bar(total.pct)}
-  <div class="tabs">${tabs}</div><div class="row sm"><span class="dim">${CAT_NAME[cat]}: ${cur.pct}%</span><span class="grow"></span>${filters}</div>
+  return `${archiveHeader('Lo que descubres en tus partidas se guarda aquí para siempre.')}<div class="row sm"><span class="dim">${CAT_NAME[cat]}: ${cur.pct}% (${cur.found}/${cur.total})</span><span class="grow"></span>${filters}</div>
+  <div class="row sm" style="flex-wrap:wrap;gap:4px">${subFilters}</div>
   <div class="cards c3">${rows.map(card).join('') || '<div class="dim sm">Nada con este filtro.</div>'}</div></div>`;
 }
 
@@ -161,7 +180,6 @@ function metaPanel(): string {
       return `<div class="lootcard ${on ? 'r3' : 'off'}"><b>${on ? '🏆' : '🔒'} ${esc(a.name)}</b><div class="sm">${esc(a.text)}</div><div class="sm dim">${[a.ecos ? `+${a.ecos} ✨` : ''].filter(Boolean).join(' · ') || ' '}</div></div>`; }).join('')}</div></div>`;
   }
   if (ui.homeTab === 'archivo') return archivePanel();
-  if (ui.homeTab === 'contratos') return contractsPanel();
   if (ui.homeTab === 'clases') {
     return `<div class="panel"><h3>Maestría de clase</h3><div class="dim sm">Jugar con una clase le da experiencia de maestría (más cuanto más lejos llegues y más alta sea la ascensión). Cada nivel abre rutas y ventajas de esa clase.</div>
     <div class="cards c2">${PLAYABLE.map((id) => { const c = CLASSES[id], { lv } = masteryProgress(id);
@@ -233,7 +251,7 @@ function reconnectBanner(): string {
 export function homeScreen(msg: string): void {
   const host = JSON.parse(store.get('rda_host') ?? 'null') as { code: string } | null;
   const m = meta();
-  const tabs: Array<[typeof ui.homeTab, string]> = [['jugar', '⚔️ Jugar'], ['mejoras', `✨ Mejoras (${m.ecos})`], ['clases', '🎓 Maestría'], ['logros', `🏆 Logros ${achievementCount(m)}`], ['archivo', `📚 Archivo ${completionAll().pct}%`], ['contratos', `📋 Contratos${contractsReady(m) + specialReady(m) ? ` (${contractsReady(m) + specialReady(m)}!)` : ''}`], ['salon', `🏟️ Salón y duelos`], ['diario', '📅 Reto diario'], ['amigos', `👥 Amigos${currentAccount() ? ` (${friendsStatus().filter((f) => f.online).length}/${m.friends.length})` : ''}`], ['cuenta', currentAccount() ? `👤 ${esc(currentAccount()!.name)}` : '👤 Cuenta']];
+  const tabs: Array<[typeof ui.homeTab, string]> = [['jugar', '⚔️ Jugar'], ['mejoras', `✨ Mejoras (${m.ecos})`], ['clases', '🎓 Maestría'], ['logros', `🏆 Logros ${achievementCount(m)}`], ['archivo', `📚 Archivo ${archiveTotal().pct}%${contractsReady(m) + specialReady(m) ? ` (${contractsReady(m) + specialReady(m)}!)` : ''}`], ['salon', `🏟️ Salón y duelos`], ['diario', '📅 Reto diario'], ['amigos', `👥 Amigos${currentAccount() ? ` (${friendsStatus().filter((f) => f.online).length}/${m.friends.length})` : ''}`], ['cuenta', currentAccount() ? `👤 ${esc(currentAccount()!.name)}` : '👤 Cuenta']];
   ui.root.innerHTML = `<div class="home"><div class="row"><span class="grow"></span>${volumeControl()}</div><h1>RUNAS DEL ABISMO</h1>${m.cosmetics?.title ? `<p class="good">${esc(ui.me.name)} · <i>${esc(titleName(m.cosmetics.title))}</i></p>` : ''}<p class="dim">RPG táctico por turnos · cooperativo de 1 a 4 jugadores · 3 zonas</p>
   ${msg ? `<p class="bad">${esc(msg)}</p>` : ''}
   ${reconnectBanner()}
@@ -410,6 +428,7 @@ export function endScreen(): void {
     ${res?.achievements.length ? res.achievements.map((a) => `<div class="lootcard r3"><b>🏆 ${esc(a.name)}</b> <span class="sm">${esc(a.text)}</span><div class="sm good">${[a.ecos ? `+${a.ecos} ✨` : ''].filter(Boolean).join(' · ')}</div></div>`).join('') : ''}
     ${res ? `<div class="row sm"><b>🎓 Maestría de ${CLASSES[res.mastery.cls].name}</b><span class="good">+${res.mastery.xp} exp</span><span class="grow"></span><span class="pill">Nivel ${res.mastery.after}/5</span></div>${res.mastery.after > res.mastery.before ? Array.from({ length: res.mastery.after - res.mastery.before }, (_, k) => res.mastery.before + k).map((i) => `<div class="good">🔓 ${esc(masteryText(res.mastery.cls, i))}</div>`).join('') : `<div class="dim sm">${MASTERY_XP[res.mastery.after] ? `Faltan ${MASTERY_XP[res.mastery.after]! - res.mastery.total} de experiencia para el nivel ${res.mastery.after + 1}: ${esc(masteryText(res.mastery.cls, res.mastery.after))}` : 'Maestría máxima.'}</div>`}${masteryBar(res.mastery.cls)}` : ''}
     <div class="dim sm">Gasta tus ecos en <b>Mejoras</b> (pantalla de inicio): vida, oro, botines y curación permanentes.</div></div>
+  ${ui.runFinds.code === run.code && ui.runFinds.list.length ? `<div class="panel"><div class="row"><h3>📚 Descubierto en esta expedición</h3><span class="grow"></span><span class="dim sm">Consúltalo en el Archivo (pantalla de inicio)</span></div><div class="row" style="flex-wrap:wrap;gap:6px">${ui.runFinds.list.slice(0, 40).map((n) => `<span class="chip">${n.icon} ${esc(n.text)}</span>`).join('')}${ui.runFinds.list.length > 40 ? `<span class="dim sm">y ${ui.runFinds.list.length - 40} más</span>` : ''}</div></div>` : ''}
   <div class="panel"><h3>Resumen del grupo</h3>${run.heroes.map((h, i) => `<div class="row sm"><b class="p${i % 4}">${esc(h.name)}</b><span class="dim">${CLASSES[h.cls].name}</span><span class="grow"></span><span>⚔️ ${h.stats.dmg} (${Math.round((h.stats.dmg / total) * 100)}%)</span><span>☠️ ${h.stats.kills}</span><span>✚ ${h.stats.heal}</span><span class="${h.stats.falls ? 'bad' : 'good'}">💀 ${h.stats.falls}</span></div>`).join('')}</div>
   ${myHero ? `<div class="panel"><div class="row"><div><b>🏟️ Salón de héroes</b><div class="dim sm">Guarda a ${esc(myHero.name)} tal como está para tus duelos 3 contra 3 y para que vuelva como Némesis.</div></div><span class="grow"></span><button data-act="champsave" ${saved ? 'disabled' : ''}>${saved ? '✔ Guardado' : 'Guardar en el Salón'}</button></div></div>` : ''}
   <div class="row">${s.isHost ? '<button class="pri" data-act="again">⚔️ Jugar otra partida</button>' : '<span class="dim sm">Esperando al anfitrión para otra partida…</span>'}<button data-act="home">Volver al inicio</button></div></div>`);

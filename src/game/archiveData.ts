@@ -15,6 +15,7 @@ export const LV = {
 /** Nivel máximo de cada categoría (el Grimorio llega a «Utilizado»; las Reliquias, a «Descubierta»). */
 export const MAX_LV: Record<ArchiveCat, number> = { bestiary: 3, grimoire: 2, relics: 1 };
 export const DOCUMENTED_KILLS = 5;
+export const PAST_MAX = 80;
 
 export interface ArchiveEntry {
   /** nivel de descubrimiento (ver LV) */
@@ -66,6 +67,8 @@ export interface Archive {
   cur: { k: string; seen: string[]; dead: number[]; done?: boolean; down?: number; low?: number } | null;
   /** el Archivo se sembró ya con los datos antiguos del Salón */
   seeded: boolean;
+  /** combates ya cerrados (sus claves): si vuelve a llegar su estado, no se cuentan otra vez */
+  past?: string[];
 }
 
 export const emptyArchive = (): Archive => ({
@@ -102,6 +105,7 @@ export function normalizeArchive(a: unknown): Archive {
   const c = src.cur;
   out.cur = c && typeof c.k === 'string' ? { k: c.k.slice(0, 80), seen: (Array.isArray(c.seen) ? c.seen : []).map(String).slice(0, 40), dead: (Array.isArray(c.dead) ? c.dead : []).map(num).slice(0, 80), done: !!c.done, down: num(c.down), low: c.low === undefined ? undefined : Math.min(100, num(c.low)) } : null;
   out.seeded = !!src.seeded;
+  out.past = (Array.isArray(src.past) ? src.past : []).filter((k): k is string => typeof k === 'string').map((k) => k.slice(0, 80)).slice(-PAST_MAX);
   return out;
 }
 
@@ -130,6 +134,7 @@ export function mergeArchive(a: unknown, b: unknown): Archive {
   }
   out.cur = x.cur ?? y.cur;
   out.seeded = x.seeded || y.seeded;
+  out.past = [...new Set([...(x.past ?? []), ...(y.past ?? [])])].slice(-PAST_MAX);
   return out;
 }
 

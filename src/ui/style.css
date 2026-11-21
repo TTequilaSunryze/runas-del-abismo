@@ -644,3 +644,11 @@ button.big { font-size: 18px; padding: 10px 22px; }
 .stabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
 .stattab.cmp td, .stattab.cmp th { text-align: center; }
 .stattab.cmp td:first-child, .stattab.cmp th:first-child { text-align: left; }
+
+/* v16 · Archivo: avisos de descubrimiento */
+.archnotes { position: fixed; top: 64px; right: 12px; z-index: 70; display: flex; flex-direction: column; gap: 6px; pointer-events: none; max-width: 320px; }
+.archnote { background: rgba(20, 14, 30, .92); border: 1px solid var(--iron, #3b2f57); border-left: 3px solid #c9a0ff; border-radius: 6px; padding: 6px 10px; font-size: 13px; color: #f0e6d0; box-shadow: 0 2px 8px #0008; animation: archnote 5.2s ease-out forwards; }
+.archnote.chronicle { border-left-color: #f2c14e; }
+.archnote.contract { border-left-color: #5fd08e; }
+.archnote.special { border-left-color: #ff9f5a; }
+@keyframes archnote { 0% { opacity: 0; transform: translateX(16px); } 6% { opacity: 1; transform: none; } 85% { opacity: 1; } 100% { opacity: 0; } }
