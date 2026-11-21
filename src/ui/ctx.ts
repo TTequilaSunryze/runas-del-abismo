@@ -48,7 +48,7 @@ export const ui = {
   /** descubrimientos de la expedición en curso (para la pantalla final): código de sala → avisos */
   runFinds: { code: '', list: [] as Array<{ icon: string; text: string }> },
   /** tienda: categoría, filtros, clase para equipar, confirmación pendiente y mensaje */
-  shopCat: 'skin' as string, shopRar: '' as string, shopCls: '' as string, shopMine: false, shopConfirm: '', shopMsg: '',
+  kitSlot: 0, shopCat: 'skin' as string, shopRar: '' as string, shopCls: '' as string, shopMine: false, shopConfirm: '', shopMsg: '',
   cview: 'periodic' as 'periodic' | 'special' | 'cosmetic',
   /** mensajes de la pestaña de cuenta y del salón */
   acctMsg: '',

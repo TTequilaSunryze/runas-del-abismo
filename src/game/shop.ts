@@ -9,7 +9,7 @@ import { chronicleState } from './atlas';
 import { FRAMES, LOADOUT_MAX, TITLES, emptyCosmetics, frameDef, titleName, type Cosmetics, type Loadout, type Slot } from './cosmetics';
 import { masteryLevel, type Meta } from './meta';
 import { SPECIALS } from './specials';
-import { SPELL_CATALOG } from '../content/spellCatalog';
+import { SPELL_CATALOG, kitProblem } from '../content/spellCatalog';
 import { SPELLS } from '../core/classes/spells';
 import { routeNeeds } from './meta';
 
@@ -233,6 +233,29 @@ export function grimoireGift(m: Meta): ShopItem[] {
   m.unlocked = [...m.unlocked, GRIMOIRE_GIFT];
   return got;
 }
+
+/** H3: las 4 habilidades equipadas de una clase: las guardadas si siguen siendo válidas y desbloqueadas; si no, las iniciales. */
+export function kitFor(m: Pick<Meta, 'cosmetics' | 'kits'>, cls: ClassId): string[] {
+  const c = SPELL_CATALOG[cls];
+  if (!c) return [];
+  const k = m.kits?.[cls];
+  return k && kitProblem(cls, k, ownedSpells(m, cls)) === null ? [...k] : [...c.starters];
+}
+/** H3: cambia una ranura (gratis). Si la habilidad ya estaba equipada, intercambia las dos ranuras. Devuelve un error o null. */
+export function setKitSlot(m: Pick<Meta, 'cosmetics' | 'kits'>, cls: ClassId, slot: number, spell: string): string | null {
+  const kit = kitFor(m, cls);
+  if (slot < 0 || slot >= kit.length) return 'Ranura no válida.';
+  if (!ownedSpells(m, cls).includes(spell)) return 'Aún no has desbloqueado esa habilidad.';
+  const at = kit.indexOf(spell);
+  if (at >= 0) kit[at] = kit[slot]!;
+  kit[slot] = spell;
+  const err = kitProblem(cls, kit, ownedSpells(m, cls));
+  if (err) return err;
+  (m.kits ??= {})[cls] = kit;
+  return null;
+}
+/** H3: vuelve a las 4 iniciales. */
+export function resetKit(m: Pick<Meta, 'kits'>, cls: ClassId): void { if (m.kits) delete m.kits[cls]; }
 
 /** H2: habilidades del catálogo que el jugador puede equipar (las 4 iniciales y las alternativas desbloqueadas). */
 export function ownedSpells(m: Pick<Meta, 'cosmetics'>, cls: ClassId): string[] {

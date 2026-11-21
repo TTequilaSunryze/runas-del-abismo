@@ -13,7 +13,7 @@ import { addLog, combatScreen } from './combat';
 import { esc, mine, params, randomText, store, today, ui } from './ctx';
 import { BAG_SIZE, PRICE } from '../core/items/items';
 import { archive, drainArchiveNotices, recordArchive, type ArchiveNotice } from '../game/archive';
-import { grantUnlocks } from '../game/shop';
+import { grantUnlocks, kitFor, resetKit, setKitSlot } from '../game/shop';
 import { claimContractReward } from '../game/contracts';
 import { applyLoadout, buyItem, currentLook, emblemOf, deleteLoadout, equipItem, resetLook, saveLoadout, unequip } from '../game/shop';
 import { setLooks } from '../render/looks';
@@ -32,7 +32,7 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 
 function publish(): void {
   const m = meta();
-  ui.session?.announce({ name: ui.me.name, cls: ui.me.cls, routes: ui.me.routes, host: ui.session.isHost, look: currentLook(m, ui.me.cls), unlocked: m.unlocked, asc: Math.min(ui.asc, m.maxAsc, MAX_ASC), daily: ui.daily ? today() : null,
+  ui.session?.announce({ name: ui.me.name, cls: ui.me.cls, routes: ui.me.routes, kit: kitFor(m, ui.me.cls), host: ui.session.isHost, look: currentLook(m, ui.me.cls), unlocked: m.unlocked, asc: Math.min(ui.asc, m.maxAsc, MAX_ASC), daily: ui.daily ? today() : null,
     mastery: masteryOf(ui.me.cls), nem: myNemesis(), hasTeam: myTeam().length > 0,
     mods: ui.daily ? [] : ui.mods, abyss: !ui.daily && m.stats.wins > 0, ready: ui.session.isHost || !!ui.lobbyReady });
 }
@@ -203,6 +203,10 @@ document.addEventListener('click', (e) => {
   if (el.dataset.act !== 'togglelog') sfx.click();
   switch (el.dataset.act) {
     case 'create': void enter(randomText(4, CODE_CHARS), true, false); break;
+    // H3: configurador de 4 habilidades (gratis; se guarda por clase y se anuncia a la sala)
+    case 'kitslot': ui.kitSlot = Number(id) || 0; render([]); break;
+    case 'kitpick': { const err = setKitSlot(meta(), ui.me.cls, ui.kitSlot, id); if (err) { ui.notice = err; setTimeout(() => { ui.notice = ''; render([]); }, 2000); } else { saveMeta(); ui.kitSlot = (ui.kitSlot + 1) % 4; publish(); } render([]); break; }
+    case 'kitreset': resetKit(meta(), ui.me.cls); saveMeta(); ui.kitSlot = 0; publish(); render([]); break;
     case 'solo': void enter(randomText(4, CODE_CHARS), true, true); break;
     case 'join': { const code = (document.getElementById('code') as HTMLInputElement).value.toUpperCase().replace(/[^A-Z]/g, ''); if (code.length === 4) void enter(code, false, false); break; }
     case 'reconnect': {

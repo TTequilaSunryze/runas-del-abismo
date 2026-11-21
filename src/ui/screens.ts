@@ -5,7 +5,7 @@ import { SPELLS } from '../core/classes/spells';
 import type { ClassId } from '../core/state';
 import { POTION_HEAL, POTION_PRICE, eventDef, heroMaxHp, type RunState } from '../game/run';
 import { TURN_SECONDS } from '../game/session';
-import { HALL_SIZE, achievementCount, listedAchievements, MASTERY_XP, ecosFor, masteryOf, masteryProgress, masteryText, meta, myTeam, saveMeta, openRoutes, routeNeeds, settle } from '../game/meta';
+import { HALL_SIZE, achievementCount, listedAchievements, MASTERY_XP, ecosFor, masteryOf, masteryProgress, masteryText, meta, myTeam, saveMeta, routeNeeds, settle } from '../game/meta';
 import { currentAccount } from '../net/account';
 import { friendsStatus } from '../net/social';
 import type { Champion } from '../game/run';
@@ -27,7 +27,8 @@ import { MAX_SPELL_UPS, UPGRADES } from '../core/upgrades';
 import { archiveTotal, BESTIARY, CATEGORIES, CAT_NAME, DOCUMENTED_KILLS, GRIMOIRE, LEVEL_NAME, beastDef, completion, entriesOf } from '../game/archive';
 import { activeContracts, refreshContracts, type Contract } from '../game/contracts';
 import { SPELL_CATALOG } from '../content/spellCatalog';
-import { CATALOG, ownedSpells, CAT_NAME as SHOP_CAT, RARITY_NAME, archiveLook, currentLook, emblemOf, grantUnlocks, itemState, markSeen, owns, priceFor, reqMet, reqText, shopItem, unseenOwned, type ShopCat, type ShopItem } from '../game/shop';
+import { kitWarnings } from '../content/spellCatalog';
+import { CATALOG, SPELL_PRICE, kitFor, ownedSpells, CAT_NAME as SHOP_CAT, RARITY_NAME, archiveLook, currentLook, emblemOf, grantUnlocks, itemState, markSeen, owns, priceFor, reqMet, reqText, shopItem, unseenOwned, type ShopCat, type ShopItem } from '../game/shop';
 import { auraDef, paletteDef } from '../render/palettes';
 import { SPECIALS, SPECIAL_TYPE_NAME, evaluateSpecials, rewardName, specialRows } from '../game/specials';
 import { frameDef, titleName } from '../game/cosmetics';
@@ -374,12 +375,12 @@ export function lobbyScreen(): void {
   const s = ui.session!, me = ui.me;
   const players = s.lobby();
   const cls = CLASSES[me.cls];
-  const open = openRoutes(me.cls), mlv = masteryOf(me.cls);
+  const mlv = masteryOf(me.cls);
   const canDuel = s.isHost && myTeam().length > 0;
   const ready = players.slice(0, 4).filter((p) => p.routes.length > 0 && (p.host || p.ready));
   const total = Math.min(4, players.length);
   ui.root.innerHTML = `<div class="bar"><span>Sala</span><b class="code">${esc(s.code)}</b>${s.t.kind === 'local' ? '<span class="dim">(local)</span>' : ''}
-    <span class="dim sm">${!s.t.connected() ? '<b class="bad">⚠ Conexión perdida: reconectando…</b> ' : ''}${s.isHost ? 'Comparte el código. Cuando todos estén listos, pulsa Comenzar.' : s.hostPresent() ? 'Elige clase y kit inicial. El anfitrión comienza.' : 'Buscando al anfitrión… (puede tardar unos segundos)'}</span>
+    <span class="dim sm">${!s.t.connected() ? '<b class="bad">⚠ Conexión perdida: reconectando…</b> ' : ''}${s.isHost ? 'Comparte el código. Cuando todos estén listos, pulsa Comenzar.' : s.hostPresent() ? 'Elige clase y tus 4 habilidades. El anfitrión comienza.' : 'Buscando al anfitrión… (puede tardar unos segundos)'}</span>
     ${ui.notice ? `<span class="bad">${esc(ui.notice)}</span>` : ''}<span class="grow"></span>
     ${s.isHost ? `${ui.saved ? `<button data-act="doresume">Reanudar guardada (zona ${ui.saved.zone + 1}, sala ${ui.saved.step + 1})</button>` : ''}<span class="pill ${ready.length === total ? 'good' : ''}">Listos ${ready.length}/${total}</span><button class="pri" data-act="start" ${ready.length ? '' : 'disabled'} ${ready.length < total ? tip('Aún no están todos listos: si comienzas, entran con lo que tengan elegido') : ''}>⚔️ Comenzar</button>` : `<button class="${ui.lobbyReady ? 'readyon' : 'pri'}" data-act="lready">${ui.lobbyReady ? '✔ Listo (deshacer)' : '✋ Estoy listo'}</button><span class="pill">Listos ${ready.length}/${total}</span>`}<button data-act="home">Salir</button></div>
   <div class="cols"><section class="main">
@@ -401,19 +402,29 @@ export function lobbyScreen(): void {
       return `<button class="pick ${id === me.cls ? `on p${Math.max(0, myIdx) % 4}c` : ''} ${mateCls} ${burst ? 'burst' : ''}" data-act="cls" data-id="${id}"><b>${c.name}</b>
         <span class="portrait anim ${st.n > 1 ? '' : 'bob'}" style="--n:${st.n};background-image:url(${st.url})"></span>${burst ? '<span class="pickfx"></span>' : ''}
         ${mates.length || id === me.cls ? `<span class="mates">${id === me.cls ? `<span class="mtag p${Math.max(0, myIdx) % 4}b">Tú</span>` : ''}${mates.map(({ p, i }) => `<span class="mtag p${i % 4}b">${esc(p.name)}</span>`).join('')}</span>` : ''}<span class="dim sm">❤️ ${c.hp} · PA ${c.ap} · PM ${c.mp} · ⏱️ ${c.initiative}</span><span class="dim sm"><i>${esc(CLASS_STORY[id] ?? '')}</i></span>${masteryBar(id)}</button>`; }).join('')}</div>
-    <div class="lbl">Tu kit inicial <span class="dim">· 3 habilidades; durante la partida las mejoras con bendiciones. Más kits con maestría.</span></div>
-    <div class="cards c2">${cls.routes.map((r) => {
-      const locked = !open.includes(r.id);
-      const on = me.routes.includes(r.id);
-      return `<button class="pick ${on ? 'on' : ''}" data-act="route" data-id="${r.id}" ${locked ? 'disabled' : ''}><b>${on ? '✔ ' : ''}${r.name}</b><span class="dim sm">${r.text}</span>
-        <span class="row">${r.spells.map((id) => { const d = SPELLS[id]!; return `<span class="schip" ${tip(spellTip(d))}>${spellIcon(d)} ${esc(d.name)}</span>`; }).join('')}</span>
-        ${locked ? `<i class="sm bad">🔒 Se desbloquea con maestría ${routeNeeds(me.cls, r.id)} de ${cls.name}: juega partidas con esta clase</i>` : ''}</button>`;
-    }).join('')}</div>
+    ${kitPanel(me.cls)}
   </section>
   <aside class="side"><div class="tabs"><button class="on">👥 Jugadores (${players.length}/4)</button></div><div class="tabbody">
     ${players.map((p, i) => `<div class="member ${i > 3 ? 'off' : ''} ${p.ready && !p.host ? 'isready' : ''}"><div class="row"><b class="p${i % 4}">${p.look.emblem ? `${p.look.emblem} ` : ''}${esc(p.name)}</b>${p.host ? '<span>👑</span>' : ''}${p.id === ui.myId ? '<span class="dim sm">(tú)</span>' : ''}<span class="grow"></span>${p.host ? '<span class="rdy host">👑 Anfitrión</span>' : p.ready ? '<span class="rdy on">✔ LISTO</span>' : '<span class="rdy">⏳ Eligiendo…</span>'}</div>
-      <div class="sm">${esc(CLASSES[p.cls]?.name ?? '?')} <span class="dim">${p.routes.map((r) => esc(findRoute(p.cls, r)?.name ?? r)).join(' + ') || 'eligiendo kit'}</span></div>${i > 3 ? '<div class="bad sm">Sala llena</div>' : ''}${canDuel && p.id !== ui.myId && p.hasTeam ? `<button class="mini" data-act="duel" data-id="${esc(p.id)}">🏟️ Retar a duelo 3 contra 3</button>` : p.hasTeam ? '<div class="dim sm">🏟️ Tiene equipo de duelo</div>' : ''}</div>`).join('')}
+      <div class="sm">${esc(CLASSES[p.cls]?.name ?? '?')} <span class="row">${(p.kit ?? []).map((id) => SPELLS[id] ? `<span ${tip(spellTip(SPELLS[id]!))}>${spellIcon(SPELLS[id]!, false)}</span>` : '').join('')}</span></div>${i > 3 ? '<div class="bad sm">Sala llena</div>' : ''}${canDuel && p.id !== ui.myId && p.hasTeam ? `<button class="mini" data-act="duel" data-id="${esc(p.id)}">🏟️ Retar a duelo 3 contra 3</button>` : p.hasTeam ? '<div class="dim sm">🏟️ Tiene equipo de duelo</div>' : ''}</div>`).join('')}
   </div></aside></div>`;
+}
+
+/** H3: configurador de las 4 habilidades equipadas (gratis; queda fijo durante la expedición). */
+function kitPanel(c: ClassId): string {
+  const m = meta(), cat = SPELL_CATALOG[c];
+  if (!cat) return '';
+  const kit = kitFor(m, c), owned = ownedSpells(m, c), warn = kitWarnings(kit);
+  const slot = Math.max(0, Math.min(3, ui.kitSlot));
+  const slots = kit.map((id, i) => { const d = SPELLS[id]!; const w = warn.find((x) => x.id === id);
+    return `<button class="kslot ${i === slot ? 'on' : ''} ${w ? 'warn' : ''}" data-act="kitslot" data-id="${i}" ${tip(spellTip(d, w ? `<div class="sm bad">⚠ ${esc(w.text)}</div>` : ''))}><kbd>${i + 1}</kbd>${spellIcon(d)}<small>${esc(d.name)}</small>${w ? '<i class="kwarn">⚠</i>' : ''}</button>`; }).join('');
+  const pick = (id: string): string => { const d = SPELLS[id]; if (!d) return ''; const have = owned.includes(id), on = kit.includes(id);
+    return `<button class="kpick ${on ? 'on' : ''} ${have ? '' : 'locked'}" ${have ? `data-act="kitpick" data-id="${id}"` : 'disabled'} ${tip(spellTip(d, have ? (on ? '<div class="sm good">Equipada</div>' : `<div class="sm">Clic: ponla en la ranura ${slot + 1}</div>`) : `<div class="sm bad">🔒 Desbloquéala en la Tienda › Habilidades (${SPELL_PRICE} ✨)</div>`))}>${spellIcon(d)}<small>${have ? '' : '🔒 '}${esc(d.name)}</small></button>`; };
+  return `<div class="lbl">Tus habilidades <span class="dim">· 4 ranuras · elige una ranura y luego la habilidad. Cambiarlas es gratis; quedan fijas durante la expedición.</span><span class="grow"></span><button class="mini" data-act="kitreset">Iniciales</button></div>
+    <div class="panel kitcfg"><div class="kslots">${slots}</div>
+    ${warn.length ? `<div class="sm bad">⚠ ${warn.map((w) => `${esc(SPELLS[w.id]!.name)}: ${esc(w.text.toLowerCase())}`).join(' · ')}</div>` : ''}
+    <div class="sm dim">Iniciales</div><div class="kpicks">${cat.starters.map(pick).join('')}</div>
+    <div class="sm dim">Alternativas (${owned.length - cat.starters.length}/${cat.alts.length} desbloqueadas${cat.missing ? ` · ${cat.missing} más en camino` : ''})</div><div class="kpicks">${cat.alts.map(pick).join('')}</div></div>`;
 }
 
 function frame(run: RunState, main: string, selling = false): void {

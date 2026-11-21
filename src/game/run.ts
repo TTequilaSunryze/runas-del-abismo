@@ -23,6 +23,7 @@ import { enterRoom, roomAction, roomDone, roomPending, type RoomOp, type RoomSta
 import { pactEnemyHp, pactEnemyPower } from '../content/pacts';
 import { SPECIAL_CHANCE, SPECIAL_EVENTS, specialCandidates, specialWeight } from '../content/specialEvents';
 import { validEmblem, validFrame, validTitle } from './cosmetics';
+import { kitProblem } from '../content/spellCatalog';
 import { BRANCH_EVENTS, branchStarters, followUps, keyFlag, optionOpen, secretOpen, weakBossFlag } from '../content/branching';
 
 /** Una opción de la recompensa del jefe. */
@@ -78,6 +79,8 @@ export interface HeroSave {
   bag2: Record<string, number>;
   /** Escofinas de Eco (Forja): 3 = una mejora de hechizo a elegir */
   escofinas?: number;
+  /** H3: las 4 habilidades equipadas al empezar (fijas toda la partida). Sin él, el kit de ruta (partidas antiguas). */
+  kit?: string[];
   /** recalibrados hechos (cada uno encarece el siguiente) */
   forgeUses?: number;
 }
@@ -96,6 +99,8 @@ export interface Champion {
   asc: number;
   won: boolean;
   date: string;
+  /** H3: sus 4 habilidades equipadas (opcional: los campeones antiguos usan su kit de ruta) */
+  kit?: string[];
   /** título y marco del jugador al guardarlo (solo visuales; opcionales) */
   title?: string;
   frame?: string;
@@ -265,7 +270,9 @@ export interface RunOpts {
   firstRun?: boolean;
 }
 
-export type NewHero = Pick<HeroSave, 'owner' | 'name' | 'cls' | 'routes'> & { mastery?: number };
+export type NewHero = Pick<HeroSave, 'owner' | 'name' | 'cls' | 'routes'> & { mastery?: number; kit?: unknown };
+/** H3: configuración de 4 habilidades recibida de la sala, si es válida para la clase. */
+export const cleanKit = (cls: ClassId, kit: unknown): string[] | undefined => (Array.isArray(kit) && kit.length === 4 && kitProblem(cls, kit.map(String)) === null ? kit.map(String) : undefined);
 
 /** Niveles en los que se elige una mejora de hechizo. */
 /** Kit inicial válido de la clase (uno solo; el Clásico por defecto). */
@@ -287,7 +294,7 @@ export function newRun(code: string, seed: number, players: NewHero[], opts: Run
     offers: {}, event: null, eventsSeen: [], shop: null, ambush: false, note: ZONES[0]!.intro,
     nemesis: (opts.nemesis ?? []).map(cleanChampion).filter((c): c is Champion => !!c).slice(0, 8), nemesisUsed: [],
     heroes: players.map((p) => ({
-      owner: p.owner, name: p.name, cls: p.cls, routes: kitOf(p.cls, p.routes), hp: 0, level: 1, gold: 0, equip: {}, bag: [], boon: {},
+      owner: p.owner, name: p.name, cls: p.cls, routes: kitOf(p.cls, p.routes), ...(cleanKit(p.cls, p.kit) ? { kit: cleanKit(p.cls, p.kit) } : {}), hp: 0, level: 1, gold: 0, equip: {}, bag: [], boon: {},
       stats: { dmg: 0, kills: 0, falls: 0, heal: 0, maxGold: 0 },
       relics: [], boons: [], boonOffer: null, bag2: { c_vida: 1 }, ups: {}, bossOffer: null, mastery: Math.max(0, Math.min(5, Math.floor(Number(p.mastery) || 0))),
     })),
@@ -429,14 +436,14 @@ export const healOf = (run: RunState, _h: HeroSave, base: number): number => bas
 
 export const priceOf = (run: RunState, base: number): number => Math.round(base * (run.asc >= 4 ? 1.25 : 1) * (run.mods.includes('codicia') ? 2 : 1));
 
-type Build = Pick<HeroSave, 'cls' | 'name' | 'owner' | 'routes' | 'level' | 'equip'> & { boon?: Stats; ups?: Record<string, string[]>; relics?: string[]; boons?: string[]; bag2?: Record<string, number>; souls?: number; soulBank?: number };
+type Build = Pick<HeroSave, 'cls' | 'name' | 'owner' | 'routes' | 'level' | 'equip'> & { kit?: string[]; boon?: Stats; ups?: Record<string, string[]>; relics?: string[]; boons?: string[]; bag2?: Record<string, number>; souls?: number; soulBank?: number };
 
 /** El héroe listo para combatir: clase, nivel, equipo y mejoras. */
 export function heroSpec(h: Build, pos: Pos = { x: 0, y: 0 }): UnitSpec {
   const traits: string[] = [];
   const relics = (h.relics ?? []).map((r) => RELICS[r]).filter((r) => !!r);
   const pat = patronBonus(h.boons ?? []);
-  const u = makeHero({ cls: h.cls, name: h.name, owner: h.owner, routes: h.routes, pos, level: h.level, bonus: [...Object.values(h.equip).map((i) => i.stats), h.boon, ...relics.map((r) => r!.stats), ...pat.stats] });
+  const u = makeHero({ cls: h.cls, name: h.name, owner: h.owner, routes: h.routes, kit: h.kit, pos, level: h.level, bonus: [...Object.values(h.equip).map((i) => i.stats), h.boon, ...relics.map((r) => r!.stats), ...pat.stats] });
   for (const t of pat.traits) if (!traits.includes(t)) traits.push(t);
   // Carcelero: las almas de toda la partida dan armadura (+1 cada 5)
   if (u.souls !== undefined) { u.souls = Math.max(0, Math.floor(h.souls ?? 0)); u.soulBank = Math.max(0, Math.floor(h.soulBank ?? 0)); u.armor += Math.floor(u.souls / SOULS_PER_ARMOR) * SOUL_ARMOR; }
@@ -486,7 +493,8 @@ export function cleanChampion(x: unknown): Champion | null {
       equip[sl] = { slot: sl, name: String(it.name ?? '?').slice(0, 40), rarity: Math.max(0, Math.min(3, Math.floor(Number(it.rarity) || 0))) as Rarity, stats };
     }
     const level = Math.max(1, Math.min(MAX_LEVEL, Math.floor(Number(c.level) || 1)));
-    const known = makeHero({ cls: c.cls, name: 'x', owner: 'x', routes, pos: { x: 0, y: 0 }, level }).spells.map((sp) => sp.id);
+    const kit = Array.isArray(c.kit) && kitProblem(c.cls, c.kit.map(String)) === null ? c.kit.map(String) : undefined;
+    const known = makeHero({ cls: c.cls, name: 'x', owner: 'x', routes, kit, pos: { x: 0, y: 0 }, level }).spells.map((sp) => sp.id);
     const ups: Record<string, string[]> = {};
     let total = 0;
     for (const id of known) {
@@ -494,7 +502,7 @@ export function cleanChampion(x: unknown): Champion | null {
       for (const up of Array.isArray(c.ups?.[id]) ? c.ups[id]! : []) if (total < 7 && canUpgrade(SPELLS[id]!, list, String(up))) { list.push(String(up)); total++; }
       if (list.length) ups[id] = list;
     }
-    return { id: String(c.id ?? '').slice(0, 40) || 'x', name: String(c.name ?? 'Héroe').slice(0, 14), by: String(c.by ?? '').slice(0, 14), cls: c.cls, routes, level, equip, ups,
+    return { id: String(c.id ?? '').slice(0, 40) || 'x', name: String(c.name ?? 'Héroe').slice(0, 14), by: String(c.by ?? '').slice(0, 14), cls: c.cls, routes, ...(kit ? { kit } : {}), level, equip, ups,
       asc: Math.max(0, Math.min(10, Math.floor(Number(c.asc) || 0))), won: !!c.won, date: String(c.date ?? '').slice(0, 10), ...(validTitle(c.title) ? { title: validTitle(c.title) } : {}), ...(validFrame(c.frame) ? { frame: validFrame(c.frame) } : {}), ...(validEmblem(c.emblem) ? { emblem: validEmblem(c.emblem) } : {}) };
   } catch {
     return null;
@@ -503,7 +511,7 @@ export function cleanChampion(x: unknown): Champion | null {
 
 /** Foto de un héroe de la partida para guardarlo en el Salón. */
 export function championOf(run: RunState, h: HeroSave): Champion {
-  return { id: `${run.code}-${run.rng >>> 0}-${h.owner.slice(0, 6)}`, name: h.name, by: h.name, cls: h.cls, routes: [...h.routes], level: h.level, equip: structuredClone(h.equip), ups: structuredClone(h.ups),
+  return { id: `${run.code}-${run.rng >>> 0}-${h.owner.slice(0, 6)}`, name: h.name, by: h.name, cls: h.cls, routes: [...h.routes], ...(h.kit ? { kit: [...h.kit] } : {}), level: h.level, equip: structuredClone(h.equip), ups: structuredClone(h.ups),
     asc: run.asc, won: run.phase === 'won', date: new Date().toISOString().slice(0, 10) };
 }
 

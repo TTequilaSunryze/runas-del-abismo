@@ -3,6 +3,7 @@ import type { UnitSpec } from '../combat/engine';
 import { sumStats, type Stats } from '../items/items';
 import type { ClassId, Pos } from '../state';
 import { CLASSES, canPickRoute, spellsFor } from './classes';
+import { kitProblem } from '../../content/spellCatalog';
 
 export interface HeroBuild {
   cls: ClassId;
@@ -14,7 +15,13 @@ export interface HeroBuild {
   level?: number;
   /** estadísticas del equipo y de bendiciones o maldiciones */
   bonus?: Array<Stats | undefined>;
+  /** H3: las 4 habilidades equipadas (del catálogo de la clase). Sin él (partidas y campeones antiguos), el kit de ruta. */
+  kit?: readonly string[];
 }
+
+/** H3: habilidades con las que empieza: la configuración válida de 4 o, si no hay, las del kit de ruta. */
+export const startSpells = (cls: ClassId, routes: readonly string[], level: number, kit?: readonly string[]): string[] =>
+  kit && kitProblem(cls, kit) === null ? [...kit] : spellsFor(cls, routes, level);
 
 /** Cada nivel por encima del 1 da +8% de vida base y +1 de daño. */
 export function makeHero(opts: HeroBuild): UnitSpec {
@@ -30,7 +37,7 @@ export function makeHero(opts: HeroBuild): UnitSpec {
     hp, maxHp: hp, shield: 0, armor: Math.max(0, c.armor + b.armor), power: c.power + (level - 1) + b.power, powerPhys: b.powerPhys, powerMagic: b.powerMagic, crit: c.crit + b.crit,
     ap, maxAp: ap, mp, maxMp: mp, initiative: c.initiative + b.initiative, apMod: 0, mpMod: 0, tackle: Math.max(0, c.tackle + b.tackle), dodge: Math.max(0, c.dodge + b.dodge),
     resist: { fire: b.resFire, ice: b.resIce, poison: b.resPoison, shadow: b.resShadow }, statusBonus: Math.max(0, Math.min(2, b.status)),
-    statuses: {}, spells: spellsFor(opts.cls, chosen, level).map((id) => ({ id, cd: 0 })), ai: null,
+    statuses: {}, spells: startSpells(opts.cls, chosen, level, opts.kit).map((id) => ({ id, cd: 0 })), ai: null,
     // la Hechicera Zorro empieza sin esencia acumulada
     ...(opts.cls === 'zorro' ? { essence: 0 } : {}),
     // el Carcelero cosecha almas: armadura fija por cada enemigo que cae con él vivo

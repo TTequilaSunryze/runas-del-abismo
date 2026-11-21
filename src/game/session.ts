@@ -19,6 +19,8 @@ export interface LobbyPlayer {
   name: string;
   cls: ClassId;
   routes: string[];
+  /** H3: sus 4 habilidades equipadas */
+  kit?: string[];
   host: boolean;
   /** apariencia (cosméticos) del jugador: solo visual, no entra en la partida */
   look: Look;
@@ -168,7 +170,7 @@ export class Session {
       .filter((p: Peer) => typeof p.data.name === 'string')
       .map((p) => ({
         id: p.id, name: String(p.data.name).slice(0, 14), cls: (PLAYABLE.includes(p.data.cls as ClassId) ? p.data.cls : 'zorro') as ClassId,
-        routes: Array.isArray(p.data.routes) ? (p.data.routes as string[]) : [], host: !!p.data.host, look: cleanLook(p.data.look),
+        routes: Array.isArray(p.data.routes) ? (p.data.routes as string[]) : [], kit: Array.isArray(p.data.kit) ? (p.data.kit as unknown[]).slice(0, 4).map(String) : undefined, host: !!p.data.host, look: cleanLook(p.data.look),
         unlocked: Array.isArray(p.data.unlocked) ? (p.data.unlocked as string[]).slice(0, 20).map(String) : [],
         asc: Number(p.data.asc) || 0, daily: typeof p.data.daily === 'string' ? p.data.daily : null,
         mastery: Number(p.data.mastery) || 0, nem: p.data.nem ?? null, hasTeam: !!p.data.hasTeam,
@@ -207,7 +209,7 @@ export class Session {
     if (!players.length) return;
     const host = all.find((p) => p.id === this.myId);
     this.run = newRun(this.code, (Date.now() ^ (Math.random() * 2 ** 31)) >>> 0,
-      players.map((p) => ({ owner: p.id, name: p.name, cls: p.cls, routes: p.routes, mastery: p.mastery })),
+      players.map((p) => ({ owner: p.id, name: p.name, cls: p.cls, routes: p.routes, kit: p.kit, mastery: p.mastery })),
       { firstRun: meta().stats.runs === 0, asc: host?.asc ?? 0, daily: host?.daily ?? null, unlocked: players.flatMap((p) => p.unlocked), nemesis: all.map((p) => p.nem).filter(Boolean), mods: host?.mods ?? [], abyss: host?.abyss ?? false });
     this.afterChange([]);
   }

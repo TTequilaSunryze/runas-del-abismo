@@ -48,6 +48,8 @@ export interface Meta {
   contracts?: ContractBook;
   /** títulos y marcos desbloqueados y equipados (solo visuales). Opcional. */
   cosmetics?: Cosmetics;
+  /** H3: habilidades equipadas por clase (4 ids). Opcional; se valida al usarla (si no vale, las iniciales). */
+  kits?: Record<string, string[]>;
 }
 
 const KEY = 'rda_meta';
@@ -135,7 +137,16 @@ export function mergeMeta(a: Meta, b: Partial<Meta>): Meta {
     archive: mergeArchive(a.archive, b.archive),
     contracts: mergeContracts(a.contracts, b.contracts),
     cosmetics: mergeCosmetics(a.cosmetics, b.cosmetics),
+    // H3: la configuración de este dispositivo manda; de la otra, solo las clases que aquí no se han tocado
+    kits: { ...cleanKits(b.kits), ...cleanKits(a.kits) },
   };
+}
+/** H3: configuraciones guardadas con forma correcta (4 textos por clase); la validez se comprueba al usarlas. */
+export function cleanKits(x: unknown): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  if (!x || typeof x !== 'object') return out;
+  for (const [k, v] of Object.entries(x as Record<string, unknown>)) if (CLASSES[k as ClassId] && Array.isArray(v) && v.length === 4) out[k] = v.map(String).slice(0, 4);
+  return out;
 }
 
 // ---------- maestría de clase ----------
@@ -148,7 +159,8 @@ export const MASTERY_GOLD = 25;
 export function masteryText(cls: ClassId, i: number): string {
   if (i >= 4) return MASTERY_TEXT[4]!;
   const r = CLASSES[cls].routes[i + 1];
-  return r ? `Desbloquea el kit ${r.name}` : `Empiezas cada partida con +${MASTERY_GOLD} de oro`;
+  // H3: los kits por maestría ya no se eligen en la sala: sus habilidades del catálogo se regalan en la tienda
+  return r ? `Regala habilidades del kit ${r.name} en la tienda` : `Empiezas cada partida con +${MASTERY_GOLD} de oro`;
 }
 /** Progreso de maestría de una clase: nivel, experiencia y lo que falta para el siguiente. */
 export function masteryProgress(cls: string): { lv: number; xp: number; prev: number; next: number | undefined; pct: number } {
