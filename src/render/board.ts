@@ -8,6 +8,8 @@ import { alive, dist, hasLineOfSight, reachable } from '../core/combat/grid';
 import type { CombatState, GameEvent, Pos, Unit } from '../core/state';
 import type { Session } from '../game/session';
 import { PLAYER_COLORS, drawUnit, isModel } from './sprites';
+import { lookOf } from './looks';
+import { auraDef, drawAura } from './palettes';
 import { ANIM_FRAMES, animFor, type Anim } from './models';
 
 const TILE = 56;
@@ -565,8 +567,12 @@ export class Board {
       }
       // Furia alta: el Bárbaro arde
       if ((u.fury ?? 0) >= 60) { g.fillStyle = `rgba(255,70,30,${0.12 + ((u.fury ?? 0) / 100) * 0.18})`; g.beginPath(); g.arc(cx, by - TILE * 0.4, TILE * 0.5, 0, 6.3); g.fill(); }
+      // cosméticos del jugador (solo apariencia): aura bajo los pies y variante de color de su héroe
+      const look = u.team === 'hero' && u.summoner === undefined ? lookOf(u.owner) : undefined;
+      const aura = auraDef(look?.aura);
+      if (aura && !u.statuses.invis) drawAura(g, aura, cx, by - 2, TILE * 0.36, 8, now);
       drawUnit(g, u.kind, u.team, heroIdx.get(u.id) ?? 0, cx + (lg ? lg.dx * swing * TILE * 0.3 : 0), by + bob + (lg ? lg.dy * swing * TILE * 0.3 : 0), Math.round(TILE * 1.18),
-        { flash: (this.flash.get(u.id) ?? 0) > now, swing, flip: def0 ? left : !left, alpha: u.statuses.invis ? 0.4 : u.ai === 'decoy' ? 0.55 : 1, anim, frame });
+        { flash: (this.flash.get(u.id) ?? 0) > now, swing, flip: def0 ? left : !left, alpha: u.statuses.invis ? 0.4 : u.ai === 'decoy' ? 0.55 : 1, anim, frame, skin: look?.cls === u.kind ? look.skin : undefined });
       // Marca de la muerte: calavera con el daño guardado
       const dmk = u.statuses.deathmark;
       if (dmk) {

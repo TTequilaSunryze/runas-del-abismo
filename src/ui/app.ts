@@ -1,6 +1,6 @@
 // Arranque de la interfaz: conexión a la sala, redibujado y entrada del usuario.
 import { isMuted, playEvents, sfx, toggleMute } from '../audio/sfx';
-import { canPickRoute } from '../core/classes/classes';
+import { PLAYABLE, canPickRoute } from '../core/classes/classes';
 import { apCost, spellOf } from '../core/combat/engine';
 import type { Slot } from '../core/items/items';
 import type { ClassId, GameEvent } from '../core/state';
@@ -14,8 +14,10 @@ import { esc, mine, params, randomText, store, today, ui } from './ctx';
 import { BAG_SIZE, PRICE } from '../core/items/items';
 import { drainArchiveNotices, recordArchive, type ArchiveNotice } from '../game/archive';
 import { claimContractReward } from '../game/contracts';
+import { applyLoadout, buyItem, currentLook, emblemOf, deleteLoadout, equipItem, resetLook, saveLoadout, unequip } from '../game/shop';
+import { setLooks } from '../render/looks';
 import { claimSpecialReward, equipCosmetic } from '../game/specials';
-import { buyPerk, masteryOf, meta, myNemesis, myTeam, openRoutes, removeChampion, saveChampion, saveMeta, toggleTeam } from '../game/meta';
+import { masteryOf, meta, myNemesis, myTeam, openRoutes, removeChampion, saveChampion, saveMeta, toggleTeam } from '../game/meta';
 import { currentAccount, fetchTeam, restoreAccount, signIn, signOut, signUp } from '../net/account';
 import { addFriend, invite, removeFriend, setRoom, socialHandlers } from '../net/social';
 import { championOf } from '../game/run';
@@ -28,7 +30,7 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 
 function publish(): void {
   const m = meta();
-  ui.session?.announce({ name: ui.me.name, cls: ui.me.cls, routes: ui.me.routes, host: ui.session.isHost, perks: m.perks, unlocked: m.unlocked, asc: Math.min(ui.asc, m.maxAsc, MAX_ASC), daily: ui.daily ? today() : null,
+  ui.session?.announce({ name: ui.me.name, cls: ui.me.cls, routes: ui.me.routes, host: ui.session.isHost, look: currentLook(m, ui.me.cls), unlocked: m.unlocked, asc: Math.min(ui.asc, m.maxAsc, MAX_ASC), daily: ui.daily ? today() : null,
     mastery: masteryOf(ui.me.cls), nem: myNemesis(), hasTeam: myTeam().length > 0,
     mods: ui.daily ? [] : ui.mods, abyss: !ui.daily && m.stats.wins > 0, ready: ui.session.isHost || !!ui.lobbyReady });
 }
@@ -111,10 +113,14 @@ function showArchiveNotices(list: ArchiveNotice[]): void {
   while (box.children.length > 6) box.firstElementChild!.remove();
 }
 
+/** Clase para la que se equipan aspectos en la tienda: la del filtro o la elegida para jugar. */
+const shopClass = (): ClassId => ((PLAYABLE as string[]).includes(ui.shopCls) ? ui.shopCls : ui.me.cls) as ClassId;
+
 let lastKey = '';
 function render(events: GameEvent[]): void {
   const s = ui.session;
   if (!s) return;
+  setLooks(s.lobby().map((p) => [p.id, p.look]));
   const run = s.run;
   const want = !run ? 'lobby' : run.phase === 'combat' && run.combat ? 'combat' : run.phase === 'event' && run.event ? 'event' : run.phase === 'shop' ? 'shop' : run.phase === 'room' && run.room ? 'room' : run.phase === 'map' ? 'map' : 'end';
   // sin cambios reales no se redibuja: así un latido de red no interrumpe un clic
@@ -223,6 +229,20 @@ document.addEventListener('click', (e) => {
     case 'buy': s?.act({ a: 'buy', idx: Number(id) }); sfx.coin(); break;
     case 'potion': s?.act({ a: 'potion' }); break;
     case 'arccat': ui.arcCat = id as typeof ui.arcCat; ui.arcOpen = ''; ui.arcSub = ''; ui.arcF2 = ''; homeScreen(''); break;
+    case 'shopcat': ui.shopCat = id; ui.shopConfirm = ''; ui.shopMsg = ''; homeScreen(''); break;
+    case 'shoprar': ui.shopRar = id; homeScreen(''); break;
+    case 'shopcls': ui.shopCls = id; homeScreen(''); break;
+    case 'shopmine': ui.shopMine = !ui.shopMine; homeScreen(''); break;
+    case 'shopbuy': ui.shopConfirm = id; ui.shopMsg = ''; homeScreen(''); break;
+    case 'shopno': ui.shopConfirm = ''; homeScreen(''); break;
+    case 'shopyes': { const r = buyItem(meta(), id); ui.shopConfirm = ''; if (r.ok) { saveMeta(); sfx.myTurn(); ui.shopMsg = `Comprado por ${r.paid} ✨.`; } else ui.shopMsg = r.error; homeScreen(''); break; }
+    case 'shopeq': { const e = equipItem(meta(), id, shopClass()); if (e) ui.shopMsg = e; else saveMeta(); homeScreen(''); break; }
+    case 'shopun': unequip(meta(), id as never, shopClass()); saveMeta(); homeScreen(''); break;
+    case 'lsave': { const e = saveLoadout(meta(), shopClass(), `Conjunto ${(meta().cosmetics?.loadouts?.[shopClass()]?.length ?? 0) + 1}`); if (e) ui.shopMsg = e; else saveMeta(); homeScreen(''); break; }
+    case 'lapply': applyLoadout(meta(), shopClass(), Number(id)); saveMeta(); homeScreen(''); break;
+    case 'ldel': deleteLoadout(meta(), shopClass(), Number(id)); saveMeta(); homeScreen(''); break;
+    case 'lreset': resetLook(meta(), shopClass()); saveMeta(); homeScreen(''); break;
+    case 'refundok': meta().refundSeen = true; saveMeta(); homeScreen(''); break;
     case 'cview': ui.cview = id as typeof ui.cview; homeScreen(''); break;
     case 'sclaim': { if (claimSpecialReward(meta(), id)) { saveMeta(); sfx.myTurn(); } homeScreen(''); break; }
     case 'ctitle': if (equipCosmetic(meta(), 'title', id || null)) saveMeta(); homeScreen(''); break;
@@ -236,14 +256,12 @@ document.addEventListener('click', (e) => {
       ui.homeTab = id as typeof ui.homeTab;
       if (ui.homeTab === 'diario' && ui.board2 !== 'cargando') { ui.board2 = 'cargando'; void topDaily(today()).then((r) => { ui.board2 = r ?? 'error'; if (ui.screen === 'home') homeScreen(''); }); }
       homeScreen(''); break;
-    case 'perk': buyPerk(id); homeScreen(''); break;
     case 'tuto': ui.tutorial = 0; meta().seenTutorial = false; homeScreen(''); break;
     case 'tutonext': ui.tutorial++; if (ui.tutorial >= 5) { meta().seenTutorial = true; saveMeta(); } homeScreen(''); break;
     case 'tutoskip': meta().seenTutorial = true; saveMeta(); homeScreen(''); break;
     case 'ascup': ui.asc = Math.min(meta().maxAsc, ui.asc + 1); publish(); render([]); break;
     case 'ascdown': ui.asc = Math.max(0, ui.asc - 1); publish(); render([]); break;
     case 'again': ui.log.length = 0; s?.backToLobby(); break;
-    case 'reroll': s?.act({ a: 'reroll' }); break;
     case 'bossreward': {
       const o = s?.run ? mine(s.run)?.bossOffer?.[Number(id)] : undefined;
       if (o) ui.got = gotFromBoss(o);
@@ -283,7 +301,7 @@ document.addEventListener('click', (e) => {
     case 'map': ui.mapOpen = !ui.mapOpen; lastKey = ''; render([]); break;
     case 'stats': ui.statsOpen = !ui.statsOpen; lastKey = ''; render([]); break;
     case 'mod': ui.mods = ui.mods.includes(id) ? ui.mods.filter((x) => x !== id) : ui.mods.length < 3 ? [...ui.mods, id] : ui.mods; publish(); render([]); break;
-    case 'champsave': { const h = s?.run?.heroes.find((x) => x.owner === ui.myId); if (s?.run && h) { saveChampion({ ...championOf(s.run, h), by: currentAccount()?.name ?? ui.me.name, ...(meta().cosmetics?.title ? { title: meta().cosmetics!.title! } : {}), ...(meta().cosmetics?.frame ? { frame: meta().cosmetics!.frame! } : {}) }); publish(); lastKey = ''; render([]); } break; }
+    case 'champsave': { const h = s?.run?.heroes.find((x) => x.owner === ui.myId); if (s?.run && h) { saveChampion({ ...championOf(s.run, h), by: currentAccount()?.name ?? ui.me.name, ...(meta().cosmetics?.title ? { title: meta().cosmetics!.title! } : {}), ...(meta().cosmetics?.frame ? { frame: meta().cosmetics!.frame! } : {}), ...(emblemOf(meta()) ? { emblem: emblemOf(meta()) } : {}) }); publish(); lastKey = ''; render([]); } break; }
     case 'champdel': removeChampion(id); homeScreen(''); break;
     case 'champteam': toggleTeam(id); homeScreen(''); break;
     case 'duelmirror': void duel({ name: 'Tu reflejo', team: myTeam() }); break;

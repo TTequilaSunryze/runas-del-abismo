@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { newRun } from '../src/game/run';
-import { ACHIEVEMENTS, buyPerk, ecosFor, meta, settle } from '../src/game/meta';
+import { ACHIEVEMENTS, ecosFor, mergeMeta, meta, replaceMeta, settle } from '../src/game/meta';
 
 const store: Record<string, string> = {};
 (globalThis as unknown as { localStorage: Storage }).localStorage = {
@@ -26,11 +26,22 @@ describe('progresión', () => {
     expect(s.asc).toBe(1);
     expect(s.achievements.map((x) => x.id)).toContain('victoria');
   });
-  it('las mejoras cuestan ecos y tienen tope', () => {
-    meta().ecos = 1000;
-    expect(buyPerk('vit')).toBe(true);
-    for (let i = 0; i < 10; i++) buyPerk('vit');
-    expect(meta().perks.vit).toBe(5);
+  it('las Mejoras retiradas se devuelven en ecos una sola vez (también al fusionar)', () => {
+    const old = { ...meta(), ecos: 10, perks: { vit: 5, gold: 4, loot: 1, aid: 3 }, perksRefunded: undefined };
+    replaceMeta(old as never);
+    // vit 30+55+80+105+130 = 400 · gold 25+45+65+85 = 220 · loot 120 · aid 40+70+100 = 210 → 950
+    expect(meta().ecos).toBe(10 + 950);
+    expect(meta().perks).toBeUndefined();
+    replaceMeta(JSON.parse(JSON.stringify(meta())));
+    expect(meta().ecos).toBe(960);
+    // otro dispositivo con los datos antiguos: la fusión no devuelve otra vez
+    replaceMeta(mergeMeta(meta(), old as never));
+    expect(meta().ecos).toBe(960);
+    // si el otro dispositivo compró un nivel más que aún no se devolvió, solo se devuelve esa diferencia
+    const more = { ...(old as object), perks: { vit: 5, gold: 4, loot: 1, aid: 3, hack: 9 } };
+    replaceMeta(mergeMeta(meta(), more as never));
+    expect(meta().ecos).toBe(960);
+    expect(meta().perksRefundEcos).toBe(950);
     expect(ACHIEVEMENTS.length).toBeGreaterThan(10);
   });
 });

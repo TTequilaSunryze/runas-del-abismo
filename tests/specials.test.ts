@@ -135,7 +135,7 @@ describe('Fase D · persistencia y conservación', () => {
   it('Meta y libretas anteriores sin especiales ni cosméticos se completan', () => {
     expect(normalizeContracts({ day: '2026-11-21', daily: [], weekly: [] }).special).toEqual({});
     expect(normalizeCosmetics(undefined)).toEqual(emptyCosmetics());
-    expect(normalizeCosmetics({ titles: ['cronista', 'falso', 'cronista'], title: 'falso', frame: 'abisal' })).toEqual({ v: 1, titles: ['cronista'], frames: [], title: null, frame: null });
+    expect(normalizeCosmetics({ titles: ['cronista', 'falso', 'cronista'], title: 'falso', frame: 'abisal' })).toMatchObject({ v: 1, titles: ['cronista'], frames: [], title: null, frame: null });
   });
   it('guardar y cargar conserva especiales, títulos y marcos', () => {
     registerSpecial(meta(), { t: 'won', cls: 'arquero', pact: 'sangre' });
@@ -152,7 +152,7 @@ describe('Fase D · persistencia y conservación', () => {
     const m = mergeContracts(a, b);
     expect(m.special!.class_arquero!.claimed).toBe(true);
     expect(m.special!.col_relics!.progress).toBe(4);
-    expect(mergeCosmetics({ titles: ['cronista'], title: 'cronista' }, { titles: ['veloz'], frames: ['hueso'] })).toEqual({ v: 1, titles: ['cronista', 'veloz'], frames: ['hueso'], title: 'cronista', frame: null });
+    expect(mergeCosmetics({ titles: ['cronista'], title: 'cronista' }, { titles: ['veloz'], frames: ['hueso'] })).toMatchObject({ v: 1, titles: ['cronista', 'veloz'], frames: ['hueso'], title: 'cronista', frame: null });
   });
   it('conserva ecos, mejoras, maestría, logros, Archivo y contratos periódicos', () => {
     const m = meta();

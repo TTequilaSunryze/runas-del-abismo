@@ -652,3 +652,36 @@ button.big { font-size: 18px; padding: 10px 22px; }
 .archnote.contract { border-left-color: #5fd08e; }
 .archnote.special { border-left-color: #ff9f5a; }
 @keyframes archnote { 0% { opacity: 0; transform: translateX(16px); } 6% { opacity: 1; transform: none; } 85% { opacity: 1; } 100% { opacity: 0; } }
+
+/* v17 · Tienda de ecos y personalización del Archivo (solo apariencia) */
+.newtag { font-size: 10px; color: #1a1426; background: #7affc8; border-radius: 3px; padding: 0 4px; margin-left: 4px; }
+.shopprev { display: flex; align-items: center; justify-content: center; gap: 2px; min-width: 60px; min-height: 60px; overflow: hidden; }
+.fxprev { display: inline-block; width: 46px; height: 20px; border-radius: 50%; border: 2px solid var(--c); background: radial-gradient(ellipse, var(--g) 30%, transparent 70%); box-shadow: 0 0 10px var(--c); animation: fxpulse 1.6s ease-in-out infinite; }
+@keyframes fxpulse { 50% { transform: scale(1.12); } }
+.frprev { display: inline-block; width: 40px; height: 48px; border: 3px solid; border-radius: 6px; background: rgba(0, 0, 0, .3); }
+.thprev { display: inline-flex; width: 52px; height: 40px; align-items: center; justify-content: center; border-radius: 6px; border: 2px solid var(--arc-edge, #555); background: var(--arc-bg, #222); color: var(--arc-ink, #eee); }
+.cdprev { padding: 6px 8px !important; font-size: 12px; min-height: 0 !important; }
+.bgprev svg { width: 64px !important; height: auto !important; }
+.rar-common { border-color: #9a9a9a; } .rar-uncommon { border-color: #55c765; color: #9ee6a6; } .rar-rare { border-color: #4a93ee; color: #9cc8ff; } .rar-epic { border-color: #b06cff; color: #d6b0ff; } .rar-set { border-color: #f2c14e; color: #f2c14e; }
+.arc { position: relative; overflow: hidden; }
+.arcbg { display: inline-block; width: 72px; height: 40px; overflow: hidden; border-radius: 4px; margin-left: 8px; opacity: .9; pointer-events: none; }
+.arcbg svg { width: 72px !important; height: auto !important; }
+.arcdeco { margin: 0 6px; opacity: .85; }
+/* temas: cambian fondo y bordes del panel; el texto mantiene su contraste */
+.arc-t-pergamino { --arc-bg: #3a2f22; --arc-edge: #c9a46a; --arc-ink: #f3e6c8; background: linear-gradient(180deg, #3a2f22, #2a2219) !important; border-color: #c9a46a !important; }
+.arc-t-ceniza { --arc-bg: #2b2624; --arc-edge: #e0723a; --arc-ink: #f0e0d8; background: linear-gradient(180deg, #2f2522, #1d1817) !important; border-color: #e0723a !important; }
+.arc-t-bosque { --arc-bg: #1e2a1e; --arc-edge: #5fa04e; --arc-ink: #e0f0d8; background: linear-gradient(180deg, #1f2b1f, #151d15) !important; border-color: #5fa04e !important; }
+.arc-t-abisal { --arc-bg: #21162f; --arc-edge: #9b5cff; --arc-ink: #eadcff; background: linear-gradient(180deg, #24173a, #140d20) !important; border-color: #9b5cff !important; }
+.thprev.arc-t-pergamino, .thprev.arc-t-ceniza, .thprev.arc-t-bosque, .thprev.arc-t-abisal { background: var(--arc-bg) !important; border-color: var(--arc-edge) !important; }
+/* marcos de fichas del Archivo */
+.arc-c-hueso .lootcard, .lootcard.arc-c-hueso { border-color: #d8d0b8 !important; }
+.arc-c-oro .lootcard, .lootcard.arc-c-oro { border-color: #f2c14e !important; box-shadow: inset 0 0 6px #f2c14e44; }
+.arc-c-bestia .lootcard, .lootcard.arc-c-bestia { border-color: #c06a3a !important; border-style: double !important; border-width: 3px !important; }
+/* temas: también fichas, pestañas y títulos (el texto conserva su color para no perder contraste) */
+.arc[class*="arc-t-"] h3, .arc[class*="arc-t-"] .tabs button.on { color: var(--arc-edge) !important; }
+.arc[class*="arc-t-"] .tabs button.on { border-bottom-color: var(--arc-edge) !important; }
+.arc[class*="arc-t-"] .mbar i { background: var(--arc-edge) !important; }
+.arc-t-pergamino .lootcard { background: linear-gradient(180deg, #4d3f2c, #3b3022) !important; }
+.arc-t-ceniza .lootcard { background: linear-gradient(180deg, #3a2a24, #261c19) !important; }
+.arc-t-bosque .lootcard { background: linear-gradient(180deg, #273826, #1a261a) !important; }
+.arc-t-abisal .lootcard { background: linear-gradient(180deg, #2f2045, #1d132b) !important; }

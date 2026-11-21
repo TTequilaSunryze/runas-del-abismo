@@ -2,7 +2,7 @@
 import { mergeArchive } from '../game/archiveData';
 import { mergeContracts } from '../game/contractsData';
 import { mergeCosmetics } from '../game/cosmetics';
-import { mergeMeta, meta, myTeam, replaceMeta, saveMeta, setSaveHook, type Meta } from '../game/meta';
+import { mergedEcos, mergeMeta, meta, myTeam, replaceMeta, saveMeta, setSaveHook, type Meta } from '../game/meta';
 import { goOffline, goOnline } from './social';
 import { supabase } from './transport';
 
@@ -51,7 +51,7 @@ async function attach(user: { id: string; email?: string | null; user_metadata?:
   const cloud = (row!.meta ?? {}) as Partial<Meta>;
   // primer uso de esta cuenta en este navegador: se une todo; después manda lo más reciente
   if (local.acct !== user.id) replaceMeta({ ...mergeMeta(local, cloud), acct: user.id });
-  else if ((cloud.t ?? 0) > local.t && cloud.v === 1) replaceMeta({ ...(cloud as Meta), acct: user.id, archive: mergeArchive(local.archive, cloud.archive), contracts: mergeContracts(local.contracts, cloud.contracts), cosmetics: mergeCosmetics(local.cosmetics, cloud.cosmetics) });
+  else if ((cloud.t ?? 0) > local.t && cloud.v === 1) replaceMeta({ ...(cloud as Meta), acct: user.id, ecos: mergedEcos(cloud as Meta, local), archive: mergeArchive(local.archive, cloud.archive), contracts: mergeContracts(local.contracts, cloud.contracts), cosmetics: mergeCosmetics(local.cosmetics, cloud.cosmetics) });
   account = { id: user.id, email: user.email ?? '', name: row!.name as string };
   goOnline(account.name);
   setSaveHook(() => { if (timer) clearTimeout(timer); timer = setTimeout(() => void push(), 1500); });

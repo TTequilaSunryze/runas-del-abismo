@@ -2,7 +2,7 @@
 // Es lo que se sincroniza entre jugadores y lo que se guarda.
 import { ENEMY_SCALING, FEATURES, schoolOf } from '../core/tuning';
 import { AFFIXES, CAGE_ALLY, makeEnemy } from '../content/enemies';
-import { DAILY_ASC, DAILY_MODS, DAILY_POOL, MAX_MODS, OMENS, perkLevel, type Perks } from '../content/modes';
+import { DAILY_ASC, DAILY_MODS, DAILY_POOL, MAX_MODS, OMENS } from '../content/modes';
 import { BASE_ZONES, ZONES, type BossDef, type ZoneDef } from '../content/zones';
 import type { BossInfo } from '../core/combat/ai';
 import { RELIC_EVENTS, RELICS } from '../content/relics';
@@ -21,7 +21,7 @@ import { CORRIDOR_CHANCE, genTerrain } from './terrain';
 import type { ClassId, CombatState, GameEvent, Pos } from '../core/state';
 import { enterRoom, roomAction, roomDone, roomPending, type RoomOp, type RoomState } from './rooms';
 import { pactEnemyHp, pactEnemyPower } from '../content/pacts';
-import { validFrame, validTitle } from './cosmetics';
+import { validEmblem, validFrame, validTitle } from './cosmetics';
 
 /** Una opción de la recompensa del jefe. */
 export type BossOption =
@@ -56,10 +56,6 @@ export interface HeroSave {
   bag: Item[];
   /** bendiciones y maldiciones de eventos */
   boon: Stats;
-  /** mejoras permanentes del jugador (compradas con ecos) */
-  perks: Perks;
-  /** re-tiradas de botín que le quedan en esta zona */
-  rerolls: number;
   stats: HeroStats;
   /** mejoras de hechizo elegidas: id de hechizo → ids de mejora */
   ups: Record<string, string[]>;
@@ -101,6 +97,7 @@ export interface Champion {
   /** título y marco del jugador al guardarlo (solo visuales; opcionales) */
   title?: string;
   frame?: string;
+  emblem?: string;
 }
 
 export interface HeroStats {
@@ -258,7 +255,7 @@ export interface RunOpts {
   firstRun?: boolean;
 }
 
-export type NewHero = Pick<HeroSave, 'owner' | 'name' | 'cls' | 'routes'> & { perks?: Perks; mastery?: number };
+export type NewHero = Pick<HeroSave, 'owner' | 'name' | 'cls' | 'routes'> & { mastery?: number };
 
 /** Niveles en los que se elige una mejora de hechizo. */
 /** Kit inicial válido de la clase (uno solo; el Clásico por defecto). */
@@ -281,8 +278,7 @@ export function newRun(code: string, seed: number, players: NewHero[], opts: Run
     nemesis: (opts.nemesis ?? []).map(cleanChampion).filter((c): c is Champion => !!c).slice(0, 8), nemesisUsed: [],
     heroes: players.map((p) => ({
       owner: p.owner, name: p.name, cls: p.cls, routes: kitOf(p.cls, p.routes), hp: 0, level: 1, gold: 0, equip: {}, bag: [], boon: {},
-      perks: Object.fromEntries(['vit', 'gold', 'loot', 'reroll', 'aid'].map((k) => [k, perkLevel(p.perks, k)])),
-      rerolls: 0, stats: { dmg: 0, kills: 0, falls: 0, heal: 0, maxGold: 0 },
+      stats: { dmg: 0, kills: 0, falls: 0, heal: 0, maxGold: 0 },
       relics: [], boons: [], boonOffer: null, bag2: { c_vida: 1 }, ups: {}, bossOffer: null, mastery: Math.max(0, Math.min(5, Math.floor(Number(p.mastery) || 0))),
     })),
   };
@@ -290,12 +286,11 @@ export function newRun(code: string, seed: number, players: NewHero[], opts: Run
   run.bossPick = ZONES.map((z) => randInt(run, 0, z.bosses.length - 1));
   for (const h of run.heroes) {
     const base = heroMaxHp(h);
-    h.boon.hp = Math.round(base * (perkLevel(h.perks, 'vit') * 0.06 - (run.mods.includes('cristal') ? 0.25 : 0)));
+    h.boon.hp = run.mods.includes('cristal') ? Math.round(base * -0.25) : 0;
     if (run.mods.includes('cristal')) h.boon.power = 3;
     // maestría: los niveles que no abren un kit dan oro inicial
     const noKit = Array.from({ length: Math.min(4, h.mastery) }, (_, i) => i + 1).filter((i) => !CLASSES[h.cls].routes[i]).length;
-    h.gold = perkLevel(h.perks, 'gold') * 25 + noKit * 25;
-    h.rerolls = perkLevel(h.perks, 'reroll');
+    h.gold = noKit * 25;
     h.hp = Math.round(heroMaxHp(h) * (run.asc >= 8 ? 0.75 : 1));
   }
   // se empieza dentro del Altar (en la primera partida del jugador, apagado)
@@ -316,7 +311,6 @@ export function giveRelic(run: RunState, h: HeroSave, rare?: boolean): string | 
   const r = (pool.length ? pick(run, pool) : all.length ? pick(run, all) : null);
   if (!r) return null;
   h.relics.push(r.id);
-  if (r.id === 'dado') h.rerolls++;
   if (r.stats?.hp) h.hp = Math.max(1, h.hp + r.stats.hp);
   return r.id;
 }
@@ -419,7 +413,7 @@ export function statBreakdown(h: HeroSave): Array<{ key: string; name: string; b
 
 /** Precio con los recargos de la ascensión y del reto diario. */
 /** Curación de jefe y hogueras: base + 8% por nivel de Primeros auxilios, −30% desde la ascensión 3. */
-export const healOf = (run: RunState, h: HeroSave, base: number): number => (base + perkLevel(h.perks, 'aid') * 0.08) * (run.asc >= 3 ? 0.7 : 1);
+export const healOf = (run: RunState, _h: HeroSave, base: number): number => base * (run.asc >= 3 ? 0.7 : 1);
 
 export const priceOf = (run: RunState, base: number): number => Math.round(base * (run.asc >= 4 ? 1.25 : 1) * (run.mods.includes('codicia') ? 2 : 1));
 
@@ -489,7 +483,7 @@ export function cleanChampion(x: unknown): Champion | null {
       if (list.length) ups[id] = list;
     }
     return { id: String(c.id ?? '').slice(0, 40) || 'x', name: String(c.name ?? 'Héroe').slice(0, 14), by: String(c.by ?? '').slice(0, 14), cls: c.cls, routes, level, equip, ups,
-      asc: Math.max(0, Math.min(10, Math.floor(Number(c.asc) || 0))), won: !!c.won, date: String(c.date ?? '').slice(0, 10), ...(validTitle(c.title) ? { title: validTitle(c.title) } : {}), ...(validFrame(c.frame) ? { frame: validFrame(c.frame) } : {}) };
+      asc: Math.max(0, Math.min(10, Math.floor(Number(c.asc) || 0))), won: !!c.won, date: String(c.date ?? '').slice(0, 10), ...(validTitle(c.title) ? { title: validTitle(c.title) } : {}), ...(validFrame(c.frame) ? { frame: validFrame(c.frame) } : {}), ...(validEmblem(c.emblem) ? { emblem: validEmblem(c.emblem) } : {}) };
   } catch {
     return null;
   }
@@ -743,12 +737,12 @@ export function genLoot(run: RunState, kind: DropKind = dropKindOf(run), min: Ra
 }
 
 /**
- * Botín de objetos: 1 objeto por héroe en combate normal y élite, 2 en jefe (más 1 con el perk o la lupa en élites
+ * Botín de objetos: 1 objeto por héroe en combate normal y élite, 2 en jefe (más 1 con la lupa en élites
  * y jefes), con el tipo de daño de ese héroe. Es individual: va directo a cada héroe (si no cabe, a su parte del alijo).
  */
 function dropLoot(run: RunState, h: HeroSave, kind: DropKind, report: Item[]): void {
   if (!(rand(run) < dropChance(run.zone, kind)) && !(kind === 'elite' && run.pact === 'tirano')) return;
-  const extra = kind === 'combat' ? 0 : perkLevel(h.perks, 'loot') + (h.relics.includes('lupa') ? 1 : 0);
+  const extra = kind === 'combat' ? 0 : h.relics.includes('lupa') ? 1 : 0;
   const n = { combat: 1, elite: 1, boss: 2, shop: 1 }[kind] + extra;
   for (let i = 0; i < n; i++) {
     const it = genLoot(run, kind, kind === 'elite' && run.pact === 'tirano' && i === 0 ? 2 : 0, h);
@@ -950,7 +944,7 @@ export function finishFight(run: RunState): void {
     run.step = 0;
     setMap(run);
     run.allies = [];
-    for (const h of run.heroes) { h.hp = Math.min(heroMaxHp(h), h.hp + (run.pact === 'desatada' ? 0 : Math.ceil(heroMaxHp(h) * 0.5))); h.rerolls = perkLevel(h.perks, 'reroll') + (h.relics.includes('dado') ? 1 : 0); }
+    for (const h of run.heroes) { h.hp = Math.min(heroMaxHp(h), h.hp + (run.pact === 'desatada' ? 0 : Math.ceil(heroMaxHp(h) * 0.5))); }
     run.note = `${won} ${zoneOf(run).intro}${run.pact === 'desatada' ? ' El pacto os niega el descanso.' : ' Recuperáis el 50% de la vida.'}`;
     // el prestamista cobra al llegar a la zona siguiente
     if (run.flags.includes(`deuda_${run.zone}`)) {
@@ -991,7 +985,6 @@ export type MetaAction =
   | { a: 'drop'; idx: number }
   | { a: 'buy'; idx: number }
   | { a: 'potion' }
-  | { a: 'reroll' }
   | { a: 'bossreward'; idx: number }
   | { a: 'boon'; idx: number }
   | { a: 'ready' }
@@ -1102,15 +1095,6 @@ export function metaAction(run: RunState, owner: string, a: MetaAction): string 
       else if (o.kind === 'gold') h.gold += o.amount;
       else h.hp = Math.min(heroMaxHp(h), h.hp + Math.ceil(heroMaxHp(h) * 0.5));
       h.bossOffer = null;
-      break;
-    }
-    case 'reroll': {
-      const list = run.offers[owner];
-      if (!list) return 'No tienes botín pendiente';
-      if (h.rerolls <= 0) return 'No te quedan re-tiradas en esta zona';
-      h.rerolls--;
-      const min = Math.min(...list.map((x) => x.rarity)) as Rarity;
-      run.offers[owner] = list.map(() => genLoot(run, dropKindOf(run), min));
       break;
     }
     case 'boon': {

@@ -9,7 +9,7 @@ import { HALL_SIZE, achievementCount, listedAchievements, MASTERY_XP, ecosFor, m
 import { currentAccount } from '../net/account';
 import { friendsStatus } from '../net/social';
 import type { Champion } from '../game/run';
-import { ASCENSION, DAILY_MODS, MOD_ECOS, OMENS, PERKS, perkLevel } from '../content/modes';
+import { ASCENSION, DAILY_MODS, MOD_ECOS, OMENS } from '../content/modes';
 import { ALLIES } from '../content/enemies';
 import { readSnapshot } from '../game/snapshot';
 import { RELICS } from '../content/relics';
@@ -26,7 +26,9 @@ import { STAT_NAME, type Item } from '../core/items/items';
 import { MAX_SPELL_UPS, UPGRADES } from '../core/upgrades';
 import { archiveTotal, BESTIARY, CATEGORIES, CAT_NAME, DOCUMENTED_KILLS, GRIMOIRE, LEVEL_NAME, beastDef, completion, entriesOf } from '../game/archive';
 import { activeContracts, refreshContracts, type Contract } from '../game/contracts';
-import { FRAMES, SPECIALS, SPECIAL_TYPE_NAME, TITLES, evaluateSpecials, rewardName, specialRows } from '../game/specials';
+import { CATALOG, CAT_NAME as SHOP_CAT, RARITY_NAME, archiveLook, currentLook, emblemOf, grantUnlocks, itemState, markSeen, owns, priceFor, reqMet, reqText, shopItem, unseenOwned, type ShopCat, type ShopItem } from '../game/shop';
+import { auraDef, paletteDef } from '../render/palettes';
+import { SPECIALS, SPECIAL_TYPE_NAME, evaluateSpecials, rewardName, specialRows } from '../game/specials';
 import { frameDef, titleName } from '../game/cosmetics';
 import { ATLAS_CATS, CHRONICLE_CATS, MAX_LV, MASTERED_AT, type AtlasCat, type ChronicleCat } from '../game/archiveData';
 import { ATLAS, ATLAS_DONE_TEXT, ATLAS_NAME, ATLAS_STATE_NAME, CHRONICLES, CHRONICLE_NAME, CHRONICLE_STATE_NAME, atlasEntry, atlasProgress, chronicleEntry, chronicleProgress } from '../game/atlas';
@@ -45,7 +47,8 @@ function archiveHeader(desc: string): string {
     ...CATEGORIES.map((c): [typeof ui.arcCat, string] => { const p = completion(c); return [c, `${CAT_NAME[c]} ${p.found}/${p.total}`]; }),
     ['atlas', '🗺️ Atlas'], ['chronicles', '📜 Crónicas'], ['contracts', `📋 Contratos${pend ? ` (${pend}!)` : ''}`],
   ];
-  return `<div class="panel"><div class="row"><h3>📚 Archivo del Abismo</h3><span class="grow"></span><b class="pill" ${tip('<b>Colección global</b><div class="sm">Bestiario, Grimorio, Reliquias, entradas del Atlas y Crónicas completadas.</div>')}>${t.pct}% · ${t.found}/${t.total}</b></div>
+  const al = archiveLook(m), deco = al.deco ? `<span class="arcdeco">${esc(al.deco)}</span>` : '';
+  return `<div class="panel arc ${al.theme ? `arc-t-${al.theme}` : ''} ${al.card ? `arc-c-${al.card}` : ''}"><div class="row"><h3>${deco}📚 Archivo del Abismo${deco}</h3>${al.bg ? `<span class="arcbg">${sceneOf(al.bg)}</span>` : ''}<span class="grow"></span><b class="pill" ${tip('<b>Colección global</b><div class="sm">Bestiario, Grimorio, Reliquias, entradas del Atlas y Crónicas completadas.</div>')}>${t.pct}% · ${t.found}/${t.total}</b></div>
   <span class="mbar"><i style="width:${t.pct}%"></i><b>Colección global ${t.pct}%</b></span><div class="dim sm">${esc(desc)}</div>
   <div class="tabs">${nav.map(([c, n]) => `<button class="${ui.arcCat === c ? 'on' : ''}" data-act="arccat" data-id="${c}">${n}</button>`).join('')}</div>`;
 }
@@ -76,6 +79,63 @@ function contractsPanel(): string {
 
 const specialReady = (m: ReturnType<typeof meta>): number => specialRows(m).filter((r) => r.completed && !r.claimed).length;
 
+/** Vista previa de un elemento con los recursos existentes (sprites con su variante, auras, escenas, emojis, colores). */
+function shopPreview(x: ShopItem, cls: ClassId): string {
+  const c = (x.cls ?? cls) as ClassId;
+  if (x.cat === 'skin') return `<img class="parch" width="56" height="56" src="${unitPortraitUrl(c, 'hero', 0, x.ref)}" alt="">`;
+  if (x.cat === 'kit') return (x.includes ?? []).filter((i) => i.startsWith('skin_')).map((i) => `<img class="parch" width="44" height="44" src="${unitPortraitUrl(c, 'hero', 0, shopItem(i)!.ref)}" alt="">`).join('');
+  if (x.cat === 'fx') { const a = auraDef(x.ref)!; return `<span class="fxprev" style="--c:${a.color};--g:${a.glow}"></span>`; }
+  if (x.cat === 'frame') { const f = frameDef(x.ref)!; return `<span class="frprev" style="border-color:${f.color};box-shadow:0 0 8px ${f.color}88"></span>`; }
+  if (x.cat === 'emblem' || x.cat === 'deco') return `<span class="emo big">${x.ref}</span>`;
+  if (x.cat === 'title') return `<i class="good">${esc(titleName(x.ref))}</i>`;
+  if (x.cat === 'theme') return `<span class="thprev arc-t-${x.ref}"><b>Aa</b></span>`;
+  if (x.cat === 'card') return `<span class="lootcard cdprev arc-c-${x.ref}">Ficha</span>`;
+  return `<span class="bgprev">${sceneOf(x.ref)}</span>`;
+}
+const sceneOf = (id: string): string => (id === 'altar' ? altarScene(true) : id === 'forja' ? forgeScene(30) : id === 'cofre' ? chestScene('loot') : id === 'descanso' ? restScene(0) : id === 'santuario' ? shrineScene(1) : '');
+
+/** Tienda de ecos: categorías, filtros, vista previa, compra con confirmación, inventario, equipamiento y conjuntos. */
+function shopPanel(): string {
+  const m = meta();
+  if (grantUnlocks(m).length) saveMeta();
+  const cls = ((PLAYABLE as string[]).includes(ui.shopCls) ? ui.shopCls : ui.me.cls) as ClassId;
+  const fresh = new Set(unseenOwned(m).map((x) => x.id));
+  const cats = (Object.keys(SHOP_CAT) as ShopCat[]).map((c) => {
+    const all = CATALOG().filter((x) => x.cat === c), n = all.filter((x) => owns(m, x.id)).length, nw = all.filter((x) => fresh.has(x.id)).length;
+    return `<button class="${ui.shopCat === c ? 'on' : ''}" data-act="shopcat" data-id="${c}">${SHOP_CAT[c]} ${n}/${all.length}${nw ? ' <b class="newtag">NUEVO</b>' : ''}</button>`;
+  }).join('');
+  const rar = ([['', 'Todas'], ...Object.entries(RARITY_NAME)] as Array<[string, string]>).map(([k, n]) => `<button class="mini ${ui.shopRar === k ? 'on' : ''}" data-act="shoprar" data-id="${k}">${n}</button>`).join('');
+  const clsF = ([['', 'Todas las clases'], ...PLAYABLE.map((c): [string, string] => [c, CLASSES[c].name])]).map(([k, n]) => `<button class="mini ${ui.shopCls === k ? 'on' : ''}" data-act="shopcls" data-id="${k}">${esc(n)}</button>`).join('');
+  const list = CATALOG().filter((x) => x.cat === ui.shopCat && x.available && (!ui.shopRar || x.rarity === ui.shopRar) && (!ui.shopCls || !x.cls || x.cls === ui.shopCls) && (!ui.shopMine || owns(m, x.id)));
+  const card = (x: ShopItem): string => {
+    const st = itemState(m, x, cls), price = priceFor(m, x), poor = m.ecos < price;
+    let act = '';
+    if (st === 'equipped') act = `<span class="pill good sm">✔ Equipado</span> <button class="mini" data-act="shopun" data-id="${x.cat === 'skin' ? 'skin' : x.cat === 'title' ? 'title' : x.cat === 'frame' ? 'frame' : SLOT_OF_CAT[x.cat] ?? ''}">Quitar</button>`;
+    else if (st === 'owned') act = x.cat === 'kit' ? '<span class="pill good sm">✔ Completo</span>' : x.cat === 'skin' && x.cls && x.cls !== cls ? `<span class="dim sm">Adquirido · elige ${esc(CLASSES[x.cls].name)} para equiparlo</span>` : `<span class="pill sm">Adquirido</span> <button class="pri mini" data-act="shopeq" data-id="${x.id}">Equipar${x.cat === 'skin' ? ` en ${esc(CLASSES[cls].name)}` : ''}</button>`;
+    else if (st === 'locked') act = `<span class="dim sm">🔒 ${esc(reqText(x.req!))}</span>`;
+    else if (st === 'exclusive') act = `<span class="dim sm">🏅 Exclusivo: ${esc(reqText(x.req!))}</span>`;
+    else if (ui.shopConfirm === x.id) act = `<span class="sm">¿Gastar <b>${price} ✨</b>?</span> <button class="pri mini" data-act="shopyes" data-id="${x.id}" ${poor ? 'disabled' : ''}>Confirmar</button> <button class="mini" data-act="shopno">Cancelar</button>${poor ? `<div class="bad sm">Te faltan ${price - m.ecos} ecos.</div>` : ''}`;
+    else act = `<button class="${poor ? '' : 'pri'} mini" data-act="shopbuy" data-id="${x.id}">${poor ? `Te faltan ${price - m.ecos} ✨` : `Comprar · ${price} ✨`}</button>${x.cat === 'kit' && price !== x.price ? ` <span class="dim sm">(antes ${x.price})</span>` : ''}`;
+    return `<div class="lootcard shopcard ${st === 'equipped' ? 'r3' : st === 'owned' ? 'r1' : st === 'locked' ? 'off' : ''}"><div class="row"><div class="cell big shopprev">${shopPreview(x, cls)}</div><div class="grow"><b>${esc(x.name)}</b>${fresh.has(x.id) ? ' <b class="newtag">NUEVO</b>' : ''}<div class="pill sm rar-${x.rarity}">${RARITY_NAME[x.rarity]}${x.cls ? ` · ${esc(CLASSES[x.cls].name)}` : ''}</div></div></div><div class="sm">${esc(x.desc)}</div>${x.req && x.price !== null ? `<div class="sm dim">Requisito: ${esc(reqText(x.req))}${reqMet(m, x.req) ? ' ✔' : ''}</div>` : ''}<div class="row" style="flex-wrap:wrap;gap:4px">${act}</div></div>`;
+  };
+  // conjuntos de la clase elegida (aspecto, aura y emblema)
+  const lo = m.cosmetics?.loadouts?.[cls] ?? [], look = currentLook(m, cls);
+  const lookCard = ['skin', 'kit', 'fx', 'emblem'].includes(ui.shopCat) ? `<div class="panel note"><div class="row"><img class="parch" width="48" height="48" src="${unitPortraitUrl(cls, 'hero', 0, look.skin)}" alt="">${look.aura ? `<span class="fxprev" style="--c:${auraDef(look.aura)!.color};--g:${auraDef(look.aura)!.glow}"></span>` : ''}<span class="emo">${look.emblem ?? ''}</span>
+    <div class="grow"><b>Aspecto de ${esc(CLASSES[cls].name)}</b><div class="dim sm">${look.skin ? esc(paletteDef(look.skin)!.name) : 'Predeterminado'}${look.aura ? ` · ${esc(auraDef(look.aura)!.name)}` : ''}. Elige otra clase en el filtro para cambiar la suya.</div></div>
+    <button class="mini" data-act="lsave">Guardar conjunto</button><button class="mini" data-act="lreset">Predeterminado</button></div>
+    ${lo.length ? `<div class="row sm" style="flex-wrap:wrap;gap:4px">${lo.map((l, i) => `<span class="chip">${esc(l.name)} <button class="mini" data-act="lapply" data-id="${i}">Usar</button><button class="mini" data-act="ldel" data-id="${i}">✕</button></span>`).join('')}</div>` : ''}</div>` : '';
+  const refund = m.perksRefundEcos && !m.refundSeen ? `<div class="panel note"><div class="row"><span class="emo">♻️</span><div class="grow"><b>Las Mejoras permanentes se han retirado.</b><div class="sm">Te hemos devuelto los <b>${m.perksRefundEcos} ecos</b> que gastaste en ellas. Ahora los ecos sirven para personalizar, nunca para ganar poder.</div></div><button class="mini" data-act="refundok">Entendido</button></div></div>` : '';
+  // lo propio de esta categoría ya se ha visto
+  setTimeout(() => { if (markSeen(m, list.filter((x) => owns(m, x.id)).map((x) => x.id))) saveMeta(); }, 0);
+  return `${refund}<div class="panel"><div class="row"><h3>✨ Tienda de ecos</h3><span class="grow"></span><b class="pill">✨ ${m.ecos} ecos</b></div>
+  <div class="dim sm">Solo apariencia: nada de la tienda cambia el combate. Sin compras al azar ni ofertas por tiempo.</div>
+  <div class="tabs">${cats}</div><div class="row sm" style="flex-wrap:wrap;gap:4px">${rar}<span class="grow"></span><button class="mini ${ui.shopMine ? 'on' : ''}" data-act="shopmine">🎒 Solo lo mío (inventario)</button></div>
+  <div class="row sm" style="flex-wrap:wrap;gap:4px">${clsF}</div>
+  ${ui.shopMsg ? `<div class="${/^Comprado/.test(ui.shopMsg) ? 'good' : 'bad'} sm">${esc(ui.shopMsg)}</div>` : ''}${lookCard}
+  <div class="cards c3">${list.map(card).join('') || '<div class="dim sm">Nada con estos filtros.</div>'}</div></div>`;
+}
+const SLOT_OF_CAT: Partial<Record<ShopCat, string>> = { emblem: 'emblem', fx: 'aura', theme: 'theme', card: 'card', bg: 'bg', deco: 'deco' };
+
 /** Contratos Especiales: permanentes, por tipo, con requisitos, avance y recompensa visual. */
 function specialsView(m: ReturnType<typeof meta>): string {
   if (evaluateSpecials(m)) saveMeta();
@@ -88,16 +148,11 @@ function specialsView(m: ReturnType<typeof meta>): string {
     }).join('')}</div>`).join('');
 }
 
-/** Selección de título y marco (solo los desbloqueados se pueden equipar). */
+/** Títulos y marcos se equipan en la Tienda (un solo sitio para toda la personalización). */
 function cosmeticView(m: ReturnType<typeof meta>): string {
-  const c = m.cosmetics ?? { titles: [] as string[], frames: [] as string[], title: null, frame: null };
-  const titles = TITLES.map((t) => { const has = c.titles.includes(t.id), on = c.title === t.id;
-    return `<button class="mini ${on ? 'on' : ''}" ${has ? `data-act="ctitle" data-id="${t.id}"` : 'disabled'}>${has ? '' : '🔒 '}${esc(has ? t.name : '???')}</button>`; }).join(' ');
-  const frames = FRAMES.map((f) => { const has = c.frames.includes(f.id), on = c.frame === f.id;
-    return `<button class="mini ${on ? 'on' : ''}" ${has ? `data-act="cframe" data-id="${f.id}"` : 'disabled'} style="${has ? `border-color:${f.color};color:${f.color}` : ''}">${has ? '' : '🔒 '}${esc(has ? f.name : '???')}</button>`; }).join(' ');
-  return `<div class="dim sm">Los títulos acompañan a tu nombre en el inicio y en los héroes que guardes en el Salón; los marcos rodean sus fichas. Se consiguen con los Contratos Especiales.</div>
-  <h3>Título ${c.title ? `· <span class="good">${esc(titleName(c.title))}</span>` : ''}</h3><div class="row" style="flex-wrap:wrap;gap:6px">${c.title ? '<button class="mini" data-act="ctitle" data-id="">Sin título</button> ' : ''}${titles}</div>
-  <h3>Marco ${c.frame ? `· <span style="color:${frameDef(c.frame)!.color}">${esc(frameDef(c.frame)!.name)}</span>` : ''}</h3><div class="row" style="flex-wrap:wrap;gap:6px">${c.frame ? '<button class="mini" data-act="cframe" data-id="">Sin marco</button> ' : ''}${frames}</div>`;
+  const c = m.cosmetics;
+  return `<div class="dim sm">Tienes ${c?.titles.length ?? 0} títulos y ${c?.frames.length ?? 0} marcos. Se equipan, junto con el resto de tu apariencia, en la Tienda.</div>
+  <div class="row"><button class="pri" data-act="htab" data-id="tienda">Ir a la Tienda ✨</button></div>`;
 }
 
 /** Atlas (zonas, eventos, pactos, presagios) y Crónicas (historias, secretos, hitos): mismas fichas, estados propios. */
@@ -166,13 +221,6 @@ function archivePanel(): string {
 
 function metaPanel(): string {
   const m = meta();
-  if (ui.homeTab === 'mejoras') {
-    return `<div class="panel"><div class="row"><h3>Mejoras permanentes</h3><span class="grow"></span><b class="pill">✨ ${m.ecos} ecos</b></div>
-    <div class="dim sm">Se compran con ecos (se ganan en cada partida) y valen para todas tus partidas, también online.</div>
-    <div class="cards c3">${PERKS.map((p) => { const l = perkLevel(m.perks, p.id), full = l >= p.max, c = p.cost(l);
-      return `<div class="lootcard"><div class="row"><div class="cell big"><span class="emo">${p.icon}</span></div><div><b>${p.name}</b> <span class="dim sm">${l}/${p.max}</span><div class="sm ${l ? 'good' : 'dim'}">${esc(p.text(l || 1))}</div>${!full ? `<div class="dim sm">Siguiente: ${esc(p.text(l + 1))}</div>` : ''}</div></div>
-      <button class="pri" data-act="perk" data-id="${p.id}" ${full || m.ecos < c ? 'disabled' : ''}>${full ? 'Máximo' : `Mejorar · ${c} ✨`}</button></div>`; }).join('')}</div></div>`;
-  }
   if (ui.homeTab === 'logros') {
     return `<div class="panel"><div class="row"><h3>Logros</h3><span class="grow"></span><span class="dim sm">${achievementCount(m)}</span></div>
     <div class="dim sm">Partidas: ${m.stats.runs} · Victorias: ${m.stats.wins} · Bajas: ${m.stats.kills} · Jefes: ${m.stats.bosses} · Ascensión máxima: ${m.maxAsc}</div>
@@ -180,6 +228,7 @@ function metaPanel(): string {
       return `<div class="lootcard ${on ? 'r3' : 'off'}"><b>${on ? '🏆' : '🔒'} ${esc(a.name)}</b><div class="sm">${esc(a.text)}</div><div class="sm dim">${[a.ecos ? `+${a.ecos} ✨` : ''].filter(Boolean).join(' · ') || ' '}</div></div>`; }).join('')}</div></div>`;
   }
   if (ui.homeTab === 'archivo') return archivePanel();
+  if (ui.homeTab === 'tienda') return shopPanel();
   if (ui.homeTab === 'clases') {
     return `<div class="panel"><h3>Maestría de clase</h3><div class="dim sm">Jugar con una clase le da experiencia de maestría (más cuanto más lejos llegues y más alta sea la ascensión). Cada nivel abre rutas y ventajas de esa clase.</div>
     <div class="cards c2">${PLAYABLE.map((id) => { const c = CLASSES[id], { lv } = masteryProgress(id);
@@ -232,7 +281,7 @@ function metaPanel(): string {
 export function champCard(c: Champion, inTeam: boolean, actions = true): string {
   const ups = Object.values(c.ups).reduce((a, l) => a + l.length, 0);
   const fr = frameDef(c.frame);
-  return `<div class="lootcard ${c.won ? 'r3' : 'r1'}"${fr ? ` style="border-color:${fr.color};box-shadow:0 0 8px ${fr.color}66"` : ''}><div class="row"><b>${esc(c.name)}</b>${c.title ? `<i class="sm good">${esc(titleName(c.title))}</i>` : ''}<span class="dim sm">${CLASSES[c.cls].name}</span><span class="grow"></span>${c.won ? '<span>🏆</span>' : ''}${c.asc ? `<span class="pill sm">A${c.asc}</span>` : ''}</div>
+  return `<div class="lootcard ${c.won ? 'r3' : 'r1'}"${fr ? ` style="border-color:${fr.color};box-shadow:0 0 8px ${fr.color}66"` : ''}><div class="row"><b>${c.emblem ? `${c.emblem} ` : ''}${esc(c.name)}</b>${c.title ? `<i class="sm good">${esc(titleName(c.title))}</i>` : ''}<span class="dim sm">${CLASSES[c.cls].name}</span><span class="grow"></span>${c.won ? '<span>🏆</span>' : ''}${c.asc ? `<span class="pill sm">A${c.asc}</span>` : ''}</div>
   <div class="sm dim">${c.routes.map((r) => esc(findRoute(c.cls, r)?.name ?? r)).join(' + ')}</div>
   <div class="cells tiny">${Object.values(c.equip).map((it) => `<span class="cell ${RAR[it.rarity]}" ${tip(itemHtml(it, true))}>${itemIcon(it)}</span>`).join('')}</div>
   <div class="sm dim">✨ ${ups} mejoras</div>
@@ -251,8 +300,8 @@ function reconnectBanner(): string {
 export function homeScreen(msg: string): void {
   const host = JSON.parse(store.get('rda_host') ?? 'null') as { code: string } | null;
   const m = meta();
-  const tabs: Array<[typeof ui.homeTab, string]> = [['jugar', '⚔️ Jugar'], ['mejoras', `✨ Mejoras (${m.ecos})`], ['clases', '🎓 Maestría'], ['logros', `🏆 Logros ${achievementCount(m)}`], ['archivo', `📚 Archivo ${archiveTotal().pct}%${contractsReady(m) + specialReady(m) ? ` (${contractsReady(m) + specialReady(m)}!)` : ''}`], ['salon', `🏟️ Salón y duelos`], ['diario', '📅 Reto diario'], ['amigos', `👥 Amigos${currentAccount() ? ` (${friendsStatus().filter((f) => f.online).length}/${m.friends.length})` : ''}`], ['cuenta', currentAccount() ? `👤 ${esc(currentAccount()!.name)}` : '👤 Cuenta']];
-  ui.root.innerHTML = `<div class="home"><div class="row"><span class="grow"></span>${volumeControl()}</div><h1>RUNAS DEL ABISMO</h1>${m.cosmetics?.title ? `<p class="good">${esc(ui.me.name)} · <i>${esc(titleName(m.cosmetics.title))}</i></p>` : ''}<p class="dim">RPG táctico por turnos · cooperativo de 1 a 4 jugadores · 3 zonas</p>
+  const tabs: Array<[typeof ui.homeTab, string]> = [['jugar', '⚔️ Jugar'], ['tienda', `✨ Tienda (${m.ecos})${unseenOwned(m).length || (m.perksRefundEcos && !m.refundSeen) ? ' (!)' : ''}`], ['clases', '🎓 Maestría'], ['logros', `🏆 Logros ${achievementCount(m)}`], ['archivo', `📚 Archivo ${archiveTotal().pct}%${contractsReady(m) + specialReady(m) ? ` (${contractsReady(m) + specialReady(m)}!)` : ''}`], ['salon', `🏟️ Salón y duelos`], ['diario', '📅 Reto diario'], ['amigos', `👥 Amigos${currentAccount() ? ` (${friendsStatus().filter((f) => f.online).length}/${m.friends.length})` : ''}`], ['cuenta', currentAccount() ? `👤 ${esc(currentAccount()!.name)}` : '👤 Cuenta']];
+  ui.root.innerHTML = `<div class="home"><div class="row"><span class="grow"></span>${volumeControl()}</div><h1>RUNAS DEL ABISMO</h1>${m.cosmetics?.title || emblemOf(m) ? `<p class="good">${emblemOf(m)} ${esc(ui.me.name)}${m.cosmetics?.title ? ` · <i>${esc(titleName(m.cosmetics.title))}</i>` : ''}</p>` : ''}<p class="dim">RPG táctico por turnos · cooperativo de 1 a 4 jugadores · 3 zonas</p>
   ${msg ? `<p class="bad">${esc(msg)}</p>` : ''}
   ${reconnectBanner()}
   <div class="tabs htabs">${tabs.map(([id, n]) => `<button class="${ui.homeTab === id ? 'on' : ''}" data-act="htab" data-id="${id}">${n}</button>`).join('')}</div>
@@ -319,7 +368,7 @@ export function lobbyScreen(): void {
     }).join('')}</div>
   </section>
   <aside class="side"><div class="tabs"><button class="on">👥 Jugadores (${players.length}/4)</button></div><div class="tabbody">
-    ${players.map((p, i) => `<div class="member ${i > 3 ? 'off' : ''} ${p.ready && !p.host ? 'isready' : ''}"><div class="row"><b class="p${i % 4}">${esc(p.name)}</b>${p.host ? '<span>👑</span>' : ''}${p.id === ui.myId ? '<span class="dim sm">(tú)</span>' : ''}<span class="grow"></span>${p.host ? '<span class="rdy host">👑 Anfitrión</span>' : p.ready ? '<span class="rdy on">✔ LISTO</span>' : '<span class="rdy">⏳ Eligiendo…</span>'}</div>
+    ${players.map((p, i) => `<div class="member ${i > 3 ? 'off' : ''} ${p.ready && !p.host ? 'isready' : ''}"><div class="row"><b class="p${i % 4}">${p.look.emblem ? `${p.look.emblem} ` : ''}${esc(p.name)}</b>${p.host ? '<span>👑</span>' : ''}${p.id === ui.myId ? '<span class="dim sm">(tú)</span>' : ''}<span class="grow"></span>${p.host ? '<span class="rdy host">👑 Anfitrión</span>' : p.ready ? '<span class="rdy on">✔ LISTO</span>' : '<span class="rdy">⏳ Eligiendo…</span>'}</div>
       <div class="sm">${esc(CLASSES[p.cls]?.name ?? '?')} <span class="dim">${p.routes.map((r) => esc(findRoute(p.cls, r)?.name ?? r)).join(' + ') || 'eligiendo kit'}</span></div>${i > 3 ? '<div class="bad sm">Sala llena</div>' : ''}${canDuel && p.id !== ui.myId && p.hasTeam ? `<button class="mini" data-act="duel" data-id="${esc(p.id)}">🏟️ Retar a duelo 3 contra 3</button>` : p.hasTeam ? '<div class="dim sm">🏟️ Tiene equipo de duelo</div>' : ''}</div>`).join('')}
   </div></aside></div>`;
 }
@@ -427,7 +476,7 @@ export function endScreen(): void {
     ${res?.asc ? `<div class="good">🔓 Ascensión ${res.asc} desbloqueada: la próxima partida puede ser más difícil y dar más ecos.</div>` : ''}
     ${res?.achievements.length ? res.achievements.map((a) => `<div class="lootcard r3"><b>🏆 ${esc(a.name)}</b> <span class="sm">${esc(a.text)}</span><div class="sm good">${[a.ecos ? `+${a.ecos} ✨` : ''].filter(Boolean).join(' · ')}</div></div>`).join('') : ''}
     ${res ? `<div class="row sm"><b>🎓 Maestría de ${CLASSES[res.mastery.cls].name}</b><span class="good">+${res.mastery.xp} exp</span><span class="grow"></span><span class="pill">Nivel ${res.mastery.after}/5</span></div>${res.mastery.after > res.mastery.before ? Array.from({ length: res.mastery.after - res.mastery.before }, (_, k) => res.mastery.before + k).map((i) => `<div class="good">🔓 ${esc(masteryText(res.mastery.cls, i))}</div>`).join('') : `<div class="dim sm">${MASTERY_XP[res.mastery.after] ? `Faltan ${MASTERY_XP[res.mastery.after]! - res.mastery.total} de experiencia para el nivel ${res.mastery.after + 1}: ${esc(masteryText(res.mastery.cls, res.mastery.after))}` : 'Maestría máxima.'}</div>`}${masteryBar(res.mastery.cls)}` : ''}
-    <div class="dim sm">Gasta tus ecos en <b>Mejoras</b> (pantalla de inicio): vida, oro, botines y curación permanentes.</div></div>
+    <div class="dim sm">Gasta tus ecos en la <b>Tienda</b> (pantalla de inicio): aspectos, efectos, títulos y personalización. Nunca dan poder en combate.</div></div>
   ${ui.runFinds.code === run.code && ui.runFinds.list.length ? `<div class="panel"><div class="row"><h3>📚 Descubierto en esta expedición</h3><span class="grow"></span><span class="dim sm">Consúltalo en el Archivo (pantalla de inicio)</span></div><div class="row" style="flex-wrap:wrap;gap:6px">${ui.runFinds.list.slice(0, 40).map((n) => `<span class="chip">${n.icon} ${esc(n.text)}</span>`).join('')}${ui.runFinds.list.length > 40 ? `<span class="dim sm">y ${ui.runFinds.list.length - 40} más</span>` : ''}</div></div>` : ''}
   <div class="panel"><h3>Resumen del grupo</h3>${run.heroes.map((h, i) => `<div class="row sm"><b class="p${i % 4}">${esc(h.name)}</b><span class="dim">${CLASSES[h.cls].name}</span><span class="grow"></span><span>⚔️ ${h.stats.dmg} (${Math.round((h.stats.dmg / total) * 100)}%)</span><span>☠️ ${h.stats.kills}</span><span>✚ ${h.stats.heal}</span><span class="${h.stats.falls ? 'bad' : 'good'}">💀 ${h.stats.falls}</span></div>`).join('')}</div>
   ${myHero ? `<div class="panel"><div class="row"><div><b>🏟️ Salón de héroes</b><div class="dim sm">Guarda a ${esc(myHero.name)} tal como está para tus duelos 3 contra 3 y para que vuelva como Némesis.</div></div><span class="grow"></span><button data-act="champsave" ${saved ? 'disabled' : ''}>${saved ? '✔ Guardado' : 'Guardar en el Salón'}</button></div></div>` : ''}

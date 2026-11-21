@@ -1,4 +1,5 @@
 // Sesión de juego: el anfitrión ejecuta el motor y reparte el estado; los demás envían acciones.
+import { cleanLook, type Look } from '../render/looks';
 import { PLAYABLE, canPickRoute } from '../core/classes/classes';
 import { runAiTurn } from '../core/combat/ai';
 import { cast, current, deployMove, endTurn, move, startCombat, type ActionResult } from '../core/combat/engine';
@@ -7,7 +8,6 @@ import { saveRun, type Peer, type Transport } from '../net/transport';
 import { clearSnapshot, saveSnapshot } from './snapshot';
 import { meta } from './meta';
 import { cancel, every, later, type Timer } from '../net/clock';
-import type { Perks } from '../content/modes';
 import { pendingOf, waitingFor, type HeroSave } from './run';
 import { mapChoice } from './run';
 import { bossInfo, chooseNode, recordEvents, finishFight, leaveNode, metaAction, newArena, newRun, resolveEvent, type MetaAction, type RunState } from './run';
@@ -20,7 +20,8 @@ export interface LobbyPlayer {
   cls: ClassId;
   routes: string[];
   host: boolean;
-  perks: Perks;
+  /** apariencia (cosméticos) del jugador: solo visual, no entra en la partida */
+  look: Look;
   /** reservado */
   unlocked: string[];
   /** solo del anfitrión: ascensión elegida y si es el reto diario */
@@ -167,8 +168,7 @@ export class Session {
       .filter((p: Peer) => typeof p.data.name === 'string')
       .map((p) => ({
         id: p.id, name: String(p.data.name).slice(0, 14), cls: (PLAYABLE.includes(p.data.cls as ClassId) ? p.data.cls : 'zorro') as ClassId,
-        routes: Array.isArray(p.data.routes) ? (p.data.routes as string[]) : [], host: !!p.data.host,
-        perks: (p.data.perks && typeof p.data.perks === 'object' ? p.data.perks : {}) as Perks,
+        routes: Array.isArray(p.data.routes) ? (p.data.routes as string[]) : [], host: !!p.data.host, look: cleanLook(p.data.look),
         unlocked: Array.isArray(p.data.unlocked) ? (p.data.unlocked as string[]).slice(0, 20).map(String) : [],
         asc: Number(p.data.asc) || 0, daily: typeof p.data.daily === 'string' ? p.data.daily : null,
         mastery: Number(p.data.mastery) || 0, nem: p.data.nem ?? null, hasTeam: !!p.data.hasTeam,
@@ -207,7 +207,7 @@ export class Session {
     if (!players.length) return;
     const host = all.find((p) => p.id === this.myId);
     this.run = newRun(this.code, (Date.now() ^ (Math.random() * 2 ** 31)) >>> 0,
-      players.map((p) => ({ owner: p.id, name: p.name, cls: p.cls, routes: p.routes, perks: p.perks, mastery: p.mastery })),
+      players.map((p) => ({ owner: p.id, name: p.name, cls: p.cls, routes: p.routes, mastery: p.mastery })),
       { firstRun: meta().stats.runs === 0, asc: host?.asc ?? 0, daily: host?.daily ?? null, unlocked: players.flatMap((p) => p.unlocked), nemesis: all.map((p) => p.nem).filter(Boolean), mods: host?.mods ?? [], abyss: host?.abyss ?? false });
     this.afterChange([]);
   }

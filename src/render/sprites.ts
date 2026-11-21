@@ -1,3 +1,4 @@
+import { paletteDef, recolor, type PaletteDef } from './palettes';
 import { ANIM_FRAMES, MODEL_CLASSES, MODEL_SIZE, modelFrame, type Anim } from './models';
 // Sprites dibujados por código. Cada letra es un color de la paleta.
 // Héroes: 16×16, uno por clase. Enemigos: 12×12.
@@ -133,6 +134,11 @@ const ENEMY_LOOK: Record<string, Look> = {
 
 const cache = new Map<string, HTMLCanvasElement>();
 
+/** Paleta de sprite clásico con la variante aplicada a todos sus colores (BASE incluido). */
+function skinned(pal: Record<string, string>, p: PaletteDef): Record<string, string> {
+  const full = { ...BASE, ...pal };
+  return Object.fromEntries(Object.entries(full).map(([k, v]) => [k, recolor(v, p)]));
+}
 function bake(sprite: string, pal: Record<string, string>): HTMLCanvasElement {
   const k = sprite + JSON.stringify(pal);
   let c = cache.get(k);
@@ -174,27 +180,30 @@ export interface DrawOpts {
   frame?: number;
   /** la Sombra del Acechador */
   tint?: 'shadow';
+  /** variante de color (cosmético): id de PALETTES */
+  skin?: string;
 }
 
 const modelCache = new Map<string, HTMLCanvasElement>();
 
 /** Fotograma de un modelo de 32×32 convertido en imagen (con caché). */
-function bakeModel(kind: string, anim: Anim, frame: number, tint?: 'shadow'): HTMLCanvasElement {
-  const k = `${kind}:${anim}:${frame}:${tint ?? ''}`;
+function bakeModel(kind: string, anim: Anim, frame: number, tint?: 'shadow', skin?: string): HTMLCanvasElement {
+  const pal = tint ? undefined : paletteDef(skin);
+  const k = `${kind}:${anim}:${frame}:${tint ?? ''}:${pal?.id ?? ''}`;
   let c = modelCache.get(k);
   if (c) return c;
   const grid = modelFrame(kind, anim, frame, tint);
   c = document.createElement('canvas');
   c.width = c.height = MODEL_SIZE;
   const g = c.getContext('2d')!;
-  grid.forEach((row, y) => row.forEach((col, x) => { if (col) { g.fillStyle = col[0] === '~' ? col.slice(1) : col; g.fillRect(x, y, 1, 1); } }));
+  grid.forEach((row, y) => row.forEach((col, x) => { if (col) { const c = col[0] === '~' ? col.slice(1) : col; g.fillStyle = pal ? recolor(c, pal) : c; g.fillRect(x, y, 1, 1); } }));
   modelCache.set(k, c);
   return c;
 }
 
 /** Dibuja un modelo animado (a escala entera) con los pies en la base de la casilla. */
 function drawModel(g: CanvasRenderingContext2D, kind: string, team: string, cx: number, baseY: number, tile: number, o: DrawOpts): void {
-  const img = bakeModel(kind, o.anim ?? 'idle', o.frame ?? 0, o.tint);
+  const img = bakeModel(kind, o.anim ?? 'idle', o.frame ?? 0, o.tint, team === 'hero' ? o.skin : undefined);
   const s = Math.max(1, Math.round(tile / 28));
   const w = MODEL_SIZE * s;
   const x = Math.round(cx - w / 2), y = Math.round(baseY - w + s * 2);
@@ -217,7 +226,8 @@ export function drawUnit(g: CanvasRenderingContext2D, kind: string, team: string
   // un héroe puede estar en el bando rival (némesis) y un monstruo en el nuestro (invocaciones)
   const cls = HERO_SPRITES.includes(kind);
   const look: Look = cls ? { sprite: kind, pal: hero ? PLAYER_COLORS[colorIdx % 4]! : RIVAL_COLORS[colorIdx % 3]! } : ENEMY_LOOK[kind] ?? ENEMY_LOOK.esqueleto!;
-  const img = bake(look.sprite, look.pal);
+  const skinPal = cls && hero ? paletteDef(o.skin) : undefined;
+  const img = bake(look.sprite, skinPal ? skinned(look.pal, skinPal) : look.pal);
   const n = img.width;
   const s = Math.max(2, Math.floor((tile * (cls ? 0.98 : 0.9) * (look.scale ?? 1)) / n));
   const w = n * s;
@@ -268,14 +278,14 @@ export function classStripUrl(cls: string, anim: Anim = 'idle'): { url: string; 
 }
 
 /** Retrato pequeño de cualquier unidad (para la línea de turnos), con caché. */
-export function unitPortraitUrl(kind: string, team: string, colorIdx = 0): string {
-  const k = `u:${kind}:${team}:${colorIdx}`;
+export function unitPortraitUrl(kind: string, team: string, colorIdx = 0, skin?: string): string {
+  const k = `u:${kind}:${team}:${colorIdx}:${skin ?? ''}`;
   let url = portraits.get(k);
   if (url) return url;
   const c = document.createElement('canvas');
   c.width = c.height = 64;
   const g = c.getContext('2d')!;
-  try { drawUnit(g, kind, team, colorIdx, 32, 62, 64, { anim: 'idle', frame: 0 }); } catch { /* sin sprite: queda vacío */ }
+  try { drawUnit(g, kind, team, colorIdx, 32, 62, 64, { anim: 'idle', frame: 0, skin }); } catch { /* sin sprite: queda vacío */ }
   url = c.toDataURL();
   portraits.set(k, url);
   return url;

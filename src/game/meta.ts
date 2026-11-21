@@ -1,13 +1,13 @@
-// Progresión entre partidas: ecos, mejoras permanentes, logros y ascensión.
+// Progresión entre partidas: ecos (para la tienda de cosméticos), maestría, logros, ascensión y Archivo.
 // Se guarda en el navegador de cada jugador.
 import { CLASSES } from '../core/classes/classes';
-import { MAX_ASC, MOD_ECOS, PERKS, perkLevel, type Perks } from '../content/modes';
+import { MAX_ASC, MOD_ECOS } from '../content/modes';
 import type { ClassId } from '../core/state';
 import { ACT_ROOMS } from './map';
 import type { Champion, HeroSave, RunState } from './run';
 import { mergeArchive, normalizeArchive, type Archive } from './archiveData';
 import { mergeContracts, normalizeContracts, type ContractBook } from './contractsData';
-import { mergeCosmetics, normalizeCosmetics, type Cosmetics } from './cosmetics';
+import { mergeCosmetics, normalizeCosmetics, spentTotal, type Cosmetics } from './cosmetics';
 export type { Cosmetics } from './cosmetics';
 export type { Contract, ContractBook, ContractPeriod, ContractTarget, SpecialRecord, SpecialType } from './contractsData';
 export type { Archive, AtlasEntryRecord, ChronicleEntryRecord, AtlasCat, AtlasState, ChronicleCat, ChronicleState } from './archiveData';
@@ -15,7 +15,13 @@ export type { Archive, AtlasEntryRecord, ChronicleEntryRecord, AtlasCat, AtlasSt
 export interface Meta {
   v: 1;
   ecos: number;
-  perks: Perks;
+  /** heredado: niveles de las antiguas Mejoras permanentes (ya retiradas). Se reembolsan al cargar y queda vacío. */
+  perks?: Record<string, number>;
+  /** niveles de Mejoras ya reembolsados (para no devolverlos dos veces, también al fusionar dispositivos) */
+  perksRefunded?: Record<string, number>;
+  /** ecos devueltos por las Mejoras retiradas (para avisar al jugador) y si ya vio el aviso */
+  perksRefundEcos?: number;
+  refundSeen?: boolean;
   /** reservado */
   unlocked: string[];
   /** ascensión más alta disponible */
@@ -45,7 +51,29 @@ export interface Meta {
 }
 
 const KEY = 'rda_meta';
-const fresh = (): Meta => ({ v: 1, ecos: 0, perks: {}, unlocked: [], maxAsc: 0, achievements: [], stats: { runs: 0, wins: 0, kills: 0, bosses: 0, bestZone: 0 }, seenTutorial: false, combats: 0, claimed: [], mastery: {}, hall: [], team: [], t: 0, acct: null, friends: [], archive: normalizeArchive(undefined), contracts: normalizeContracts(undefined), cosmetics: normalizeCosmetics(undefined) });
+
+/** Precios que tenían las Mejoras permanentes retiradas (para devolver exactamente lo gastado). */
+export const LEGACY_PERKS: Record<string, { max: number; cost: (lvl: number) => number }> = {
+  vit: { max: 5, cost: (l) => 30 + l * 25 }, gold: { max: 4, cost: (l) => 25 + l * 20 }, loot: { max: 1, cost: () => 120 }, aid: { max: 3, cost: (l) => 40 + l * 30 },
+};
+const lvlOf = (x: unknown, max: number): number => (Number.isFinite(Number(x)) ? Math.max(0, Math.min(max, Math.floor(Number(x)))) : 0);
+/**
+ * Devuelve los ecos gastados en Mejoras que aún no se habían devuelto y deja `perks` vacío. Idempotente: `perksRefunded`
+ * recuerda los niveles ya devueltos, así que volver a cargar o fusionar con otro dispositivo no devuelve dos veces.
+ */
+export function refundPerks(m: Meta): number {
+  let got = 0;
+  const done = (m.perksRefunded ??= {});
+  for (const [id, def] of Object.entries(LEGACY_PERKS)) {
+    const lvl = lvlOf(m.perks?.[id], def.max), had = lvlOf(done[id], def.max);
+    for (let l = had; l < lvl; l++) got += def.cost(l);
+    if (lvl > had) done[id] = lvl;
+  }
+  if (got) { m.ecos += got; m.perksRefundEcos = (m.perksRefundEcos ?? 0) + got; }
+  delete m.perks;
+  return got;
+}
+const fresh = (): Meta => ({ v: 1, ecos: 0, unlocked: [], maxAsc: 0, achievements: [], stats: { runs: 0, wins: 0, kills: 0, bosses: 0, bestZone: 0 }, seenTutorial: false, combats: 0, claimed: [], mastery: {}, hall: [], team: [], t: 0, acct: null, friends: [], archive: normalizeArchive(undefined), contracts: normalizeContracts(undefined), cosmetics: normalizeCosmetics(undefined) });
 
 let cache: Meta | null = null;
 export function meta(): Meta {
@@ -53,6 +81,7 @@ export function meta(): Meta {
   try {
     const m = JSON.parse(localStorage.getItem(KEY) ?? 'null') as Meta | null;
     cache = m && m.v === 1 ? { ...fresh(), ...m, stats: { ...fresh().stats, ...m.stats }, archive: normalizeArchive(m.archive), contracts: normalizeContracts(m.contracts), cosmetics: normalizeCosmetics(m.cosmetics) } : fresh();
+    if (refundPerks(cache)) saveMeta(false);
     // quien ya jugaba antes de la maestría no empieza de cero
     if (m && m.v === 1 && !m.mastery && cache.stats.runs > 0) {
       for (const c of Object.keys(CLASSES)) cache.mastery[c] = cache.achievements.includes(`clase_${c}`) ? MASTERY_XP[1]! : MASTERY_XP[0]!;
@@ -76,10 +105,20 @@ export function saveMeta(touch = true): void {
 /** Sustituye el progreso local (al cargar el de la cuenta). */
 export function replaceMeta(m: Meta): void {
   cache = { ...fresh(), ...m, stats: { ...fresh().stats, ...m.stats }, archive: normalizeArchive(m.archive), contracts: normalizeContracts(m.contracts), cosmetics: normalizeCosmetics(m.cosmetics) };
+  refundPerks(cache);
   saveMeta(false);
 }
 
 const uniq = <T,>(a: T[]): T[] => [...new Set(a)];
+/**
+ * Ecos al unir dos dispositivos. Lo ganado nunca baja, así que el total ganado (saldo + gastado en la tienda) de cada uno es
+ * fiable: se toma el mayor y se le resta lo gastado en ambos (sin duplicar compras). Así una compra hecha en un dispositivo
+ * no se «devuelve» al fusionar con otro que aún no la tenía, ni se cobra dos veces.
+ */
+export function mergedEcos(a: Pick<Meta, 'ecos' | 'cosmetics'>, b: Partial<Pick<Meta, 'ecos' | 'cosmetics'>>): number {
+  const gross = Math.max(a.ecos + spentTotal(a.cosmetics), (b.ecos ?? 0) + spentTotal(b.cosmetics));
+  return Math.max(0, gross - spentTotal(mergeCosmetics(a.cosmetics, b.cosmetics)));
+}
 /** Une dos progresos sin perder nada: lo mayor de cada cosa. Se usa la primera vez que un navegador entra en una cuenta. */
 export function mergeMeta(a: Meta, b: Partial<Meta>): Meta {
   const f = fresh();
@@ -88,7 +127,7 @@ export function mergeMeta(a: Meta, b: Partial<Meta>): Meta {
   const hall = [...(a.hall ?? [])];
   for (const c of b.hall ?? []) if (!hall.some((x) => x.id === c.id)) hall.push(c);
   return {
-    ...f, v: 1, ecos: Math.max(a.ecos, b.ecos ?? 0), perks: maxRec(a.perks, b.perks), unlocked: uniq([...a.unlocked, ...(b.unlocked ?? [])]),
+    ...f, v: 1, ecos: mergedEcos(a, b), perks: maxRec(a.perks, b.perks), perksRefunded: maxRec(a.perksRefunded, b.perksRefunded), perksRefundEcos: Math.max(a.perksRefundEcos ?? 0, b.perksRefundEcos ?? 0), refundSeen: !!(a.refundSeen || b.refundSeen), unlocked: uniq([...a.unlocked, ...(b.unlocked ?? [])]),
     maxAsc: Math.max(a.maxAsc, b.maxAsc ?? 0), achievements: uniq([...a.achievements, ...(b.achievements ?? [])]),
     stats: maxRec(a.stats, b.stats) as Meta['stats'], seenTutorial: a.seenTutorial || !!b.seenTutorial, combats: Math.max(a.combats, b.combats ?? 0),
     claimed: uniq([...a.claimed, ...(b.claimed ?? [])]).slice(-40), mastery: maxRec(a.mastery, b.mastery), hall: hall.slice(-HALL_SIZE),
@@ -167,15 +206,6 @@ export const myTeam = (): Champion[] => meta().team.map((id) => meta().hall.find
 /** El héroe más fuerte del salón: el que puede volver como némesis. */
 export const myNemesis = (): Champion | null => meta().hall.slice().sort((a, b) => b.level + b.asc * 2 + Number(b.won) * 5 - (a.level + a.asc * 2 + Number(a.won) * 5))[0] ?? null;
 
-export function buyPerk(id: string): boolean {
-  const m = meta(), def = PERKS.find((p) => p.id === id);
-  const lvl = perkLevel(m.perks, id);
-  if (!def || lvl >= def.max || m.ecos < def.cost(lvl)) return false;
-  m.ecos -= def.cost(lvl);
-  m.perks[id] = lvl + 1;
-  saveMeta();
-  return true;
-}
 
 export interface AchievementDef {
   id: string;

@@ -13,6 +13,7 @@ import { ZONES } from '../content/zones';
 import { DOCUMENTED_KILLS, LV, PAST_MAX, emptyArchive, isDiscovered, levelOf, raise, type Archive, type ArchiveCat } from './archiveData';
 import { trackContract, type ContractEvent } from './contracts';
 import { SPECIALS, evaluateSpecials, registerSpecial } from './specials';
+import { grantUnlocks } from './shop';
 import { ATLAS, CHRONICLES, atlasProgress, chronicleProgress } from './atlas';
 import { ATLAS_CATS, CHRONICLE_CATS } from './archiveData';
 import { LIMITE_PCT, MILESTONE_CATS, MILESTONE_PCTS, RELAMPAGO_ROUNDS, registerAtlasDiscovery, registerChronicleProgress } from './atlas';
@@ -228,7 +229,11 @@ export function recordArchive(run: RunState | null, myId: string, events: readon
         if ((a.cur.low ?? 100) < LIMITE_PCT && snap.myAlive) chron('secrets', 'al_limite', 1, fid);
       }
     }
-    if (changed) { evaluateMilestones(); evaluateSpecials(m); saveMeta(); pushNotices(before, progressKeys()); }
+    if (changed) {
+      evaluateMilestones(); evaluateSpecials(m);
+      for (const x of grantUnlocks(m)) notices.push({ icon: '🎁', kind: 'special', text: `Desbloqueado en la tienda: ${x.name}` });
+      saveMeta(); pushNotices(before, progressKeys());
+    }
     return changed;
   } catch {
     return false;

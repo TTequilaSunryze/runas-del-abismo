@@ -96,7 +96,8 @@ describe('Fase E · expedición completa hasta el jefe del Abismo (2 jugadores)'
     // progreso antiguo intacto
     as('a', () => {
       const m = meta();
-      expect([m.ecos, m.perks, m.maxAsc, m.achievements, m.mastery, m.friends, m.stats.runs]).toEqual([OLD_META.ecos, OLD_META.perks, 2, OLD_META.achievements, OLD_META.mastery, ['bea'], 14]);
+      // Mejoras retiradas devueltas: vit 2 (30 + 55) + gold 1 (25) = 110
+      expect([m.ecos, m.perks, m.perksRefundEcos, m.maxAsc, m.achievements, m.mastery, m.friends, m.stats.runs]).toEqual([OLD_META.ecos + 110, undefined, 110, 2, OLD_META.achievements, OLD_META.mastery, ['bea'], 14]);
     });
 
     // cobro final: una vez por jugador

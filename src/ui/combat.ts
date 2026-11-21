@@ -9,6 +9,9 @@ import { Board, STATUS_NAME } from '../render/board';
 import { unitPortraitUrl } from '../render/sprites';
 import { esc, tip, ui } from './ctx';
 import { spellIcon, spellTip } from './icons';
+import { lookOf } from '../render/looks';
+/** Variante de color (cosmético) del héroe de un jugador, para sus retratos. */
+const skinFor = (u: { kind: string; team: string; owner: string | null; summoner?: number }): string | undefined => { const l = u.team === 'hero' && u.summoner === undefined ? lookOf(u.owner) : undefined; return l?.cls === u.kind ? l.skin : undefined; };
 import { blessingBar, escofinas, sysButtons } from './panels';
 
 /** Registro de combate: quién lanza qué, a quién golpea, cuánto daño y qué efectos deja. */
@@ -104,7 +107,7 @@ export function combatScreen(events: GameEvent[]): void {
   document.getElementById('init')!.innerHTML = c.order.map((id) => getUnit(c, id)!).filter((u) => u && u.hp > 0)
     .map((u) => { const tot = Math.max(u.maxHp, u.hp + u.shield); const pct = Math.max(0, Math.min(100, (u.hp / tot) * 100)); const spct = (u.shield / tot) * 100; const ally = u.team === mineTeam;
       return `<div class="tl ${cur?.id === u.id ? 'on' : ''} ${ally ? 'ally' : 'foe'} ${u.id === me?.id ? 'isme' : ''} ${u.rank === 'elite' || u.ai === 'boss' ? 'big' : ''}" ${tip(`<b>${esc(u.name)}</b><div class="sm">${u.hp}/${u.maxHp} PV${u.shield ? ` · 🛡 ${u.shield}` : ''} · iniciativa ${u.initiative}</div><div class="sm"><span class="lap">${u.ap} PA</span> · <span class="lmp">${u.mp} PM</span> · armadura ${Math.floor(u.armor)}</div>${Object.entries(u.statuses).filter(([, v]) => v).map(([k, v]) => `<div class="sm lst">${esc(STATUS_NAME[k as keyof typeof STATUS_NAME] ?? k)} (${v!.turns} t.)</div>`).join('')}${(u.traits ?? []).map((t) => TRAIT_TEXT[t] ? `<div class="sm dim">${esc(TRAIT_TEXT[t]!)}</div>` : '').join('')}`)}>
-        <img src="${unitPortraitUrl(u.kind, u.team, u.team === 'hero' ? (heroIdx.get(u.id) ?? 0) % 4 : 0)}" alt=""><i class="tlhp"><b style="width:${pct}%"></b>${u.shield ? `<s style="left:${pct}%;width:${spct}%"></s>` : ''}</i><span class="tln">${esc(u.name.split(' ')[0]!)}</span>${u.id === me?.id ? '<span class="tlme">TÚ</span>' : ''}</div>`; }).join('');
+        <img src="${unitPortraitUrl(u.kind, u.team, u.team === 'hero' ? (heroIdx.get(u.id) ?? 0) % 4 : 0, skinFor(u))}" alt=""><i class="tlhp"><b style="width:${pct}%"></b>${u.shield ? `<s style="left:${pct}%;width:${spct}%"></s>` : ''}</i><span class="tln">${esc(u.name.split(' ')[0]!)}</span>${u.id === me?.id ? '<span class="tlme">TÚ</span>' : ''}</div>`; }).join('');
   // barra inferior al estilo Dofus: corazón de vida, PA y PM, hechizos, objetos y botón de turno
   const deploying = !!c.deploy;
   const ready = deploying && c.deploy!.ready.includes(s.myId);
@@ -112,7 +115,7 @@ export function combatScreen(events: GameEvent[]): void {
     ? `<button class="pri endturn ${ready ? 'done' : 'glow'}" data-act="deployready" ${ready || !me ? 'disabled' : ''}>${ready ? '✔ Listo' : '¡Listo!'}<small>(E)</small></button>`
     : `<button class="pri endturn ${myTurn ? 'glow' : ''}" data-act="end" ${myTurn ? '' : 'disabled'}>${myTurn ? 'Pasar turno' : 'Esperando…'}<small>(E)</small></button>`;
   document.getElementById('hud')!.innerHTML = me
-    ? `<div class="dme"><img class="dport" src="${unitPortraitUrl(me.kind, me.team, (heroIdx.get(me.id) ?? 0) % 4)}" alt=""><div class="dmeinfo"><b>${esc(me.name)}</b>${(() => { const hs = run.heroes.find((x) => x.owner === me.owner); return hs ? `<div class="sm"><span class="pill">💰 ${hs.gold}</span> ${escofinas(hs)}</div>` : ''; })()}${resourceHtml(c, me)}${usableMp(c, me) < me.mp && myTurn ? `<div class="sm lmp" ${tip('Placaje: los enemigos pegados a ti te retienen. Al alejarte pierdes PM según tu Huida y su Placaje.')}>⛓ Placado: ${usableMp(c, me)}/${me.mp} PM útiles</div>` : ''}</div></div>
+    ? `<div class="dme"><img class="dport" src="${unitPortraitUrl(me.kind, me.team, (heroIdx.get(me.id) ?? 0) % 4, skinFor(me))}" alt=""><div class="dmeinfo"><b>${esc(me.name)}</b>${(() => { const hs = run.heroes.find((x) => x.owner === me.owner); return hs ? `<div class="sm"><span class="pill">💰 ${hs.gold}</span> ${escofinas(hs)}</div>` : ''; })()}${resourceHtml(c, me)}${usableMp(c, me) < me.mp && myTurn ? `<div class="sm lmp" ${tip('Placaje: los enemigos pegados a ti te retienen. Al alejarte pierdes PM según tu Huida y su Placaje.')}>⛓ Placado: ${usableMp(c, me)}/${me.mp} PM útiles</div>` : ''}</div></div>
       <div class="dvital">${heartSvg(me.hp, me.maxHp, me.shield)}<div class="apmp"><span class="star" ${tip('Puntos de acción: se gastan al lanzar hechizos.')}>${starSvg(me.ap)}</span><span class="dia" ${tip('Puntos de movimiento: cada casilla cuesta 1.')}>${diaSvg(me.mp)}</span></div></div>
       <div class="spellbar">${me.spells.map((sp, i) => ({ sp, i })).filter(({ sp }) => sp.charges === undefined).map(({ sp, i }) => { const d = spellOf(me, sp.id)!; const cost = apCost(me, sp.id, c); const spent = !!d.perTurn && (sp.uses ?? 0) >= d.perTurn; const off = !myTurn || me.ap < cost || sp.cd > 0 || spent || me.hp <= 0;
         // Corte de Guadaña: el icono cambia de color con la carga (gris → violeta → magenta con almas)

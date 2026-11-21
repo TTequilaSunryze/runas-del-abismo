@@ -157,7 +157,8 @@ describe('Archivo · persistencia y migración', () => {
     store.rda_meta = JSON.stringify(old);
     replaceMeta(JSON.parse(store.rda_meta));
     const m = meta();
-    expect([m.ecos, m.perks, m.maxAsc, m.achievements, m.mastery, m.friends, m.stats.runs]).toEqual([321, { vit: 2 }, 3, ['victoria'], { arquero: 150 }, ['bea'], 9]);
+    // las Mejoras retiradas se devuelven: vit 2 = 30 + 55
+    expect([m.ecos, m.perks, m.maxAsc, m.achievements, m.mastery, m.friends, m.stats.runs]).toEqual([321 + 85, undefined, 3, ['victoria'], { arquero: 150 }, ['bea'], 9]);
     expect(m.archive).toEqual(normalizeArchive(undefined));
   });
   it('datos corruptos del Archivo se sanean', () => {

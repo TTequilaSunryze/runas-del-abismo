@@ -1,4 +1,4 @@
-// Modos que cambian la dificultad: niveles de ascensión, modificadores del reto diario y mejoras permanentes.
+// Modos que cambian la dificultad: niveles de ascensión, modificadores del reto diario y presagios.
 
 export const MAX_ASC = 10;
 
@@ -61,28 +61,3 @@ export const OMENS: OmenDef[] = [
 ];
 export const DAILY_ASC = 3;
 
-/** Mejoras permanentes que cada jugador compra con ecos. */
-export interface PerkDef {
-  id: string;
-  name: string;
-  icon: string;
-  text: (lvl: number) => string;
-  max: number;
-  cost: (lvl: number) => number;
-}
-
-export const PERKS: PerkDef[] = [
-  { id: 'vit', name: 'Vitalidad', icon: '❤️', text: (l) => `+${l * 6}% de vida máxima`, max: 5, cost: (l) => 30 + l * 25 },
-  { id: 'gold', name: 'Bolsa heredada', icon: '💰', text: (l) => `Empiezas con ${l * 25} de oro`, max: 4, cost: (l) => 25 + l * 20 },
-  { id: 'loot', name: 'Ojo del saqueador', icon: '🎁', text: (l) => `+${l} objeto en los botines de élites y jefes`, max: 1, cost: () => 120 },
-  { id: 'aid', name: 'Primeros auxilios', icon: '🩹', text: (l) => `+${l * 8}% de curación tras el jefe y en las hogueras`, max: 3, cost: (l) => 40 + l * 30 },
-];
-
-export type Perks = Partial<Record<string, number>>;
-
-/** Nivel de una mejora, siempre dentro de sus límites (los datos llegan de otros jugadores). */
-export function perkLevel(p: Perks | undefined, id: string): number {
-  const def = PERKS.find((x) => x.id === id);
-  const v = Number(p?.[id] ?? 0);
-  return def && Number.isFinite(v) ? Math.max(0, Math.min(def.max, Math.floor(v))) : 0;
-}

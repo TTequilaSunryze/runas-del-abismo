@@ -31,26 +31,27 @@ describe('reto diario', () => {
   });
 });
 
-describe('mejoras permanentes', () => {
-  it('dan vida, oro y objetos extra en el botín', () => {
-    const base = newRun('T', 3, P);
-    const boosted = newRun('T', 3, [{ ...P[0]!, perks: { vit: 5, gold: 2, loot: 1, hack: 99 } }]);
-    const h = boosted.heroes[0]!;
-    expect(heroMaxHp(h)).toBeGreaterThan(heroMaxHp(base.heroes[0]!));
-    expect(h.gold).toBe(50);
-    h.boonOffer = null;
-    boosted.combat = createCombat({ seed: 1, w: 8, h: 5, obstacles: [], units: [heroSpec(h, { x: 1, y: 1 })] }).state;
-    boosted.combat.over = 'win'; boosted.phase = 'combat'; boosted.kind = 'elite';
-    finishFight(boosted);
-    // el botín es individual: va directo al héroe y queda en el informe
-    expect(boosted.report!.items.length).toBeGreaterThanOrEqual(2);
-    expect(Object.keys(h.equip).length + h.bag.length).toBeGreaterThanOrEqual(2);
-    expect(boosted.offers.p0).toBeUndefined();
-  });
-  it('los niveles fuera de rango se recortan', () => {
-    const r = newRun('T', 3, [{ ...P[0]!, perks: { vit: 999, gold: -5 } }]);
-    expect(r.heroes[0]!.perks.vit).toBe(5);
-    expect(r.heroes[0]!.gold).toBe(0);
+describe('mejoras permanentes retiradas', () => {
+  it('ya no existen: sin vida ni oro extra; el botín de élite es individual (+1 solo con la lupa)', () => {
+    const run = newRun('T', 3, P);
+    const h = run.heroes[0]!;
+    expect('perks' in h).toBe(false);
+    expect('rerolls' in h).toBe(false);
+    expect(h.gold).toBe(0);
+    expect(h.boon.hp ?? 0).toBe(0);
+    const loot = (lupa: boolean): number => {
+      const r = newRun('T', 3, P), x = r.heroes[0]!;
+      if (lupa) x.relics.push('lupa');
+      x.boonOffer = null;
+      r.combat = createCombat({ seed: 1, w: 8, h: 5, obstacles: [], units: [heroSpec(x, { x: 1, y: 1 })] }).state;
+      r.combat.over = 'win'; r.phase = 'combat'; r.kind = 'elite'; r.pact = 'tirano';
+      finishFight(r);
+      expect(r.offers.p0).toBeUndefined();
+      return r.report!.items.length;
+    };
+    expect(loot(false)).toBe(1);
+    expect(loot(true)).toBe(2);
+    void heroMaxHp;
   });
 });
 
