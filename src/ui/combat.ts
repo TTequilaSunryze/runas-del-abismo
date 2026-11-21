@@ -1,4 +1,6 @@
 // Pantalla de combate: tablero, orden de iniciativa, barra de hechizos y registro.
+import { CLASSES, PLAYABLE } from '../core/classes/classes';
+import { isTraining } from '../game/run';
 import { SPELLS } from '../core/classes/spells';
 import { MAG_MAX, SOULS_PER_ARMOR, SOUL_ARMOR, apCost, current, essenceNeed, furyCrit, furyPower, getUnit, scytheBonus, spellOf, usableMp } from '../core/combat/engine';
 import { marksOf } from '../core/combat/marks';
@@ -66,12 +68,25 @@ const TRAIT_TEXT: Record<string, string> = {
   raise: 'Alza a los muertos como aliados.', ghost: 'Atraviesa obstáculos.', hunter: 'Persigue al héroe más frágil.', pack: 'Más daño por cada compañero de manada.',
 };
 
+/** Herramientas de la sala de pruebas: muñecos a distancia, recargar, enfriamientos, curar, nivel y clase. */
+function trainingTools(c: CombatState): string {
+  const me = c.units.find((u) => u.owner === ui.myId && u.team === 'hero' && u.summoner === undefined);
+  const dummies = c.units.filter((u) => u.hp > 0 && u.traits?.includes('dummy'));
+  const dmg = dummies.reduce((n, d) => n + (d.maxHp - d.hp), 0);
+  const lvl = ui.session?.run?.heroes[0]?.level ?? 1;
+  return `<div class="sm">Muñecos: ${dummies.length} · daño recibido desde su último turno: <b>${dmg}</b></div>
+    <div class="row sm" style="flex-wrap:wrap;gap:3px">Muñeco a ${[1, 2, 3, 4, 5, 6, 8].map((n) => `<button class="mini" data-act="train" data-id="dummy:${n}">${n}</button>`).join('')} casillas</div>
+    <div class="row sm" style="flex-wrap:wrap;gap:3px"><button class="mini" data-act="train" data-id="refill">⚡ PA y PM</button><button class="mini" data-act="train" data-id="cd">⏱️ Sin esperas</button><button class="mini" data-act="train" data-id="heal">❤️ Curar todo</button></div>
+    <div class="row sm" style="flex-wrap:wrap;gap:3px">Nivel ${[1, 4, 8, 12].map((n) => `<button class="mini ${n === lvl ? 'on' : ''}" data-act="train" data-id="level:${n}">${n}</button>`).join('')}</div>
+    <div class="row sm" style="flex-wrap:wrap;gap:3px">${PLAYABLE.map((k) => `<button class="mini ${me?.kind === k ? 'on' : ''}" data-act="train" data-id="cls:${k}">${esc(CLASSES[k].name.split(' ')[0]!)}</button>`).join('')}</div>`;
+}
+
 export function combatScreen(events: GameEvent[]): void {
   const s = ui.session!, run = s.run!, c = run.combat!;
   if (ui.screen !== 'combat') {
     ui.root.innerHTML = `<div id="info" class="bar cinfo"></div>
       <div class="cgrid"><div class="stage"><canvas id="cv"></canvas><div id="toast" class="casttoast"></div></div>
-      <aside class="cside"><div class="cbox"><div class="cboxh">⏳ Orden de turnos <span id="rnd" class="dim sm"></span></div><div id="init" class="timeline"></div></div>
+      <aside class="cside">${isTraining(run) ? '<div class="cbox trainbox"><div class="cboxh">🎯 Sala de pruebas</div><div id="train"></div></div>' : ''}<div class="cbox"><div class="cboxh">⏳ Orden de turnos <span id="rnd" class="dim sm"></span></div><div id="init" class="timeline"></div></div>
       <div class="cbox grow"><div class="cboxh">📜 Registro de combate <span class="dim sm">G: señalar casilla</span></div><div id="log" class="clog"></div></div></aside></div>
       <div id="hud" class="dhud"></div>`;
     ui.board?.destroy();
@@ -104,6 +119,8 @@ export function combatScreen(events: GameEvent[]): void {
   const heroIdx = new Map(c.units.filter((u) => u.team === 'hero' && u.summoner === undefined).map((u, i) => [u.id, i]));
   const mineTeam = me?.team ?? 'hero';
   document.getElementById('rnd')!.textContent = `ronda ${c.round}`;
+  const tb = document.getElementById('train');
+  if (tb) tb.innerHTML = trainingTools(c);
   document.getElementById('init')!.innerHTML = c.order.map((id) => getUnit(c, id)!).filter((u) => u && u.hp > 0)
     .map((u) => { const tot = Math.max(u.maxHp, u.hp + u.shield); const pct = Math.max(0, Math.min(100, (u.hp / tot) * 100)); const spct = (u.shield / tot) * 100; const ally = u.team === mineTeam;
       return `<div class="tl ${cur?.id === u.id ? 'on' : ''} ${ally ? 'ally' : 'foe'} ${u.id === me?.id ? 'isme' : ''} ${u.rank === 'elite' || u.ai === 'boss' ? 'big' : ''}" ${tip(`<b>${esc(u.name)}</b><div class="sm">${u.hp}/${u.maxHp} PV${u.shield ? ` · 🛡 ${u.shield}` : ''} · iniciativa ${u.initiative}</div><div class="sm"><span class="lap">${u.ap} PA</span> · <span class="lmp">${u.mp} PM</span> · armadura ${Math.floor(u.armor)}</div>${Object.entries(u.statuses).filter(([, v]) => v).map(([k, v]) => `<div class="sm lst">${esc(STATUS_NAME[k as keyof typeof STATUS_NAME] ?? k)} (${v!.turns} t.)</div>`).join('')}${(u.traits ?? []).map((t) => TRAIT_TEXT[t] ? `<div class="sm dim">${esc(TRAIT_TEXT[t]!)}</div>` : '').join('')}`)}>

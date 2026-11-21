@@ -8,11 +8,11 @@ import type { BossInfo } from '../core/combat/ai';
 import { RELIC_EVENTS, RELICS } from '../content/relics';
 import { CONSUMABLES, MAX_CONSUMABLE, patronBonus, patronOf, patronsOf } from '../content/boons';
 import { BLESSINGS, BOON_MODS } from '../core/boonmods';
-import { CLASSES, MAX_LEVEL, canPickRoute } from '../core/classes/classes';
+import { CLASSES, MAX_LEVEL, PLAYABLE, canPickRoute } from '../core/classes/classes';
 import { SPELLS } from '../core/classes/spells';
 import { MAX_SPELL_UPS, UPGRADES, canUpgrade } from '../core/upgrades';
 import { makeHero } from '../core/classes/factory';
-import { SOULS_PER_ARMOR, SOUL_ARMOR, createCombat, type CombatSetup, type UnitSpec } from '../core/combat/engine';
+import { SOULS_PER_ARMOR, SOUL_ARMOR, createCombat, summon as engineSummon, type CombatSetup, type UnitSpec } from '../core/combat/engine';
 import { reachable } from '../core/combat/grid';
 import { BAG_SIZE, PRICE, SLOTS, STAT_NAME, genItem, sumStats, type DropKind, type Item, type Rarity, type Slot, type StatKey, type Stats } from '../core/items/items';
 import { pick, rand, randInt, seedFrom, shuffle, type RngBox } from '../core/rng';
@@ -23,7 +23,7 @@ import { enterRoom, roomAction, roomDone, roomPending, type RoomOp, type RoomSta
 import { pactEnemyHp, pactEnemyPower } from '../content/pacts';
 import { SPECIAL_CHANCE, SPECIAL_EVENTS, specialCandidates, specialWeight } from '../content/specialEvents';
 import { validEmblem, validFrame, validTitle } from './cosmetics';
-import { kitProblem } from '../content/spellCatalog';
+import { catalogSpells, kitProblem } from '../content/spellCatalog';
 import { BRANCH_EVENTS, branchStarters, followUps, keyFlag, optionOpen, secretOpen, weakBossFlag } from '../content/branching';
 
 /** Una opción de la recompensa del jefe. */
@@ -421,7 +421,7 @@ export function buildBossOffer(run: RunState, h: HeroSave, opts: { spells?: bool
 export function pendingOf(run: RunState, h: HeroSave): string[] {
   const out: string[] = [];
   if (run.offers[h.owner]) out.push('botín');
-  if (h.bossOffer) out.push('recompensa del jefe');
+  if (h.bossOffer) out.push(run.room?.kind === 'shrine' ? 'mejora del santuario' : 'recompensa');
   if (h.boonOffer) out.push('bendición');
   out.push(...roomPending(run, h));
   return out;
@@ -1093,10 +1093,12 @@ export type MetaAction =
   | { a: 'boon'; idx: number }
   | { a: 'ready' }
   | { a: 'mapvote'; idx: number }
+  | { a: 'train'; op: string }
   | ({ a: 'room' } & RoomOp);
 
 /** Acciones de un jugador fuera del combate. Devuelve un mensaje de error o null si se aplicó. */
 export function metaAction(run: RunState, owner: string, a: MetaAction): string | null {
+  if (a.a === 'train') return trainingAction(run, owner, a.op);
   const h = run.heroes.find((x) => x.owner === owner);
   if (!h) return 'No formas parte de esta partida';
   if (run.phase === 'combat') return 'No se puede en combate';
@@ -1250,6 +1252,76 @@ export function dailyScore(run: RunState): number {
   const kills = run.heroes.reduce((a, h) => a + h.stats.kills, 0);
   return Math.min(100000, run.zone * 1000 + run.step * 120 + kills * 10 + (run.phase === 'won' ? 5000 : 0));
 }
+
+// ---------- sala de pruebas ----------
+/** Marca de la partida de pruebas (en run.flags; usa el modo arena: no cuenta para el Archivo, los ecos ni los contratos). */
+export const TRAINING = 'training';
+/** Vida del muñeco: se recupera entera al empezar cada uno de sus turnos (daño infinito en la práctica). */
+export const DUMMY_HP = 99999;
+export const MAX_DUMMIES = 6;
+const TW = 14, TH = 8;
+export const isTraining = (run: RunState | null | undefined): boolean => !!run?.flags.includes(TRAINING);
+
+/** Muñeco de prueba: no se mueve ni ataca, sin armadura ni resistencias. */
+export function trainingDummy(pos: Pos): UnitSpec {
+  const d = makeEnemy('pilar', pos);
+  return { ...d, name: 'Muñeco de prueba', hp: DUMMY_HP, maxHp: DUMMY_HP, armor: 0, resist: {}, traits: ['dummy'], initiative: 0 };
+}
+
+/** Sala de pruebas: tu héroe con las 14 habilidades de su clase (sin coste de ecos) y un muñeco a 4 casillas. */
+export function newTraining(code: string, seed: number, owner: string, name: string, cls: ClassId): RunState {
+  const run = newRun(code, seed, [{ owner, name, cls, routes: ['base'] }]);
+  run.flags.push(TRAINING);
+  run.arena = { a: owner, b: null, nameA: name.slice(0, 14), nameB: 'Muñecos' };
+  run.note = 'Sala de pruebas: nada de aquí cuenta para tu progreso.';
+  const u = heroSpec(run.heroes[0]!, { x: 2, y: 4 });
+  u.spells = catalogSpells(cls).map((id) => ({ id, cd: 0 }));
+  // un par de columnas para probar la línea de visión
+  run.combat = createCombat({ seed: seed >>> 0 || 1, w: TW, h: TH, obstacles: [{ x: 9, y: 1 }, { x: 9, y: 2 }, { x: 9, y: 6 }], units: [u, trainingDummy({ x: 6, y: 4 })] }).state;
+  run.phase = 'combat';
+  run.kind = 'combat';
+  return run;
+}
+
+/** Herramientas de la sala de pruebas. */
+function trainingAction(run: RunState, owner: string, op: string): string | null {
+  if (!isTraining(run) || !run.combat) return 'Solo en la sala de pruebas';
+  const c = run.combat, me = c.units.find((u) => u.owner === owner && u.team === 'hero' && u.summoner === undefined);
+  if (!me) return 'No tienes héroe aquí';
+  const dummies = c.units.filter((u) => u.hp > 0 && hasDummy(u));
+  const [kind, arg] = op.split(':');
+  if (kind === 'dummy') {
+    // muñeco a N casillas en tu misma fila (o lo más cerca posible)
+    if (dummies.length >= MAX_DUMMIES) return `Máximo ${MAX_DUMMIES} muñecos`;
+    const n = Math.max(1, Math.min(12, Number(arg) || 4));
+    const x = me.pos.x + n < TW ? me.pos.x + n : Math.max(0, me.pos.x - n);
+    const ev: GameEvent[] = [];
+    if (!engineSummon(c, trainingDummy({ x, y: me.pos.y }), { x, y: me.pos.y }, ev)) return 'No hay sitio para otro muñeco';
+    return null;
+  }
+  if (kind === 'refill') { me.ap = me.maxAp; me.mp = me.maxMp; return null; }
+  if (kind === 'cd') { for (const sp of me.spells) { sp.cd = 0; sp.uses = 0; } return null; }
+  if (kind === 'heal') { for (const d of dummies) { d.hp = d.maxHp; d.shield = 0; d.statuses = {}; } me.hp = me.maxHp; me.statuses = {}; return null; }
+  if (kind === 'level') {
+    const h = run.heroes.find((x) => x.owner === owner)!;
+    h.level = Math.max(1, Math.min(MAX_LEVEL, Number(arg) || 1));
+    return trainingAction(run, owner, `cls:${h.cls}`);
+  }
+  if (kind === 'cls') {
+    const cls = (PLAYABLE as string[]).includes(arg ?? '') ? (arg as ClassId) : me.kind as ClassId;
+    const h = run.heroes.find((x) => x.owner === owner)!;
+    const level = h.level;
+    const next = newTraining(run.code, run.rng, owner, h.name, cls);
+    next.heroes[0]!.level = level;
+    const u = heroSpec(next.heroes[0]!, { x: 2, y: 4 });
+    u.spells = catalogSpells(cls).map((id) => ({ id, cd: 0 }));
+    next.combat = createCombat({ seed: run.rng >>> 0 || 1, w: TW, h: TH, obstacles: [{ x: 9, y: 1 }, { x: 9, y: 2 }, { x: 9, y: 6 }], units: [u, trainingDummy({ x: 6, y: 4 })] }).state;
+    Object.assign(run, next);
+    return null;
+  }
+  return 'Herramienta desconocida';
+}
+const hasDummy = (u: { traits?: string[] }): boolean => !!u.traits?.includes('dummy');
 
 /** Duelo de 3 contra 3 con héroes del Salón. Si `b.owner` es null, ese bando lo lleva la IA. */
 export function newArena(code: string, seed: number, a: { owner: string; name: string; team: unknown[] }, b: { owner: string | null; name: string; team: unknown[] }): RunState | null {

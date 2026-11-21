@@ -470,6 +470,8 @@ export function runAiTurn(s: CombatState, info?: BossInfo): GameEvent[] {
   const u = current(s);
   const ev: GameEvent[] = [];
   if (!u || !u.ai) return ev;
+  // sala de pruebas: el muñeco recupera toda su vida en su turno (daño infinito en la práctica)
+  if (hasTrait(u, 'dummy')) u.hp = u.maxHp;
   if (u.ai === 'pillar') pillarTurn(s, ev);
   else if (u.ai === 'boss') bossTurn(s, u, info, ev);
   else if (u.ai === 'champ') champTurn(s, u, ev);

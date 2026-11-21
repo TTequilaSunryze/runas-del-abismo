@@ -10,7 +10,7 @@ import { meta } from './meta';
 import { cancel, every, later, type Timer } from '../net/clock';
 import { pendingOf, waitingFor, type HeroSave } from './run';
 import { mapChoice } from './run';
-import { bossInfo, chooseNode, recordEvents, finishFight, leaveNode, metaAction, newArena, newRun, resolveEvent, type MetaAction, type RunState } from './run';
+import { bossInfo, chooseNode, recordEvents, finishFight, leaveNode, metaAction, newArena, newRun, newTraining, resolveEvent, type MetaAction, type RunState } from './run';
 
 export type Action = { a: 'move'; to: Pos } | { a: 'cast'; spell: string; at: Pos } | { a: 'end' } | { a: 'deploy'; to: Pos } | { a: 'deployready'; force?: boolean } | MetaAction;
 
@@ -222,6 +222,13 @@ export class Session {
     this.run = run;
     this.afterChange([]);
     return true;
+  }
+
+  /** Sala de pruebas (solo en local): tu héroe con todas sus habilidades y muñecos de daño infinito. */
+  startTraining(myName: string, cls: ClassId): void {
+    if (!this.isHost) return;
+    this.run = newTraining(this.code, (Date.now() ^ (Math.random() * 2 ** 31)) >>> 0, this.myId, myName, cls);
+    this.afterChange([]);
   }
 
   /** Reta a otro jugador de la sala: le pide su equipo y empieza el duelo en vivo. */

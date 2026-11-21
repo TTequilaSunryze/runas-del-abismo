@@ -19,7 +19,7 @@ import { applyLoadout, buyItem, currentLook, emblemOf, deleteLoadout, equipItem,
 import { setLooks } from '../render/looks';
 import { setCombatBg, setMenuScene } from '../render/menubg';
 import { claimSpecialReward, equipCosmetic } from '../game/specials';
-import { masteryOf, meta, myNemesis, myTeam, openRoutes, removeChampion, saveChampion, saveMeta, toggleTeam } from '../game/meta';
+import { creatorOn, isCreatorAccount, maxAscOf, masteryOf, meta, myNemesis, myTeam, openRoutes, removeChampion, saveChampion, saveMeta, toggleTeam } from '../game/meta';
 import { currentAccount, fetchTeam, restoreAccount, signIn, signOut, signUp } from '../net/account';
 import { addFriend, invite, removeFriend, setRoom, socialHandlers } from '../net/social';
 import { championOf } from '../game/run';
@@ -32,9 +32,9 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 
 function publish(): void {
   const m = meta();
-  ui.session?.announce({ name: ui.me.name, cls: ui.me.cls, routes: ui.me.routes, kit: kitFor(m, ui.me.cls), host: ui.session.isHost, look: currentLook(m, ui.me.cls), unlocked: m.unlocked, asc: Math.min(ui.asc, m.maxAsc, MAX_ASC), daily: ui.daily ? today() : null,
+  ui.session?.announce({ name: ui.me.name, cls: ui.me.cls, routes: ui.me.routes, kit: kitFor(m, ui.me.cls), host: ui.session.isHost, look: currentLook(m, ui.me.cls), unlocked: m.unlocked, asc: Math.min(ui.asc, maxAscOf(m), MAX_ASC), daily: ui.daily ? today() : null,
     mastery: masteryOf(ui.me.cls), nem: myNemesis(), hasTeam: myTeam().length > 0,
-    mods: ui.daily ? [] : ui.mods, abyss: !ui.daily && m.stats.wins > 0, ready: ui.session.isHost || !!ui.lobbyReady });
+    mods: ui.daily ? [] : ui.mods, abyss: !ui.daily && (m.stats.wins > 0 || creatorOn(m)), ready: ui.session.isHost || !!ui.lobbyReady });
 }
 
 function home(msg = ''): void {
@@ -176,6 +176,15 @@ function render(events: GameEvent[]): void {
 let submitted = '';
 ui.rerender = () => render([]);
 
+/** Sala de pruebas: partida local con todas las habilidades de la clase y muñecos de daño infinito. */
+async function training(cls: ClassId): Promise<void> {
+  if (!isCreatorAccount()) return;
+  await enter(randomText(4, CODE_CHARS), true, true);
+  ui.log.length = 0;
+  ui.me.cls = cls;
+  ui.session?.startTraining(currentAccount()?.name ?? ui.me.name, cls);
+}
+
 /** Duelo contra un equipo llevado por la IA, en una sala local. */
 async function duel(foe: { name: string; team: unknown[] }): Promise<void> {
   await enter(randomText(4, CODE_CHARS), true, true);
@@ -203,6 +212,10 @@ document.addEventListener('click', (e) => {
   if (el.dataset.act !== 'togglelog') sfx.click();
   switch (el.dataset.act) {
     case 'create': void enter(randomText(4, CODE_CHARS), true, false); break;
+    // modo creador (solo cuentas de creador) y sala de pruebas
+    case 'creator': { if (!isCreatorAccount()) break; const m = meta(); m.creator = !m.creator; saveMeta(); homeScreen(''); break; }
+    case 'trainstart': void training(id as ClassId); break;
+    case 'train': s?.act({ a: 'train', op: id }); break;
     // H3: configurador de 4 habilidades (gratis; se guarda por clase y se anuncia a la sala)
     case 'kitslot': ui.kitSlot = Number(id) || 0; render([]); break;
     case 'kitpick': { const err = setKitSlot(meta(), ui.me.cls, ui.kitSlot, id); if (err) { ui.notice = err; setTimeout(() => { ui.notice = ''; render([]); }, 2000); } else { saveMeta(); ui.kitSlot = (ui.kitSlot + 1) % 4; publish(); } render([]); break; }
@@ -283,7 +296,7 @@ document.addEventListener('click', (e) => {
     case 'tuto': ui.tutorial = 0; meta().seenTutorial = false; homeScreen(''); break;
     case 'tutonext': ui.tutorial++; if (ui.tutorial >= 5) { meta().seenTutorial = true; saveMeta(); } homeScreen(''); break;
     case 'tutoskip': meta().seenTutorial = true; saveMeta(); homeScreen(''); break;
-    case 'ascup': ui.asc = Math.min(meta().maxAsc, ui.asc + 1); publish(); render([]); break;
+    case 'ascup': ui.asc = Math.min(maxAscOf(), ui.asc + 1); publish(); render([]); break;
     case 'ascdown': ui.asc = Math.max(0, ui.asc - 1); publish(); render([]); break;
     case 'again': ui.log.length = 0; s?.backToLobby(); break;
     case 'bossreward': {

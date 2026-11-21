@@ -50,7 +50,22 @@ export interface Meta {
   cosmetics?: Cosmetics;
   /** H3: habilidades equipadas por clase (4 ids). Opcional; se valida al usarla (si no vale, las iniciales). */
   kits?: Record<string, string[]>;
+  /** Modo creador activado (solo surte efecto en las cuentas de creador). No borra ni cambia el progreso real. */
+  creator?: boolean;
 }
+
+// ---------- modo creador ----------
+/** Cuentas de creador (email de la cuenta, en minúsculas). */
+export const CREATOR_EMAILS = ['rodrigoamericarp@gmail.com'];
+let creatorAccount = false;
+/** La cuenta avisa de quién ha entrado (o null al salir). */
+export function setCreatorAccount(email: string | null | undefined): void { creatorAccount = !!email && CREATOR_EMAILS.includes(email.trim().toLowerCase()); }
+/** ¿La cuenta conectada es de creador? */
+export const isCreatorAccount = (): boolean => creatorAccount;
+/** ¿Está activo el modo creador? (cuenta de creador y opción marcada) */
+export const creatorOn = (m: Partial<Pick<Meta, 'creator'>> = meta()): boolean => creatorAccount && !!m.creator;
+/** Ascensión máxima disponible (todas con el modo creador). */
+export const maxAscOf = (m: Meta = meta()): number => (creatorOn(m) ? MAX_ASC : m.maxAsc);
 
 const KEY = 'rda_meta';
 
@@ -168,7 +183,7 @@ export function masteryProgress(cls: string): { lv: number; xp: number; prev: nu
   return { lv, xp, prev, next, pct: next ? Math.round(((xp - prev) / (next - prev)) * 100) : 100 };
 }
 export const masteryLevel = (xp: number): number => MASTERY_XP.filter((n) => xp >= n).length;
-export const masteryOf = (cls: string): number => masteryLevel(meta().mastery[cls] ?? 0);
+export const masteryOf = (cls: string): number => (creatorOn() ? 5 : masteryLevel(meta().mastery[cls] ?? 0));
 /** Rutas que se pueden elegir con ese nivel de maestría: al principio la 1.ª y la 3.ª (no opuestas). */
 /** Kits iniciales que se pueden elegir: el Clásico siempre; uno más por cada nivel de maestría (hasta el 4). */
 export function openRoutes(cls: ClassId, level = masteryOf(cls)): string[] {

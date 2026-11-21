@@ -3,9 +3,9 @@ import { CLASSES, PLAYABLE, findRoute } from '../core/classes/classes';
 import { classStripUrl } from '../render/sprites';
 import { SPELLS } from '../core/classes/spells';
 import type { ClassId } from '../core/state';
-import { POTION_HEAL, POTION_PRICE, eventDef, heroMaxHp, type RunState } from '../game/run';
+import { POTION_HEAL, POTION_PRICE, eventDef, heroMaxHp, type HeroSave, type RunState } from '../game/run';
 import { TURN_SECONDS } from '../game/session';
-import { HALL_SIZE, achievementCount, listedAchievements, MASTERY_XP, ecosFor, masteryOf, masteryProgress, masteryText, meta, myTeam, saveMeta, routeNeeds, settle } from '../game/meta';
+import { creatorOn, isCreatorAccount, maxAscOf, HALL_SIZE, achievementCount, listedAchievements, MASTERY_XP, ecosFor, masteryOf, masteryProgress, masteryText, meta, myTeam, saveMeta, routeNeeds, settle } from '../game/meta';
 import { currentAccount } from '../net/account';
 import { friendsStatus } from '../net/social';
 import type { Champion } from '../game/run';
@@ -17,7 +17,7 @@ import { championOf, dailyOf, dailyScore, lastZone } from '../game/run';
 import { CLASS_STORY, ENDING_LOST, ENDING_WON, TUTORIAL, ZONE_STORY } from '../content/story';
 import { esc, mine, store, tip, today, ui } from './ctx';
 import { NODE_ICON, itemIcon, spellIcon, spellTip } from './icons';
-import { advanceBar, blessingBar, boonRow, diffHtml, itemHtml, mapSvg, pendingRows, sidePanel, topBar, volumeControl } from './panels';
+import { advanceBar, blessingBar, boonRow, bossRow, diffHtml, itemHtml, mapSvg, pendingRows, sidePanel, topBar, volumeControl } from './panels';
 import { CONSUMABLES, MAX_CONSUMABLE } from '../content/boons';
 import { CHEST_CURSE_CHANCE, HEAT, HEAT_HOT, HEAT_MAX, HEAT_OVERLOAD, HONE_COST, SCRAP_YIELD, curseOf, heatTier, pactOf, recalibratePrice } from '../content/pacts';
 import { REST_OPTIONS, itemByRef, recalStats, restHeal, restText } from '../game/rooms';
@@ -331,6 +331,7 @@ export function homeScreen(msg: string): void {
     <div class="panel orn playbox"><h3>Crear sala</h3><p class="dim sm">Serás el anfitrión. Comparte el código de 4 letras.</p><button class="pri" data-act="create">Crear sala</button></div>
     <div class="panel orn playbox"><h3>Unirse</h3><p class="dim sm">Con el código que te pase el anfitrión.</p><div class="row center"><input id="code" maxlength="4" placeholder="ABCD" class="codein"><button class="pri" data-act="join">Unirse</button></div></div>
     <div class="panel orn playbox"><h3>Un jugador</h3><p class="dim sm">Sin conexión con otros.</p><button data-act="solo">Jugar solo</button></div>
+    ${creatorBox(m)}
     ${host ? `<button class="resumebtn" data-act="resume">Continuar la partida guardada de la sala ${esc(host.code)}</button>` : ''}`;
   ui.root.innerHTML = `<div class="home2">
   <header class="hhead"><div><h1 class="ptitle">RUNAS DEL ABISMO</h1><p class="sub">RPG táctico por turnos · cooperativo de 1 a 4 jugadores · 3 zonas</p></div><span class="grow"></span><div class="hright">${volumeControl()}${badge}</div></header>
@@ -384,8 +385,8 @@ export function lobbyScreen(): void {
     ${ui.notice ? `<span class="bad">${esc(ui.notice)}</span>` : ''}<span class="grow"></span>
     ${s.isHost ? `${ui.saved ? `<button data-act="doresume">Reanudar guardada (zona ${ui.saved.zone + 1}, sala ${ui.saved.step + 1})</button>` : ''}<span class="pill ${ready.length === total ? 'good' : ''}">Listos ${ready.length}/${total}</span><button class="pri" data-act="start" ${ready.length ? '' : 'disabled'} ${ready.length < total ? tip('Aún no están todos listos: si comienzas, entran con lo que tengan elegido') : ''}>⚔️ Comenzar</button>` : `<button class="${ui.lobbyReady ? 'readyon' : 'pri'}" data-act="lready">${ui.lobbyReady ? '✔ Listo (deshacer)' : '✋ Estoy listo'}</button><span class="pill">Listos ${ready.length}/${total}</span>`}<button data-act="home">Salir</button></div>
   <div class="cols"><section class="main">
-    ${s.isHost ? `<div class="panel"><div class="row"><b>Dificultad</b><span class="grow"></span><button class="mini" data-act="ascdown" ${ui.asc <= 0 || ui.daily ? 'disabled' : ''}>−</button><b class="pill">Ascensión ${ui.daily ? 3 : ui.asc}</b><button class="mini" data-act="ascup" ${ui.asc >= meta().maxAsc || ui.daily ? 'disabled' : ''}>+</button><label class="sm"><input type="checkbox" data-act="dailytoggle" ${ui.daily ? 'checked' : ''}> Reto diario</label></div>
-      <div class="dim sm">${ui.daily ? dailyOf(today()).mods.map((id) => esc(DAILY_MODS.find((x) => x.id === id)!.name)).join(' + ') + ' · ranking compartido' : esc(ASCENSION.slice(0, ui.asc + 1).slice(-2).join(' '))}${meta().maxAsc < 1 && !ui.daily ? ' · Gana una partida para desbloquear la ascensión 1.' : ''}</div>
+    ${s.isHost ? `<div class="panel"><div class="row"><b>Dificultad</b><span class="grow"></span><button class="mini" data-act="ascdown" ${ui.asc <= 0 || ui.daily ? 'disabled' : ''}>−</button><b class="pill">Ascensión ${ui.daily ? 3 : ui.asc}</b><button class="mini" data-act="ascup" ${ui.asc >= maxAscOf() || ui.daily ? 'disabled' : ''}>+</button><label class="sm"><input type="checkbox" data-act="dailytoggle" ${ui.daily ? 'checked' : ''}> Reto diario</label></div>
+      <div class="dim sm">${ui.daily ? dailyOf(today()).mods.map((id) => esc(DAILY_MODS.find((x) => x.id === id)!.name)).join(' + ') + ' · ranking compartido' : esc(ASCENSION.slice(0, ui.asc + 1).slice(-2).join(' '))}${maxAscOf() < 1 && !ui.daily ? ' · Gana una partida para desbloquear la ascensión 1.' : ''}</div>
       ${ui.daily ? '' : `<div class="lbl">Modificadores de expedición <span class="dim">· opcionales, hasta ${MAX_MODS} · más riesgo, más ecos</span></div>
       <div class="chips">${DAILY_MODS.map((m) => { const on = ui.mods.includes(m.id), why = on ? null : ui.mods.length >= MAX_MODS ? `Ya tienes ${MAX_MODS} activos` : modConflict(m.id, ui.mods);
         return `<button class="chip modchip t${m.tier ?? 2} ${on ? 'r2 sel' : ''}" data-act="mod" data-id="${m.id}" ${why ? 'disabled' : ''} ${tip(modTip(m.id, why))}>${on ? '✔ ' : ''}${esc(m.name)} <span class="risk">${'●'.repeat(m.tier ?? 2)}</span></button>`; }).join('')}</div>
@@ -408,6 +409,17 @@ export function lobbyScreen(): void {
     ${players.map((p, i) => `<div class="member ${i > 3 ? 'off' : ''} ${p.ready && !p.host ? 'isready' : ''}"><div class="row"><b class="p${i % 4}">${p.look.emblem ? `${p.look.emblem} ` : ''}${esc(p.name)}</b>${p.host ? '<span>👑</span>' : ''}${p.id === ui.myId ? '<span class="dim sm">(tú)</span>' : ''}<span class="grow"></span>${p.host ? '<span class="rdy host">👑 Anfitrión</span>' : p.ready ? '<span class="rdy on">✔ LISTO</span>' : '<span class="rdy">⏳ Eligiendo…</span>'}</div>
       <div class="sm">${esc(CLASSES[p.cls]?.name ?? '?')} <span class="row">${(p.kit ?? []).map((id) => SPELLS[id] ? `<span ${tip(spellTip(SPELLS[id]!))}>${spellIcon(SPELLS[id]!, false)}</span>` : '').join('')}</span></div>${i > 3 ? '<div class="bad sm">Sala llena</div>' : ''}${canDuel && p.id !== ui.myId && p.hasTeam ? `<button class="mini" data-act="duel" data-id="${esc(p.id)}">🏟️ Retar a duelo 3 contra 3</button>` : p.hasTeam ? '<div class="dim sm">🏟️ Tiene equipo de duelo</div>' : ''}</div>`).join('')}
   </div></aside></div>`;
+}
+
+/** Panel de creador (solo cuentas de creador): todo desbloqueado con un clic y sala de pruebas. */
+function creatorBox(m: ReturnType<typeof meta>): string {
+  if (!isCreatorAccount()) return '';
+  const on = creatorOn(m);
+  return `<div class="panel orn playbox creatorbox"><h3>🛠️ Creador</h3>
+    <label class="row center sm"><input type="checkbox" data-act="creator" ${on ? 'checked' : ''}> Todo desbloqueado</label>
+    <p class="dim sm">${on ? 'Activo: tienda, habilidades, ascensiones, El Abismo y maestría 5. Tu progreso real no cambia.' : 'Desactivado: ves tu progreso real.'}</p>
+    <div class="lbl">🎯 Sala de pruebas</div><p class="dim sm">Todas las habilidades de la clase y muñecos de daño infinito.</p>
+    <div class="row center" style="flex-wrap:wrap;gap:4px">${PLAYABLE.map((c) => `<button class="mini" data-act="trainstart" data-id="${c}">${esc(CLASSES[c].name)}</button>`).join('')}</div></div>`;
 }
 
 /** H3: configurador de las 4 habilidades equipadas (gratis; queda fijo durante la expedición). */
@@ -576,10 +588,12 @@ export function roomScreen(): void {
     return;
   }
   if (r.kind === 'shrine') {
-    const status = run.heroes.map((x) => `<span class="pill sm ${x.boonOffer ? 'dim' : 'good'}">${x.boonOffer ? '⏳' : '✔'} ${esc(x.name)}</span>`).join(' ');
-    const inner = `${h?.boonOffer ? boonRow(run) : `<div class="panel note"><b class="good">${h ? 'Ya has recibido la bendición del santuario.' : 'Estás mirando el santuario.'}</b></div>`}
+    // H4: el Santuario ofrece una mejora de hechizo (bossOffer); se mantiene la bendición por si quedara alguna pendiente
+    const waiting = (x: HeroSave): boolean => !!(x.boonOffer || x.bossOffer);
+    const status = run.heroes.map((x) => `<span class="pill sm ${waiting(x) ? 'dim' : 'good'}">${waiting(x) ? '⏳' : '✔'} ${esc(x.name)}</span>`).join(' ');
+    const inner = `${h && waiting(h) ? `${boonRow(run)}${bossRow(run)}` : `<div class="panel note"><b class="good">${h ? 'Ya has recibido la mejora del santuario.' : 'Estás mirando el santuario.'}</b></div>`}
       <div class="row">${status}</div>${advanceBar(run, 'Continuar →')}`;
-    frame(run, roomWin(shrineScene(r.zone), 'El Santuario', 'Una estatua sin rostro vela entre cirios que nunca se consumen. Ante ella, el poder dormido de cada clase despierta: elige una bendición pasiva.', inner, 'shrinewin'));
+    frame(run, roomWin(shrineScene(r.zone), 'El Santuario', 'Una estatua sin rostro vela entre cirios que nunca se consumen. Ante ella, tu poder se afila: elige una mejora para uno de tus hechizos.', inner, 'shrinewin'));
     return;
   }
   if (r.kind === 'rest') {

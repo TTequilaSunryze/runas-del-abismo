@@ -7,7 +7,7 @@ import { AURAS, PALETTES, auraDef, paletteDef } from '../render/palettes';
 import type { Look } from '../render/looks';
 import { chronicleState } from './atlas';
 import { FRAMES, LOADOUT_MAX, TITLES, emptyCosmetics, frameDef, titleName, type Cosmetics, type Loadout, type Slot } from './cosmetics';
-import { masteryLevel, type Meta } from './meta';
+import { creatorOn, masteryLevel, type Meta } from './meta';
 import { SPECIALS } from './specials';
 import { SPELL_CATALOG, kitProblem } from '../content/spellCatalog';
 import { SPELLS } from '../core/classes/spells';
@@ -146,11 +146,16 @@ const cos = (m: Pick<Meta, 'cosmetics'>): Cosmetics => {
 };
 /** ¿Tiene el jugador este elemento? (títulos y marcos se guardan en sus listas de la Fase D) */
 export function owns(m: Pick<Meta, 'cosmetics'>, id: string): boolean {
+  // modo creador: todo desbloqueado (sin tocar lo comprado de verdad)
+  return creatorOn(m as Partial<Meta>) ? !!shopItem(id) : ownsReal(m, id);
+}
+/** Propiedad real (lo comprado o desbloqueado de verdad), sin el modo creador. */
+export function ownsReal(m: Pick<Meta, 'cosmetics'>, id: string): boolean {
   const x = shopItem(id), c = cos(m);
   if (!x) return false;
   if (x.cat === 'title') return c.titles.includes(x.ref);
   if (x.cat === 'frame') return c.frames.includes(x.ref);
-  if (x.cat === 'kit') return (x.includes ?? []).every((i) => owns(m, i));
+  if (x.cat === 'kit') return (x.includes ?? []).every((i) => ownsReal(m, i));
   return c.owned!.includes(id);
 }
 /** ¿Cumple el requisito? (sin requisito: sí) */
@@ -166,7 +171,7 @@ function give(m: Pick<Meta, 'cosmetics'>, x: ShopItem): void {
   const c = cos(m);
   if (x.cat === 'title') { if (!c.titles.includes(x.ref)) c.titles.push(x.ref); }
   else if (x.cat === 'frame') { if (!c.frames.includes(x.ref)) c.frames.push(x.ref); }
-  else if (x.cat === 'kit') for (const i of x.includes ?? []) { const y = shopItem(i); if (y && !owns(m, i)) give(m, y); }
+  else if (x.cat === 'kit') for (const i of x.includes ?? []) { const y = shopItem(i); if (y && !ownsReal(m, i)) give(m, y); }
   else if (!c.owned!.includes(x.id)) c.owned!.push(x.id);
 }
 
@@ -196,7 +201,7 @@ export function buyItem(m: Meta, id: string): BuyResult {
   if (!x) return { ok: false, error: 'Ese elemento no existe.' };
   if (!x.available) return { ok: false, error: 'Ese elemento aún no está disponible.' };
   if (x.price === null) return { ok: false, error: 'No se compra: se desbloquea con su requisito.' };
-  if (owns(m, id)) return { ok: false, error: 'Ya lo tienes.' };
+  if (ownsReal(m, id)) return { ok: false, error: 'Ya lo tienes.' };
   if (!reqMet(m, x.req)) return { ok: false, error: `Requisito: ${reqText(x.req!)}.` };
   const price = priceFor(m, x);
   if (m.ecos < price) return { ok: false, error: `Te faltan ${price - m.ecos} ecos.` };
@@ -217,9 +222,9 @@ export function buyItem(m: Meta, id: string): BuyResult {
 export function grantUnlocks(m: Meta): ShopItem[] {
   const got: ShopItem[] = [];
   for (const x of CATALOG()) {
-    if (x.freeWith && !owns(m, x.id) && reqMet(m, x.freeWith)) { give(m, x); got.push(x); continue; }
+    if (x.freeWith && !ownsReal(m, x.id) && reqMet(m, x.freeWith)) { give(m, x); got.push(x); continue; }
     if (x.price !== null || !x.req || (x.req.k === 'special' && (x.cat === 'title' || x.cat === 'frame'))) continue;
-    if (!owns(m, x.id) && reqMet(m, x.req)) { give(m, x); got.push(x); }
+    if (!ownsReal(m, x.id) && reqMet(m, x.req)) { give(m, x); got.push(x); }
   }
   got.push(...grimoireGift(m));
   return got;
@@ -229,7 +234,7 @@ export function grantUnlocks(m: Meta): ShopItem[] {
 export function grimoireGift(m: Meta): ShopItem[] {
   if (m.unlocked.includes(GRIMOIRE_GIFT)) return [];
   const got: ShopItem[] = [];
-  for (const x of CATALOG()) if (x.cat === 'spell' && !owns(m, x.id) && (m.archive?.grimoire?.[x.ref]?.lv ?? 0) >= 1) { give(m, x); got.push(x); }
+  for (const x of CATALOG()) if (x.cat === 'spell' && !ownsReal(m, x.id) && (m.archive?.grimoire?.[x.ref]?.lv ?? 0) >= 1) { give(m, x); got.push(x); }
   m.unlocked = [...m.unlocked, GRIMOIRE_GIFT];
   return got;
 }
