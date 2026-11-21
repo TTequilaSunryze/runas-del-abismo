@@ -2,9 +2,10 @@
 // El jefe tiene dos fases, invoca refuerzos y pilares que lo curan.
 import { SPELLS, type SpellDef } from '../classes/spells';
 import type { CombatState, GameEvent, Pos, Unit } from '../state';
-import { LATE_ROUND, apCost, cast, castProblem, current, endTurn, hasTrait, heal, move, spellOf, summon, type UnitSpec } from './engine';
+import { LATE_ROUND, apCost, applyStatus, cast, castProblem, current, endTurn, hasTrait, heal, move, spellOf, strike, summon, type UnitSpec } from './engine';
 import { alive, dist, hasLineOfSight, isFree, reachable, same } from './grid';
-import { coneCells, marksOf } from './marks';
+import { addMark, coneCells, dirOf, marksOf, removeMark } from './marks';
+import { bossKit, type BossKit, type OmenDef } from './bosskits';
 
 /** Lo que la zona aporta a la IA: invocaciones del jefe y de los nigromantes. */
 export interface BossInfo {
@@ -20,6 +21,8 @@ export interface BossInfo {
 }
 
 const RAISE_AP = 2;
+/** G3.2: alzados vivos por nigromante. */
+const RAISE_MAX = 2;
 const DEVOUR_HEAL = 0.35;
 /** G3.0: cada pilar cura un 3% de la vida del jefe por turno (antes 5%: con 3 pilares, un 15% por ronda). */
 const PILLAR_HEAL = 0.03;
@@ -153,49 +156,187 @@ function raise(s: CombatState, u: Unit, info: BossInfo | undefined, ev: GameEven
   const living = s.units.filter((e) => e.team === u.team && alive(e)).length;
   const heroes = s.units.filter((h) => h.team !== u.team).length;
   if (living >= heroes + 2) return;
+  // G3.2: cada nigromante mantiene como mucho 2 alzados; son suyos y caen con él
+  if (s.units.filter((x) => alive(x) && x.summoner === u.id).length >= RAISE_MAX) return;
   const c = corpses(s).filter((x) => dist(x.pos, u.pos) <= 5 && isFree(s, x.pos)).sort((a, b) => dist(a.pos, u.pos) - dist(b.pos, u.pos))[0];
   if (!c) return;
   c.used = true;
   u.ap -= RAISE_AP;
   const nu = summon(s, info.minion(c.pos), c.pos, ev);
-  if (nu) ev.push({ t: 'raise', unit: u.id, corpse: c.id });
+  if (nu) { nu.summoner = u.id; ev.push({ t: 'raise', unit: u.id, corpse: c.id }); }
+}
+
+/** Héroes visibles (incluye sus invocaciones, no los señuelos). */
+const heroTargets = (s: CombatState, u: Unit): Unit[] => s.units.filter((h) => h.team !== u.team && alive(h) && !h.statuses.invis && h.ai !== 'decoy');
+
+const inBoard = (s: CombatState, p: Pos): boolean => p.x >= 0 && p.y >= 0 && p.x < s.w && p.y < s.h && !s.obstacles.includes(`${p.x},${p.y}`);
+const crossAt = (p: Pos): Pos[] => [p, { x: p.x + 1, y: p.y }, { x: p.x - 1, y: p.y }, { x: p.x, y: p.y + 1 }, { x: p.x, y: p.y - 1 }];
+const squareAt = (p: Pos): Pos[] => { const o: Pos[] = []; for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) o.push({ x: p.x + dx, y: p.y + dy }); return o; };
+
+/** A quién apunta un ataque anunciado. */
+function omenTarget(s: CombatState, u: Unit, how: OmenDef['target'], foes: Unit[]): Unit | undefined {
+  if (!foes.length) return undefined;
+  const byHp = [...foes].sort((a, b) => a.hp - b.hp || a.id - b.id);
+  if (how === 'frail') return byHp[0];
+  if (how === 'marked') return foes.find((f) => f.statuses.mark) ?? [...foes].sort((a, b) => dist(b.pos, u.pos) - dist(a.pos, u.pos) || a.id - b.id)[0];
+  if (how === 'far') return [...foes].sort((a, b) => dist(b.pos, u.pos) - dist(a.pos, u.pos) || a.id - b.id)[0];
+  if (how === 'near') return [...foes].sort((a, b) => dist(a.pos, u.pos) - dist(b.pos, u.pos) || a.id - b.id)[0];
+  // cluster: el que tenga más compañeros pegados (desempate: el de menos vida)
+  const near = (f: Unit): number => foes.filter((o) => dist(o.pos, f.pos) <= 1).length;
+  return byHp.sort((a, b) => near(b) - near(a))[0];
+}
+
+/** Casillas que cubre el ataque anunciado. */
+export function omenCells(s: CombatState, u: Unit, o: OmenDef): Pos[] {
+  const foes = heroTargets(s, u);
+  const t = omenTarget(s, u, o.target, foes);
+  let cells: Pos[] = [];
+  if (o.shape === 'ring') {
+    for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) { const d = Math.abs(dx) + Math.abs(dy); if (d >= 1 && d <= 2) cells.push({ x: u.pos.x + dx, y: u.pos.y + dy }); }
+  } else if (o.shape === 'heroes') {
+    cells = foes.map((f) => ({ ...f.pos }));
+  } else if (t && o.shape === 'cross') cells = crossAt(t.pos);
+  else if (t && o.shape === 'square') cells = squareAt(t.pos);
+  else if (t && o.shape === 'twin') {
+    const other = foes.filter((f) => f !== t).sort((a, b) => dist(b.pos, t.pos) - dist(a.pos, t.pos) || a.id - b.id)[0];
+    cells = [...crossAt(t.pos), ...(other ? crossAt(other.pos) : [])];
+  } else if (t && o.shape === 'line') {
+    const [dx, dy] = dirOf(u.pos, t.pos);
+    for (let i = 1; i <= (o.len ?? 6); i++) {
+      const p = { x: u.pos.x + dx * i, y: u.pos.y + dy * i };
+      if (!inBoard(s, p)) break;
+      cells.push(p);
+    }
+  }
+  const seen = new Set<string>();
+  return cells.filter((p) => inBoard(s, p) && !seen.has(`${p.x},${p.y}`) && !!seen.add(`${p.x},${p.y}`));
+}
+
+/** Daño de un ataque anunciado: su golpe en área (2.º hechizo) por el multiplicador, más su daño plano. */
+export function omenDamage(u: Unit, o: OmenDef): number {
+  const d = SPELLS[u.spells[1]?.id ?? u.spells[0]!.id]?.dmg ?? [8, 8];
+  return Math.round(((d[0] + d[1]) / 2) * o.mul + u.power);
+}
+
+/** Marca en el suelo el ataque anunciado: estallará al empezar el siguiente turno del jefe. */
+function placeOmen(s: CombatState, u: Unit, o: OmenDef, ev: GameEvent[]): boolean {
+  const cells = omenCells(s, u, o);
+  if (!cells.length) return false;
+  const dmg = omenDamage(u, o);
+  for (const p of cells) addMark(s, { kind: 'omen', pos: p, team: u.team, turns: 2, owner: u.id, dmg, sub: o.effect ?? 'none' }, ev);
+  ev.push({ t: 'note', text: `⚠ ${u.name} prepara ${o.name}. ${o.hint}` });
+  return true;
+}
+
+/** Al empezar su turno, el jefe suelta lo que anunció: daña a los héroes que sigan en las casillas marcadas. */
+function detonateOmens(s: CombatState, u: Unit, kit: BossKit, ev: GameEvent[]): void {
+  const marks = marksOf(s, 'omen', u.id);
+  if (!marks.length) return;
+  const hit = new Set<number>();
+  for (const m of marks) {
+    if (m.sub === 'fire') { s.fire ??= {}; s.fire[`${m.pos.x},${m.pos.y}`] = Math.max(s.fire[`${m.pos.x},${m.pos.y}`] ?? 0, 2); }
+    for (const h of s.units.filter((x) => alive(x) && x.team !== u.team && same(x.pos, m.pos) && !hit.has(x.id))) {
+      hit.add(h.id);
+      if (m.sub === 'strip' && h.shield > 0) { ev.push({ t: 'resist', unit: h.id, what: '¡Escudo devorado!' }); h.shield = 0; }
+      strike(s, h, m.dmg ?? 8, ev, 'omen', { element: SPELLS[u.spells[1]?.id ?? '']?.element });
+      if (!alive(h)) continue;
+      if (m.sub === 'root') applyStatus(h, 'rooted', 1, 1, ev);
+      if (m.sub === 'fire') applyStatus(h, 'burn', 2, 1, ev);
+      if (m.sub === 'drainap') { h.apMod -= 1; ev.push({ t: 'drain', unit: h.id, ap: -1, mp: 0 }); }
+    }
+    removeMark(s, m, ev);
+    if (s.over) return;
+  }
+  ev.push({ t: 'note', text: hit.size ? `${u.name} descarga su ataque: alcanza a ${hit.size}.` : `${u.name} descarga su ataque, pero nadie se ha quedado dentro.` });
+  if (kit.after && alive(u)) { applyStatus(u, kit.after.kind, kit.after.turns, kit.after.stacks, ev); ev.push({ t: 'note', text: `${u.name} ${kit.after.text}.` }); }
+}
+
+/** Una invocación del jefe, ya adaptada a su papel (esbirro, guardián o manifestación). */
+function bossMinion(s: CombatState, u: Unit, info: BossInfo, kit: BossKit | undefined, ev: GameEvent[]): Unit | null {
+  let at = u.pos;
+  if (kit?.minion.fromCorpse) {
+    const c = corpses(s).filter((x) => dist(x.pos, u.pos) <= 6 && isFree(s, x.pos)).sort((a, b) => dist(a.pos, u.pos) - dist(b.pos, u.pos) || a.id - b.id)[0];
+    if (c) { c.used = true; at = c.pos; }
+  }
+  const spec = info.minion(at);
+  if (kit) {
+    const hp = Math.max(4, Math.round(spec.maxHp * kit.minion.hp));
+    spec.hp = spec.maxHp = hp;
+    const traits = (spec.traits ?? []).filter((x) => !kit.minion.drop?.includes(x));
+    for (const x of kit.minion.add ?? []) if (!traits.includes(x)) traits.push(x);
+    spec.traits = traits;
+  }
+  const m = summon(s, spec, at, ev);
+  if (!m) return null;
+  m.summoner = u.id;
+  if (kit?.minion.fade) m.statuses.fading = { turns: kit.minion.fade + 1, stacks: 0 };
+  return m;
 }
 
 function bossTurn(s: CombatState, u: Unit, info: BossInfo | undefined, ev: GameEvent[]): void {
+  const kit = bossKit(u.kind);
   const heroes = s.units.filter((h) => h.team === 'hero').length;
+  if (u.phase === undefined) {
+    u.phase = 1;
+    if (kit?.dropStart) u.traits = (u.traits ?? []).filter((x) => !kit.dropStart!.includes(x));
+  }
+  // G3.1: primero suelta el ataque que anunció el turno anterior
+  if (kit) detonateOmens(s, u, kit, ev);
+  if (s.over || !alive(u)) return;
+  // G3.2: invocaciones del jefe marcadas como suyas (mueren con él), con tope a la vez y en total por combate
+  const mine = (): Unit[] => s.units.filter((m) => m.summoner === u.id && m.ai !== 'pillar');
   const minions = s.units.filter((m) => m.team === 'enemy' && alive(m) && m.id !== u.id && m.ai !== 'pillar').length;
-  const cap = info?.minionCap ?? heroes;
-  // G3.0: invocaciones del jefe marcadas como suyas (mueren con él), con tope a la vez y en total por combate
-  const mine = s.units.filter((m) => m.summoner === u.id && m.ai !== 'pillar');
-  const room = (info?.minionTotal ?? Infinity) - mine.length;
-  const call = (k: number): void => { for (let i = 0; i < Math.min(k, room); i++) { const m = summon(s, info!.minion(u.pos), u.pos, ev); if (m) m.summoner = u.id; } };
+  const cap = kit?.minion.cap ?? info?.minionCap ?? heroes;
+  const room = (): number => (info?.minionTotal ?? Infinity) - mine().length;
+  const call = (k: number): void => { for (let i = 0; i < k && room() > 0 && info; i++) bossMinion(s, u, info, kit, ev); };
+  // el Eco se cura mientras vivan sus ecos (en lugar de regenerarse siempre)
+  if (kit?.healPerMinion && s.round < LATE_ROUND) { const n = mine().filter(alive).length; if (n) heal(u, u.maxHp * kit.healPerMinion * n, ev); }
+  let summoned = false;
   if ((u.phase ?? 1) === 1 && u.hp <= u.maxHp / 2) {
-    // Segunda fase: más duro, más rápido, cuerpo a cuerpo, y levanta pilares que lo curan.
+    // Segunda fase: más duro, más rápido, cuerpo a cuerpo y, según el jefe, pilares que lo curan.
     u.phase = 2;
     u.armor += 2;
     u.maxMp = 3;
     u.mp = 3;
     u.name = info?.phase2Name ?? u.name;
     ev.push({ t: 'phase', unit: u.id, phase: 2 });
-    if (info) call(Math.max(1, Math.ceil(heroes / 2)));
-    if (info?.pillar) {
+    if (kit?.phase2) {
+      u.traits = (u.traits ?? []).filter((x) => !kit.phase2!.drop?.includes(x));
+      for (const x of kit.phase2.add ?? []) if (!u.traits.includes(x)) u.traits.push(x);
+      ev.push({ t: 'note', text: kit.phase2.text });
+    }
+    if (info) call(kit?.minion.burst ?? Math.max(1, Math.ceil(heroes / 2)));
+    const pillars = kit?.pillars ?? info?.pillars ?? 2;
+    if (info?.pillar && pillars > 0) {
       // pilares lejos del jefe, para obligar al grupo a repartirse
       const spots = [...reachable(s, u.pos, 30, true).cost.keys()]
         .map((k) => { const [x, y] = k.split(',').map(Number) as [number, number]; return { x, y }; })
         .filter((p) => isFree(s, p) && dist(p, u.pos) >= 3)
         .sort((a, b) => dist(b, u.pos) - dist(a, u.pos));
-      for (let i = 0; i < (info.pillars ?? 2); i++) {
+      for (let i = 0; i < pillars; i++) {
         const at = spots[(i * 5) % Math.max(1, spots.length)];
         if (at && isFree(s, at)) summon(s, info.pillar(at), at, ev);
       }
     }
-  } else if ((u.phase ?? 1) === 1 && info && s.round % SUMMON_EVERY === 0 && mine.filter(alive).length < cap && minions < heroes + 1 && room > 0) {
-    call(1);
-    u.ap = Math.max(0, u.ap - 3);
+    summoned = true;
   }
   const phase2 = u.phase === 2;
+  const omen = kit ? (phase2 ? kit.omen2 ?? kit.omen : kit.omen) : undefined;
+  // G3.1: el ataque anunciado toca en rondas fijas (nunca dos seguidos) y gasta 3 PA; si toca, ese turno no invoca
+  const omenNow = !!omen && !summoned && s.round % omen.every === omen.at && !marksOf(s, 'omen', u.id).length && u.ap >= 3;
+  const summonNow = !!info && !summoned && !omenNow && room() > 0 && mine().filter(alive).length < cap && minions < heroes + 1
+    && (kit ? kit.minion.phases.includes(u.phase ?? 1) && s.round % kit.minion.every === kit.minion.at : !phase2 && s.round % SUMMON_EVERY === 0);
+  if (summonNow) {
+    const m = bossMinion(s, u, info!, kit, ev);
+    if (m && kit) ev.push({ t: 'note', text: `${u.name} ${kit.minion.text}.` });
+    u.ap = Math.max(0, u.ap - 3);
+  }
+  if (hasTrait(u, 'trapper')) trapper(s, u, ev);
+  if (hasTrait(u, 'blink')) blink(s, u, ev);
+  if (omenNow) u.ap -= 3;
   // primer hechizo: a distancia (fase 1); segundo: cuerpo a cuerpo en área (fase 2)
-  fight(s, u, SPELLS[u.spells[phase2 ? 1 : 0]!.id]!, !phase2, ev);
+  if (alive(u) && current(s)?.id === u.id) fight(s, u, SPELLS[u.spells[phase2 ? 1 : 0]!.id]!, !phase2, ev);
+  if (omenNow && alive(u) && !s.over && current(s)?.id === u.id) placeOmen(s, u, omen!, ev);
 }
 
 /** Los pilares no se mueven: curan al jefe en cada uno de sus turnos. */

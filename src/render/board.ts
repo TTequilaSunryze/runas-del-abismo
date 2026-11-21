@@ -20,8 +20,8 @@ const PAD = 42;
 const art = (src: string): HTMLImageElement | null => { if (typeof Image === 'undefined') return null; const i = new Image(); i.src = `${import.meta.env.BASE_URL}${src}`; return i; };
 const Z1 = { floor: art('tiles/z1_floor.png'), pillar: art('tiles/z1_pillar.png') };
 const ready = (i: HTMLImageElement | null): i is HTMLImageElement => !!i && i.complete && i.naturalWidth > 0;
-const STATUS_COLOR: Record<string, string> = { burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0', charm: '#ff9ad8', vuln: '#c9a0ff', bleed: '#e03040', hobble: '#9ad0e8', guarded: '#7fe0b0', deathmark: '#ff3a4a', verdugo: '#ff8a30', frenzy: '#ff5030', orbita: '#b07cff', chained: '#a0a8c0', rooted: '#c89a5a', anchor: '#5ac8ff', silver: '#e0e8ff', smoke: '#9a8ab8', immune: '#7ae8ff', kinetic: '#58a6ff', prism: '#c8a0ff' };
-export const STATUS_NAME: Record<string, string> = { burn: 'Quemadura', poison: 'Veneno', slow: 'Ralentizado', stun: 'Aturdido', mark: 'Marcado', empower: 'Potenciado', reach: 'Alcance+', invis: 'Invisible', exposed: 'Expuesto', charm: 'Encantado', vuln: 'Vulnerable', bleed: 'Sangrado', hobble: 'Atrapado', guarded: 'Protegido', deathmark: 'Marca de la muerte', verdugo: 'Presa', frenzy: 'Frenesí', orbita: 'Órbita', chained: 'Encadenado', rooted: 'Inmovilizado', anchor: 'Sello de anclaje', silver: 'Balas de plata', smoke: 'En el humo', immune: 'Inmune', kinetic: 'Barrera cinética', prism: 'Baluarte prismático' };
+const STATUS_COLOR: Record<string, string> = { burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0', charm: '#ff9ad8', vuln: '#c9a0ff', bleed: '#e03040', hobble: '#9ad0e8', guarded: '#7fe0b0', deathmark: '#ff3a4a', verdugo: '#ff8a30', frenzy: '#ff5030', orbita: '#b07cff', chained: '#a0a8c0', rooted: '#c89a5a', anchor: '#5ac8ff', silver: '#e0e8ff', smoke: '#9a8ab8', immune: '#7ae8ff', kinetic: '#58a6ff', prism: '#c8a0ff', fading: '#b0b8d0' };
+export const STATUS_NAME: Record<string, string> = { burn: 'Quemadura', poison: 'Veneno', slow: 'Ralentizado', stun: 'Aturdido', mark: 'Marcado', empower: 'Potenciado', reach: 'Alcance+', invis: 'Invisible', exposed: 'Expuesto', charm: 'Encantado', vuln: 'Vulnerable', bleed: 'Sangrado', hobble: 'Atrapado', guarded: 'Protegido', deathmark: 'Marca de la muerte', verdugo: 'Presa', frenzy: 'Frenesí', orbita: 'Órbita', chained: 'Encadenado', rooted: 'Inmovilizado', anchor: 'Sello de anclaje', silver: 'Balas de plata', smoke: 'En el humo', immune: 'Inmune', kinetic: 'Barrera cinética', prism: 'Baluarte prismático', fading: 'Desvaneciéndose' };
 
 interface Float { x: number; y: number; text: string; color: string; t0: number }
 interface Shot { x0: number; y0: number; x1: number; y1: number; color: string; t0: number; dur: number; orb?: boolean }
@@ -435,6 +435,17 @@ export class Board {
         g.strokeStyle = 'rgba(140,210,255,.45)'; g.setLineDash([4, 4]); g.strokeRect(m.pos.x * TILE + 3, m.pos.y * TILE + 3, TILE - 6, TILE - 6); g.setLineDash([]);
       } else if (m.kind === 'smoke') {
         for (let i = 0; i < 4; i++) { const a = now / 900 + i * 1.6 + m.id; g.fillStyle = 'rgba(150,120,190,.32)'; g.beginPath(); g.arc(cx + Math.cos(a) * 9, (m.pos.y + 0.5) * TILE + Math.sin(a) * 6, TILE * 0.24, 0, 6.3); g.fill(); }
+      } else if (m.kind === 'omen') {
+        // G3.1: ataque anunciado del jefe: casilla roja que late; estalla al empezar su siguiente turno
+        const X = m.pos.x * TILE, Y = m.pos.y * TILE, a = 0.22 + 0.14 * Math.sin(now / 160 + m.id);
+        g.fillStyle = `rgba(255,40,40,${a.toFixed(3)})`; g.fillRect(X + 2, Y + 2, TILE - 4, TILE - 4);
+        g.strokeStyle = 'rgba(255,90,70,.9)'; g.lineWidth = 2; g.strokeRect(X + 3, Y + 3, TILE - 6, TILE - 6);
+        g.save(); g.beginPath(); g.rect(X + 3, Y + 3, TILE - 6, TILE - 6); g.clip();
+        g.strokeStyle = 'rgba(255,120,90,.35)'; g.lineWidth = 2;
+        for (let k = -TILE; k < TILE; k += 10) { g.beginPath(); g.moveTo(X + k, Y + TILE); g.lineTo(X + k + TILE, Y); g.stroke(); }
+        g.restore();
+        g.save(); g.fillStyle = '#ffe0d0'; g.font = 'bold 16px monospace'; g.textAlign = 'center'; g.fillText('!', cx, cy + 6); g.restore();
+        continue;
       } else if (m.kind === 'fence') {
         // se dibuja como obstáculo (drawFence)
       } else {

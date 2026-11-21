@@ -86,6 +86,18 @@ const FRENZY_FLAT = 1;
 const BLEED_DMG = 3;
 const DEATHMARK_PCT = 0.35;
 const GUARD_SHARE = 0.4;
+/** G3.3: Sed de batalla cura 2 + 20 por cada 100 de Furia. */
+export const THIRST_PER_FURY = 0.2;
+/** G3.1: derribar un pilar deja al jefe Expuesto. */
+export const PILLAR_EXPOSE = { stacks: 2, turns: 2 };
+/** G3.2: matar un eco del Eco de los Caídos le hace este % de su vida máxima. */
+export const ECHO_BACKLASH = 0.04;
+/** G3.3: Distancia letal del Arquero: +1 de daño por casilla más allá de 3 (máx. +3). */
+export const ARCHER_RANGE_FROM = 3;
+export const ARCHER_RANGE_MAX = 3;
+/** ¿Es un héroe Arquero (no el Arquero óseo enemigo)? */
+const isArcher = (u: Unit): boolean => u.kind === 'arquero' && (u.ai === null || u.ai === 'champ');
+export const archerBonus = (u: Unit, t: Unit): number => (isArcher(u) ? Math.max(0, Math.min(ARCHER_RANGE_MAX, dist(u.pos, t.pos) - ARCHER_RANGE_FROM)) : 0);
 /** quién está lanzando el hechizo en curso (para la Marca de la muerte) */
 let casting: number | null = null;
 /** escuela del hechizo en curso: lo mágico usa el % de daño mágico del equipo y lo demás el físico */
@@ -307,6 +319,16 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
       ev.push({ t: 'explode', unit: u.id });
       for (const o of s.units.filter((x) => x !== u && alive(x) && x.team === u.team && dist(x.pos, u.pos) <= 1)) hurt(s, o, Math.ceil(u.maxHp * 0.2), ev, 'vacio', { pierce: true });
     }
+    // G3.1: derribar un pilar deja al jefe Expuesto (−2 de armadura) 2 rondas
+    if (u.ai === 'pillar') {
+      u.used = true;
+      const boss = s.units.find((b) => alive(b) && b.team === u.team && b.ai === 'boss');
+      if (boss) { addStatus(boss, 'exposed', PILLAR_EXPOSE.turns, PILLAR_EXPOSE.stacks, ev); ev.push({ t: 'note', text: `El pilar cae: ${boss.name} queda Expuesto.` }); }
+    }
+    // G3.2: matar una invocación da ventaja contra quien la creó
+    const maker = u.summoner === undefined ? undefined : s.units.find((x) => x.id === u.summoner && alive(x) && x.team === u.team);
+    if (maker && hasTrait(u, 'wail')) { maker.apMod -= 1; ev.push({ t: 'note', text: `El lamento se quiebra: ${maker.name} pierde 1 PA en su próximo turno.` }); }
+    if (maker && hasTrait(u, 'echo')) { ev.push({ t: 'note', text: `El eco vuelve a ${maker.name} y lo hiere.` }); hurt(s, maker, maker.maxHp * ECHO_BACKLASH, ev, 'eco', { pierce: true }); }
     // las invocaciones mueren con su creador
     for (const m of s.units.filter((x) => alive(x) && x.summoner === u.id)) {
       m.hp = 0; m.shield = 0;
@@ -317,6 +339,15 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
     checkOver(s, ev);
   }
   return dmg;
+}
+
+/** G3.1: daño de una mecánica de jefe (ataques anunciados): pasa por armadura, escudo y resistencias como cualquier golpe. */
+export function strike(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: string, opts: { pierce?: boolean; element?: Element } = {}): number {
+  return hurt(s, u, raw, ev, source, opts);
+}
+/** G3.1: aplica un estado desde la IA (respeta inmunidades). */
+export function applyStatus(u: Unit, kind: StatusKind, turns: number, stacks: number, ev: GameEvent[]): void {
+  addStatus(u, kind, turns, stacks, ev);
 }
 
 /** El Carcelero cosecha un alma: cuenta para la armadura, se puede gastar y deja un eco en el suelo. */
@@ -387,6 +418,16 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     u.mistWalk = false; u.gravHit = false; u.twinBlades = false; u.huntUsed = false; u.bloodUsed = false; u.behindNow = false; u.firstCast = false;
     // el señuelo dura hasta su turno
     if (u.ai === 'decoy') { u.hp = 0; ev.push({ t: 'death', unit: u.id }); continue; }
+    // G3.2: las manifestaciones se desvanecen solas al agotarse (sin cadáver que alzar ni devorar)
+    const fd = u.statuses.fading;
+    if (fd && --fd.turns <= 0) {
+      u.hp = 0; u.shield = 0; u.used = true;
+      ev.push({ t: 'death', unit: u.id });
+      ev.push({ t: 'note', text: `${u.name} se desvanece.` });
+      clearMarksOf(s, u.id, ev);
+      checkOver(s, ev);
+      continue;
+    }
     // Furia: si pasa un turno entero sin atacar ni recibir daño, pierde 20
     if (u.fury !== undefined) { if (!u.furyHot) addFury(u, -20, ev); u.furyHot = false; }
     if (u.spells.some((sp) => sp.temp)) u.spells = u.spells.filter((sp) => !sp.temp || (sp.id === 'k_farol' && marksOf(s, 'lantern').some((m) => m.team === u.team)) || (sp.id === 's_cambio' && marksOf(s, 'shadow', u.id).length > 0));
@@ -999,7 +1040,9 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
       const raw = (randInt(s, def.dmg[0], def.dmg[1]) + (t === main ? flat : 0) + flatAll + dmgFlat(u, t, pack + fury) + (crit ? critFlat(u) : 0)) * (t === main || def.range[1] === 0 || def.line || def.cone || def.fullArea || square2.length ? 1 : 0.5);
       // Lanza resonante: +4 contra enemigos sobre o junto a un glifo tuyo
       const lres = def.id === 'r_lanza' && hasTrait(u, 'lanzares') && marksOf(s, 'glyph', u.id).some((m) => dist(m.pos, t.pos) <= 1) ? 4 : 0;
-      const got = hurt(s, t, raw + lres, ev, def.id, { crit, element: fullMag ? 'fire' : def.element, pierce: def.pierce || (crit && opposite) || (!!def.gun && !!u.statuses.silver), armorPen: pen, armorFlat: def.armorIgnore });
+      // G3.4: daño extra contra objetivos con un estado concreto (Flecha ígnea contra quemados…); G3.3: Distancia letal
+      const vs = def.bonusVs && t.statuses[def.bonusVs.kind] ? def.bonusVs.dmg : 0;
+      const got = hurt(s, t, raw + lres + vs + archerBonus(u, t), ev, def.id, { crit, element: fullMag ? 'fire' : def.element, pierce: def.pierce || (crit && opposite) || (!!def.gun && !!u.statuses.silver), armorPen: pen, armorFlat: def.armorIgnore });
       // Munición incendiaria: el disparo con el cargador lleno quema
       if (fullMag && hasTrait(u, 'incendiaria') && alive(t) && !pass) addStatus(t, 'burn', 2, 1, ev);
       if (!pass) {
@@ -1356,6 +1399,8 @@ const SELF_SPECIALS: Record<string, SelfSpecial> = {
       if (!same(p, u.pos)) { u.pos = p; ev.push({ t: 'blink', unit: u.id, to: { ...p } }); break; }
     }
     summon(s, { ...u, name: 'Señuelo', owner: null, hp: 1, maxHp: 1, shield: 0, armor: 0, statuses: {}, spells: [], ai: 'decoy', summoner: u.id, traits: ['taunt'], essence: undefined, initiative: 0 }, from, ev);
+    // G3.4: el engaño alimenta el Robo de esencia
+    gainEssence(u, 1, ev);
   },
   // Órbita defensiva: consume la esfera más cercana: escudo y repele al primero que te golpee cuerpo a cuerpo
   orbit: (s, u, d, _at, ev) => {
@@ -1392,7 +1437,8 @@ const SELF_SPECIALS: Record<string, SelfSpecial> = {
   // Sed de batalla: consume la Furia (la mitad con Furia inagotable) para curarse
   thirst: (_s, u, _d, _at, ev) => {
     const f = u.fury ?? 0;
-    heal(u, 2 + f * 0.12, ev);
+    // G3.3: la Furia se convierte en una curación que compensa gastarla (antes 12 por cada 100)
+    heal(u, 2 + f * THIRST_PER_FURY, ev);
     addFury(u, -(hasTrait(u, 'inagotable') ? Math.ceil(f / 2) : f), ev);
   },
   // Pacto de sangre: (la vida ya se pagó) +40 de Furia y +1 PM

@@ -11,7 +11,9 @@ export type Team = 'hero' | 'enemy';
 export type StatusKind = 'burn' | 'poison' | 'slow' | 'stun' | 'mark' | 'empower' | 'reach' | 'invis' | 'exposed' | 'charm'
   | 'vuln' | 'bleed' | 'hobble' | 'guarded' | 'deathmark' | 'verdugo' | 'frenzy' | 'orbita' | 'chained'
   // v15: Arquitecto Rúnico y Pistolero Arcano
-  | 'rooted' | 'anchor' | 'silver' | 'smoke' | 'immune' | 'kinetic' | 'prism';
+  | 'rooted' | 'anchor' | 'silver' | 'smoke' | 'immune' | 'kinetic' | 'prism'
+  // G3.2: manifestaciones que se desvanecen solas al acabarse
+  | 'fading';
 export type ClassId = 'guerrero' | 'mago' | 'clerigo' | 'picaro' | 'arquero' | 'zorro' | 'esferas' | 'carcelero' | 'acechador' | 'barbaro' | 'arquitecto' | 'pistolero';
 
 export interface StatusState {

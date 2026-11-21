@@ -136,7 +136,7 @@ export const CLASS_PASSIVE: Partial<Record<ClassId, { name: string; icon: string
   barbaro: { name: 'Furia', icon: '🔥', text: '+20 de Furia al golpear y +10 al recibir daño. Cada 40: +1 de daño; cada 20: +6% de crítico. Si pasas un turno sin pelear, pierdes 20.' },
   arquitecto: { name: 'Geometría Bélica', icon: '🔷', text: 'Al empezar tu turno sobre o junto a uno de tus glifos: ganas 4 de escudo y tu siguiente hechizo de daño hace +2.' },
   pistolero: { name: 'Cargador arcano', icon: '🔫', text: 'Cada disparo suma 1 carga (máx. 4). Con el cargador lleno, el siguiente disparo es un crítico seguro con +6 de daño elemental y vacía el tambor.' },
-  arquero: { name: 'Tirador', icon: '🏹', text: 'Sin recurso propio: daño constante a distancia y mucha movilidad.' },
+  arquero: { name: 'Distancia letal', icon: '🏹', text: 'Tus golpes hacen +1 de daño por cada casilla de distancia más allá de 3 (máx. +3 a 6 casillas o más). Colocarte lejos es tu recurso.' },
 };
 
 /** Se elige un solo kit inicial. */
