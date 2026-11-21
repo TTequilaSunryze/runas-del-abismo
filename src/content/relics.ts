@@ -27,8 +27,8 @@ RELIC_EVENTS.push({
   id: 'reliquia_2', title: 'Lo que dejó el Rey',
   text: 'Entre las brasas quedan tres objetos que no arden. Bajo ellos, una grieta lleva al Abismo. Llevad uno.',
   options: [
-    { label: 'Brasa eterna', hint: 'Todos: +2 de daño y +15% de resistencia al fuego.', apply: (run) => { for (const h of run.heroes) { boon(h, 'power', 2); boon(h, 'resFire', 15); } return 'La brasa os calienta desde dentro.'; } },
-    { label: 'Velo de humo', hint: 'Todos: +25% de resistencia a la sombra y +6 de iniciativa.', apply: (run) => { for (const h of run.heroes) { boon(h, 'resShadow', 25); boon(h, 'initiative', 6); } return 'El humo os envuelve: en el Abismo os costará más veros.'; } },
+    { label: 'Brasa eterna', hint: 'Todos: +2 de daño.', apply: (run) => { for (const h of run.heroes) { boon(h, 'power', 2); boon(h, 'resFire', 15); } return 'La brasa os calienta desde dentro.'; } },
+    { label: 'Velo de humo', hint: 'Todos: +6 de iniciativa.', apply: (run) => { for (const h of run.heroes) { boon(h, 'resShadow', 25); boon(h, 'initiative', 6); } return 'El humo os envuelve: en el Abismo os costará más veros.'; } },
     { label: 'Corona fundida', hint: 'Todos: +25 de vida máxima.', apply: (run) => { for (const h of run.heroes) { boon(h, 'hp', 25); h.hp += 25; } return 'El oro fundido os endurece la sangre.'; } },
   ],
 });
@@ -56,7 +56,7 @@ export const RELICS: Record<string, RelicDef> = Object.fromEntries(
     { id: 'trebol', name: 'Trébol de cuatro hojas', icon: '🍀', text: '+10% de crítico.', stats: { crit: 10 } },
     { id: 'cristal', name: 'Cristal de estasis', icon: '🔮', text: '+1 turno a tus estados.', stats: { status: 1 } },
     { id: 'viento', name: 'Botas de viento', icon: '🌬️', text: '+8 de iniciativa.', stats: { initiative: 8 } },
-    { id: 'fe', name: 'Medalla de fe', icon: '✝️', text: '+20% de resistencia a fuego, hielo, veneno y sombra.', stats: { resFire: 20, resIce: 20, resPoison: 20, resShadow: 20 } },
+    { id: 'fe', name: 'Medalla de fe', icon: '✝️', text: 'Sin efecto por ahora.', stats: { resFire: 20, resIce: 20, resPoison: 20, resShadow: 20 } },
     { id: 'dragon', name: 'Sangre de dragón', icon: '🐉', text: '+1 de daño y +12 de vida.', stats: { power: 1, hp: 12 }, rare: true },
     { id: 'tuerto', name: 'Ojo del tuerto', icon: '👁️', text: '+18% de crítico, pero -10 de vida.', stats: { crit: 18, hp: -10 } },
     { id: 'ascua', name: 'Ascua inextinguible', icon: '🔥', text: 'Todo tu daño quema 2 turnos.', trait: 'ignite', rare: true },
@@ -69,6 +69,6 @@ export const RELICS: Record<string, RelicDef> = Object.fromEntries(
     { id: 'furia', name: 'Máscara de furia', icon: '👹', text: '+4 de daño por debajo de la mitad de vida.', trait: 'enrage' },
     { id: 'bolsa', name: 'Bolsa sin fondo', icon: '💰', text: '+15 de oro tras cada combate.' },
     { id: 'lupa', name: 'Lupa del tasador', icon: '🔎', text: '+1 opción en cada botín.' },
-    { id: 'dado', name: 'Dado trucado', icon: '🎲', text: '+1 re-tirada de botín en cada zona.' },
+    { id: 'dado', name: 'Dado trucado', icon: '🎲', text: 'Sin efecto por ahora: ya no hay re-tiradas de botín.' },
   ] as RelicDef[]).map((r) => [r.id, r]),
 );

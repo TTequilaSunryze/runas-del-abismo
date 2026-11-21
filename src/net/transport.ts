@@ -270,8 +270,11 @@ export interface DailyRow {
 export async function submitDaily(row: DailyRow & { day: string; code: string }): Promise<boolean> {
   try {
     const { data, error } = await rtClient().rpc('submit_daily', { p_day: row.day, p_code: row.code, p_names: row.names, p_players: row.players, p_score: row.score, p_won: row.won, p_zone: row.zone });
+    if (error) console.warn('[reto diario] submit_daily falló:', error.message);
+    else if (data !== true) console.warn('[reto diario] submit_daily rechazó la puntuación (fecha fuera de rango)');
     return !error && data === true;
-  } catch {
+  } catch (e) {
+    console.warn('[reto diario] submit_daily no se pudo enviar:', e);
     return false;
   }
 }

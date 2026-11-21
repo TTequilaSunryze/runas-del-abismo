@@ -1,5 +1,6 @@
 // Equipo: 8 ranuras, 4 rarezas. Los nombres y la temática vienen de cada zona (content/).
 import { pick, rand, randInt, shuffle, type RngBox } from '../rng';
+import { FEATURES } from '../tuning';
 
 export const SLOTS = ['casco', 'capa', 'arma', 'peto', 'anillo', 'amuleto', 'botas', 'guantes'] as const;
 export type Slot = (typeof SLOTS)[number];
@@ -192,6 +193,10 @@ export function sumStats(list: Array<Stats | undefined>): Record<StatKey, number
   return total;
 }
 
+/** Estadísticas de resistencia: no hacen nada mientras FEATURES.resistances esté apagado, así que no se muestran (los datos se conservan). */
+export const RES_STATS: readonly StatKey[] = ['resFire', 'resIce', 'resPoison', 'resShadow'];
+export const statShown = (k: StatKey): boolean => FEATURES.resistances || !RES_STATS.includes(k);
+
 export function statsText(s: Stats): string {
-  return (Object.keys(s) as StatKey[]).map((k) => `${(s[k] ?? 0) > 0 ? '+' : ''}${s[k]} ${STAT_NAME[k]}`).join(' · ');
+  return (Object.keys(s) as StatKey[]).filter(statShown).map((k) => `${(s[k] ?? 0) > 0 ? '+' : ''}${s[k]} ${STAT_NAME[k]}`).join(' · ');
 }

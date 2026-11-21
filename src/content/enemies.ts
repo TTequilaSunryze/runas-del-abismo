@@ -46,7 +46,7 @@ const addTrait = (u: UnitSpec, t: string): void => { if (!u.traits?.includes(t))
 
 /** Modificadores de élite: se aplican sobre un enemigo ya creado. */
 export const AFFIXES: Record<string, { name: string; text: string; apply: (u: UnitSpec) => void }> = {
-  ardiente: { name: 'Ardiente', text: 'Sus golpes queman; resiste el fuego.', apply: (u) => { u.spells[0]!.imbue = 'fuego'; u.resist.fire = (u.resist.fire ?? 0) + 50; } },
+  ardiente: { name: 'Ardiente', text: 'Sus golpes queman.', apply: (u) => { u.spells[0]!.imbue = 'fuego'; u.resist.fire = (u.resist.fire ?? 0) + 50; } },
   vampirico: { name: 'Vampírico', text: 'Se cura con el daño que hace.', apply: (u) => { u.spells[0]!.imbue = 'vampiro'; } },
   blindado: { name: 'Blindado', text: '+2 de armadura y +20% de vida.', apply: (u) => { u.armor += 2; u.hp = u.maxHp = Math.round(u.maxHp * 1.2); } },
   veloz: { name: 'Veloz', text: '+2 PM y mucha más iniciativa.', apply: (u) => { u.mp += 2; u.maxMp += 2; u.initiative += 10; } },

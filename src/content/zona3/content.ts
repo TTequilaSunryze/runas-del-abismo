@@ -25,7 +25,7 @@ export const ZONA3_EVENTS: EventDef[] = [
     text: 'Entre los escombros, una fragua sigue encendida sin nadie que la alimente. El yunque espera.',
     options: [
       { label: 'Templar las armas', hint: 'Todos: +2 de daño. El calor cuesta el 20% de la vida actual.', apply: (run) => { for (const h of run.heroes) { boon(h, 'power', 2); losePct(h, 0.2); } return 'El acero canta. Vuestra piel, también.'; } },
-      { label: 'Reforzar las armaduras', hint: 'Todos: +2 de armadura y +15% de resistencia al fuego.', apply: (run) => { for (const h of run.heroes) { boon(h, 'armor', 2); boon(h, 'resFire', 15); } return 'Salís de la forja más pesados y más seguros.'; } },
+      { label: 'Reforzar las armaduras', hint: 'Todos: +2 de armadura.', apply: (run) => { for (const h of run.heroes) { boon(h, 'armor', 2); boon(h, 'resFire', 15); } return 'Salís de la forja más pesados y más seguros.'; } },
     ],
   },
   {

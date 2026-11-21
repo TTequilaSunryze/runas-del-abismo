@@ -6,12 +6,13 @@ import type { Slot } from '../core/items/items';
 import type { ClassId, GameEvent } from '../core/state';
 import type { RunState } from '../game/run';
 import { Session } from '../game/session';
-import { dailyScore, loadable } from '../game/run';
+import { dailyScore, dailyZone, loadable } from '../game/run';
 import { joinRoom, loadRun, submitDaily, topDaily } from '../net/transport';
 import { readSnapshot } from '../game/snapshot';
 import { addLog, combatScreen } from './combat';
 import { esc, mine, params, randomText, store, today, ui } from './ctx';
 import { BAG_SIZE, PRICE } from '../core/items/items';
+import { recordArchive } from '../game/archive';
 import { buyPerk, masteryOf, meta, myNemesis, myTeam, openRoutes, removeChampion, saveChampion, saveMeta, toggleTeam } from '../game/meta';
 import { currentAccount, fetchTeam, restoreAccount, signIn, signOut, signUp } from '../net/account';
 import { addFriend, invite, removeFriend, setRoom, socialHandlers } from '../net/social';
@@ -76,6 +77,7 @@ async function enter(code: string, isHost: boolean, local: boolean, resume = fal
   }
   let wasMyTurn = false;
   session.onChange = (ev) => {
+    recordArchive(session.run, ui.myId, ev);
     addLog(ev);
     playEvents(ev);
     const now = session.isMyTurn();
@@ -124,7 +126,7 @@ function render(events: GameEvent[]): void {
   if (ui.mapOpen && run && !run.arena) ui.root.insertAdjacentHTML('beforeend', mapModal(run));
   if (want === 'end' && run && run.daily && s.isHost && run.heroes.length) {
     const k = `${run.code}:${run.daily}:${run.zone}:${run.step}:${run.phase}`;
-    if (k !== submitted) { submitted = k; void submitDaily({ day: run.daily, code: run.code, names: run.heroes.map((h) => h.name).join(', ').slice(0, 60), players: run.heroes.length, score: dailyScore(run), won: run.phase === 'won', zone: Math.min(2, run.zone) }); }
+    if (k !== submitted) { submitted = k; void submitDaily({ day: run.daily, code: run.code, names: run.heroes.map((h) => h.name).join(', ').slice(0, 60), players: run.heroes.length, score: dailyScore(run), won: run.phase === 'won', zone: dailyZone(run) }); }
   }
 }
 let submitted = '';
@@ -202,6 +204,10 @@ document.addEventListener('click', (e) => {
     case 'drop': s?.act({ a: 'drop', idx: Number(id) }); ui.selItem = ''; break;
     case 'buy': s?.act({ a: 'buy', idx: Number(id) }); sfx.coin(); break;
     case 'potion': s?.act({ a: 'potion' }); break;
+    case 'arccat': ui.arcCat = id as typeof ui.arcCat; ui.arcOpen = ''; ui.arcSub = ''; homeScreen(''); break;
+    case 'arcsub': ui.arcSub = id; ui.arcOpen = ''; homeScreen(''); break;
+    case 'arcfilter': ui.arcFilter = id as typeof ui.arcFilter; homeScreen(''); break;
+    case 'arcopen': ui.arcOpen = ui.arcOpen === id ? '' : id; homeScreen(''); break;
     case 'htab':
       ui.homeTab = id as typeof ui.homeTab;
       if (ui.homeTab === 'diario' && ui.board2 !== 'cargando') { ui.board2 = 'cargando'; void topDaily(today()).then((r) => { ui.board2 = r ?? 'error'; if (ui.screen === 'home') homeScreen(''); }); }

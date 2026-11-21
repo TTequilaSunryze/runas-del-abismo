@@ -5,7 +5,7 @@ import { SPELLS } from '../core/classes/spells';
 import type { ClassId } from '../core/state';
 import { POTION_HEAL, POTION_PRICE, eventDef, heroMaxHp, type RunState } from '../game/run';
 import { TURN_SECONDS } from '../game/session';
-import { ACHIEVEMENTS, HALL_SIZE, MASTERY_XP, ecosFor, masteryOf, masteryProgress, masteryText, meta, myTeam, openRoutes, routeNeeds, settle } from '../game/meta';
+import { HALL_SIZE, achievementCount, listedAchievements, MASTERY_XP, ecosFor, masteryOf, masteryProgress, masteryText, meta, myTeam, openRoutes, routeNeeds, settle } from '../game/meta';
 import { currentAccount } from '../net/account';
 import { friendsStatus } from '../net/social';
 import type { Champion } from '../game/run';
@@ -24,9 +24,71 @@ import { REST_OPTIONS, itemByRef, recalStats, restHeal, restText } from '../game
 import { altarScene, chestScene, forgeScene, restScene, shrineScene } from './scenes';
 import { STAT_NAME, type Item } from '../core/items/items';
 import { MAX_SPELL_UPS, UPGRADES } from '../core/upgrades';
+import { BESTIARY, CATEGORIES, CAT_NAME, DOCUMENTED_KILLS, GRIMOIRE, LEVEL_NAME, beastDef, completion, completionAll, entriesOf } from '../game/archive';
+import { ATLAS_CATS, CHRONICLE_CATS, MAX_LV, MASTERED_AT, type AtlasCat, type ChronicleCat } from '../game/archiveData';
+import { ATLAS, ATLAS_DONE_TEXT, ATLAS_NAME, ATLAS_STATE_NAME, CHRONICLES, CHRONICLE_NAME, CHRONICLE_STATE_NAME, atlasEntry, atlasProgress, chronicleEntry, chronicleProgress } from '../game/atlas';
+import { BLESSINGS } from '../core/boonmods';
+import { unitPortraitUrl } from '../render/sprites';
 import { NODE_NAME, heroSpec, upCount, upgradeChoices } from '../game/run';
 
 const RAR = ['ir0', 'ir1', 'ir2', 'ir3'];
+
+/** Atlas (zonas, eventos, pactos, presagios) y Crónicas (historias, secretos, hitos): mismas fichas, estados propios. */
+function archiveExtra(tabs: string): string {
+  const m = meta(), mbar = (v: number, max: number): string => `<span class="mbar"><i style="width:${Math.min(100, Math.round((v / Math.max(1, max)) * 100))}%"></i><b>${Math.min(v, max)}/${max}</b></span>`;
+  const atlas = ui.arcCat === 'atlas';
+  const subs = (atlas ? ATLAS_CATS : CHRONICLE_CATS) as readonly string[];
+  const sub = subs.includes(ui.arcSub) ? ui.arcSub : subs[0]!;
+  const subTabs = subs.map((c) => { const p = atlas ? atlasProgress(m, c as AtlasCat) : chronicleProgress(m, c as ChronicleCat); return `<button class="mini ${sub === c ? 'on' : ''}" data-act="arcsub" data-id="${c}">${(atlas ? ATLAS_NAME : CHRONICLE_NAME)[c as never]} ${p.found}/${p.total}</button>`; }).join('');
+  const cards = atlas ? ATLAS[sub as AtlasCat].map((r) => {
+    const e = atlasEntry(m, r.cat, r.id), open = ui.arcOpen === `${sub}:${r.id}`;
+    const body = e ? `<div class="sm">${esc(r.text)}</div><div class="sm dim">${r.zone ? `Zona ${r.zone === 4 ? 'del Abismo' : r.zone} · ` : ''}encontrado ${e.encounters} vez/veces · completado ${e.completions} (${esc(ATLAS_DONE_TEXT[r.cat])}; ${MASTERED_AT} para dominarlo)</div>` : '<div class="sm">Aún no lo has encontrado.</div>';
+    return `<div class="lootcard ${e ? (e.state === 'mastered' ? 'r3' : 'r1') : 'off'}" data-act="arcopen" data-id="${sub}:${r.id}"><div class="row"><div class="cell big"><span class="emo">${e ? r.icon : '❔'}</span></div><div class="grow"><b>${e ? esc(r.name) : '???'}</b><div class="pill sm">${e ? '' : '🔒 '}${e ? ATLAS_STATE_NAME[e.state] : 'Sin descubrir'}</div></div></div>${open || !e ? body : ''}</div>`;
+  }) : CHRONICLES[sub as ChronicleCat].map((r) => {
+    const e = chronicleEntry(m, r.cat, r.id), st = e?.state ?? 'locked', open = ui.arcOpen === `${sub}:${r.id}`;
+    const shown = r.cat === 'milestones' || st !== 'locked', secretLocked = r.cat === 'secrets' && st === 'locked';
+    const body = secretLocked ? `<div class="sm dim">${esc(r.hint ?? 'Un secreto por descubrir.')}</div>` : st === 'locked' ? '<div class="sm">Aún no la has descubierto.</div>' : `<div class="sm">${esc(r.text)}</div>`;
+    return `<div class="lootcard ${st === 'completed' ? 'r3' : st === 'discovered' ? 'r1' : 'off'}" data-act="arcopen" data-id="${sub}:${r.id}"><div class="row"><div class="grow"><b>${shown ? esc(r.name) : '???'}</b><div class="pill sm">${st === 'locked' ? '🔒 ' : ''}${CHRONICLE_STATE_NAME[st]}</div></div></div>${r.cat === 'milestones' || r.goal > 1 ? mbar(e?.progress ?? 0, r.goal) : ''}${open || st === 'locked' || r.cat !== 'stories' ? body : ''}</div>`;
+  });
+  return `<div class="panel"><div class="row"><h3>📚 Archivo del Abismo</h3><span class="grow"></span></div>
+  <div class="dim sm">${atlas ? 'El mapa de lo que has encontrado: zonas, eventos, pactos y presagios.' : 'Historias que se desvelan al jugar, secretos de combate y hitos de tu colección. Sin recompensas por ahora.'}</div>
+  <div class="tabs">${tabs}</div><div class="row sm">${subTabs}</div><div class="cards c3">${cards.join('')}</div></div>`;
+}
+
+/** Archivo del Abismo: Bestiario, Grimorio y Reliquias con filtros, progreso y fichas (lo no descubierto sale bloqueado). */
+function archivePanel(): string {
+  const tabs = [...CATEGORIES.map((c) => { const p = completion(c); return `<button class="${ui.arcCat === c ? 'on' : ''}" data-act="arccat" data-id="${c}">${CAT_NAME[c]} ${p.found}/${p.total}</button>`; }),
+    `<button class="${ui.arcCat === 'atlas' ? 'on' : ''}" data-act="arccat" data-id="atlas">🗺️ Atlas</button>`, `<button class="${ui.arcCat === 'chronicles' ? 'on' : ''}" data-act="arccat" data-id="chronicles">📜 Crónicas</button>`].join('');
+  if (ui.arcCat === 'atlas' || ui.arcCat === 'chronicles') return archiveExtra(tabs);
+  const cat = ui.arcCat, rows = entriesOf(cat).filter((r) => ui.arcFilter === 'all' || (ui.arcFilter === 'found') === (r.lv > 0));
+  const filters = ([['all', 'Todo'], ['found', 'Descubierto'], ['missing', 'Sin descubrir']] as const).map(([f, n]) => `<button class="mini ${ui.arcFilter === f ? 'on' : ''}" data-act="arcfilter" data-id="${f}">${n}</button>`).join('');
+  const total = completionAll(), cur = completion(cat);
+  const bar = (p: number): string => `<span class="mbar"><i style="width:${p}%"></i><b>${p}%</b></span>`;
+  const card = (r: { id: string; lv: number; seen: number; n: number }): string => {
+    const open = ui.arcOpen === `${cat}:${r.id}`, lvName = LEVEL_NAME[cat][r.lv] ?? '', on = r.lv > 0;
+    let icon = '<span class="emo">❔</span>', name = '???', text = 'Aún no la has encontrado.', extra = '';
+    if (cat === 'bestiary') {
+      const b = beastDef(r.id)!, z = BESTIARY.find((x) => x.id === r.id)!.zone;
+      if (on) { icon = `<img class="parch" width="44" height="44" src="${unitPortraitUrl(r.id, 'enemy')}" alt="">`; name = b.name; text = r.lv >= 2 ? `${b.ai === 'boss' ? 'Jefe' : b.ai === 'pillar' ? 'Pilar' : b.ai === 'ranged' ? 'A distancia' : 'Cuerpo a cuerpo'} · ${b.hp} de vida base · ${b.ap} PA · ${b.mp} PM.` : 'Lo has visto en combate. Derrota a uno para estudiarlo.'; }
+      else text = 'Aún no lo has visto en combate.';
+      extra = `<div class="sm dim">Zona ${z === 4 ? 'del Abismo' : z}${on ? ` · visto en ${r.seen} combate(s) · derrotado ${r.n} vez/veces${r.lv < 3 ? ` (${DOCUMENTED_KILLS} para documentarlo)` : ''}` : ''}</div>`;
+    } else if (cat === 'grimoire') {
+      const g = GRIMOIRE.find((x) => x.id === r.id)!, sp = SPELLS[r.id], bl = BLESSINGS[r.id];
+      if (on) { icon = g.kind === 'spell' && sp ? spellIcon(sp) : `<span class="emo">${bl?.icon ?? '✨'}</span>`; name = sp?.name ?? bl?.name ?? r.id; text = sp?.text ?? bl?.text ?? ''; }
+      else text = g.kind === 'blessing' ? 'Una bendición de clase todavía por descubrir.' : 'Un hechizo todavía por descubrir.';
+      extra = `<div class="sm dim">${g.kind === 'blessing' ? 'Bendición' : 'Hechizo'} · ${CLASSES[g.cls].name}</div>`;
+    } else {
+      const rl = RELICS[r.id]!;
+      if (on) { icon = `<span class="emo">${rl.icon}</span>`; name = rl.name; text = rl.text; } else text = 'Una reliquia todavía por encontrar.';
+      extra = rl.rare && on ? '<div class="sm dim">Rara</div>' : '';
+    }
+    return `<div class="lootcard ${on ? (r.lv >= (cat === 'bestiary' ? 3 : MAX_LV[cat]) ? 'r3' : 'r1') : 'off'}" data-act="arcopen" data-id="${cat}:${r.id}"><div class="row"><div class="cell big">${icon}</div><div class="grow"><b>${esc(name)}</b><div class="pill sm">${on ? '' : '🔒 '}${esc(lvName)}</div></div></div>${open || !on ? `<div class="sm">${esc(text)}</div>${extra}` : ''}</div>`;
+  };
+  return `<div class="panel"><div class="row"><h3>📚 Archivo del Abismo</h3><span class="grow"></span><b class="pill">${total.pct}% · ${total.found}/${total.total}</b></div>
+  <div class="dim sm">Lo que descubres en tus partidas se guarda aquí para siempre. Sin recompensas por ahora: es tu registro de la expedición.</div>${bar(total.pct)}
+  <div class="tabs">${tabs}</div><div class="row sm"><span class="dim">${CAT_NAME[cat]}: ${cur.pct}%</span><span class="grow"></span>${filters}</div>
+  <div class="cards c3">${rows.map(card).join('') || '<div class="dim sm">Nada con este filtro.</div>'}</div></div>`;
+}
 
 function metaPanel(): string {
   const m = meta();
@@ -38,11 +100,12 @@ function metaPanel(): string {
       <button class="pri" data-act="perk" data-id="${p.id}" ${full || m.ecos < c ? 'disabled' : ''}>${full ? 'Máximo' : `Mejorar · ${c} ✨`}</button></div>`; }).join('')}</div></div>`;
   }
   if (ui.homeTab === 'logros') {
-    return `<div class="panel"><div class="row"><h3>Logros</h3><span class="grow"></span><span class="dim sm">${m.achievements.length}/${ACHIEVEMENTS.length}</span></div>
+    return `<div class="panel"><div class="row"><h3>Logros</h3><span class="grow"></span><span class="dim sm">${achievementCount(m)}</span></div>
     <div class="dim sm">Partidas: ${m.stats.runs} · Victorias: ${m.stats.wins} · Bajas: ${m.stats.kills} · Jefes: ${m.stats.bosses} · Ascensión máxima: ${m.maxAsc}</div>
-    <div class="cards c2">${ACHIEVEMENTS.map((a) => { const on = m.achievements.includes(a.id);
+    <div class="cards c2">${listedAchievements(m).map((a) => { const on = m.achievements.includes(a.id);
       return `<div class="lootcard ${on ? 'r3' : 'off'}"><b>${on ? '🏆' : '🔒'} ${esc(a.name)}</b><div class="sm">${esc(a.text)}</div><div class="sm dim">${[a.ecos ? `+${a.ecos} ✨` : ''].filter(Boolean).join(' · ') || ' '}</div></div>`; }).join('')}</div></div>`;
   }
+  if (ui.homeTab === 'archivo') return archivePanel();
   if (ui.homeTab === 'clases') {
     return `<div class="panel"><h3>Maestría de clase</h3><div class="dim sm">Jugar con una clase le da experiencia de maestría (más cuanto más lejos llegues y más alta sea la ascensión). Cada nivel abre rutas y ventajas de esa clase.</div>
     <div class="cards c2">${PLAYABLE.map((id) => { const c = CLASSES[id], { lv } = masteryProgress(id);
@@ -86,7 +149,7 @@ function metaPanel(): string {
     return `<div class="panel"><h3>Reto diario · ${day}</h3><div class="dim sm">Misma semilla para todo el mundo, ascensión 3 y dos modificadores. Para jugarlo, créalo en una sala marcando “Reto diario”.</div>
     <div class="cards c2">${d.mods.map((id) => { const mod = DAILY_MODS.find((x) => x.id === id)!; return `<div class="lootcard r2"><b>${esc(mod.name)}</b><div class="sm">${esc(mod.text)}</div></div>`; }).join('')}</div>
     <div class="lbl">Clasificación de hoy</div>
-    ${ui.board2 === 'cargando' ? '<div class="dim">Cargando…</div>' : ui.board2 === 'error' ? '<div class="bad sm">No se pudo cargar la clasificación.</div>' : rows.length ? `<div class="rank">${rows.map((r, i) => `<div class="row"><b>${i + 1}.</b><span class="grow">${esc(r.names)} <span class="dim sm">(${r.players}J)</span></span><span class="${r.won ? 'good' : 'dim'} sm">${r.won ? 'Victoria' : `Zona ${r.zone + 1}`}</span><b class="pill">${r.score}</b></div>`).join('')}</div>` : '<div class="dim sm">Nadie ha jugado todavía hoy. ¡Sé el primero!</div>'}</div>`;
+    ${ui.board2 === 'cargando' ? '<div class="dim">Cargando…</div>' : ui.board2 === 'error' ? '<div class="bad sm">No se pudo cargar la clasificación.</div>' : rows.length ? `<div class="rank">${rows.map((r, i) => `<div class="row"><b>${i + 1}.</b><span class="grow">${esc(r.names)} <span class="dim sm">(${r.players}J)</span></span><span class="${r.won ? 'good' : 'dim'} sm">${r.won ? 'Victoria' : `Zona ${r.zone}`}</span><b class="pill">${r.score}</b></div>`).join('')}</div>` : '<div class="dim sm">Nadie ha jugado todavía hoy. ¡Sé el primero!</div>'}</div>`;
   }
   return '';
 }
@@ -113,7 +176,7 @@ function reconnectBanner(): string {
 export function homeScreen(msg: string): void {
   const host = JSON.parse(store.get('rda_host') ?? 'null') as { code: string } | null;
   const m = meta();
-  const tabs: Array<[typeof ui.homeTab, string]> = [['jugar', '⚔️ Jugar'], ['mejoras', `✨ Mejoras (${m.ecos})`], ['clases', '🎓 Maestría'], ['logros', `🏆 Logros ${m.achievements.length}/${ACHIEVEMENTS.length}`], ['salon', `🏟️ Salón y duelos`], ['diario', '📅 Reto diario'], ['amigos', `👥 Amigos${currentAccount() ? ` (${friendsStatus().filter((f) => f.online).length}/${m.friends.length})` : ''}`], ['cuenta', currentAccount() ? `👤 ${esc(currentAccount()!.name)}` : '👤 Cuenta']];
+  const tabs: Array<[typeof ui.homeTab, string]> = [['jugar', '⚔️ Jugar'], ['mejoras', `✨ Mejoras (${m.ecos})`], ['clases', '🎓 Maestría'], ['logros', `🏆 Logros ${achievementCount(m)}`], ['archivo', `📚 Archivo ${completionAll().pct}%`], ['salon', `🏟️ Salón y duelos`], ['diario', '📅 Reto diario'], ['amigos', `👥 Amigos${currentAccount() ? ` (${friendsStatus().filter((f) => f.online).length}/${m.friends.length})` : ''}`], ['cuenta', currentAccount() ? `👤 ${esc(currentAccount()!.name)}` : '👤 Cuenta']];
   ui.root.innerHTML = `<div class="home"><div class="row"><span class="grow"></span>${volumeControl()}</div><h1>RUNAS DEL ABISMO</h1><p class="dim">RPG táctico por turnos · cooperativo de 1 a 4 jugadores · 3 zonas</p>
   ${msg ? `<p class="bad">${esc(msg)}</p>` : ''}
   ${reconnectBanner()}
@@ -289,7 +352,7 @@ export function endScreen(): void {
     ${res?.asc ? `<div class="good">🔓 Ascensión ${res.asc} desbloqueada: la próxima partida puede ser más difícil y dar más ecos.</div>` : ''}
     ${res?.achievements.length ? res.achievements.map((a) => `<div class="lootcard r3"><b>🏆 ${esc(a.name)}</b> <span class="sm">${esc(a.text)}</span><div class="sm good">${[a.ecos ? `+${a.ecos} ✨` : ''].filter(Boolean).join(' · ')}</div></div>`).join('') : ''}
     ${res ? `<div class="row sm"><b>🎓 Maestría de ${CLASSES[res.mastery.cls].name}</b><span class="good">+${res.mastery.xp} exp</span><span class="grow"></span><span class="pill">Nivel ${res.mastery.after}/5</span></div>${res.mastery.after > res.mastery.before ? Array.from({ length: res.mastery.after - res.mastery.before }, (_, k) => res.mastery.before + k).map((i) => `<div class="good">🔓 ${esc(masteryText(res.mastery.cls, i))}</div>`).join('') : `<div class="dim sm">${MASTERY_XP[res.mastery.after] ? `Faltan ${MASTERY_XP[res.mastery.after]! - res.mastery.total} de experiencia para el nivel ${res.mastery.after + 1}: ${esc(masteryText(res.mastery.cls, res.mastery.after))}` : 'Maestría máxima.'}</div>`}${masteryBar(res.mastery.cls)}` : ''}
-    <div class="dim sm">Gasta tus ecos en <b>Mejoras</b> (pantalla de inicio): vida, oro y re-tiradas permanentes.</div></div>
+    <div class="dim sm">Gasta tus ecos en <b>Mejoras</b> (pantalla de inicio): vida, oro, botines y curación permanentes.</div></div>
   <div class="panel"><h3>Resumen del grupo</h3>${run.heroes.map((h, i) => `<div class="row sm"><b class="p${i % 4}">${esc(h.name)}</b><span class="dim">${CLASSES[h.cls].name}</span><span class="grow"></span><span>⚔️ ${h.stats.dmg} (${Math.round((h.stats.dmg / total) * 100)}%)</span><span>☠️ ${h.stats.kills}</span><span>✚ ${h.stats.heal}</span><span class="${h.stats.falls ? 'bad' : 'good'}">💀 ${h.stats.falls}</span></div>`).join('')}</div>
   ${myHero ? `<div class="panel"><div class="row"><div><b>🏟️ Salón de héroes</b><div class="dim sm">Guarda a ${esc(myHero.name)} tal como está para tus duelos 3 contra 3 y para que vuelva como Némesis.</div></div><span class="grow"></span><button data-act="champsave" ${saved ? 'disabled' : ''}>${saved ? '✔ Guardado' : 'Guardar en el Salón'}</button></div></div>` : ''}
   <div class="row">${s.isHost ? '<button class="pri" data-act="again">⚔️ Jugar otra partida</button>' : '<span class="dim sm">Esperando al anfitrión para otra partida…</span>'}<button data-act="home">Volver al inicio</button></div></div>`);

@@ -4,7 +4,7 @@ import { FEATURES, schoolOf } from '../core/tuning';
 import { isMuted, musicVolume } from '../audio/sfx';
 import { CLASS_PASSIVE, CLASSES, findRoute } from '../core/classes/classes';
 import { SPELLS } from '../core/classes/spells';
-import { BAG_SIZE, PRICE, RARITY_NAME, SLOTS, SLOT_NAME, STAT_NAME, statDiff, statsText, type Item, type Slot, type StatKey } from '../core/items/items';
+import { BAG_SIZE, PRICE, RARITY_NAME, SLOTS, SLOT_NAME, STAT_NAME, statDiff, statShown, statsText, type Item, type Slot, type StatKey } from '../core/items/items';
 import { RELICS } from '../content/relics';
 import { MAX_BOONS, PATRONS, patronBonus, patronOf } from '../content/boons';
 import { BLESSINGS, BOON_MODS } from '../core/boonmods';
@@ -50,14 +50,14 @@ export function diffHtml(it: Item, h: HeroSave): string {
   if (old === it) return '';
   if (!old) return '<div class="good sm">Ranura libre: todo es mejora</div>';
   const d = statDiff(it.stats, old.stats);
-  const keys = Object.keys(d) as StatKey[];
+  const keys = (Object.keys(d) as StatKey[]).filter(statShown);
   if (!keys.length) return '<div class="dim sm">Igual que lo que llevas</div>';
   return `<div class="sm"><span class="dim">Frente a ${esc(old.name)}:</span><br>${keys.map((k) => `<span class="${d[k]! > 0 ? 'good' : 'bad'}">${d[k]! > 0 ? '+' : ''}${d[k]} ${STAT_NAME[k]}</span>`).join('<br>')}</div>`;
 }
 
 export function itemHtml(it: Item, withIcon = false): string {
   const aff = it.affixes?.length
-    ? it.affixes.map((x) => `<div class="sm affix"><span class="dim">${x.kind === 'prefix' ? 'Prefijo' : 'Sufijo'} · ${esc(x.name)}:</span> <span class="good">+${x.value} ${STAT_NAME[x.stat]}</span></div>`).join('')
+    ? it.affixes.filter((x) => statShown(x.stat)).map((x) => `<div class="sm affix"><span class="dim">${x.kind === 'prefix' ? 'Prefijo' : 'Sufijo'} · ${esc(x.name)}:</span> <span class="good">+${x.value} ${STAT_NAME[x.stat]}</span></div>`).join('')
     : `<div class="sm">${statsText(it.stats).split(' · ').join('<br>')}</div>`;
   return `<div class="row">${withIcon ? `<span class="cell ${RAR[it.rarity]}" style="width:44px;height:44px">${itemIcon(it)}</span>` : ''}<div><b class="${RAR[it.rarity]}">${esc(it.name)}</b><div class="dim sm">${SLOT_NAME[it.slot]} · <span class="${RAR[it.rarity]}">${RARITY_NAME[it.rarity]}</span></div></div></div>${aff}${it.passive ? `<div class="sm ir3">★ ${esc(it.passive.text)}</div>` : ''}${it.lore ? `<i class="dim sm">${esc(it.lore)}</i>` : ''}`;
 }
@@ -144,7 +144,7 @@ export function bossRow(run: RunState): string {
   if (!h?.bossOffer) return '';
   return `<div class="panel loot boon"><div class="row"><h3>👑 Recompensa del jefe: elige una</h3><span class="grow"></span><span class="dim sm">Aprendidos: ${h.boons.length}/${MAX_BOONS}</span></div>
   <div class="dim sm">Elige uno de estos hechizos nuevos de ${esc(CLASSES[h.cls].name)}.</div>
-  <div class="cards c3">${h.bossOffer.map((o, i) => bossCard(h, o, i)).join('')}</div></div>`;
+  <div class="cards c${Math.min(4, h.bossOffer.length)}">${h.bossOffer.map((o, i) => bossCard(h, o, i)).join('')}</div></div>`;
 }
 
 /** Modal de victoria: botín en iconos con tooltip, recompensa del jefe, resumen y «Continuar». */
@@ -190,7 +190,7 @@ export function boonRow(run: RunState): string {
   const allSpells = h.boonOffer.spells.every((x) => SPELLS[x]);
   return `<div class="panel loot boon"><div class="row"><h3>${p.icon} ${allSpells ? 'Hechizo nuevo' : 'Hechizo nuevo o bendición'}: elige uno</h3><span class="grow"></span><span class="dim sm">Aprendidos: ${h.boons.length}/${MAX_BOONS}</span></div>
   <div class="dim sm">${p.noSet ? `Hechizos únicos y bendiciones de ${esc(CLASSES[h.cls].name)}, al azar.` : `Mejoras de tus hechizos de ${esc(CLASSES[h.cls].name.toLowerCase())} o hechizos nuevos. Con 2 de ${esc(p.name)}: ${esc(p.twoText)} · con 3: ${esc(p.threeText)}.${counts[p.id] ? ` Ya tienes ${counts[p.id]}.` : ''}`}</div>
-  <div class="cards c3">${h.boonOffer.spells.map(card).join('')}</div>
+  <div class="cards c${Math.min(4, h.boonOffer.spells.length)}">${h.boonOffer.spells.map(card).join('')}</div>
   </div>`;
 }
 

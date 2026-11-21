@@ -49,7 +49,7 @@ export const ZONA2_EVENTS: EventDef[] = [
     text: 'Un nido enorme cuelga entre dos árboles. Dentro brilla el ajuar de alguien que no tuvo suerte.',
     options: [
       { label: 'Saquearlo', hint: 'Cada uno gana una reliquia común; el próximo combate tiene presagio de Ciénaga.', apply: (run) => { for (const h of run.heroes) giveRelic(run, h, false); run.nextOmen = 'pantano'; return 'Salís pegajosos y con los bolsillos llenos.'; } },
-      { label: 'Quemarlo', hint: 'Todos: +15% de resistencia al veneno y +1 de daño.', apply: (run) => { for (const h of run.heroes) { boon(h, 'resPoison', 15); boon(h, 'power', 1); } return 'Arde rápido. Las arañas, también.'; } },
+      { label: 'Quemarlo', hint: 'Todos: +1 de daño.', apply: (run) => { for (const h of run.heroes) { boon(h, 'resPoison', 15); boon(h, 'power', 1); } return 'Arde rápido. Las arañas, también.'; } },
     ],
   },
   {

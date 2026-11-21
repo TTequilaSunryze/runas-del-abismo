@@ -1,0 +1,211 @@
+// Archivo del Abismo · catálogos (derivados del contenido real, sin duplicarlo), consultas y registro automático.
+import { BLESSINGS } from '../core/boonmods';
+import { CLASSES, PLAYABLE } from '../core/classes/classes';
+import { SPELLS } from '../core/classes/spells';
+import type { ClassId, GameEvent } from '../core/state';
+import { ZONA1_ENEMIES } from '../content/zona1/enemies';
+import { ZONA2_ENEMIES } from '../content/zona2/enemies';
+import { ZONA3_ENEMIES } from '../content/zona3/enemies';
+import { ZONA4_ENEMIES } from '../content/zona4/enemies';
+import { patronsOf } from '../content/boons';
+import { RELICS } from '../content/relics';
+import { DOCUMENTED_KILLS, LV, emptyArchive, isDiscovered, levelOf, raise, type Archive, type ArchiveCat } from './archiveData';
+import { LIMITE_PCT, MILESTONE_CATS, MILESTONE_PCTS, RELAMPAGO_ROUNDS, registerAtlasDiscovery, registerChronicleProgress } from './atlas';
+import { meta, saveMeta } from './meta';
+import { heroSpec, type RunState } from './run';
+
+export { DOCUMENTED_KILLS, LV, isDiscovered, levelOf, type Archive, type ArchiveCat } from './archiveData';
+
+export const CATEGORIES: ArchiveCat[] = ['bestiary', 'grimoire', 'relics'];
+export const CAT_NAME: Record<ArchiveCat, string> = { bestiary: 'Bestiario', grimoire: 'Grimorio', relics: 'Reliquias' };
+/** Nombre de cada nivel según la categoría (el 0 es siempre «sin descubrir»). */
+export const LEVEL_NAME: Record<ArchiveCat, string[]> = {
+  bestiary: ['Desconocido', 'Descubierto', 'Estudiado', 'Documentado'],
+  grimoire: ['Desconocido', 'Descubierto', 'Utilizado'],
+  relics: ['No descubierta', 'Descubierta'],
+};
+
+// ---------- catálogos ----------
+export interface BeastRef { id: string; zone: number }
+const ZONE_ENEMIES = [ZONA1_ENEMIES, ZONA2_ENEMIES, ZONA3_ENEMIES, ZONA4_ENEMIES];
+/** Enemigos del juego, por zona (1-4). Los aliados y los héroes convertidos en élite no están. */
+export const BESTIARY: BeastRef[] = ZONE_ENEMIES.flatMap((z, i) => Object.keys(z).map((id) => ({ id, zone: i + 1 })));
+const BEAST_IDS = new Set(BESTIARY.map((b) => b.id));
+export const beastDef = (id: string) => ZONE_ENEMIES.map((z) => z[id]).find(Boolean);
+
+export interface GrimoireRef { id: string; kind: 'spell' | 'blessing'; cls: ClassId }
+/** Hechizos de las clases jugables (base, kits y hechizos de patrón) y sus bendiciones. Las mejoras de hechizo no son entradas. */
+export const GRIMOIRE: GrimoireRef[] = (() => {
+  const out = new Map<string, GrimoireRef>();
+  for (const c of PLAYABLE) {
+    const def = CLASSES[c];
+    const ids = [...def.base, ...def.routes.flatMap((r) => r.spells)];
+    for (const id of ids) if (SPELLS[id] && !out.has(id)) out.set(id, { id, kind: 'spell', cls: c });
+  }
+  for (const [id, sp] of Object.entries(SPELLS)) if (sp.route === 'boon' && !out.has(id) && PLAYABLE.some((c) => patronSpells(c).has(id))) out.set(id, { id, kind: 'spell', cls: PLAYABLE.find((c) => patronSpells(c).has(id))! });
+  for (const b of Object.values(BLESSINGS)) if ((PLAYABLE as string[]).includes(b.cls)) out.set(b.id, { id: b.id, kind: 'blessing', cls: b.cls as ClassId });
+  return [...out.values()];
+})();
+const GRIM_IDS = new Set(GRIMOIRE.map((g) => g.id));
+function patronSpells(c: ClassId): Set<string> { return new Set(patronsOf(c).flatMap((p) => p.spells)); }
+
+export const RELIC_IDS = Object.keys(RELICS);
+
+export const catalogIds = (cat: ArchiveCat): string[] => (cat === 'bestiary' ? BESTIARY.map((b) => b.id) : cat === 'grimoire' ? GRIMOIRE.map((g) => g.id) : RELIC_IDS);
+
+// ---------- acceso al Archivo guardado ----------
+/** Archivo del jugador, ya sembrado con los datos antiguos del Salón la primera vez. */
+export function archive(): Archive {
+  const m = meta();
+  const a = (m.archive ??= emptyArchive());
+  if (!a.seeded) {
+    a.seeded = true;
+    // migración: un héroe guardado en el Salón demuestra que su clase se ha jugado, así que sus hechizos de base y de kit ya se conocían
+    for (const c of m.hall) {
+      const def = CLASSES[c.cls];
+      if (!def) continue;
+      for (const id of [...def.base, ...def.routes.filter((r) => (c.routes ?? []).includes(r.id)).flatMap((r) => r.spells)]) if (GRIM_IDS.has(id)) raise(a, 'grimoire', id, LV.found, { seen: 1 });
+    }
+  }
+  return a;
+}
+
+// ---------- API pública del Archivo ----------
+/** Descubre una entrada (si ya la tenías no cambia nada). Devuelve true si es nueva. */
+export function discover(cat: ArchiveCat, id: string): boolean {
+  if (!catalogIds(cat).includes(id) || isDiscovered(archive(), cat, id)) return false;
+  raise(archive(), cat, id, LV.found, { seen: 1 });
+  saveMeta();
+  return true;
+}
+/** Sube el nivel de descubrimiento (nunca lo baja ni pasa del máximo de la categoría). Devuelve true si cambió. */
+export function setLevel(cat: ArchiveCat, id: string, lv: number): boolean {
+  if (!catalogIds(cat).includes(id) || lv <= levelOf(archive(), cat, id)) return false;
+  raise(archive(), cat, id, lv);
+  saveMeta();
+  return true;
+}
+export const discovered = (cat: ArchiveCat, id: string): boolean => isDiscovered(archive(), cat, id);
+export const levelFor = (cat: ArchiveCat, id: string): number => levelOf(archive(), cat, id);
+
+export interface Progress { found: number; total: number; pct: number }
+const prog = (found: number, total: number): Progress => ({ found, total, pct: total ? Math.round((found / total) * 100) : 0 });
+/** Porcentaje de colección de una categoría (entradas descubiertas sobre las del catálogo actual). */
+export function completion(cat: ArchiveCat): Progress {
+  const a = archive(), ids = catalogIds(cat);
+  return prog(ids.filter((id) => isDiscovered(a, cat, id)).length, ids.length);
+}
+export function completionAll(): Progress {
+  const ps = CATEGORIES.map(completion);
+  return prog(ps.reduce((n, p) => n + p.found, 0), ps.reduce((n, p) => n + p.total, 0));
+}
+
+export interface ArchiveRow { id: string; lv: number; seen: number; n: number }
+/** Entradas de una categoría (todas las del catálogo, descubiertas o no) con su estado guardado. */
+export function entriesOf(cat: ArchiveCat): ArchiveRow[] {
+  const a = archive();
+  return catalogIds(cat).map((id) => ({ id, lv: a[cat][id]?.lv ?? 0, seen: a[cat][id]?.seen ?? 0, n: a[cat][id]?.n ?? 0 }));
+}
+
+// ---------- registro automático ----------
+interface Snap { k: string; units: Map<number, { kind: string; team: string; owner: string | null }>; fight: number; zone: number; kind: string; omen: string | null; round: number; myAlive: boolean }
+let snap: Snap | null = null;
+const combatKey = (run: RunState): string => `${run.code}:${run.zone}:${run.step}:${run.fight}`;
+/** Identifica la expedición (código de sala + jefes sorteados) para no contar dos veces lo mismo en ella. */
+const runId = (run: RunState): string => `${run.code}:${run.bossPick.join('')}`;
+
+/**
+ * Registra en el Archivo lo que ve el jugador `myId` en este estado de la partida: reliquias y hechizos que tiene, enemigos
+ * que aparecen y caen, hechizos que lanza y, en el Atlas y las Crónicas, zonas, eventos, pactos, presagios, historias,
+ * secretos de combate e hitos de colección. Es idempotente (llamarla otra vez con el mismo estado y eventos no cambia nada,
+ * ni tras recargar la página) y nunca lanza: un fallo aquí no debe interrumpir la partida. No da recompensas.
+ */
+export function recordArchive(run: RunState | null, myId: string, events: readonly GameEvent[] = []): boolean {
+  try {
+    const me = run?.heroes.find((h) => h.owner === myId);
+    if (!run || !me || run.arena) return false;
+    const m = meta(), a = archive(), id = runId(run);
+    let changed = false;
+    const atlas = (...args: Parameters<typeof registerAtlasDiscovery> extends [unknown, ...infer R] ? R : never): void => { changed = registerAtlasDiscovery(m, ...args) || changed; };
+    const chron = (...args: Parameters<typeof registerChronicleProgress> extends [unknown, ...infer R] ? R : never): void => { changed = registerChronicleProgress(m, ...args) || changed; };
+    for (const r of me.relics) if (RELICS[r] && !isDiscovered(a, 'relics', r)) changed = raise(a, 'relics', r, LV.found, { seen: 1 }) || changed;
+    const owned = [...heroSpec(me).spells.map((sp) => sp.id), ...me.boons];
+    for (const g of owned) if (GRIM_IDS.has(g) && !isDiscovered(a, 'grimoire', g)) changed = raise(a, 'grimoire', g, LV.found, { seen: 1 }) || changed;
+
+    // Atlas y Crónicas de la expedición
+    const zid = `z${run.zone + 1}`;
+    atlas('zones', zid, 'unlocked', `${id}:${run.zone}`);
+    chron('stories', `zona_${run.zone + 1}`, 1, `${id}:${run.zone}:in`);
+    if ((PLAYABLE as string[]).includes(me.cls)) chron('stories', `clase_${me.cls}`, 1, `${id}:play`);
+    if (run.pact) atlas('pacts', run.pact, 'unlocked', id);
+    if (run.phase === 'event' && run.event) {
+      atlas('events', run.event.id, 'unlocked', `${id}:${run.zone}:${run.step}`);
+      if (run.event.result) atlas('events', run.event.id, 'explored', `${id}:${run.zone}:${run.step}`);
+    }
+    if (run.phase === 'won') { chron('stories', 'final_victoria', 1, id); chron('stories', `clase_${me.cls}`, 2, `${id}:won`); }
+    if (run.phase === 'lost') chron('stories', 'final_derrota', 1, id);
+
+    if (run.combat) {
+      const k = combatKey(run);
+      if (snap?.k !== k) snap = { k, units: new Map(), fight: run.fight, zone: run.zone, kind: run.kind, omen: run.omen, round: 0, myAlive: true };
+      if (a.cur?.k !== k) { a.cur = { k, seen: [], dead: [], done: false, down: 0, low: 100 }; changed = true; }
+      snap.round = run.combat.round; snap.omen = run.omen ?? snap.omen; snap.myAlive = false;
+      for (const u of run.combat.units) {
+        snap.units.set(u.id, { kind: u.kind, team: u.team, owner: u.owner });
+        if (u.team === 'enemy' && BEAST_IDS.has(u.kind) && !a.cur.seen.includes(u.kind)) { a.cur.seen.push(u.kind); raise(a, 'bestiary', u.kind, LV.found, { seen: 1 }); changed = true; }
+        if (u.team === 'hero' && u.owner === myId && u.hp > 0) {
+          snap.myAlive = true;
+          const pct = Math.floor((u.hp / Math.max(1, u.maxHp)) * 100);
+          if (pct < (a.cur.low ?? 100)) { a.cur.low = pct; changed = true; }
+        }
+      }
+      if (run.omen) atlas('omens', run.omen, 'unlocked', `${id}:${run.fight}`);
+    }
+    if (snap && a.cur?.k === snap.k) {
+      for (const e of events) {
+        if (e.t === 'death') {
+          const u = snap.units.get(e.unit);
+          if (!u || a.cur.dead.includes(e.unit)) continue;
+          if (u.team === 'hero') { if (!(u.kind in CLASSES)) continue; a.cur.dead.push(e.unit); a.cur.down = (a.cur.down ?? 0) + 1; changed = true; continue; }
+          if (u.team !== 'enemy' || !BEAST_IDS.has(u.kind)) continue;
+          a.cur.dead.push(e.unit);
+          raise(a, 'bestiary', u.kind, LV.studied, { n: 1 });
+          if ((a.bestiary[u.kind]?.n ?? 0) >= DOCUMENTED_KILLS) raise(a, 'bestiary', u.kind, LV.documented);
+          changed = true;
+        } else if (e.t === 'cast' && GRIM_IDS.has(e.spell) && snap.units.get(e.unit)?.owner === myId) {
+          changed = raise(a, 'grimoire', e.spell, LV.studied) || changed;
+        }
+      }
+      // el combate acaba en victoria cuando desaparece y la cuenta de combates ganados sube en uno
+      if (!run.combat && !a.cur.done && run.fight === snap.fight + 1) {
+        a.cur.done = true; changed = true;
+        const fid = `${id}:${snap.fight}`;
+        if (snap.omen) atlas('omens', snap.omen, 'explored', fid);
+        if (snap.kind === 'boss') {
+          atlas('zones', `z${snap.zone + 1}`, 'explored', `${id}:${snap.zone}`);
+          chron('stories', `zona_${snap.zone + 1}`, 2, `${id}:${snap.zone}:boss`);
+          if (run.pact) atlas('pacts', run.pact, 'explored', `${id}:${snap.zone}`);
+        }
+        if ((snap.kind === 'elite' || snap.kind === 'boss') && !a.cur.down) chron('secrets', 'intocables', 1, fid);
+        if (snap.round <= RELAMPAGO_ROUNDS) chron('secrets', 'relampago', 1, fid);
+        if ((a.cur.low ?? 100) < LIMITE_PCT && snap.myAlive) chron('secrets', 'al_limite', 1, fid);
+      }
+    }
+    if (changed) { evaluateMilestones(); saveMeta(); }
+    return changed;
+  } catch {
+    return false;
+  }
+}
+
+/** Hitos de colección: avance = % descubierto de Bestiario, Grimorio y Reliquias. */
+export function evaluateMilestones(): boolean {
+  let changed = false;
+  for (const c of MILESTONE_CATS) {
+    const pct = completion(c).pct;
+    for (const p of MILESTONE_PCTS) if (pct >= 1) changed = registerChronicleProgress(meta(), 'milestones', `${c}_${p}`, pct) || changed;
+  }
+  return changed;
+}
+/** Solo para pruebas: olvida el estado de seguimiento en memoria. */
+export const resetArchiveTracking = (): void => { snap = null; };

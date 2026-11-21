@@ -3,7 +3,10 @@
 import { CLASSES } from '../core/classes/classes';
 import { MAX_ASC, MOD_ECOS, PERKS, perkLevel, type Perks } from '../content/modes';
 import type { ClassId } from '../core/state';
+import { ACT_ROOMS } from './map';
 import type { Champion, HeroSave, RunState } from './run';
+import { mergeArchive, normalizeArchive, type Archive } from './archiveData';
+export type { Archive, AtlasEntryRecord, ChronicleEntryRecord, AtlasCat, AtlasState, ChronicleCat, ChronicleState } from './archiveData';
 
 export interface Meta {
   v: 1;
@@ -29,17 +32,19 @@ export interface Meta {
   acct: string | null;
   /** nombres de cuenta de mis amigos */
   friends: string[];
+  /** Archivo del Abismo (bestiario, grimorio, reliquias). Opcional: las Meta anteriores no lo tienen. */
+  archive?: Archive;
 }
 
 const KEY = 'rda_meta';
-const fresh = (): Meta => ({ v: 1, ecos: 0, perks: {}, unlocked: [], maxAsc: 0, achievements: [], stats: { runs: 0, wins: 0, kills: 0, bosses: 0, bestZone: 0 }, seenTutorial: false, combats: 0, claimed: [], mastery: {}, hall: [], team: [], t: 0, acct: null, friends: [] });
+const fresh = (): Meta => ({ v: 1, ecos: 0, perks: {}, unlocked: [], maxAsc: 0, achievements: [], stats: { runs: 0, wins: 0, kills: 0, bosses: 0, bestZone: 0 }, seenTutorial: false, combats: 0, claimed: [], mastery: {}, hall: [], team: [], t: 0, acct: null, friends: [], archive: normalizeArchive(undefined) });
 
 let cache: Meta | null = null;
 export function meta(): Meta {
   if (cache) return cache;
   try {
     const m = JSON.parse(localStorage.getItem(KEY) ?? 'null') as Meta | null;
-    cache = m && m.v === 1 ? { ...fresh(), ...m, stats: { ...fresh().stats, ...m.stats } } : fresh();
+    cache = m && m.v === 1 ? { ...fresh(), ...m, stats: { ...fresh().stats, ...m.stats }, archive: normalizeArchive(m.archive) } : fresh();
     // quien ya jugaba antes de la maestría no empieza de cero
     if (m && m.v === 1 && !m.mastery && cache.stats.runs > 0) {
       for (const c of Object.keys(CLASSES)) cache.mastery[c] = cache.achievements.includes(`clase_${c}`) ? MASTERY_XP[1]! : MASTERY_XP[0]!;
@@ -62,7 +67,7 @@ export function saveMeta(touch = true): void {
 
 /** Sustituye el progreso local (al cargar el de la cuenta). */
 export function replaceMeta(m: Meta): void {
-  cache = { ...fresh(), ...m, stats: { ...fresh().stats, ...m.stats } };
+  cache = { ...fresh(), ...m, stats: { ...fresh().stats, ...m.stats }, archive: normalizeArchive(m.archive) };
   saveMeta(false);
 }
 
@@ -80,6 +85,7 @@ export function mergeMeta(a: Meta, b: Partial<Meta>): Meta {
     stats: maxRec(a.stats, b.stats) as Meta['stats'], seenTutorial: a.seenTutorial || !!b.seenTutorial, combats: Math.max(a.combats, b.combats ?? 0),
     claimed: uniq([...a.claimed, ...(b.claimed ?? [])]).slice(-40), mastery: maxRec(a.mastery, b.mastery), hall: hall.slice(-HALL_SIZE),
     team: (a.team?.length ? a.team : b.team) ?? [], t: Date.now(), acct: a.acct, friends: uniq([...(a.friends ?? []), ...(b.friends ?? [])]).slice(0, 30),
+    archive: mergeArchive(a.archive, b.archive),
   };
 }
 
@@ -108,8 +114,21 @@ export function openRoutes(cls: ClassId, level = masteryOf(cls)): string[] {
   return CLASSES[cls].routes.filter((_r, i) => i <= level).map((r) => r.id);
 }
 export const routeNeeds = (cls: ClassId, route: string): number => Math.max(0, CLASSES[cls].routes.findIndex((r) => r.id === route));
+/**
+ * Salas realmente superadas en la partida. `step` es la capa actual del mapa de la zona (sube al cerrar una sala,
+ * y vuelve a 0 al cambiar de zona), y `trail` se reinicia con cada mapa, así que las zonas ya completadas se
+ * suman por su tamaño fijo: ACT_ROOMS + 1 capas (la última es el jefe) y, en la primera zona, el Altar de Pactos
+ * delante (salvo en la arena). Cada capa cuenta una sola vez: el jefe y el altar son capas como las demás.
+ */
+export function roomsCleared(run: RunState): number {
+  const perZone = ACT_ROOMS + 1, first = perZone + (run.arena ? 0 : 1);
+  const before = run.zone <= 0 ? 0 : first + (run.zone - 1) * perZone;
+  const here = Math.max(0, Math.min(run.step, run.map.length || run.step));
+  return before + here;
+}
+
 export function masteryXpFor(run: RunState): number {
-  const rooms = run.zone * 7 + run.step, bosses = run.flags.filter((f) => f.startsWith('boss_')).length;
+  const rooms = roomsCleared(run), bosses = run.flags.filter((f) => f.startsWith('boss_')).length;
   return Math.round((rooms * 5 + bosses * 25 + (run.phase === 'won' ? 50 : 0)) * (1 + 0.2 * run.asc));
 }
 
@@ -183,9 +202,21 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   classWin('guerrero'), classWin('mago'), classWin('clerigo'), classWin('picaro'), classWin('arquero'), classWin('zorro'), classWin('esferas'), classWin('carcelero'), classWin('acechador'), classWin('barbaro'), classWin('arquitecto'), classWin('pistolero'),
 ];
 
+/**
+ * Logros que se muestran: se ocultan los de clases que no se pueden jugar (CLASSES[x].hidden), salvo que el jugador
+ * ya los tenga. En ACHIEVEMENTS siguen existiendo (y en meta.achievements los ya ganados): solo cambia la lista visible.
+ */
+export function listedAchievements(m: Pick<Meta, 'achievements'> = meta()): AchievementDef[] {
+  return ACHIEVEMENTS.filter((a) => {
+    const cls = a.id.startsWith('clase_') ? CLASSES[a.id.slice(6) as ClassId] : undefined;
+    return !cls?.hidden || m.achievements.includes(a.id);
+  });
+}
+export const achievementCount = (m: Pick<Meta, 'achievements'> = meta()): string => `${listedAchievements(m).filter((a) => m.achievements.includes(a.id)).length}/${listedAchievements(m).length}`;
+
 /** Ecos que gana un jugador al terminar: por salas, jefes y victoria, más por ascensión. */
 export function ecosFor(run: RunState): number {
-  const rooms = run.zone * 7 + run.step;
+  const rooms = roomsCleared(run);
   const bosses = run.flags.filter((f) => f.startsWith('boss_')).length;
   const base = rooms * 4 + bosses * 25 + (won(run) ? 60 : 0);
   return Math.round((base + (run.flags.includes('abyss_won') ? 80 : 0) + (run.abyss ? Math.max(0, run.zone - 2) * 30 : 0)) * (1 + 0.2 * run.asc) * (run.daily ? 1.3 : 1 + MOD_ECOS * run.mods.length));

@@ -339,6 +339,12 @@ export function upgradeChoices(h: HeroSave, id: string): string[] {
   return generic;
 }
 
+/** Opciones que ve cada jugador en las ofertas de hechizos y bendiciones: 3, o 4 con maestría 5 (promesa de MASTERY_TEXT). */
+export const OFFER_BASE = 3;
+export const OFFER_MASTER = 4;
+export const MASTER_LEVEL = 5;
+export const offerSize = (h: Pick<HeroSave, 'mastery'>): number => ((h.mastery ?? 0) >= MASTER_LEVEL ? OFFER_MASTER : OFFER_BASE);
+
 /**
  * Santuario: bendiciones pasivas de la clase (hasta 3 en total). Elige una o rechaza.
  */
@@ -348,7 +354,7 @@ export function offerBoon(run: RunState, h: HeroSave): void {
   const left = mineCls.flatMap((p) => p.spells.filter((id) => !!BLESSINGS[id] && !h.boons.includes(id)).map((id) => ({ p: p.id, id })));
   if (!left.length) return;
   const patron = left[0]!.p;
-  h.boonOffer = { patron, spells: shuffle(run, left.map((x) => x.id)).slice(0, 3) };
+  h.boonOffer = { patron, spells: shuffle(run, left.map((x) => x.id)).slice(0, offerSize(h)) };
 }
 
 /**
@@ -358,12 +364,15 @@ export function offerBoon(run: RunState, h: HeroSave): void {
 export function buildBossOffer(run: RunState, h: HeroSave): BossOption[] {
   const spells = heroSpec(h).spells.filter((sp) => sp.charges === undefined).map((sp) => sp.id);
   const choices = (id: string): string[] => upCount(h, id) >= MAX_SPELL_UPS ? [] : [...upgradeChoices(h, id), ...Object.keys(BOON_MODS).filter((m) => BOON_MODS[m]!.target === id && !h.boons.includes(m) && !(h.ups[id] ?? []).includes(m))];
-  // v12: el jefe ofrece 3 hechizos nuevos de la clase. Si ya no quedan, mejoras de los que tienes; y si tampoco, oro o curación.
-  const out: BossOption[] = shuffle(run, newSpellPool(h)).slice(0, 3).map((id) => ({ kind: 'spell', id }));
-  for (const id of shuffle(run, spells.filter((id) => choices(id).length))) { if (out.length >= 3) break; out.push({ kind: 'up', spell: id, up: pick(run, choices(id)) }); }
-  if (out.length < 3) out.push({ kind: 'gold', amount: 60 + 40 * run.zone });
-  if (out.length < 3) out.push({ kind: 'heal' });
-  while (out.length < 3) out.push({ kind: 'gold', amount: 30 + 20 * run.zone });
+  // v12: el jefe ofrece 3 hechizos nuevos de la clase (4 con maestría 5). Si ya no quedan, mejoras de los que tienes;
+  // y si tampoco, oro o curación hasta las 3 de base. La 4.ª opción de la maestría nunca se rellena con oro o curación:
+  // si no hay un hechizo o una mejora distintos que ofrecer, la oferta se queda en 3 (así no hay duplicados ni relleno).
+  const n = offerSize(h);
+  const out: BossOption[] = shuffle(run, newSpellPool(h)).slice(0, n).map((id) => ({ kind: 'spell', id }));
+  for (const id of shuffle(run, spells.filter((id) => choices(id).length))) { if (out.length >= n) break; out.push({ kind: 'up', spell: id, up: pick(run, choices(id)) }); }
+  if (out.length < OFFER_BASE) out.push({ kind: 'gold', amount: 60 + 40 * run.zone });
+  if (out.length < OFFER_BASE) out.push({ kind: 'heal' });
+  while (out.length < OFFER_BASE) out.push({ kind: 'gold', amount: 30 + 20 * run.zone });
   return out;
 }
 
@@ -1140,6 +1149,9 @@ export function metaAction(run: RunState, owner: string, a: MetaAction): string 
   h.stats.maxGold = Math.max(h.stats.maxGold, h.gold);
   return null;
 }
+
+/** Zona que se envía al ranking del reto diario: la tabla exige 1 a 3 (run.zone empieza en 0 y el Abismo pasa de 2). */
+export const dailyZone = (run: RunState): number => Math.max(1, Math.min(3, run.zone + 1));
 
 /** Puntuación del reto diario. */
 export function dailyScore(run: RunState): number {

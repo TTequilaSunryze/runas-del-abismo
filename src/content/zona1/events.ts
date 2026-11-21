@@ -43,7 +43,7 @@ export const ZONA1_EVENTS: EventDef[] = [
     id: 'cripta', title: 'La Cripta Sellada',
     text: 'Tras una losa agrietada brilla el metal de un ajuar funerario. También se oye algo que respira.',
     options: [
-      { label: 'Romper el sello', hint: 'El próximo combate es una emboscada (+2 enemigos), pero su botín será épico o mejor y con 4 opciones.', apply: (run) => { run.ambush = true; return 'La losa cede. Algo se despierta al otro lado.'; } },
+      { label: 'Romper el sello', hint: 'El próximo combate es una emboscada (+2 enemigos), pero su botín será de élite (mejor calidad).', apply: (run) => { run.ambush = true; return 'La losa cede. Algo se despierta al otro lado.'; } },
       { label: 'Dejarla en paz', hint: 'No ocurre nada.', apply: () => 'Algunos muertos merecen seguir dormidos.' },
     ],
   },
