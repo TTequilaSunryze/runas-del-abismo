@@ -21,6 +21,12 @@ export interface DailyMod {
   id: string;
   name: string;
   text: string;
+  /** riesgo: 1 leve, 2 medio, 3 alto (los originales del reto diario: 2) */
+  tier?: 1 | 2 | 3;
+  /** ecos extra de este modificador (por defecto MOD_ECOS) */
+  ecos?: number;
+  /** modificadores con los que no se puede combinar */
+  excl?: string[];
 }
 
 export const DAILY_MODS: DailyMod[] = [
@@ -35,7 +41,34 @@ export const DAILY_MODS: DailyMod[] = [
   { id: 'sin_descanso', name: 'Sin descanso', text: 'Las hogueras se convierten en combates.' },
   { id: 'jefes', name: 'Tiranos', text: 'Los jefes tienen un 30% más de vida.' },
   { id: 'pobreza', name: 'Pobreza', text: 'Ganáis la mitad de oro.' },
+  // Fase G1: modificadores de expedición
+  { id: 'oscuridad', name: 'Oscuridad profunda', text: 'En el mapa solo se ve qué hay en las 2 capas siguientes; el resto queda en sombra.', tier: 1, ecos: 0.1 },
+  { id: 'ecos_inestables', name: 'Ecos inestables', text: 'Los combates normales dan un 30% menos de oro; élites y jefes, un 50% más.', tier: 1, ecos: 0.05, excl: ['codicia', 'pobreza'] },
+  { id: 'agrietado', name: 'Santuario agrietado', text: 'Los santuarios ofrecen una bendición menos, pero curan un 20% de la vida al entrar.', tier: 1, ecos: 0.1 },
+  { id: 'niebla', name: 'Niebla arcana', text: 'En los combates con presagio, los enemigos tienen +20% de vida.', tier: 1, ecos: 0.1 },
+  { id: 'reforzados', name: 'Enemigos reforzados', text: 'Los enemigos empiezan cada combate con un escudo del 15% de su vida.', tier: 2, ecos: 0.15 },
+  { id: 'maldicion', name: 'Maldición persistente', text: 'El grupo tiene un 10% menos de vida máxima toda la partida; a cambio, cada héroe empieza con una reliquia.', tier: 2, ecos: 0.1, excl: ['cristal'] },
+  { id: 'riesgo', name: 'Riesgo creciente', text: 'Desde la zona 2, los enemigos ganan +12% de vida y +1 de daño por cada zona superada.', tier: 3, ecos: 0.2, excl: ['jefes'] },
 ];
+export const modDef = (id: string): DailyMod | undefined => DAILY_MODS.find((m) => m.id === id);
+/** Ecos extra de un modificador. */
+export const modEcos = (id: string): number => modDef(id)?.ecos ?? MOD_ECOS;
+/** Por qué no se puede añadir `id` a la selección (o null si se puede). */
+export function modConflict(id: string, chosen: readonly string[]): string | null {
+  const d = modDef(id);
+  for (const c of chosen) {
+    if (c === id) continue;
+    const o = modDef(c);
+    if (d?.excl?.includes(c) || o?.excl?.includes(id)) return `Incompatible con ${o?.name ?? c}`;
+  }
+  return null;
+}
+/** Quita de una lista los modificadores desconocidos, repetidos o incompatibles (se queda el primero). */
+export function cleanMods(list: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const m of list) if (modDef(m) && !out.includes(m) && !modConflict(m, out) && out.length < MAX_MODS) out.push(m);
+  return out;
+}
 /** El reto diario solo usa los modificadores originales (para que el ranking sea comparable). */
 export const DAILY_POOL = ['llamas', 'horda', 'codicia', 'cristal', 'frenesi'];
 /** Ecos extra por cada modificador elegido a mano. */

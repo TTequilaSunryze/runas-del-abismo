@@ -2,7 +2,7 @@
 // Es lo que se sincroniza entre jugadores y lo que se guarda.
 import { ENEMY_SCALING, FEATURES, schoolOf } from '../core/tuning';
 import { AFFIXES, CAGE_ALLY, makeEnemy } from '../content/enemies';
-import { DAILY_ASC, DAILY_MODS, DAILY_POOL, MAX_MODS, OMENS } from '../content/modes';
+import { DAILY_ASC, DAILY_POOL, OMENS, cleanMods } from '../content/modes';
 import { BASE_ZONES, ZONES, type BossDef, type ZoneDef } from '../content/zones';
 import type { BossInfo } from '../core/combat/ai';
 import { RELIC_EVENTS, RELICS } from '../content/relics';
@@ -270,7 +270,7 @@ export function dailyOf(date: string): { seed: number; mods: string[] } {
 export function newRun(code: string, seed: number, players: NewHero[], opts: RunOpts = {}): RunState {
   const daily = opts.daily ? dailyOf(opts.daily) : null;
   const run: RunState = {
-    version: 9, code, asc: daily ? DAILY_ASC : Math.max(0, Math.min(10, opts.asc ?? 0)), daily: opts.daily ?? null, mods: daily?.mods ?? [...new Set((opts.mods ?? []).filter((m) => DAILY_MODS.some((d) => d.id === m)))].slice(0, MAX_MODS),
+    version: 9, code, asc: daily ? DAILY_ASC : Math.max(0, Math.min(10, opts.asc ?? 0)), daily: opts.daily ?? null, mods: daily?.mods ?? cleanMods(opts.mods ?? []),
     bossPick: [], abyss: !daily && !!opts.abyss, allies: [], omen: null, nextOmen: null, cage: null, ready: {}, stamp: 0,
     unlocked: [...new Set(opts.unlocked ?? [])], flags: [],
     zone: 0, zoneFight: 0, rng: (daily?.seed ?? seed) >>> 0, fight: 0, step: 0, map: [], links: [], at: -1, trail: [], phase: 'map', kind: 'combat', combat: null,
@@ -286,11 +286,13 @@ export function newRun(code: string, seed: number, players: NewHero[], opts: Run
   run.bossPick = ZONES.map((z) => randInt(run, 0, z.bosses.length - 1));
   for (const h of run.heroes) {
     const base = heroMaxHp(h);
-    h.boon.hp = run.mods.includes('cristal') ? Math.round(base * -0.25) : 0;
+    h.boon.hp = run.mods.includes('cristal') ? Math.round(base * -0.25) : run.mods.includes('maldicion') ? Math.round(base * -0.1) : 0;
     if (run.mods.includes('cristal')) h.boon.power = 3;
     // maestría: los niveles que no abren un kit dan oro inicial
     const noKit = Array.from({ length: Math.min(4, h.mastery) }, (_, i) => i + 1).filter((i) => !CLASSES[h.cls].routes[i]).length;
     h.gold = noKit * 25;
+    // Maldición persistente: a cambio de la vida, una reliquia para empezar
+    if (run.mods.includes('maldicion')) giveRelic(run, h);
     h.hp = Math.round(heroMaxHp(h) * (run.asc >= 8 ? 0.75 : 1));
   }
   // se empieza dentro del Altar (en la primera partida del jugador, apagado)
@@ -352,7 +354,7 @@ export function offerBoon(run: RunState, h: HeroSave): void {
   const left = mineCls.flatMap((p) => p.spells.filter((id) => !!BLESSINGS[id] && !h.boons.includes(id)).map((id) => ({ p: p.id, id })));
   if (!left.length) return;
   const patron = left[0]!.p;
-  h.boonOffer = { patron, spells: shuffle(run, left.map((x) => x.id)).slice(0, offerSize(h)) };
+  h.boonOffer = { patron, spells: shuffle(run, left.map((x) => x.id)).slice(0, Math.max(2, offerSize(h) - (run.mods.includes('agrietado') ? 1 : 0))) };
 }
 
 /**
@@ -604,6 +606,8 @@ export function buildFight(run: RunState): CombatSetup {
       if (omen === 'oro') e.hp = e.maxHp = Math.round(e.maxHp * 1.25);
       if (omen === 'tormenta' || run.mods.includes('veloces')) { e.mp++; e.maxMp++; }
       if (run.mods.includes('veloces')) e.initiative += 4;
+      if (omen && run.mods.includes('niebla')) e.hp = e.maxHp = Math.round(e.maxHp * 1.2);
+      if (run.mods.includes('reforzados')) e.shield = (e.shield ?? 0) + Math.round(e.maxHp * 0.15);
       const add = (t: string): void => { if (!(e.traits ?? []).includes(t)) e.traits = [...(e.traits ?? []), t]; };
       if (run.pact === 'presteza') { e.mp++; e.maxMp++; }
       if (run.pact === 'cristal') e.crit += 15;
@@ -686,8 +690,8 @@ function enemyOpts(run: RunState, id: string, first: boolean) {
   return {
     affixes,
     laterList: run.kind !== 'boss' && run.zoneFight >= 1,
-    hpMul: 1 + boost + pactEnemyHp(run.pact, strong) + (id === bossOf(run).id ? (run.asc >= 6 ? 0.2 : 0) + (run.mods.includes('jefes') ? 0.3 : 0) : 0),
-    power: boost * 5 + (run.mods.includes('frenesi') ? 1 : 0) + pactEnemyPower(run.pact),
+    hpMul: 1 + boost + pactEnemyHp(run.pact, strong) + (run.mods.includes('riesgo') ? 0.12 * Math.min(3, run.zone) : 0) + (id === bossOf(run).id ? (run.asc >= 6 ? 0.2 : 0) + (run.mods.includes('jefes') ? 0.3 : 0) : 0),
+    power: boost * 5 + (run.mods.includes('frenesi') ? 1 : 0) + (run.mods.includes('riesgo') ? Math.min(3, run.zone) : 0) + pactEnemyPower(run.pact),
   };
 }
 
@@ -881,7 +885,7 @@ export function finishFight(run: RunState): void {
   if (run.arena) { run.phase = c.over === 'win' ? 'won' : 'lost'; run.note = `Gana el equipo de ${c.over === 'win' ? run.arena.nameA : run.arena.nameB}.`; return; }
   if (c.over === 'lose') { run.phase = 'lost'; return; }
   if (c.units.some((u) => u.name.startsWith('Némesis: '))) run.flags.push('nemesis');
-  const gold = Math.round((25 + run.fight * 8 + (run.kind === 'elite' ? 20 : run.kind === 'boss' ? 40 : 0)) * (run.mods.includes('codicia') ? 2 : 1) * (run.omen === 'oro' ? 2 : 1) * (run.mods.includes('pobreza') ? 0.5 : 1) * (run.pact === 'avaricia' ? 2 : 1));
+  const gold = Math.round((25 + run.fight * 8 + (run.kind === 'elite' ? 20 : run.kind === 'boss' ? 40 : 0)) * (run.mods.includes('codicia') ? 2 : 1) * (run.omen === 'oro' ? 2 : 1) * (run.mods.includes('pobreza') ? 0.5 : 1) * (run.pact === 'avaricia' ? 2 : 1) * (run.mods.includes('ecos_inestables') ? (run.kind === 'combat' ? 0.7 : 1.5) : 1));
   // las maldiciones de cofre y el calor de la forja se gastan con el combate
   run.hexes = (run.hexes ?? []).map((x) => ({ ...x, fights: x.fights - 1 })).filter((x) => x.fights > 0);
   run.overload = null;

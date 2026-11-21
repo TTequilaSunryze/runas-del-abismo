@@ -28,7 +28,11 @@ export function enterRoom(run: RunState, kind: RoomState['kind'], firstRun = fal
   if (kind === 'altar') run.room = { kind, pacts: firstRun ? [] : shuffle(run, PACTS.map((p) => p.id)).slice(0, 2), votes: {} };
   else if (kind === 'forge') run.room = { kind, heat: 0, log: [] };
   else if (kind === 'chest') run.room = { kind, opened: false };
-  else if (kind === 'shrine') run.room = { kind, zone: run.zone };
+  else if (kind === 'shrine') {
+    run.room = { kind, zone: run.zone };
+    // Santuario agrietado: una bendición menos, pero cura al entrar
+    if (run.mods.includes('agrietado')) for (const h of run.heroes) if (h.hp > 0) h.hp = Math.min(heroMaxHp(h), h.hp + Math.ceil(heroMaxHp(h) * 0.2));
+  }
   else run.room = { kind: 'rest', zone: run.zone, picks: {}, lines: [] };
   if (run.room.kind === 'altar' && !run.room.pacts.length) run.room.result = 'El altar está frío. Aún no conocéis los nombres de los Pactos: volved cuando hayáis bajado una vez al Abismo.';
   run.phase = 'room';

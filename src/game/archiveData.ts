@@ -27,7 +27,7 @@ export interface ArchiveEntry {
 }
 
 // ---------- Atlas y Crónicas (Fase B) ----------
-export type AtlasCat = 'zones' | 'events' | 'pacts' | 'omens';
+export type AtlasCat = 'zones' | 'events' | 'pacts' | 'omens' | 'mods';
 export type AtlasState = 'unlocked' | 'explored' | 'mastered';
 export const ATLAS_STATES: AtlasState[] = ['unlocked', 'explored', 'mastered'];
 export type ChronicleCat = 'stories' | 'secrets' | 'milestones';
@@ -53,7 +53,7 @@ export interface ChronicleEntryRecord {
   progress: number;
   last?: string;
 }
-export const ATLAS_CATS: AtlasCat[] = ['zones', 'events', 'pacts', 'omens'];
+export const ATLAS_CATS: AtlasCat[] = ['zones', 'events', 'pacts', 'omens', 'mods'];
 export const CHRONICLE_CATS: ChronicleCat[] = ['stories', 'secrets', 'milestones'];
 
 export interface Archive {
@@ -73,7 +73,7 @@ export interface Archive {
 
 export const emptyArchive = (): Archive => ({
   v: 1, bestiary: {}, grimoire: {}, relics: {},
-  atlas: { zones: {}, events: {}, pacts: {}, omens: {} }, chronicles: { stories: {}, secrets: {}, milestones: {} },
+  atlas: { zones: {}, events: {}, pacts: {}, omens: {}, mods: {} }, chronicles: { stories: {}, secrets: {}, milestones: {} },
   cur: null, seeded: false,
 });
 

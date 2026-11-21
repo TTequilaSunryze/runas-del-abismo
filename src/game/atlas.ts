@@ -1,7 +1,7 @@
 // Archivo del Abismo · Atlas (zonas, eventos, pactos, presagios) y Crónicas (historias, secretos, hitos de colección).
 // Catálogos derivados del contenido existente; funciones de registro idempotentes sobre Meta. Sin recompensas.
 import { PLAYABLE } from '../core/classes/classes';
-import { OMENS } from '../content/modes';
+import { DAILY_MODS, OMENS } from '../content/modes';
 import { PACTS } from '../content/pacts';
 import { RELIC_EVENTS } from '../content/relics';
 import { ENDING_LOST, ENDING_WON, ZONE_STORY, CLASS_STORY } from '../content/story';
@@ -23,12 +23,13 @@ export const ATLAS: Record<AtlasCat, AtlasRef[]> = {
     .map(({ e, zone }): AtlasRef => ({ id: e.id, cat: 'events', name: e.title, icon: '❓', text: e.text, ...(zone ? { zone } : {}) })),
   pacts: PACTS.map((p) => ({ id: p.id, cat: 'pacts', name: p.name, icon: p.icon, text: `${p.boon} · ${p.bane}` })),
   omens: OMENS.map((o) => ({ id: o.id, cat: 'omens', name: o.name, icon: o.icon, text: o.text })),
+  mods: DAILY_MODS.map((m) => ({ id: m.id, cat: 'mods', name: m.name, icon: ['', '🟢', '🟡', '🔴'][m.tier ?? 2]!, text: m.text })),
 };
-export const ATLAS_NAME: Record<AtlasCat, string> = { zones: 'Zonas', events: 'Eventos', pacts: 'Pactos', omens: 'Presagios' };
+export const ATLAS_NAME: Record<AtlasCat, string> = { zones: 'Zonas', events: 'Eventos', pacts: 'Pactos', omens: 'Presagios', mods: 'Modificadores' };
 export const ATLAS_STATE_NAME: Record<AtlasState, string> = { unlocked: 'Desbloqueado', explored: 'Explorado', mastered: 'Dominado' };
 /** Qué significa «completar» una entrada, por categoría (para mostrarlo en las fichas). */
 export const ATLAS_DONE_TEXT: Record<AtlasCat, string> = {
-  zones: 'derrotar a su jefe', events: 'resolver el evento', pacts: 'derrotar a un jefe con el pacto activo', omens: 'ganar un combate bajo el presagio',
+  zones: 'derrotar a su jefe', events: 'resolver el evento', pacts: 'derrotar a un jefe con el pacto activo', omens: 'ganar un combate bajo el presagio', mods: 'ganar una expedición con el modificador activo',
 };
 
 export type ChronicleRef = { id: string; cat: ChronicleCat; name: string; text: string; goal: number; hint?: string };

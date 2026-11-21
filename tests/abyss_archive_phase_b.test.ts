@@ -189,7 +189,7 @@ describe('Fase B · persistencia, migración y conservación', () => {
     const a = normalizeArchive(faseA);
     expect(a.bestiary.limo).toEqual({ lv: 2, seen: 3, n: 4 });
     expect(a.relics.colmillo!.lv).toBe(1);
-    expect(a.atlas).toEqual({ zones: {}, events: {}, pacts: {}, omens: {} });
+    expect(a.atlas).toEqual({ zones: {}, events: {}, pacts: {}, omens: {}, mods: {} });
     expect(a.chronicles).toEqual({ stories: {}, secrets: {}, milestones: {} });
     expect(a.seeded).toBe(true);
   });

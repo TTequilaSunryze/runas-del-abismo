@@ -1,7 +1,7 @@
 // Progresión entre partidas: ecos (para la tienda de cosméticos), maestría, logros, ascensión y Archivo.
 // Se guarda en el navegador de cada jugador.
 import { CLASSES } from '../core/classes/classes';
-import { MAX_ASC, MOD_ECOS } from '../content/modes';
+import { MAX_ASC, modEcos } from '../content/modes';
 import type { ClassId } from '../core/state';
 import { ACT_ROOMS } from './map';
 import type { Champion, HeroSave, RunState } from './run';
@@ -259,7 +259,7 @@ export function ecosFor(run: RunState): number {
   const rooms = roomsCleared(run);
   const bosses = run.flags.filter((f) => f.startsWith('boss_')).length;
   const base = rooms * 4 + bosses * 25 + (won(run) ? 60 : 0);
-  return Math.round((base + (run.flags.includes('abyss_won') ? 80 : 0) + (run.abyss ? Math.max(0, run.zone - 2) * 30 : 0)) * (1 + 0.2 * run.asc) * (run.daily ? 1.3 : 1 + MOD_ECOS * run.mods.length));
+  return Math.round((base + (run.flags.includes('abyss_won') ? 80 : 0) + (run.abyss ? Math.max(0, run.zone - 2) * 30 : 0)) * (1 + 0.2 * run.asc) * (run.daily ? 1.3 : 1 + run.mods.reduce((n, id) => n + modEcos(id), 0)));
 }
 
 export interface Settlement {

@@ -157,6 +157,8 @@ export function recordArchive(run: RunState | null, myId: string, events: readon
     chron('stories', `zona_${run.zone + 1}`, 1, `${id}:${run.zone}:in`);
     if ((PLAYABLE as string[]).includes(me.cls)) chron('stories', `clase_${me.cls}`, 1, `${id}:play`);
     if (run.pact) atlas('pacts', run.pact, 'unlocked', id);
+    // modificadores de la expedición: encontrados al jugar con ellos, completados al ganar (una vez por expedición)
+    for (const md of run.mods) { atlas('mods', md, 'unlocked', id); if (run.phase === 'won') atlas('mods', md, 'explored', `${id}:won`); }
     if (run.phase === 'event' && run.event) {
       atlas('events', run.event.id, 'unlocked', `${id}:${run.zone}:${run.step}`);
       if (run.event.result) { atlas('events', run.event.id, 'explored', `${id}:${run.zone}:${run.step}`); contract({ t: 'atlas', cat: 'events', key: `${id}:ev:${run.zone}:${run.step}` }); }

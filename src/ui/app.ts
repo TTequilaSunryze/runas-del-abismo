@@ -22,7 +22,7 @@ import { masteryOf, meta, myNemesis, myTeam, openRoutes, removeChampion, saveCha
 import { currentAccount, fetchTeam, restoreAccount, signIn, signOut, signUp } from '../net/account';
 import { addFriend, invite, removeFriend, setRoom, socialHandlers } from '../net/social';
 import { championOf } from '../game/run';
-import { MAX_ASC } from '../content/modes';
+import { MAX_ASC, MAX_MODS, modConflict } from '../content/modes';
 import { setMusicVolume, setZoneMusic } from '../audio/sfx';
 import { gotFromBoss, gotModal, itemHtml, mapModal, statsModal, victoryModal } from './panels';
 import { endScreen, eventScreen, homeScreen, lobbyScreen, mapScreen, roomScreen, shopScreen } from './screens';
@@ -302,7 +302,8 @@ document.addEventListener('click', (e) => {
     case 'side': ui.sideOpen = !ui.sideOpen; lastKey = ''; render([]); break;
     case 'map': ui.mapOpen = !ui.mapOpen; lastKey = ''; render([]); break;
     case 'stats': ui.statsOpen = !ui.statsOpen; lastKey = ''; render([]); break;
-    case 'mod': ui.mods = ui.mods.includes(id) ? ui.mods.filter((x) => x !== id) : ui.mods.length < 3 ? [...ui.mods, id] : ui.mods; publish(); render([]); break;
+    case 'mod': ui.mods = ui.mods.includes(id) ? ui.mods.filter((x) => x !== id) : ui.mods.length < MAX_MODS && !modConflict(id, ui.mods) ? [...ui.mods, id] : ui.mods; publish(); render([]); break;
+    case 'modsclear': ui.mods = []; publish(); render([]); break;
     case 'champsave': { const h = s?.run?.heroes.find((x) => x.owner === ui.myId); if (s?.run && h) { saveChampion({ ...championOf(s.run, h), by: currentAccount()?.name ?? ui.me.name, ...(meta().cosmetics?.title ? { title: meta().cosmetics!.title! } : {}), ...(meta().cosmetics?.frame ? { frame: meta().cosmetics!.frame! } : {}), ...(emblemOf(meta()) ? { emblem: emblemOf(meta()) } : {}) }); publish(); lastKey = ''; render([]); } break; }
     case 'champdel': removeChampion(id); homeScreen(''); break;
     case 'champteam': toggleTeam(id); homeScreen(''); break;

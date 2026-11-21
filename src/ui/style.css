@@ -804,3 +804,10 @@ body.has-menubg .cards.c5 { grid-template-columns: repeat(auto-fill, minmax(150p
 .ico.art.rar1 { filter: drop-shadow(0 0 3px rgba(88, 166, 255, .85)); }
 .ico.art.rar2 { filter: drop-shadow(0 0 3px rgba(199, 125, 255, .9)); }
 .ico.art.rar3 { filter: drop-shadow(0 0 4px rgba(255, 196, 70, .95)); }
+
+/* modificadores de expedición */
+.modchip .risk { font-size: 9px; letter-spacing: 1px; margin-left: 2px; }
+.modchip.t1 .risk { color: #9fd86a; } .modchip.t2 .risk { color: #f2c14e; } .modchip.t3 .risk { color: #ff6a5a; }
+.modchip:disabled { opacity: .4; cursor: not-allowed; }
+.modsum { margin-top: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 13px; }
+.chip.mods { border-color: #ff8a5a !important; color: #ffcfae; }

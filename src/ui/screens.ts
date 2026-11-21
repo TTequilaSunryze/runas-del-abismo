@@ -9,7 +9,7 @@ import { HALL_SIZE, achievementCount, listedAchievements, MASTERY_XP, ecosFor, m
 import { currentAccount } from '../net/account';
 import { friendsStatus } from '../net/social';
 import type { Champion } from '../game/run';
-import { ASCENSION, DAILY_MODS, MOD_ECOS, OMENS } from '../content/modes';
+import { ASCENSION, DAILY_MODS, MAX_MODS, OMENS, modConflict, modDef, modEcos } from '../content/modes';
 import { ALLIES } from '../content/enemies';
 import { readSnapshot } from '../game/snapshot';
 import { RELICS } from '../content/relics';
@@ -341,6 +341,18 @@ function masteryBar(cls: ClassId): string {
   return `<span class="mbar" ${tip(p.next ? `<b>Maestría ${p.lv}/5</b><div class="sm">${p.xp}/${p.next} de experiencia: faltan ${p.next - p.xp} para el nivel ${p.lv + 1}.</div><div class="sm good">Nivel ${p.lv + 1}: ${esc(masteryText(cls, p.lv))}</div>` : '<b>Maestría máxima</b>')}><i style="width:${p.pct}%"></i><b>Maestría ${p.lv}/5${p.next ? ` · ${p.pct}%` : ''}</b></span><span class="dim sm mnext">${p.next ? `Faltan ${p.next - p.xp} exp para el nivel ${p.lv + 1}` : 'Maestría máxima'}</span>`;
 }
 
+/** Ficha emergente de un modificador: efecto, riesgo, ecos e incompatibilidades. */
+function modTip(id: string, why: string | null): string {
+  const m = modDef(id)!, ex = DAILY_MODS.filter((o) => m.excl?.includes(o.id) || o.excl?.includes(id));
+  return `<b>${esc(m.name)}</b><div class="sm">${esc(m.text)}</div><div class="sm dim">Riesgo ${['', 'leve', 'medio', 'alto'][m.tier ?? 2]} · +${Math.round(modEcos(id) * 100)}% de ecos</div>${ex.length ? `<div class="sm dim">No se combina con: ${ex.map((o) => esc(o.name)).join(', ')}</div>` : ''}${why ? `<div class="sm bad">${esc(why)}</div>` : ''}`;
+}
+/** Resumen de los modificadores activos (lo ven todos los jugadores de la sala). */
+function modsSummary(list: readonly string[], host: boolean): string {
+  if (!list.length) return host ? '<div class="dim sm">Sin modificadores: expedición normal.</div>' : '';
+  const bonus = Math.round(list.reduce((n, id) => n + modEcos(id), 0) * 100);
+  return `<div class="modsum"><b>⚠ Activos:</b> ${list.map((id) => `<span class="chip r2" ${tip(modTip(id, null))}>${esc(modDef(id)?.name ?? id)}</span>`).join(' ')} <span class="good">+${bonus}% de ecos</span>${host ? ' <button class="mini" data-act="modsclear">Quitar todos</button>' : ''}</div>`;
+}
+
 export function lobbyScreen(): void {
   const s = ui.session!, me = ui.me;
   const players = s.lobby();
@@ -356,8 +368,10 @@ export function lobbyScreen(): void {
   <div class="cols"><section class="main">
     ${s.isHost ? `<div class="panel"><div class="row"><b>Dificultad</b><span class="grow"></span><button class="mini" data-act="ascdown" ${ui.asc <= 0 || ui.daily ? 'disabled' : ''}>−</button><b class="pill">Ascensión ${ui.daily ? 3 : ui.asc}</b><button class="mini" data-act="ascup" ${ui.asc >= meta().maxAsc || ui.daily ? 'disabled' : ''}>+</button><label class="sm"><input type="checkbox" data-act="dailytoggle" ${ui.daily ? 'checked' : ''}> Reto diario</label></div>
       <div class="dim sm">${ui.daily ? dailyOf(today()).mods.map((id) => esc(DAILY_MODS.find((x) => x.id === id)!.name)).join(' + ') + ' · ranking compartido' : esc(ASCENSION.slice(0, ui.asc + 1).slice(-2).join(' '))}${meta().maxAsc < 1 && !ui.daily ? ' · Gana una partida para desbloquear la ascensión 1.' : ''}</div>
-      ${ui.daily ? '' : `<div class="lbl">Modificadores <span class="dim">· hasta 3, +${Math.round(MOD_ECOS * 100)}% de ecos cada uno</span></div>
-      <div class="chips">${DAILY_MODS.map((m) => `<button class="chip ${ui.mods.includes(m.id) ? 'r2 sel' : ''}" data-act="mod" data-id="${m.id}" ${tip(`<b>${esc(m.name)}</b><div class="sm">${esc(m.text)}</div>`)}>${ui.mods.includes(m.id) ? '✔ ' : ''}${esc(m.name)}</button>`).join('')}</div>`}</div>` : players.find((p) => p.host) ? (() => { const hp = players.find((p) => p.host)!; return `<div class="panel dim sm">Dificultad del anfitrión: ${hp.daily ? 'Reto diario' : `Ascensión ${hp.asc}${hp.abyss ? ' · con El Abismo' : ''}${hp.mods.length ? ` · ${hp.mods.map((id) => esc(DAILY_MODS.find((d) => d.id === id)?.name ?? id)).join(', ')}` : ''}`}</div>`; })() : ''}
+      ${ui.daily ? '' : `<div class="lbl">Modificadores de expedición <span class="dim">· opcionales, hasta ${MAX_MODS} · más riesgo, más ecos</span></div>
+      <div class="chips">${DAILY_MODS.map((m) => { const on = ui.mods.includes(m.id), why = on ? null : ui.mods.length >= MAX_MODS ? `Ya tienes ${MAX_MODS} activos` : modConflict(m.id, ui.mods);
+        return `<button class="chip modchip t${m.tier ?? 2} ${on ? 'r2 sel' : ''}" data-act="mod" data-id="${m.id}" ${why ? 'disabled' : ''} ${tip(modTip(m.id, why))}>${on ? '✔ ' : ''}${esc(m.name)} <span class="risk">${'●'.repeat(m.tier ?? 2)}</span></button>`; }).join('')}</div>
+      ${modsSummary(ui.mods, true)}`}</div>` : players.find((p) => p.host) ? (() => { const hp = players.find((p) => p.host)!; return `<div class="panel dim sm">Dificultad del anfitrión: ${hp.daily ? 'Reto diario' : `Ascensión ${hp.asc}${hp.abyss ? ' · con El Abismo' : ''}`}${hp.daily ? '' : modsSummary(hp.mods, false)}</div>`; })() : ''}
     ${currentAccount() && s.t.kind === 'online' ? (() => { const fr = friendsStatus().filter((f) => f.online && f.room !== s.code); return fr.length ? `<div class="panel sm"><b>👥 Invitar:</b> ${fr.map((f) => `<button class="mini" data-act="invite" data-id="${esc(f.name)}">✉ ${esc(f.name)}</button>`).join(' ')}</div>` : ''; })() : ''}
     <div class="lbl">Tu clase <span class="dim">· maestría ${mlv}/5 con ${cls.name}</span></div>
     <div class="cards c5">${PLAYABLE.map((id) => { const c = CLASSES[id];

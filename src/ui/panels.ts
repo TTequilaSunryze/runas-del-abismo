@@ -1,5 +1,6 @@
 // Piezas comunes: barra superior, celdas de objeto con icono, ficha lateral (equipo, hechizos, grupo) y botín.
 import { HEAT_HOT, HEAT_OVERLOAD, curseOf, heatTier, pactOf } from '../content/pacts';
+import { modDef } from '../content/modes';
 import { FEATURES, schoolOf } from '../core/tuning';
 import { isMuted, musicVolume } from '../audio/sfx';
 import { CLASS_PASSIVE, CLASSES, findRoute } from '../core/classes/classes';
@@ -296,14 +297,16 @@ export function mapSvg(run: RunState, pick = false): string {
   const nodes = run.map.map((row, l) => row.map((k, i) => {
     const [x, y] = pos(l, i);
     const can = l === run.step && avail.includes(i), done = here(l, i) || current(l, i);
+    // Oscuridad profunda: más allá de las 2 capas siguientes no se sabe qué hay (salvo el jefe)
+    const dark = run.mods.includes('oscuridad') && l > run.step + 1 && l < run.map.length - 1;
     const stroke = can ? '#ffcf5a' : done ? '#7fe07a' : '#7a6a52';
     const click = pick && can ? `data-act="node" data-id="${i}" style="cursor:${canPick ? 'pointer' : 'not-allowed'}"` : '';
     const label = can ? `<text x="${x}" y="${y + 37}" text-anchor="middle" font-size="12" font-weight="700" fill="#3a2410" class="mlabel">${esc(NODE_NAME[k].replace(/^\S+\s/, ''))}</text>` : '';
     const vs = can ? votesAt(i) : [];
     const voteMarks = vs.map((v, n) => `<g><circle cx="${x - 18 + n * 12}" cy="${y - 24}" r="7" fill="${v.col}" stroke="#000" stroke-width="2"/><text x="${x - 18 + n * 12}" y="${y - 20.5}" text-anchor="middle" font-size="9" font-weight="bold" fill="#000" pointer-events="none">${esc(v.name.charAt(0).toUpperCase())}</text></g>`).join('');
     const ring = vs.length ? `<circle cx="${x}" cy="${y}" r="29" fill="none" stroke="${vs.find((v) => v.mine)?.col ?? vs[0]!.col}" stroke-width="2" stroke-dasharray="4 3" class="voting"/>` : '';
-    const tipHtml = `<b>${esc(NODE_NAME[k])}</b><div class="sm">${esc(NODE_HINT[k] ?? '')}</div>${vs.length ? `<div class="sm">Quieren ir: ${vs.map((v) => `<b style="color:${v.col}">${esc(v.name)}</b>`).join(', ')}</div>` : ''}${can && pick ? '<div class="sm good">Haz clic para votar este camino</div>' : ''}`;
-    return `<g ${click} ${tip(tipHtml)} opacity="${l < run.step && !done ? 0.35 : 1}">${ring}${can ? `<circle cx="${x}" cy="${y}" r="27" fill="#ff9a3a" opacity=".35" class="mpulse"/>` : ''}<circle cx="${x}" cy="${y}" r="${can ? 23 : 19}" fill="${can ? '#3b2a18' : '#24201c'}" stroke="${stroke}" stroke-width="${can || done ? 3 : 2}"${can || done ? ' filter="url(#mglow)"' : ''}/><circle cx="${x}" cy="${y}" r="${can ? 18 : 15}" fill="none" stroke="#000" stroke-opacity=".45"/><text x="${x}" y="${y + 7}" text-anchor="middle" font-size="20" pointer-events="none">${NODE_ICON[k]}</text>${label}${voteMarks}</g>`;
+    const tipHtml = dark ? '<b>❔ En sombra</b><div class="sm">La Oscuridad profunda no deja ver qué hay aquí.</div>' : `<b>${esc(NODE_NAME[k])}</b><div class="sm">${esc(NODE_HINT[k] ?? '')}</div>${vs.length ? `<div class="sm">Quieren ir: ${vs.map((v) => `<b style="color:${v.col}">${esc(v.name)}</b>`).join(', ')}</div>` : ''}${can && pick ? '<div class="sm good">Haz clic para votar este camino</div>' : ''}`;
+    return `<g ${click} ${tip(tipHtml)} opacity="${l < run.step && !done ? 0.35 : 1}">${ring}${can ? `<circle cx="${x}" cy="${y}" r="27" fill="#ff9a3a" opacity=".35" class="mpulse"/>` : ''}<circle cx="${x}" cy="${y}" r="${can ? 23 : 19}" fill="${can ? '#3b2a18' : '#24201c'}" stroke="${stroke}" stroke-width="${can || done ? 3 : 2}"${can || done ? ' filter="url(#mglow)"' : ''}/><circle cx="${x}" cy="${y}" r="${can ? 18 : 15}" fill="none" stroke="#000" stroke-opacity=".45"/><text x="${x}" y="${y + 7}" text-anchor="middle" font-size="20" pointer-events="none">${dark ? '❔' : NODE_ICON[k]}</text>${label}${voteMarks}</g>`;
   }).join('')).join('');
   const grid = Array.from({ length: Math.ceil(W / 40) }, (_, i) => `<line x1="${i * 40}" y1="0" x2="${i * 40}" y2="${H}"/>`).join('') + Array.from({ length: Math.ceil(H / 40) }, (_, i) => `<line x1="0" y1="${i * 40}" x2="${W}" y2="${i * 40}"/>`).join('');
   const defs = '<defs><filter id="mglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>';
@@ -328,6 +331,7 @@ export { mapLegend };
 export function runChips(run: RunState): string {
   const out: string[] = [];
   const p = pactOf(run.pact);
+  if (run.mods.length) out.push(`<span class="pill chip mods" ${tip(`<b>⚠ Modificadores de la expedición</b>${run.mods.map((id) => { const m = modDef(id); return m ? `<div class="sm"><b>${esc(m.name)}</b>: ${esc(m.text)}</div>` : ''; }).join('')}`)}>⚠ ${run.mods.length === 1 ? esc(modDef(run.mods[0]!)?.name ?? run.mods[0]!) : `${run.mods.length} modificadores`}</span>`);
   if (p) out.push(`<span class="pill chip pact" ${tip(`<b>${p.icon} ${esc(p.name)}</b><div class="sm good">▲ ${esc(p.boon)}</div><div class="sm bad">▼ ${esc(p.bane)}</div>`)}>${p.icon} ${esc(p.name.replace('Pacto ', ''))}</span>`);
   if (run.overload) { const t = heatTier(run.overload === 'overload' ? HEAT_OVERLOAD : HEAT_HOT); out.push(`<span class="pill chip heatchip ${run.overload}" ${tip(`<b>🔥 ${esc(t.name)}</b><div class="sm">${esc(t.text)}</div>`)}>🔥 ${esc(t.name)}</span>`); }
   for (const x of run.hexes ?? []) { const c = curseOf(x.id); if (c) out.push(`<span class="pill chip curse" ${tip(`<b>${c.icon} ${esc(c.name)}</b><div class="sm">${esc(c.text)}</div><div class="sm dim">Quedan ${x.fights} combate(s)</div>`)}>${c.icon} ${esc(c.name)} · ${x.fights}</span>`); }
