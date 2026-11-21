@@ -73,6 +73,8 @@ const ENEMY_LOOK: Record<string, Look> = {
   halcon: { sprite: 'bat', pal: { a: '#a07040', e: '#ffd24a' } },
   esqueleto: { sprite: 'skel', pal: { e: '#c02030' } },
   arquero: { sprite: 'skel', pal: { w: '#c9d6a8', e: '#30a040' } },
+  // H6: el Arquero óseo (enemigo) comparte id con la clase Arquero: se dibuja con su propio aspecto
+  arquero_oseo: { sprite: 'skel', pal: { w: '#c9d6a8', e: '#30a040' } },
   necrofago: { sprite: 'ghoul', pal: { a: '#7d9a78', b: '#4a3a4a', e: '#ffd24a' } },
   acolito: { sprite: 'cult', pal: { a: '#8a2a2a', b: '#f2c14e', e: '#ffb030' } },
   prior: { sprite: 'cult', pal: { a: '#4a2a7a', b: '#b9a8d8', e: '#ff3060' }, scale: 1.6 },
@@ -215,6 +217,9 @@ function drawModel(g: CanvasRenderingContext2D, kind: string, team: string, cx: 
   if (o.flash) { g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.6; g.drawImage(img, 0, 0, w, w); }
   g.restore();
 }
+
+/** H6: aspecto con el que se dibuja una unidad (el Arquero óseo no es el héroe Arquero). */
+export const lookKind = (u: { kind: string; ai: string | null }): string => (u.kind === 'arquero' && u.ai !== null && u.ai !== 'champ' ? 'arquero_oseo' : u.kind);
 
 /** ¿Esta clase usa modelo animado? */
 export const isModel = (kind: string): boolean => MODEL_CLASSES.includes(kind);

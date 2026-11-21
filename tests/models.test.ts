@@ -5,7 +5,8 @@ import { CLASSES } from '../src/core/classes/classes';
 
 describe('modelos animados', () => {
   it('existen para las 5 clases nuevas y no para las antiguas', () => {
-    expect([...MODEL_CLASSES].sort()).toEqual(['acechador', 'arquitecto', 'barbaro', 'carcelero', 'esferas', 'pistolero', 'zorro']);
+    // H6: el Arquero también tiene modelo animado
+    expect([...MODEL_CLASSES].sort()).toEqual(['acechador', 'arquero', 'arquitecto', 'barbaro', 'carcelero', 'esferas', 'pistolero', 'zorro']);
     for (const c of MODEL_CLASSES) expect(CLASSES[c as keyof typeof CLASSES]).toBeTruthy();
   });
   it('todos los fotogramas miden 32×32 y tienen dibujo', () => {

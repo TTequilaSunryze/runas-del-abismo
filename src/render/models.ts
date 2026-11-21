@@ -9,7 +9,7 @@ export type Anim = 'idle' | 'walk' | 'attack' | 'cast' | 'special' | 'death';
 export type Grid = (string | null)[][];
 
 export const MODEL_SIZE = 32;
-export const MODEL_CLASSES = ['zorro', 'esferas', 'carcelero', 'acechador', 'barbaro', 'arquitecto', 'pistolero'];
+export const MODEL_CLASSES = ['zorro', 'esferas', 'carcelero', 'acechador', 'barbaro', 'arquitecto', 'pistolero', 'arquero'];
 export const ANIM_FRAMES: Record<Anim, number> = { idle: 4, walk: 4, attack: 4, cast: 4, special: 4, death: 5 };
 
 /** Qué animación usa cada hechizo (por defecto: ataque si daña, lanzamiento si no). */
@@ -632,7 +632,116 @@ function arquitecto(p: Pen, a: Anim, f: number): void {
   if (a === 'special' || a === 'cast') for (let i = 0; i < 6; i++) { const ang = i * 1.047 + t * TAU; p.glow(16 + Math.cos(ang) * 9, 28 + Math.sin(ang) * 2, 1.8, 'rgba(90,200,255,.5)'); }
 }
 
-const DRAW: Record<string, (p: Pen, a: Anim, f: number) => void> = { zorro, esferas: tejedora, carcelero, acechador, barbaro, pistolero, arquitecto };
+// ---------------------------------------------------------------------------
+// Arquero (H6): capucha verde de explorador, capa, carcaj a la espalda y arco largo
+// ---------------------------------------------------------------------------
+
+const QC = { hood: '#3e6a34', hoodD: '#284a22', hoodL: '#5e9050', face: '#1a1410', skin: '#c89a70', eye: '#ffd24a', tunic: '#5a7a3a', tunicD: '#3e5628', leather: '#7a5230', leatherD: '#523620', belt: '#3a2a1a', buckle: '#d8b060', pants: '#4a3a2a', boot: '#5a4028', bootD: '#3a2818', bow: '#9a6a34', bowD: '#6a4420', bowL: '#c8945a', string: '#e8e0c8', arrow: '#b08a50', head: '#dce4f0', fletch: '#d84a3a', quiver: '#6a4428', out: '#0e1408' };
+
+/** Arco largo vertical con la empuñadura en (hx, hy); `pull` = cuánto se tensa la cuerda; con flecha si `nock`. */
+function longbow(p: Pen, hx: number, hy: number, pull: number, nock: boolean): void {
+  // palas del arco: curva que se abomba hacia delante
+  for (let k = -9; k <= 9; k++) {
+    const bulge = Math.round(3.2 * (1 - (k / 9) ** 2));
+    p.px(hx + bulge, hy + k, Math.abs(k) < 2 ? QC.leatherD : k < 0 ? QC.bowL : QC.bow);
+    if (Math.abs(k) < 8) p.px(hx + bulge - 1, hy + k, QC.bowD);
+  }
+  // cuerda: de punta a punta, tirada hacia atrás en el centro
+  p.line(hx, hy - 9, hx - pull, hy, QC.string);
+  p.line(hx - pull, hy, hx, hy + 9, QC.string);
+  if (nock) {
+    p.line(hx - pull, hy, hx + 7, hy, QC.arrow);
+    p.px(hx + 8, hy, QC.head); p.px(hx + 7, hy - 1, QC.head); p.px(hx + 7, hy + 1, QC.head);
+    p.px(hx - pull - 1, hy - 1, QC.fletch); p.px(hx - pull - 1, hy + 1, QC.fletch);
+  }
+}
+
+function arquero(p: Pen, a: Anim, f: number): void {
+  const n = ANIM_FRAMES[a], t = f / n;
+  const death = a === 'death' ? f / (n - 1) : 0;
+  if (death >= 0.7) {
+    const y = 25;
+    p.rect(4, y, 21, 4, QC.hoodD); p.rect(6, y + 1, 12, 2, QC.tunic);
+    p.rect(23, y - 1, 6, 4, QC.hood); p.rect(24, y, 3, 2, QC.face);
+    p.rect(2, y + 1, 4, 3, QC.boot);
+    for (let k = 0; k < 14; k++) p.px(6 + k, y + 5 - Math.round(Math.sin((k / 13) * Math.PI) * 2), QC.bow);
+    p.outline(QC.out);
+    return;
+  }
+  const kneel = a === 'death' ? Math.round(death * 7) : 0;
+  const bob = a === 'idle' ? (f % 2) : a === 'walk' ? (f % 2 ? -1 : 0) : a === 'special' ? -[1, 3, 2, 0][f]! : 0;
+  const back = a === 'special' ? -[0, 2, 3, 1][f]! : 0;
+  const y0 = 3 + bob + kneel;
+  const tx = 11 + back;
+  // capa que ondea detrás
+  const sway = a === 'walk' ? Math.round(wave(t) * 2) : a === 'special' ? 3 : Math.round(wave(t, 1));
+  p.trap(tx + 3, y0 + 11, y0 + 23 - kneel, 7, 11 + Math.abs(sway), QC.hoodD);
+  // carcaj a la espalda con plumas rojas
+  p.line(tx - 1, y0 + 9, tx + 3, y0 + 19, QC.quiver);
+  p.line(tx, y0 + 9, tx + 4, y0 + 19, QC.quiver);
+  for (let i = 0; i < 3; i++) { p.px(tx - 2 + i, y0 + 7 - (i % 2), QC.fletch); p.px(tx - 1 + i, y0 + 8, QC.arrow); }
+  // piernas y botas
+  if (a === 'walk') {
+    const st = f % 2 ? 2 : -2;
+    p.rect(tx + 2 + st, y0 + 19, 3, 6, QC.pants); p.rect(tx + 6 - st, y0 + 19, 3, 6, QC.pants);
+    p.rect(tx + 1 + st, y0 + 23, 5, 3, QC.boot); p.rect(tx + 6 - st, y0 + 23, 5, 3, QC.boot);
+  } else {
+    p.rect(tx + 2, y0 + 19, 3, 6 - kneel, QC.pants); p.rect(tx + 6, y0 + 19, 3, 6 - kneel, QC.pants);
+    p.rect(tx + 1, y0 + 23 - kneel, 5, 3, QC.boot); p.rect(tx + 6, y0 + 23 - kneel, 5, 3, QC.boot);
+    p.rect(tx + 1, y0 + 23 - kneel, 5, 1, QC.bootD); p.rect(tx + 6, y0 + 23 - kneel, 5, 1, QC.bootD);
+  }
+  // túnica con peto de cuero y cinturón
+  p.rect(tx + 1, y0 + 10, 9, 10, QC.tunic);
+  p.rect(tx + 1, y0 + 10, 9, 1, QC.hoodL);
+  p.rect(tx + 3, y0 + 11, 5, 5, QC.leather); p.rect(tx + 3, y0 + 15, 5, 1, QC.leatherD);
+  p.rect(tx + 8, y0 + 11, 2, 8, QC.tunicD);
+  p.rect(tx + 1, y0 + 16, 9, 2, QC.belt); p.px(tx + 5, y0 + 16, QC.buckle);
+  p.line(tx + 1, y0 + 10, tx + 8, y0 + 17, QC.leatherD); // correa del carcaj
+  // cabeza: capucha con la cara en sombra y ojos ámbar
+  const hx = tx + 2;
+  p.rect(hx, y0 + 4, 8, 7, QC.hood);
+  p.rect(hx + 1, y0 + 3, 6, 1, QC.hood); p.rect(hx + 2, y0 + 2, 3, 1, QC.hoodL);
+  p.px(hx - 1, y0 + 6, QC.hoodD); p.px(hx - 2, y0 + 7, QC.hoodD); // pico de la capucha hacia atrás
+  p.rect(hx + 3, y0 + 6, 5, 4, QC.face);
+  p.rect(hx + 3, y0 + 9, 5, 1, QC.skin);
+  const eyeLit = a === 'cast';
+  if (death < 0.6) { p.px(hx + 5, y0 + 7, QC.eye); p.px(hx + 7, y0 + 7, QC.eye); }
+  // brazos y arco según la animación
+  if (a === 'attack') {
+    // tensar (0-1), soltar (2) y recuperar (3)
+    const pull = [3, 5, 0, 1][f]!;
+    p.rect(tx + 9, y0 + 12, 4, 2, QC.tunic); p.rect(tx + 12, y0 + 12, 2, 2, QC.skin);
+    p.rect(tx + 12 - pull, y0 + 13, 2, 2, QC.skin);
+    longbow(p, tx + 14, y0 + 13, pull + 1, f < 2);
+    p.outline(QC.out);
+    if (f === 2) { p.glow(tx + 24, y0 + 13, 3, 'rgba(255,240,180,.8)'); p.glow(tx + 20, y0 + 13, 2, 'rgba(255,240,180,.5)'); }
+    return;
+  }
+  if (a === 'cast') {
+    // Ojo de halcón / trampas: se lleva la mano a la capucha y los ojos brillan; arco bajo
+    p.rect(tx + 8, y0 + 8, 2, 4, QC.tunic); p.rect(hx + 7, y0 + 7, 2, 2, QC.skin);
+    longbow(p, tx + 12, y0 + 18, 0, false);
+    p.outline(QC.out);
+    if (eyeLit) { p.glow(hx + 6, y0 + 7, 3.5, 'rgba(255,210,74,.6)'); for (let i = 0; i < 3; i++) p.glow(hx + 10 + i * 3, y0 + 5 - ((f + i) % 2), 1.4, 'rgba(255,230,140,.7)'); }
+    return;
+  }
+  if (a === 'special') {
+    // salto atrás: cuerpo hacia atrás y arriba, capa al viento y estela verde
+    p.rect(tx + 9, y0 + 12, 3, 2, QC.tunic);
+    longbow(p, tx + 13, y0 + 13, 2, true);
+    p.outline(QC.out);
+    for (let i = 0; i < 4; i++) p.glow(tx + 12 + i * 4, y0 + 22 - ((f + i) % 2) * 2, 1.8, 'rgba(120,200,110,.4)');
+    return;
+  }
+  // reposo / andar: arco vertical a un lado, con flecha preparada
+  p.rect(tx + 9, y0 + 12, 2, 5, QC.tunic); p.rect(tx + 10, y0 + 16, 2, 2, QC.skin);
+  longbow(p, tx + 13, y0 + 15 + (a === 'walk' ? (f % 2) : 0), 0, a === 'idle');
+  p.outline(QC.out);
+  // destello que recorre la punta de la flecha y la pluma del carcaj que se mece
+  if (a === 'idle') { p.glow(tx + 20 + (f % 4) - 1, y0 + 15 - (f === 2 ? 1 : 0), 1.5, 'rgba(230,240,255,.7)'); p.glow(tx - 2 + f, y0 + 6, 1, 'rgba(216,74,58,.5)'); }
+}
+
+const DRAW: Record<string, (p: Pen, a: Anim, f: number) => void> = { zorro, esferas: tejedora, carcelero, acechador, barbaro, pistolero, arquitecto, arquero };
 
 /** Paleta de la Sombra del Acechador: todo morado oscuro, solo los ojos siguen rojos. */
 function shadowTint(c: string): string {

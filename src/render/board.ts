@@ -7,10 +7,11 @@ import { coneCells } from '../core/combat/marks';
 import { alive, dist, hasLineOfSight, reachable } from '../core/combat/grid';
 import type { CombatState, GameEvent, Pos, Unit } from '../core/state';
 import type { Session } from '../game/session';
-import { PLAYER_COLORS, drawUnit, isModel } from './sprites';
+import { PLAYER_COLORS, drawUnit, isModel, lookKind } from './sprites';
 import { lookOf } from './looks';
 import { auraDef, drawAura } from './palettes';
 import { ANIM_FRAMES, animFor, type Anim } from './models';
+import { FxLayer, fxCells, recipeFor } from './fx';
 
 const TILE = 56;
 /** margen superior: los muros y los personajes sobresalen por arriba de su casilla */
@@ -43,7 +44,7 @@ const CLASS_KINDS = ['guerrero', 'mago', 'clerigo', 'picaro', 'arquero', 'zorro'
 /** Índice de color y etiqueta: héroes de jugadores, y héroes rivales (némesis, duelos) dentro de su bando. */
 function teamIdx(c: CombatState): Map<number, number> {
   const m = new Map<number, number>();
-  for (const team of ['hero', 'enemy'] as const) c.units.filter((u) => u.team === team && CLASS_KINDS.includes(u.kind) && u.ai !== 'decoy').forEach((u, i) => m.set(u.id, i));
+  for (const team of ['hero', 'enemy'] as const) c.units.filter((u) => u.team === team && CLASS_KINDS.includes(lookKind(u)) && u.ai !== 'decoy').forEach((u, i) => m.set(u.id, i));
   return m;
 }
 
@@ -61,6 +62,7 @@ export class Board {
   private flash = new Map<number, number>();
   private floats: Float[] = [];
   private shots: Shot[] = [];
+  private fx = new FxLayer(TILE);
   private rings: Ring[] = [];
   private spins = new Map<number, number>();
   private ghosts: Ghost[] = [];
@@ -166,16 +168,20 @@ export class Board {
             const dur = Math.min(380, 120 + len * 40), x0 = (from.x + 0.5) * TILE, y0 = (from.y + 0.4) * TILE, x1 = (e.at.x + 0.5) * TILE, y1 = (e.at.y + 0.4) * TILE;
             const col = e.spell === 'z_orbe' ? '#4ad0ff' : ELEMENT_COLOR[e.element ?? ''] ?? '#ffe08a';
             this.shots.push({ x0, y0, x1, y1, color: col, t0: now, dur, orb: true }, { x0: x1, y0: y1, x1: x0, y1: y0, color: col, t0: now + dur, dur, orb: true });
-          } else if (len > 1.5) this.shots.push({ x0: (from.x + 0.5) * TILE, y0: (from.y + 0.4) * TILE, x1: (e.at.x + 0.5) * TILE, y1: (e.at.y + 0.4) * TILE, color: ELEMENT_COLOR[e.element ?? ''] ?? '#ffe08a', t0: now, dur: Math.min(320, 90 + len * 35) });
+          }
         }
+        // H6: el resto de hechizos se dibuja con su receta de efectos (proyectil, haz, arco, área, impacto, temblor)
+        const def = SPELLS[e.spell];
+        if (def && !def.bounce && !SPIN_SPELLS.includes(e.spell)) this.fx.cast(recipeFor(def, u.kind), from, e.at, fxCells(def, from, e.at, c.w, c.h), now);
       } else if (e.t === 'move' && u && e.path.length) {
         const last = e.path[e.path.length - 1]!;
         if (from && last.x !== Math.round(from.x)) this.faceLeft.set(u.id, last.x < from.x);
       } else if (e.t === 'death' && u && from) {
-        this.ghosts.push({ kind: u.kind, team: u.team, idx: heroIdx.get(u.id) ?? 0, x: from.x, y: from.y, t0: now });
+        this.ghosts.push({ kind: lookKind(u), team: u.team, idx: heroIdx.get(u.id) ?? 0, x: from.x, y: from.y, t0: now });
       }
       if (e.t === 'damage') {
         this.flash.set(e.unit, now + 180);
+        if (from && e.amount > 0) this.fx.hit(from, e.crit, now);
         float(e.unit, e.amount > 0 ? `-${e.amount}${e.crit ? '!' : ''}` : `escudo -${e.absorbed}`, e.crit ? '#ffd24a' : '#ff7080');
       } else if (e.t === 'heal') float(e.unit, `+${e.amount}`, '#5fcf80');
       else if (e.t === 'shield') float(e.unit, `escudo +${e.amount}`, '#58a6ff');
@@ -347,8 +353,10 @@ export class Board {
     }
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.fillStyle = '#07050a'; g.fillRect(0, 0, this.canvas.width, PAD);
-    g.setTransform(1, 0, 0, 1, 0, PAD);
     const now = performance.now();
+    // H6: temblor de pantalla de los golpes fuertes
+    const [sx, sy] = this.fx.offset(now);
+    g.setTransform(1, 0, 0, 1, sx, PAD + sy);
     const zone = ZONES[this.session.run?.zone ?? 0] ?? ZONES[0]!;
     this.drawFloor(c, zone, now);
     const me0 = this.session.myUnit();
@@ -570,7 +578,7 @@ export class Board {
       sh.addColorStop(0, 'rgba(0,0,0,.6)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
       g.fillStyle = sh; g.beginPath(); g.ellipse(cx, by - 1, TILE * 0.36, 9, 0, 0, 6.3); g.fill();
       const moving = s.x !== u.pos.x || s.y !== u.pos.y;
-      const model = isModel(u.kind);
+      const model = isModel(lookKind(u));
       // modelos animados: hechizo en curso, andar o reposo (sin el balanceo de los sprites antiguos)
       let anim: Anim = 'idle', frame = Math.floor(now / 220 + u.id) % ANIM_FRAMES.idle;
       if (model) {
@@ -602,7 +610,7 @@ export class Board {
       const look = u.team === 'hero' && u.summoner === undefined ? lookOf(u.owner) : undefined;
       const aura = auraDef(look?.aura);
       if (aura && !u.statuses.invis) drawAura(g, aura, cx, by - 2, TILE * 0.36, 8, now);
-      drawUnit(g, u.kind, u.team, heroIdx.get(u.id) ?? 0, cx + (lg ? lg.dx * swing * TILE * 0.3 : 0), by + bob + (lg ? lg.dy * swing * TILE * 0.3 : 0), Math.round(TILE * 1.18),
+      drawUnit(g, lookKind(u), u.team, heroIdx.get(u.id) ?? 0, cx + (lg ? lg.dx * swing * TILE * 0.3 : 0), by + bob + (lg ? lg.dy * swing * TILE * 0.3 : 0), Math.round(TILE * 1.18),
         { flash: (this.flash.get(u.id) ?? 0) > now, swing, flip: def0 ? left : !left, alpha: u.statuses.invis ? 0.4 : u.ai === 'decoy' ? 0.55 : 1, anim, frame, skin: look?.cls === u.kind ? look.skin : undefined });
       // Marca de la muerte: calavera con el daño guardado
       const dmk = u.statuses.deathmark;
@@ -659,6 +667,8 @@ export class Board {
       }
       g.globalAlpha = 1;
     }
+    // H6: efectos de habilidades (recetas)
+    this.fx.draw(g, now);
     // luz de antorchas en las esquinas y viñeta
     const W = c.w * TILE, H = c.h * TILE, fl = 0.1 + 0.03 * Math.sin(now / 130);
     for (const [lx, ly] of [[0, 0], [W, 0], [0, H], [W, H]] as const) {

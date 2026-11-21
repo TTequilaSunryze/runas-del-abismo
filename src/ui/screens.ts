@@ -217,7 +217,7 @@ function archivePanel(): string {
     let icon = '<span class="emo">❔</span>', name = '???', text = 'Aún no la has encontrado.', extra = '';
     if (cat === 'bestiary') {
       const b = beastDef(r.id)!, z = BESTIARY.find((x) => x.id === r.id)!.zone;
-      if (on) { icon = `<img class="parch" width="44" height="44" src="${unitPortraitUrl(r.id, 'enemy')}" alt="">`; name = b.name; text = r.lv >= 2 ? `${b.ai === 'boss' ? 'Jefe' : b.ai === 'pillar' ? 'Pilar' : b.ai === 'ranged' ? 'A distancia' : 'Cuerpo a cuerpo'} · ${b.hp} de vida base · ${b.ap} PA · ${b.mp} PM.` : 'Lo has visto en combate. Derrota a uno para estudiarlo.'; }
+      if (on) { icon = `<img class="parch" width="44" height="44" src="${unitPortraitUrl(r.id === 'arquero' ? 'arquero_oseo' : r.id, 'enemy')}" alt="">`; name = b.name; text = r.lv >= 2 ? `${b.ai === 'boss' ? 'Jefe' : b.ai === 'pillar' ? 'Pilar' : b.ai === 'ranged' ? 'A distancia' : 'Cuerpo a cuerpo'} · ${b.hp} de vida base · ${b.ap} PA · ${b.mp} PM.` : 'Lo has visto en combate. Derrota a uno para estudiarlo.'; }
       else text = 'Aún no lo has visto en combate.';
       extra = `<div class="sm dim">Zona ${z === 4 ? 'del Abismo' : z}${on ? ` · visto en ${r.seen} combate(s) · derrotado ${r.n} vez/veces${r.lv < 3 ? ` (${DOCUMENTED_KILLS} para documentarlo)` : ''}` : ''}</div>`;
     } else if (cat === 'grimoire') {
