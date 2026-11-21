@@ -229,3 +229,11 @@ Los combates guardados antes de esta versión siguen cargando: un jefe sin fase 
 5. Cooperativo en línea: que los avisos, las casillas rojas y las manifestaciones se vean igual en el anfitrión y en el invitado, y tras reconectar.
 6. Arquero (Distancia letal), Arquitecto (Lanza 2 por turno), Bárbaro (Sed y Frenesí con Furia): ¿se siguen jugando bien?
 7. Ascensiones altas (A6, A9, A10 con pilares dobles): que los jefes con pilares no se vuelvan imposibles.
+
+## Actualización posterior: habilidades de jefe sin enfriamiento
+
+A petición del diseño, las **56 habilidades de jefe de las 8 clases jugables ya no tienen enfriamiento**. Mantienen su coste de PA y sus límites por turno (`perTurn`), y se pueden repetir mientras queden PA. Si alguna resulta excesiva, se le volverá a poner enfriamiento.
+
+Los kits iniciales no cambian.
+
+**Campo de inercia:** ahora se lanza a una casilla a 2-5 casillas, con línea de visión, y el campo de 3×3 se centra en ella. Antes era alrededor del Arquitecto.

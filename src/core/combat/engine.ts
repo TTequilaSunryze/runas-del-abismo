@@ -1744,9 +1744,10 @@ const V15_SELF: Record<string, SelfSpecial> = {
     }
   },
   // Campo de inercia: 3×3 alrededor del lanzador
-  inertia: (s, u, _d, _at, ev) => {
+  inertia: (s, u, _d, at, ev) => {
+    // centrado en la casilla elegida (alcance 2-5)
     for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
-      const p = { x: u.pos.x + dx, y: u.pos.y + dy };
+      const p = { x: at.x + dx, y: at.y + dy };
       if (p.x < 0 || p.y < 0 || p.x >= s.w || p.y >= s.h || s.obstacles.includes(key(p))) continue;
       addMark(s, { kind: 'inertia', pos: p, team: u.team, turns: 2, owner: u.id }, ev);
     }

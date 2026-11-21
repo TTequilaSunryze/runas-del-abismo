@@ -1,6 +1,8 @@
 // G3.1–G3.4: jefes con identidad propia, invocaciones por categorías, ajustes de clases y habilidades de jefe.
 import { describe, expect, it } from 'vitest';
 import { makeEnemy } from '../src/content/enemies';
+import { PATRONS } from '../src/content/boons';
+import { PLAYABLE } from '../src/core/classes/classes';
 import { ZONES } from '../src/content/zones';
 import { makeHero } from '../src/core/classes/factory';
 import { SPELLS } from '../src/core/classes/spells';
@@ -245,26 +247,32 @@ describe('G3.3 · clases', () => {
 });
 
 describe('G3.4 · habilidades de jefe', () => {
-  const CD: Record<string, [number, number]> = {
-    z_espejismo: [2, 2], t_singularidad: [4, 2], s_marca: [3, 2], s_velo: [2, 2], k_sacrificio: [2, 1], b_mirada: [2, 2], b_frenesi: [2, 2],
-    r_inercia: [3, 2], r_matriz: [3, 3], r_ciudadela: [4, 3], g_plata: [3, 2], a_letal: [4, 3], a_halcon: [3, 2], a_conmocion: [3, 2],
+  const AP: Record<string, number> = {
+    z_espejismo: 2, t_singularidad: 4, s_marca: 3, s_velo: 2, k_sacrificio: 2, b_mirada: 2, b_frenesi: 2,
+    r_inercia: 3, r_matriz: 3, r_ciudadela: 4, g_plata: 3, a_letal: 4, a_halcon: 3, a_conmocion: 3,
   };
-  it('PA y enfriamientos revisados; ninguna pasa de 3 turnos', () => {
-    for (const [id, [ap, cd]] of Object.entries(CD)) { expect(SPELLS[id]!.ap, id).toBe(ap); expect(SPELLS[id]!.cd, id).toBe(cd); }
-    const pool = ['zorro', 'esferas', 'acechador', 'carcelero', 'barbaro', 'arquitecto', 'pistolero', 'arquero'];
-    void pool;
-    for (const d of Object.values(SPELLS).filter((x) => x.route === 'boon')) {
-      if (['m_glaciar'].includes(d.id)) continue; // clases retiradas
-      expect(d.cd, d.id).toBeLessThanOrEqual(3);
-    }
+  const POOL = Object.values(PATRONS).filter((p) => PLAYABLE.includes(p.cls)).flatMap((p) => p.spells).filter((id) => SPELLS[id]?.route === 'boon');
+  it('las habilidades de jefe de las 8 clases no tienen enfriamiento y conservan su coste de PA', () => {
+    expect(POOL.length).toBe(56);
+    for (const id of POOL) expect(SPELLS[id]!.cd, id).toBe(0);
+    for (const [id, ap] of Object.entries(AP)) expect(SPELLS[id]!.ap, id).toBe(ap);
   });
-  it('un enfriamiento de 2 vuelve a estar listo al tercer turno propio', () => {
+  it('sin enfriamiento se pueden repetir en el mismo turno mientras haya PA', () => {
     const s = board([hero('barbaro', { x: 2, y: 2 }, ['b_mirada']), { ...makeEnemy('esqueleto', { x: 4, y: 2 }), hp: 999, maxHp: 999 }]);
     const u = me(s, s.units[0]!), e = s.units[1]!;
     expect(cast(s, u.id, 'b_mirada', e.pos).ok).toBe(true);
-    const ready: boolean[] = [];
-    for (let t = 0; t < 3; t++) { endTurn(s, u.id); me(s, u); ready.push(!castProblem(s, u, SPELLS.b_mirada!, e.pos)); }
-    expect(ready).toEqual([false, false, true]);
+    expect(cast(s, u.id, 'b_mirada', e.pos).ok).toBe(true);
+    u.ap = 1;
+    expect(castProblem(s, u, SPELLS.b_mirada!, e.pos)).toMatch(/PA/);
+  });
+  it('Campo de inercia se lanza a 2-5 casillas y crea el campo allí', () => {
+    const s = board([hero('arquitecto', { x: 2, y: 2 }, ['r_inercia']), makeEnemy('esqueleto', { x: 12, y: 7 })]);
+    const u = me(s, s.units[0]!);
+    expect(castProblem(s, u, SPELLS.r_inercia!, u.pos)).toMatch(/alcance/);
+    expect(castProblem(s, u, SPELLS.r_inercia!, { x: 8, y: 2 })).toMatch(/alcance/);
+    expect(cast(s, u.id, 'r_inercia', { x: 5, y: 2 }).ok).toBe(true);
+    const cells = marksOf(s, 'inertia', u.id).map((m) => `${m.pos.x},${m.pos.y}`);
+    expect(cells).toContain('5,2'); expect(cells).toContain('6,3'); expect(cells).not.toContain('2,2');
   });
   it('Frenesí imparable cuesta 30 de Furia', () => {
     const s = board([hero('barbaro', { x: 2, y: 2 }, ['b_frenesi']), makeEnemy('esqueleto', { x: 9, y: 2 })]);
