@@ -1,5 +1,6 @@
 // Tienda de ecos: catálogo de cosméticos (solo apariencia), compras, desbloqueos exclusivos, equipamiento y kits visuales.
-// Nada de aquí entra en el combate ni en RunState: los héroes se construyen igual con o sin cosméticos.
+// Los cosméticos no entran en el combate. H2: también vende el desbloqueo permanente de las habilidades alternativas del
+// catálogo (src/content/spellCatalog.ts). Desbloquear no da estadísticas: solo permite equiparlas (configurador, H3).
 import { CLASSES, PLAYABLE } from '../core/classes/classes';
 import type { ClassId } from '../core/state';
 import { AURAS, PALETTES, auraDef, paletteDef } from '../render/palettes';
@@ -8,11 +9,14 @@ import { chronicleState } from './atlas';
 import { FRAMES, LOADOUT_MAX, TITLES, emptyCosmetics, frameDef, titleName, type Cosmetics, type Loadout, type Slot } from './cosmetics';
 import { masteryLevel, type Meta } from './meta';
 import { SPECIALS } from './specials';
+import { SPELL_CATALOG } from '../content/spellCatalog';
+import { SPELLS } from '../core/classes/spells';
+import { routeNeeds } from './meta';
 
-export type ShopCat = 'skin' | 'kit' | 'fx' | 'frame' | 'emblem' | 'title' | 'deco' | 'theme' | 'card' | 'bg';
+export type ShopCat = 'spell' | 'skin' | 'kit' | 'fx' | 'frame' | 'emblem' | 'title' | 'deco' | 'theme' | 'card' | 'bg';
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'set';
 export const CAT_NAME: Record<ShopCat, string> = {
-  skin: 'Aspectos de héroe', kit: 'Kits visuales', fx: 'Efectos visuales', frame: 'Marcos de perfil', emblem: 'Emblemas', title: 'Títulos',
+  spell: 'Habilidades', skin: 'Aspectos de héroe', kit: 'Kits visuales', fx: 'Efectos visuales', frame: 'Marcos de perfil', emblem: 'Emblemas', title: 'Títulos',
   deco: 'Decoración del Archivo', theme: 'Temas del Archivo', card: 'Marcos de fichas', bg: 'Ilustraciones del Archivo',
 };
 export const RARITY_NAME: Record<Rarity, string> = { common: 'Común', uncommon: 'Poco común', rare: 'Rara', epic: 'Épica', set: 'Conjunto' };
@@ -40,7 +44,9 @@ export interface ShopItem {
   /** recurso visual: id de paleta, aura, título, marco, tema, escena o emoji */
   ref: string;
   /** de dónde sale el arte: siempre recursos ya existentes del juego (paletas aplicadas a los sprites, escenas, emojis, CSS) */
-  art: 'palette' | 'aura' | 'scene' | 'emoji' | 'css' | 'text';
+  art: 'palette' | 'aura' | 'scene' | 'emoji' | 'css' | 'text' | 'spell';
+  /** H2: se entrega gratis (sin dejar de poder comprarse antes) en cuanto se cumple este requisito */
+  freeWith?: Req;
   /** kits: elementos que incluye */
   includes?: string[];
   /** false = aún no disponible (no se muestra como comprable) */
@@ -61,8 +67,24 @@ const PAIRS: Array<[string, string]> = [['escarcha', 'sombra'], ['brasa', 'jade'
 const KIT_AURA = 'fx_escarcha', KIT_EMBLEM = 'em_espadas', KIT_DISCOUNT = 0.9;
 const it = (x: Omit<ShopItem, 'available'> & { available?: boolean }): ShopItem => ({ available: true, ...x });
 
+/** H2: precio de cada habilidad alternativa (propuesta aprobada: 10 alternativas ≈ 1.500 ecos por clase). */
+export const SPELL_PRICE = 150;
+/** Id del artículo de tienda de una habilidad. */
+export const spellItemId = (spell: string): string => `spell_${spell}`;
+/** Marca (en Meta.unlocked) del regalo único de las habilidades ya descubiertas en el Grimorio. */
+export const GRIMOIRE_GIFT = 'h2_grimorio';
+
 function build(): ShopItem[] {
   const out: ShopItem[] = [];
+  // H2: habilidades alternativas de cada clase (las 4 iniciales son gratis y no se venden)
+  for (const c of PLAYABLE) for (const id of SPELL_CATALOG[c]?.alts ?? []) {
+    const d = SPELLS[id];
+    if (!d) continue;
+    // las que venían en los kits del Arquero por maestría se regalan con esa maestría
+    const route = CLASSES[c].routes.find((r) => r.id !== 'base' && r.spells.includes(id));
+    out.push(it({ id: spellItemId(id), name: d.name, desc: d.text, cat: 'spell', rarity: 'uncommon', price: SPELL_PRICE, cls: c, ref: id, art: 'spell',
+      ...(route ? { freeWith: { k: 'mastery', cls: c, lv: routeNeeds(c, route.id) } as Req } : {}) }));
+  }
   const pal = (id: string): string => paletteDef(id)!.name;
   PLAYABLE.forEach((c, i) => {
     const [a, b] = PAIRS[i % PAIRS.length]!, n = CLASSES[c].name;
@@ -187,14 +209,36 @@ export function buyItem(m: Meta, id: string): BuyResult {
   return { ok: true, paid: price };
 }
 
-/** Entrega los exclusivos cuyo requisito ya se cumple (idempotente). Los de contratos especiales se entregan al reclamarlos. */
+/**
+ * Entrega los exclusivos cuyo requisito ya se cumple (idempotente). Los de contratos especiales se entregan al reclamarlos.
+ * H2: también las habilidades con `freeWith` cumplido y, una sola vez, las alternativas que el jugador ya tenía
+ * descubiertas o utilizadas en el Grimorio (progreso anterior: no se vuelve a cobrar).
+ */
 export function grantUnlocks(m: Meta): ShopItem[] {
   const got: ShopItem[] = [];
   for (const x of CATALOG()) {
+    if (x.freeWith && !owns(m, x.id) && reqMet(m, x.freeWith)) { give(m, x); got.push(x); continue; }
     if (x.price !== null || !x.req || (x.req.k === 'special' && (x.cat === 'title' || x.cat === 'frame'))) continue;
     if (!owns(m, x.id) && reqMet(m, x.req)) { give(m, x); got.push(x); }
   }
+  got.push(...grimoireGift(m));
   return got;
+}
+
+/** H2: regalo único de las habilidades alternativas ya descubiertas en el Grimorio. Idempotente (marca en Meta.unlocked). */
+export function grimoireGift(m: Meta): ShopItem[] {
+  if (m.unlocked.includes(GRIMOIRE_GIFT)) return [];
+  const got: ShopItem[] = [];
+  for (const x of CATALOG()) if (x.cat === 'spell' && !owns(m, x.id) && (m.archive?.grimoire?.[x.ref]?.lv ?? 0) >= 1) { give(m, x); got.push(x); }
+  m.unlocked = [...m.unlocked, GRIMOIRE_GIFT];
+  return got;
+}
+
+/** H2: habilidades del catálogo que el jugador puede equipar (las 4 iniciales y las alternativas desbloqueadas). */
+export function ownedSpells(m: Pick<Meta, 'cosmetics'>, cls: ClassId): string[] {
+  const c = SPELL_CATALOG[cls];
+  if (!c) return [];
+  return [...c.starters, ...c.alts.filter((id) => owns(m, spellItemId(id)))];
 }
 
 // ---------- equipamiento ----------
@@ -212,6 +256,7 @@ export function equipItem(m: Pick<Meta, 'cosmetics'>, id: string, cls?: ClassId)
   const x = shopItem(id), c = cos(m);
   if (!x || !owns(m, id)) return 'No lo tienes.';
   if (x.cat === 'kit') return 'Los kits no se equipan: equipa sus elementos o guarda un conjunto.';
+  if (x.cat === 'spell') return 'Las habilidades se equipan al preparar la expedición.';
   if (x.cat === 'title') { c.title = x.ref; return null; }
   if (x.cat === 'frame') { c.frame = x.ref; return null; }
   if (x.cat === 'skin') {

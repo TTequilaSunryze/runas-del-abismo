@@ -12,7 +12,8 @@ import { readSnapshot } from '../game/snapshot';
 import { addLog, combatScreen } from './combat';
 import { esc, mine, params, randomText, store, today, ui } from './ctx';
 import { BAG_SIZE, PRICE } from '../core/items/items';
-import { drainArchiveNotices, recordArchive, type ArchiveNotice } from '../game/archive';
+import { archive, drainArchiveNotices, recordArchive, type ArchiveNotice } from '../game/archive';
+import { grantUnlocks } from '../game/shop';
 import { claimContractReward } from '../game/contracts';
 import { applyLoadout, buyItem, currentLook, emblemOf, deleteLoadout, equipItem, resetLook, saveLoadout, unequip } from '../game/shop';
 import { setLooks } from '../render/looks';
@@ -46,6 +47,22 @@ function home(msg = ''): void {
   ui.screen = 'home';
   hideTip();
   homeScreen(msg);
+  unlockGifts();
+}
+
+/** H2: entrega lo que se regala (Grimorio una vez, maestría del Arquero, exclusivos) y avisa. */
+function unlockGifts(): void {
+  try {
+    archive();
+    const got = grantUnlocks(meta());
+    if (!got.length) return;
+    saveMeta();
+    const spells = got.filter((x) => x.cat === 'spell');
+    showArchiveNotices([
+      ...(spells.length ? [{ icon: '🎁', kind: 'special', text: `${spells.length} habilidad${spells.length > 1 ? 'es' : ''} desbloqueada${spells.length > 1 ? 's' : ''} gratis por tu progreso: búscalas en la Tienda › Habilidades` }] : []),
+      ...got.filter((x) => x.cat !== 'spell').map((x) => ({ icon: '🎁', kind: 'special', text: `Desbloqueado en la tienda: ${x.name}` })),
+    ] as ArchiveNotice[]);
+  } catch { /* sin progreso cargado */ }
 }
 
 async function enter(code: string, isHost: boolean, local: boolean, resume = false): Promise<void> {
@@ -450,5 +467,5 @@ socialHandlers(() => { if (ui.screen === 'home') homeScreen(''); else if (ui.scr
 export function boot(): void {
   home();
   // si había sesión de cuenta, se recupera y se refresca la pantalla de inicio
-  void restoreAccount().then(() => { if (ui.screen === 'home' && currentAccount()) homeScreen(''); });
+  void restoreAccount().then(() => { if (ui.screen === 'home' && currentAccount()) { homeScreen(''); unlockGifts(); } });
 }

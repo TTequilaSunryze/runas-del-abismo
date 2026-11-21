@@ -26,7 +26,8 @@ import { STAT_NAME, type Item } from '../core/items/items';
 import { MAX_SPELL_UPS, UPGRADES } from '../core/upgrades';
 import { archiveTotal, BESTIARY, CATEGORIES, CAT_NAME, DOCUMENTED_KILLS, GRIMOIRE, LEVEL_NAME, beastDef, completion, entriesOf } from '../game/archive';
 import { activeContracts, refreshContracts, type Contract } from '../game/contracts';
-import { CATALOG, CAT_NAME as SHOP_CAT, RARITY_NAME, archiveLook, currentLook, emblemOf, grantUnlocks, itemState, markSeen, owns, priceFor, reqMet, reqText, shopItem, unseenOwned, type ShopCat, type ShopItem } from '../game/shop';
+import { SPELL_CATALOG } from '../content/spellCatalog';
+import { CATALOG, ownedSpells, CAT_NAME as SHOP_CAT, RARITY_NAME, archiveLook, currentLook, emblemOf, grantUnlocks, itemState, markSeen, owns, priceFor, reqMet, reqText, shopItem, unseenOwned, type ShopCat, type ShopItem } from '../game/shop';
 import { auraDef, paletteDef } from '../render/palettes';
 import { SPECIALS, SPECIAL_TYPE_NAME, evaluateSpecials, rewardName, specialRows } from '../game/specials';
 import { frameDef, titleName } from '../game/cosmetics';
@@ -84,6 +85,7 @@ const specialReady = (m: ReturnType<typeof meta>): number => specialRows(m).filt
 /** Vista previa de un elemento con los recursos existentes (sprites con su variante, auras, escenas, emojis, colores). */
 function shopPreview(x: ShopItem, cls: ClassId): string {
   const c = (x.cls ?? cls) as ClassId;
+  if (x.cat === 'spell') { const d = SPELLS[x.ref]; return d ? `<span class="spellprev">${spellIcon(d, false)}<small>${d.ap} PA</small></span>` : ''; }
   if (x.cat === 'skin') return `<img class="parch" width="56" height="56" src="${unitPortraitUrl(c, 'hero', 0, x.ref)}" alt="">`;
   if (x.cat === 'kit') return (x.includes ?? []).filter((i) => i.startsWith('skin_')).map((i) => `<img class="parch" width="44" height="44" src="${unitPortraitUrl(c, 'hero', 0, shopItem(i)!.ref)}" alt="">`).join('');
   if (x.cat === 'fx') { const a = auraDef(x.ref)!; return `<span class="fxprev" style="--c:${a.color};--g:${a.glow}"></span>`; }
@@ -95,6 +97,18 @@ function shopPreview(x: ShopItem, cls: ClassId): string {
   return `<span class="bgprev">${sceneOf(x.ref)}</span>`;
 }
 const sceneOf = (id: string): string => (id === 'altar' ? altarScene(true) : id === 'forja' ? forgeScene(30) : id === 'cofre' ? chestScene('loot') : id === 'descanso' ? restScene(0) : id === 'santuario' ? shrineScene(1) : '');
+
+/** H2: nota de la categoría de habilidades: iniciales gratis, desbloqueadas y las que aún no existen. */
+function spellShopNote(m: ReturnType<typeof meta>, cls: ClassId | ''): string {
+  const one = (c: ClassId): string => {
+    const k = SPELL_CATALOG[c];
+    if (!k) return '';
+    const own = ownedSpells(m, c).length - k.starters.length;
+    return `<div class="sm"><b>${esc(CLASSES[c].name)}</b>: iniciales gratis ${k.starters.map((id) => SPELLS[id] ? spellIcon(SPELLS[id]!, false) : '').join('')} · alternativas ${own}/${k.alts.length}${k.missing ? ` <span class="dim">(${k.missing} más en camino)</span>` : ''}</div>`;
+  };
+  const list = cls && SPELL_CATALOG[cls] ? [cls] : PLAYABLE;
+  return `<div class="panel note"><b>📜 Habilidades</b><div class="dim sm">Cada clase tiene 4 habilidades iniciales y 10 alternativas. Desbloquearlas es para siempre; equiparlas y cambiarlas no costará ecos (configurador de 4 ranuras, próximamente). Las que ya habías descubierto en el Grimorio y las de los kits por maestría del Arquero son gratis.</div>${list.map(one).join('')}</div>`;
+}
 
 /** Tienda de ecos: categorías, filtros, vista previa, compra con confirmación, inventario, equipamiento y conjuntos. */
 function shopPanel(): string {
@@ -113,6 +127,7 @@ function shopPanel(): string {
     const st = itemState(m, x, cls), price = priceFor(m, x), poor = m.ecos < price;
     let act = '';
     if (st === 'equipped') act = `<span class="pill good sm">✔ Equipado</span> <button class="mini" data-act="shopun" data-id="${x.cat === 'skin' ? 'skin' : x.cat === 'title' ? 'title' : x.cat === 'frame' ? 'frame' : SLOT_OF_CAT[x.cat] ?? ''}">Quitar</button>`;
+    else if (st === 'owned' && x.cat === 'spell') act = '<span class="pill good sm">✔ Desbloqueada</span> <span class="dim sm">Se equipa al preparar la expedición (configurador, próximamente).</span>';
     else if (st === 'owned') act = x.cat === 'kit' ? '<span class="pill good sm">✔ Completo</span>' : x.cat === 'skin' && x.cls && x.cls !== cls ? `<span class="dim sm">Adquirido · elige ${esc(CLASSES[x.cls].name)} para equiparlo</span>` : `<span class="pill sm">Adquirido</span> <button class="pri mini" data-act="shopeq" data-id="${x.id}">Equipar${x.cat === 'skin' ? ` en ${esc(CLASSES[cls].name)}` : ''}</button>`;
     else if (st === 'locked') act = `<span class="dim sm">🔒 ${esc(reqText(x.req!))}</span>`;
     else if (st === 'exclusive') act = `<span class="dim sm">🏅 Exclusivo: ${esc(reqText(x.req!))}</span>`;
@@ -130,10 +145,10 @@ function shopPanel(): string {
   // lo propio de esta categoría ya se ha visto
   setTimeout(() => { if (markSeen(m, list.filter((x) => owns(m, x.id)).map((x) => x.id))) saveMeta(); }, 0);
   return `${refund}<div class="panel"><div class="row"><h3>✨ Tienda de ecos</h3><span class="grow"></span><b class="pill">✨ ${m.ecos} ecos</b></div>
-  <div class="dim sm">Solo apariencia: nada de la tienda cambia el combate. Sin compras al azar ni ofertas por tiempo.</div>
+  <div class="dim sm">${ui.shopCat === 'spell' ? 'Desbloqueo permanente de habilidades alternativas: no dan estadísticas, solo amplían las que puedes equipar.' : 'Solo apariencia: los cosméticos no cambian el combate.'} Sin compras al azar ni ofertas por tiempo.</div>
   <div class="tabs">${cats}</div><div class="row sm" style="flex-wrap:wrap;gap:4px">${rar}<span class="grow"></span><button class="mini ${ui.shopMine ? 'on' : ''}" data-act="shopmine">🎒 Solo lo mío (inventario)</button></div>
   <div class="row sm" style="flex-wrap:wrap;gap:4px">${clsF}</div>
-  ${ui.shopMsg ? `<div class="${/^Comprado/.test(ui.shopMsg) ? 'good' : 'bad'} sm">${esc(ui.shopMsg)}</div>` : ''}${lookCard}
+  ${ui.shopMsg ? `<div class="${/^Comprado/.test(ui.shopMsg) ? 'good' : 'bad'} sm">${esc(ui.shopMsg)}</div>` : ''}${lookCard}${ui.shopCat === 'spell' ? spellShopNote(m, ui.shopCls as ClassId) : ''}
   <div class="cards c3">${list.map(card).join('') || '<div class="dim sm">Nada con estos filtros.</div>'}</div></div>`;
 }
 const SLOT_OF_CAT: Partial<Record<ShopCat, string>> = { emblem: 'emblem', fx: 'aura', theme: 'theme', card: 'card', bg: 'bg', deco: 'deco' };
