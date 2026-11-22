@@ -27,3 +27,9 @@ Tono por zona (multiplicar) en `ZONE_TINT`.
 "Pixel Worlds - 202 Dungeon, Castle & Mine Props (Free)" de SdavGha: sin atribución obligatoria; no se pueden redistribuir sueltos ni usar para entrenar IA.
 Se usan los PNG `_2x` (rombo 128×64, igual que el tablero), oscurecidos ×(0.70, 0.67, 0.63). Punto de apoyo: centro de abajo de la imagen sobre el vértice de abajo de la casilla.
 Obstáculos por zona en `ZONE_PROPS` (src/render/board.ts); la trampa de púas es la del Stone Crypt (`spike_trap_up`).
+
+## Personajes con hoja de 8 direcciones (public/iso/units)
+
+Guerrero esqueleto: "Skeleton Series" de MEKAI GAMES (crédito agradecido; no redistribuir ni usar para entrenar IA).
+Hojas `sheets/classic/skeleton_classic_<anim>.png` tal cual: fotogramas de 96 px, pies en (48, 80), filas S, SE, E, NE, N, NW, W, SW. Se dibujan a 2×.
+Para añadir otro: copiar sus hojas como `<nombre>_<idle|walk|attack|hurt|death>.png` y registrarlo en `SHEETS` (src/render/board.ts) con la clase del enemigo.

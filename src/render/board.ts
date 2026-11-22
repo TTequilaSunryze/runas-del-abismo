@@ -87,6 +87,31 @@ const ZONE_PROPS: Array<Array<HTMLImageElement | null>> = [
   // abismo: estalagmitas, cascotes, obelisco, cristales, pilar de invocación, cristal de barrera, runas flotantes, piedra rúnica, pilar con cadenas
   [CRYPT.stalagmites, CRYPT.rubble, ...['d10_09', 'd04_02', 'd10_07', 'd10_06', 'd11_10', 'd07_05', 'd10_14', 'd10_09'].map(prop)],
 ];
+/**
+ * Personajes con hoja de animación en 8 direcciones (vista isométrica). Fotogramas de 96 px con los pies en (48, 80);
+ * filas S, SE, E, NE, N, NW, W, SW. Se dibujan a 2×.
+ * Guerrero esqueleto: «Skeleton Series» de MEKAI GAMES.
+ */
+type SheetAnim = 'idle' | 'walk' | 'attack' | 'hurt' | 'death';
+interface Sheet { img: Record<SheetAnim, HTMLImageElement | null>; frames: Record<SheetAnim, number>; size: number; foot: [number, number]; scale: number }
+const sheet = (name: string, frames: Record<SheetAnim, number>): Sheet => ({
+  img: { idle: art(`iso/units/${name}_idle.png`), walk: art(`iso/units/${name}_walk.png`), attack: art(`iso/units/${name}_attack.png`), hurt: art(`iso/units/${name}_hurt.png`), death: art(`iso/units/${name}_death.png`) },
+  frames, size: 96, foot: [48, 80], scale: 2,
+});
+/** qué enemigos usan una hoja (por su clase) */
+const SHEETS: Record<string, Sheet> = {
+  esqueleto: sheet('skeleton', { idle: 8, walk: 8, attack: 8, hurt: 5, death: 10 }),
+};
+const sheetOf = (u: { kind: string; team: string }): Sheet | undefined => (u.team === 'enemy' ? SHEETS[u.kind] : undefined);
+const sheetReady = (s: Sheet): boolean => Object.values(s.img).every(ready);
+/** Dirección (fila de la hoja) para un desplazamiento en casillas, vista en pantalla isométrica. */
+export function sheetDir(dx: number, dy: number): number {
+  if (!dx && !dy) return 0;
+  const a = Math.atan2((dx + dy) / 2, dx - dy), k = ((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8;
+  // k: 0 = E, 1 = SE, 2 = S, 3 = SO, 4 = O, 5 = NO, 6 = N, 7 = NE → filas S, SE, E, NE, N, NW, W, SW
+  return [2, 1, 0, 7, 6, 5, 4, 3][k]!;
+}
+
 /** objetos con velas: dan luz */
 const LIT_PROPS = new Set(['d05_05', 'd01_14'].map(prop));
 /** tono de cada zona sobre suelo y muros (multiplicar) */
@@ -152,7 +177,7 @@ interface Ring { x: number; y: number; color: string; t0: number; dur: number; r
 /** golpes giratorios: el personaje (y su Sombra) dan una vuelta */
 const SPIN_SPELLS = ['s_tajo', 'k_despellejar', 'k_guadana', 'z_colas', 'g_remolino', 'torbellino'];
 const SPIN_MS = 420;
-interface Ghost { kind: string; team: string; idx: number; x: number; y: number; t0: number }
+interface Ghost { kind: string; team: string; idx: number; x: number; y: number; t0: number; sheet?: string; dir?: number }
 const ELEMENT_COLOR: Record<string, string> = { fire: '#ff8a30', ice: '#8ae0ff', poison: '#7fe05a', shadow: '#b07cff', holy: '#ffe9a0' };
 const ELEMENT_NAME: Record<string, string> = { fire: 'fuego', ice: 'hielo', poison: 'veneno', shadow: 'sombra', holy: 'sagrado' };
 const LUNGE_MS = 240;
@@ -191,6 +216,9 @@ export class Board {
   /** animación de hechizo en curso (modelos animados) */
   private acts = new Map<number, { t0: number; anim: Anim }>();
   private faceLeft = new Map<number, boolean>();
+  /** dirección de cada personaje con hoja de 8 direcciones, y cuándo le golpearon por última vez */
+  private facing = new Map<number, number>();
+  private hurtAt = new Map<number, number>();
   private raf = 0;
   /** braseros vistos en este combate (para dejar el brasero volcado donde se rompió) */
   private brazierSeen = new Set<string>();
@@ -333,8 +361,9 @@ export class Board {
         const last = e.path[e.path.length - 1]!;
         if (from && last.x !== Math.round(from.x)) this.faceLeft.set(u.id, last.x < from.x);
       } else if (e.t === 'death' && u && from) {
-        this.ghosts.push({ kind: lookKind(u), team: u.team, idx: heroIdx.get(u.id) ?? 0, x: from.x, y: from.y, t0: now });
+        this.ghosts.push({ kind: lookKind(u), team: u.team, idx: heroIdx.get(u.id) ?? 0, x: from.x, y: from.y, t0: now, sheet: sheetOf(u) ? u.kind : undefined, dir: this.facing.get(u.id) ?? 0 });
       }
+      if (e.t === 'damage' && e.amount > 0) this.hurtAt.set(e.unit, now);
       if (e.t === 'damage') {
         this.flash.set(e.unit, now + 180);
         if (from && e.amount > 0) this.fx.hit(from, e.crit, now);
@@ -536,6 +565,37 @@ export class Board {
       if (t.lit) continue;
       this.drawFlame(t.x, t.y + 4, 30, now, i * 3.1);
     }
+  }
+
+  /** Un fotograma de una hoja de 8 direcciones, con los pies en el centro de la casilla (x, y) (con decimales). */
+  private sheetFrame(c: CombatState, s: Sheet, anim: SheetAnim, frame: number, dir: number, x: number, y: number, alpha = 1, flash = false): void {
+    const g = this.g, img = s.img[anim]!, p = this.top(c, x + 0.5, y + 0.5), k = s.scale, sz = s.size;
+    const dx = Math.round(p.x - s.foot[0] * k), dy = Math.round(p.y + ISO_FOOT - s.foot[1] * k);
+    this.screen(); g.save(); g.globalAlpha = alpha;
+    g.drawImage(img, frame * sz, dir * sz, sz, sz, dx, dy, sz * k, sz * k);
+    if (flash) { g.globalCompositeOperation = 'lighter'; g.globalAlpha = alpha * 0.6; g.drawImage(img, frame * sz, dir * sz, sz, sz, dx, dy, sz * k, sz * k); }
+    g.restore();
+  }
+
+  /** Personaje con hoja de 8 direcciones: ataque, herido, andar o reposo, mirando a su objetivo o al enemigo más cercano. */
+  private drawSheetUnit(c: CombatState, u: Unit, s: Pos, sh: Sheet, now: number, moving: boolean): void {
+    const ac = this.acts.get(u.id), ak = ac ? (now - ac.t0) / ACT_MS : 1, lg = this.lunge.get(u.id), hurt = now - (this.hurtAt.get(u.id) ?? -1e9);
+    let dir = this.facing.get(u.id);
+    if (ac && ak < 1 && lg) dir = sheetDir(lg.dx, lg.dy);
+    else if (moving) dir = sheetDir(u.pos.x - s.x, u.pos.y - s.y);
+    else if (dir === undefined || !(ac && ak < 1.5)) {
+      // quieto: mira al rival vivo más cercano
+      let best: Unit | undefined, bd = 1e9;
+      for (const o of c.units) if (o.hp > 0 && o.team !== u.team) { const d = Math.abs(o.pos.x - u.pos.x) + Math.abs(o.pos.y - u.pos.y); if (d < bd) { bd = d; best = o; } }
+      if (best) dir = sheetDir(best.pos.x - u.pos.x, best.pos.y - u.pos.y);
+    }
+    dir ??= 0; this.facing.set(u.id, dir);
+    let anim: SheetAnim = 'idle', fr = Math.floor(now / 125 + u.id * 3) % sh.frames.idle;
+    if (ac && ak < 1) { anim = 'attack'; fr = Math.min(sh.frames.attack - 1, Math.floor(ak * sh.frames.attack)); }
+    else if (hurt < 500) { anim = 'hurt'; fr = Math.min(sh.frames.hurt - 1, Math.floor(hurt / 100)); }
+    else if (moving) { anim = 'walk'; fr = Math.floor(now / 100) % sh.frames.walk; }
+    this.sheetFrame(c, sh, anim, fr, dir, s.x, s.y, u.statuses.invis ? 0.4 : 1, (this.flash.get(u.id) ?? 0) > now);
+    this.upright(s.x, s.y);
   }
 
   /** Punto de pantalla (con temblor) del punto del mundo (x, y). */
@@ -978,7 +1038,9 @@ export class Board {
       const look = u.team === 'hero' && u.summoner === undefined ? lookOf(u.owner) : undefined;
       const aura = auraDef(look?.aura);
       if (aura && !u.statuses.invis) drawAura(g, aura, cx, by - 2, TILE * 0.36, 8, now);
-      drawUnit(g, lookKind(u), u.team, heroIdx.get(u.id) ?? 0, cx + (lg ? lg.dx * swing * TILE * 0.3 : 0), by + bob + (lg ? lg.dy * swing * TILE * 0.3 : 0), Math.round(TILE * 1.18),
+      const sh8 = this.iso ? sheetOf(u) : undefined;
+      if (sh8 && sheetReady(sh8)) this.drawSheetUnit(c, u, s, sh8, now, moving);
+      else drawUnit(g, lookKind(u), u.team, heroIdx.get(u.id) ?? 0, cx + (lg ? lg.dx * swing * TILE * 0.3 : 0), by + bob + (lg ? lg.dy * swing * TILE * 0.3 : 0), Math.round(TILE * 1.18),
         { flash: (this.flash.get(u.id) ?? 0) > now, swing, flip: def0 ? left : !left, alpha: u.statuses.invis ? 0.4 : u.ai === 'decoy' ? 0.55 : 1, anim, frame, skin: look?.cls === u.kind ? look.skin : undefined });
       // Marca de la muerte: calavera con el daño guardado
       const dmk = u.statuses.deathmark;
@@ -987,12 +1049,19 @@ export class Board {
         g.fillStyle = '#1a0610'; g.fillRect(mx - 9, my - 9, 18 + String(dmk.stacks).length * 7, 16);
         g.fillStyle = '#ff3a4a'; g.font = 'bold 12px ui-monospace, monospace'; g.textAlign = 'left'; g.fillText(`☠${dmk.stacks}`, mx - 7, my + 3);
       }
-      this.bars(u, cx, s.y * TILE - 8, heroIdx.get(u.id));
+      this.bars(u, cx, s.y * TILE - (sh8 ? 34 : 8), heroIdx.get(u.id));
     }
     flushProps(this.iso ? c.w + c.h : c.h);
     // caídos: se desvanecen hacia arriba
-    this.ghosts = this.ghosts.filter((d) => now - d.t0 < (isModel(d.kind) ? DEATH_MS : 600));
+    this.ghosts = this.ghosts.filter((d) => now - d.t0 < (d.sheet ? 1600 : isModel(d.kind) ? DEATH_MS : 600));
     for (const d of this.ghosts) {
+      const gs = d.sheet && this.iso ? SHEETS[d.sheet] : undefined;
+      if (gs && sheetReady(gs)) {
+        // hoja de animación: cae (10 fotogramas en 1 s), se queda en el suelo y se desvanece
+        const t0 = now - d.t0, fr = Math.min(gs.frames.death - 1, Math.floor(t0 / 100));
+        this.sheetFrame(c, gs, 'death', fr, d.dir ?? 0, d.x, d.y, t0 < 1100 ? 1 : Math.max(0, 1 - (t0 - 1100) / 500));
+        continue;
+      }
       if (isModel(d.kind)) {
         // modelos animados: animación de muerte y luego se desvanecen
         const k = (now - d.t0) / DEATH_MS;

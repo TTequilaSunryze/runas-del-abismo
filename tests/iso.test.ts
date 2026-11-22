@@ -18,3 +18,18 @@ describe('vista isométrica', () => {
     }
   });
 });
+
+import { sheetDir } from '../src/render/board';
+describe('hojas de 8 direcciones', () => {
+  // filas: S, SE, E, NE, N, NW, W, SW
+  it('cada desplazamiento en casillas mira hacia donde se ve en pantalla', () => {
+    expect(sheetDir(1, 1)).toBe(0); // abajo en pantalla: S
+    expect(sheetDir(1, 0)).toBe(1); // abajo a la derecha: SE
+    expect(sheetDir(1, -1)).toBe(2); // derecha: E
+    expect(sheetDir(0, -1)).toBe(3); // arriba a la derecha: NE
+    expect(sheetDir(-1, -1)).toBe(4); // arriba: N
+    expect(sheetDir(-1, 0)).toBe(5); // arriba a la izquierda: NW
+    expect(sheetDir(-1, 1)).toBe(6); // izquierda: W
+    expect(sheetDir(0, 1)).toBe(7); // abajo a la izquierda: SW
+  });
+});
