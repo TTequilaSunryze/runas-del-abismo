@@ -24,7 +24,13 @@ def build(src, out, boxes, k=1 / 3, cell=96, anchor='center', anchor_rows=12):
             m = a[..., 3] > 40
             lab, n = ndimage.label(m)
             sizes = ndimage.sum(m, lab, range(1, n + 1))
-            a[..., 3] = np.where(np.isin(lab, [j + 1 for j, s in enumerate(sizes) if s >= 60]), a[..., 3], 0)
+            big = max(sizes) if n else 0
+            keep = []
+            for j, sl in enumerate(ndimage.find_objects(lab)):
+                # fuera: manchas sueltas, y trozos del fotograma vecino pegados al borde del recuadro
+                edge = sl[1].start == 0 or sl[1].stop == m.shape[1]
+                if sizes[j] >= 60 and not (edge and sizes[j] < big * 0.25): keep.append(j + 1)
+            a[..., 3] = np.where(np.isin(lab, keep), a[..., 3], 0)
             f = Image.fromarray(a); f = f.crop(f.getbbox())
             mm = np.array(f)[..., 3] > 0
             rows = np.nonzero(mm.any(1))[0]
@@ -33,8 +39,10 @@ def build(src, out, boxes, k=1 / 3, cell=96, anchor='center', anchor_rows=12):
             g = f.resize((max(1, round(f.width * k)), max(1, round(f.height * k))), Image.LANCZOS)
             ga = np.array(g); ga[..., 3] = np.where(ga[..., 3] > 120, 255, 0); g = Image.fromarray(ga)
             x = round(cell / 2 - ax * k) - (round(cell * 0.12) if anchor == 'left' else 0)
-            c = Image.new('RGBA', (cell, cell)); c.alpha_composite(g, (max(0, x), max(0, cell - 4 - g.height)))
-            sheet.alpha_composite(c, (i * cell, 0))
+            # se coloca sin mover el cuerpo aunque algo (una espada) se salga de la celda: lo que sale se recorta
+            c = Image.new('RGBA', (cell * 3, cell * 2)); c.alpha_composite(g, (cell + x, cell * 2 - 4 - g.height))
+            sheet.alpha_composite(c.crop((cell, cell, cell * 2, cell * 2)), (i * cell, 0))
+            if x < 0 or x + g.width > cell or g.height > cell - 4: print(f'  aviso: {name} {i} se sale de la celda')
         sheet.save(f'{out}_{name}.png')
         print(name, len(bs))
 

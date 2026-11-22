@@ -128,6 +128,8 @@ const SHEETS: Record<string, Sheet> = {
   murcielago: { ...sheet('bat', { idle: 4, walk: 8, attack: 8, hurt: 4, death: 5 }, 72, [36, 68], 2, 1), head: 60 },
   // Arquero óseo: lámina dibujada con IA (tools/arte/hoja_ia.py), una dirección; suelta la flecha en el 5.º fotograma de 8
   arquero: { ...sheet('boneArcher', { idle: 6, walk: 10, attack: 8, hurt: 5, death: 6 }, 96, [48, 92], 2, 1), head: 66, actMs: 800, release: 4 / 8 },
+  // Caballero sepulcral: lámina JPG con fondo gris (se quita rellenando desde los bordes), celdas de 160; el tajo llega en el 5.º fotograma
+  caballero: { ...sheet('knight', { idle: 4, walk: 8, attack: 8, hurt: 4, death: 6 }, 160, [80, 156], 2, 1), head: 66, actMs: 800, release: 4 / 8 },
   tejedora: withHead(sheet('weaver', { idle: 12, walk: 8, attack: 10, hurt: 8, death: 12 }, 159, [80, 84]), 27),
   // Tiny Enemies
   espectro: tiny('espectro', T4), gargola: tiny('gargola', T4), necrofago: tiny('necrofago', T4), acolito: tiny('acolito', T4),
