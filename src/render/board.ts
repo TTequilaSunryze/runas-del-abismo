@@ -101,6 +101,8 @@ interface Sheet {
   img: Partial<Record<SheetAnim, HTMLImageElement | null>>; frames: Partial<Record<SheetAnim, number>>; size: number; foot: [number, number]; scale: number; dirs: 8 | 1;
   /** duración de ataque/lanzamiento (ms) y en qué fracción sale el proyectil */
   actMs?: number; release?: number;
+  /** alto real del dibujo sobre los pies (píxeles de la hoja), para poner la barra de vida encima */
+  head?: number;
   /** proyectil propio (sustituye al genérico en los ataques que viajan), y su altura de salida sobre los pies */
   arrow?: HTMLImageElement | null; arrowY?: number;
 }
@@ -108,16 +110,19 @@ const sheet = (name: string, frames: Sheet['frames'], size = 96, foot: [number, 
   img: Object.fromEntries(Object.keys(frames).map((a) => [a, art(`iso/units/${name}_${a}.png`)])) as Sheet['img'],
   frames, size, foot, scale, dirs,
 });
+const withHead = (s: Sheet, head: number): Sheet => ({ ...s, head });
 /** «Tiny Enemies» de Vryell: 16 px, 4 direcciones repartidas en 8 filas, a 5× */
-const tiny = (id: string, f: Sheet['frames']): Sheet => sheet(`tiny_${id}`, f, 16, [8, 15], 5);
+const tiny = (id: string, f: Sheet['frames']): Sheet => ({ ...sheet(`tiny_${id}`, f, 16, [8, 15], 5), head: 14 });
 const T4 = { idle: 4, walk: 4, attack: 4, hurt: 1, death: 3 };
 /** qué enemigos usan una hoja (por su clase) */
 const SHEETS: Record<string, Sheet> = {
-  esqueleto: sheet('skeleton', { idle: 8, walk: 8, attack: 8, hurt: 5, death: 10 }),
+  esqueleto: withHead(sheet('skeleton', { idle: 8, walk: 8, attack: 8, hurt: 5, death: 10 }), 67),
   // modelos 3D pasados a pixel art (tools/arte/pixelar_hoja.py)
-  devorador: sheet('demon', { idle: 8, walk: 10, attack: 10, hurt: 4, death: 12 }, 160, [80, 104]),
-  larva: sheet('centipede', { idle: 8, walk: 6, attack: 6, hurt: 5, death: 8 }, 160, [80, 80]),
-  ent: sheet('tree', { idle: 9, walk: 8, attack: 9, hurt: 6, death: 9 }, 176, [86, 95]),
+  devorador: withHead(sheet('demon', { idle: 8, walk: 10, attack: 10, hurt: 4, death: 12 }, 160, [80, 104]), 67),
+  larva: withHead(sheet('centipede', { idle: 8, walk: 6, attack: 6, hurt: 5, death: 8 }, 160, [80, 80]), 41),
+  ent: withHead(sheet('tree', { idle: 9, walk: 8, attack: 9, hurt: 6, death: 9 }, 176, [86, 95]), 67),
+  // araña gigante 3D (celdas de 256 en origen)
+  tejedora: withHead(sheet('weaver', { idle: 12, walk: 8, attack: 10, hurt: 8, death: 12 }, 159, [80, 84]), 27),
   // Tiny Enemies
   espectro: tiny('espectro', T4), gargola: tiny('gargola', T4), necrofago: tiny('necrofago', T4), acolito: tiny('acolito', T4),
   arana: tiny('arana', { ...T4, death: 4 }), hongo: tiny('hongo', { ...T4, hurt: 2, death: 4 }), chaman: tiny('chaman', T4), druida: tiny('druida', T4),
@@ -127,13 +132,13 @@ const SHEETS: Record<string, Sheet> = {
 /** héroes con hoja (por clase). Arquero: «Arcane archer», de perfil. */
 const HERO_SHEETS: Record<string, Sheet> = {
   // a 3×: unos 96 px de alto; tensa el arco y suelta la flecha en el 7.º fotograma (de 7)
-  arquero: { ...sheet('archer', { idle: 4, walk: 8, attack: 7, cast: 4, hurt: 2, death: 8 }, 64, [32, 48], 3, 1), actMs: 800, release: 6 / 7, arrow: art('iso/units/archer_arrow.png'), arrowY: 23 },
+  arquero: { ...sheet('archer', { idle: 4, walk: 8, attack: 7, cast: 4, hurt: 2, death: 8 }, 64, [32, 48], 3, 1), actMs: 800, release: 6 / 7, arrow: art('iso/units/archer_arrow.png'), arrowY: 23, head: 32 },
 };
 const sheetOf = (u: { kind: string; team: string; summoner?: number }): Sheet | undefined =>
   u.team === 'enemy' ? SHEETS[u.kind] : u.summoner === undefined ? HERO_SHEETS[u.kind] : undefined;
 const sheetReady = (s: Sheet): boolean => Object.values(s.img).every(ready);
 /** alto del personaje sobre sus pies, en pantalla */
-const sheetHeight = (s: Sheet): number => s.foot[1] * s.scale;
+const sheetHeight = (s: Sheet): number => (s.head ?? s.foot[1]) * s.scale;
 /** Dirección (fila de la hoja) para un desplazamiento en casillas, vista en pantalla isométrica. */
 export function sheetDir(dx: number, dy: number): number {
   if (!dx && !dy) return 0;

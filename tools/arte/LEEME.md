@@ -43,3 +43,5 @@ Tiny Enemies Vol. 1 (Vryell): hojas de 16 px en 4 direcciones (filas S, E, N, W;
 Enemigos: espectro, gárgola, necrófago, acólito, araña, hongo, chamán, druida, pantera, piromante, ascua, salamandra, ceniciento, ojo, errante del vacío y heraldo.
 
 Arquero (héroe): "Arcane archer" (autor y licencia por confirmar), de perfil y mirando a la derecha; filas del original: 0 correr, 1 muerte, 3 disparo, 5 quieto, 6 habilidad, 7 herido. Celdas de 64 px, pies en (32, 48), a 3× (unos 96 px); se voltea para mirar a la izquierda. El .aseprite del pack es la misma hoja en un solo fotograma, sin etiquetas. Disparo: 800 ms, suelta la flecha en el 7.º fotograma (`release`), con `projectile.png` como flecha; el efecto de impacto y los números de daño esperan a que llegue.
+Tejedora (zona 2): araña gigante 3D (celdas de 256: el conversor lo detecta por la carpeta `x256…`), `pixelar_hoja.py x256_Spritesheets weaver 0.62 "idle=Idle_Nervous,walk=Walk,attack=Attack1,hurt=Hit,death=Die1" 2`. Licencia por confirmar.
+`head` en cada hoja = alto real del dibujo sobre los pies, para colocar la barra de vida.

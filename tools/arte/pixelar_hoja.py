@@ -13,6 +13,7 @@ from PIL import Image, ImageEnhance
 import numpy as np
 
 S = 320
+# también 256 (se detecta por el nombre de la carpeta: x256…)
 DIRS = ['180', '135', '090', '045', '000', '315', '270', '225']
 ANIMS = {'idle': ('Idle', 2), 'walk': ('Walk', 2), 'attack': ('Attack_Swipe', 2), 'hurt': ('Hit', 2), 'death': ('Death', 2)}
 
@@ -52,11 +53,16 @@ def foot_of(f):
 
 
 def frames(src, folder, ang):
-    sh = Image.open(f'{src}/{folder}/{folder}_Body_{ang}.png')
+    import glob, os
+    # carpeta «Idle_Long (Heavy)» → archivo «Idle_Long_Body_180.png»; ángulo 0 a veces sin ceros («_Body_0.png»)
+    cands = glob.glob(f'{glob.escape(src)}/{glob.escape(folder)}/*_Body_{ang}.png') or glob.glob(f'{glob.escape(src)}/{glob.escape(folder)}/*_Body_{int(ang)}.png')
+    sh = Image.open(cands[0]).convert('RGBA')
     return [f for r in range(sh.height // S) for c in range(sh.width // S) for f in [sh.crop((c * S, r * S, (c + 1) * S, (r + 1) * S))] if f.getbbox()]
 
 
 def main(src, out, k=0.5, anims=None, step=2):
+    global S
+    if 'x256' in src: S = 256
     anims = {n: (fo, step) for n, fo in anims.items()} if anims else ANIMS
     c = round(S * k)
     mont = Image.new('RGBA', (S * 4, S))
