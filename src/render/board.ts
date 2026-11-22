@@ -92,23 +92,41 @@ const ZONE_PROPS: Array<Array<HTMLImageElement | null>> = [
  * filas S, SE, E, NE, N, NW, W, SW. Se dibujan a 2×.
  * Guerrero esqueleto: «Skeleton Series» de MEKAI GAMES.
  */
-type SheetAnim = 'idle' | 'walk' | 'attack' | 'hurt' | 'death';
-interface Sheet { img: Record<SheetAnim, HTMLImageElement | null>; frames: Record<SheetAnim, number>; size: number; foot: [number, number]; scale: number }
-const sheet = (name: string, frames: Record<SheetAnim, number>, size = 96, foot: [number, number] = [48, 80]): Sheet => ({
-  img: { idle: art(`iso/units/${name}_idle.png`), walk: art(`iso/units/${name}_walk.png`), attack: art(`iso/units/${name}_attack.png`), hurt: art(`iso/units/${name}_hurt.png`), death: art(`iso/units/${name}_death.png`) },
-  frames, size, foot, scale: 2,
+type SheetAnim = 'idle' | 'walk' | 'attack' | 'hurt' | 'death' | 'cast';
+/**
+ * img: una imagen por animación (filas = direcciones). dirs 8 = S, SE, E, NE, N, NW, W, SW; dirs 1 = de perfil mirando
+ * a la derecha (se voltea para mirar a la izquierda). foot = pies dentro del fotograma; scale = aumento entero.
+ */
+interface Sheet { img: Partial<Record<SheetAnim, HTMLImageElement | null>>; frames: Partial<Record<SheetAnim, number>>; size: number; foot: [number, number]; scale: number; dirs: 8 | 1 }
+const sheet = (name: string, frames: Sheet['frames'], size = 96, foot: [number, number] = [48, 80], scale = 2, dirs: 8 | 1 = 8): Sheet => ({
+  img: Object.fromEntries(Object.keys(frames).map((a) => [a, art(`iso/units/${name}_${a}.png`)])) as Sheet['img'],
+  frames, size, foot, scale, dirs,
 });
+/** «Tiny Enemies» de Vryell: 16 px, 4 direcciones repartidas en 8 filas, a 5× */
+const tiny = (id: string, f: Sheet['frames']): Sheet => sheet(`tiny_${id}`, f, 16, [8, 15], 5);
+const T4 = { idle: 4, walk: 4, attack: 4, hurt: 1, death: 3 };
 /** qué enemigos usan una hoja (por su clase) */
 const SHEETS: Record<string, Sheet> = {
   esqueleto: sheet('skeleton', { idle: 8, walk: 8, attack: 8, hurt: 5, death: 10 }),
-  // demonio renderizado en 3D y pasado a pixel art (tools/arte/pixelar_hoja.py): celdas de 160 px
+  // modelos 3D pasados a pixel art (tools/arte/pixelar_hoja.py)
   devorador: sheet('demon', { idle: 8, walk: 10, attack: 10, hurt: 4, death: 12 }, 160, [80, 104]),
-  // ciempiés gigante (larva abisal) y árbol maldito (ent podrido): mismos modelos 3D pasados a pixel art
   larva: sheet('centipede', { idle: 8, walk: 6, attack: 6, hurt: 5, death: 8 }, 160, [80, 80]),
   ent: sheet('tree', { idle: 9, walk: 8, attack: 9, hurt: 6, death: 9 }, 176, [86, 95]),
+  // Tiny Enemies
+  espectro: tiny('espectro', T4), gargola: tiny('gargola', T4), necrofago: tiny('necrofago', T4), acolito: tiny('acolito', T4),
+  arana: tiny('arana', { ...T4, death: 4 }), hongo: tiny('hongo', { ...T4, hurt: 2, death: 4 }), chaman: tiny('chaman', T4), druida: tiny('druida', T4),
+  pantera: tiny('pantera', T4), piromante: tiny('piromante', T4), ascua: tiny('ascua', T4), salamandra: tiny('salamandra', { ...T4, death: 1 }),
+  ceniciento: tiny('ceniciento', T4), ojo: tiny('ojo', { ...T4, hurt: 2, death: 4 }), vacio: tiny('vacio', T4), heraldo: tiny('heraldo', T4),
 };
-const sheetOf = (u: { kind: string; team: string }): Sheet | undefined => (u.team === 'enemy' ? SHEETS[u.kind] : undefined);
+/** héroes con hoja (por clase). Arquero: «Arcane archer», de perfil. */
+const HERO_SHEETS: Record<string, Sheet> = {
+  arquero: sheet('archer', { idle: 4, walk: 8, attack: 7, cast: 4, hurt: 2, death: 8 }, 64, [32, 48], 4, 1),
+};
+const sheetOf = (u: { kind: string; team: string; summoner?: number }): Sheet | undefined =>
+  u.team === 'enemy' ? SHEETS[u.kind] : u.summoner === undefined ? HERO_SHEETS[u.kind] : undefined;
 const sheetReady = (s: Sheet): boolean => Object.values(s.img).every(ready);
+/** alto del personaje sobre sus pies, en pantalla */
+const sheetHeight = (s: Sheet): number => s.foot[1] * s.scale;
 /** Dirección (fila de la hoja) para un desplazamiento en casillas, vista en pantalla isométrica. */
 export function sheetDir(dx: number, dy: number): number {
   if (!dx && !dy) return 0;
@@ -574,11 +592,15 @@ export class Board {
 
   /** Un fotograma de una hoja de 8 direcciones, con los pies en el centro de la casilla (x, y) (con decimales). */
   private sheetFrame(c: CombatState, s: Sheet, anim: SheetAnim, frame: number, dir: number, x: number, y: number, alpha = 1, flash = false): void {
-    const g = this.g, img = s.img[anim]!, p = this.top(c, x + 0.5, y + 0.5), k = s.scale, sz = s.size;
-    const dx = Math.round(p.x - s.foot[0] * k), dy = Math.round(p.y + ISO_FOOT - s.foot[1] * k);
+    const g = this.g, img = s.img[anim] ?? s.img.idle!, p = this.top(c, x + 0.5, y + 0.5), k = s.scale, sz = s.size;
+    // de perfil: una sola fila; mira a la izquierda (W, SW, NW, N) volteando la imagen
+    const row = s.dirs === 1 ? 0 : dir, flip = s.dirs === 1 && [4, 5, 6, 7].includes(dir);
+    const px = Math.round(p.x), py = Math.round(p.y + ISO_FOOT);
     this.screen(); g.save(); g.globalAlpha = alpha;
-    g.drawImage(img, frame * sz, dir * sz, sz, sz, dx, dy, sz * k, sz * k);
-    if (flash) { g.globalCompositeOperation = 'lighter'; g.globalAlpha = alpha * 0.6; g.drawImage(img, frame * sz, dir * sz, sz, sz, dx, dy, sz * k, sz * k); }
+    g.translate(px, py); if (flip) g.scale(-1, 1);
+    const dx = -s.foot[0] * k, dy = -s.foot[1] * k;
+    g.drawImage(img, frame * sz, row * sz, sz, sz, dx, dy, sz * k, sz * k);
+    if (flash) { g.globalCompositeOperation = 'lighter'; g.globalAlpha = alpha * 0.6; g.drawImage(img, frame * sz, row * sz, sz, sz, dx, dy, sz * k, sz * k); }
     g.restore();
   }
 
@@ -595,10 +617,12 @@ export class Board {
       if (best) dir = sheetDir(best.pos.x - u.pos.x, best.pos.y - u.pos.y);
     }
     dir ??= 0; this.facing.set(u.id, dir);
-    let anim: SheetAnim = 'idle', fr = Math.floor(now / 125 + u.id * 3) % sh.frames.idle;
-    if (ac && ak < 1) { anim = 'attack'; fr = Math.min(sh.frames.attack - 1, Math.floor(ak * sh.frames.attack)); }
-    else if (hurt < 500) { anim = 'hurt'; fr = Math.min(sh.frames.hurt - 1, Math.floor(hurt / 100)); }
-    else if (moving) { anim = 'walk'; fr = Math.floor(now / 100) % sh.frames.walk; }
+    const n = (a: SheetAnim): number => sh.frames[a] ?? 1;
+    let anim: SheetAnim = 'idle', fr = Math.floor(now / 125 + u.id * 3) % n('idle');
+    // hechizos sin daño: animación de lanzar si la hoja la tiene
+    if (ac && ak < 1) { anim = ac.anim !== 'attack' && sh.frames.cast ? 'cast' : 'attack'; fr = Math.min(n(anim) - 1, Math.floor(ak * n(anim))); }
+    else if (hurt < 500) { anim = 'hurt'; fr = Math.min(n('hurt') - 1, Math.floor(hurt / 120)); }
+    else if (moving) { anim = 'walk'; fr = Math.floor(now / 100) % n('walk'); }
     this.sheetFrame(c, sh, anim, fr, dir, s.x, s.y, u.statuses.invis ? 0.4 : 1, (this.flash.get(u.id) ?? 0) > now);
     this.upright(s.x, s.y);
   }
@@ -1054,16 +1078,17 @@ export class Board {
         g.fillStyle = '#1a0610'; g.fillRect(mx - 9, my - 9, 18 + String(dmk.stacks).length * 7, 16);
         g.fillStyle = '#ff3a4a'; g.font = 'bold 12px ui-monospace, monospace'; g.textAlign = 'left'; g.fillText(`☠${dmk.stacks}`, mx - 7, my + 3);
       }
-      this.bars(u, cx, s.y * TILE - (sh8 ? (sh8.size > 100 ? 44 : 34) : 8), heroIdx.get(u.id));
+      // barra encima de la cabeza: alto del personaje en pantalla pasado a la escala de lo que está de pie
+      this.bars(u, cx, s.y * TILE - (sh8 ? Math.round((sheetHeight(sh8) + 8) / ISO_UP - TILE) : 8), heroIdx.get(u.id));
     }
     flushProps(this.iso ? c.w + c.h : c.h);
     // caídos: se desvanecen hacia arriba
     this.ghosts = this.ghosts.filter((d) => now - d.t0 < (d.sheet ? 1600 : isModel(d.kind) ? DEATH_MS : 600));
     for (const d of this.ghosts) {
-      const gs = d.sheet && this.iso ? SHEETS[d.sheet] : undefined;
+      const gs = d.sheet && this.iso ? (d.team === 'enemy' ? SHEETS[d.sheet] : HERO_SHEETS[d.sheet]) : undefined;
       if (gs && sheetReady(gs)) {
         // hoja de animación: cae (10 fotogramas en 1 s), se queda en el suelo y se desvanece
-        const t0 = now - d.t0, fr = Math.min(gs.frames.death - 1, Math.floor((t0 / 1000) * gs.frames.death));
+        const nd = gs.frames.death ?? 1, t0 = now - d.t0, fr = Math.min(nd - 1, Math.floor((t0 / 1000) * nd));
         this.sheetFrame(c, gs, 'death', fr, d.dir ?? 0, d.x, d.y, t0 < 1100 ? 1 : Math.max(0, 1 - (t0 - 1100) / 500));
         continue;
       }

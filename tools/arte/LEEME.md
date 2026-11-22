@@ -38,3 +38,8 @@ Devorador (zona 4): modelo 3D de demonio en 16 direcciones ("Assembled_Shadow_Op
 Larva abisal (zona 4): ciempiés gigante 3D, `pixelar_hoja.py ... centipede 0.5 "idle=Idle,walk=Walk,attack=Attack,hurt=Hit,death=Death" 2` (celdas de 160, pie (80, 80)).
 Ent podrido (zona 2): árbol maldito 3D, `pixelar_hoja.py ... tree 0.55 "idle=Idle,walk=Walk (Loop),attack=Attack_01,hurt=Hit,death=Death" 1` (celdas de 176, pie (86, 95)).
 Los tres modelos 3D venían sin licencia en el ZIP: pendiente de confirmar su origen.
+
+Tiny Enemies Vol. 1 (Vryell): hojas de 16 px en 4 direcciones (filas S, E, N, W; cabecera de 16 px; 4 filas por color). Se reparten en las 8 filas del juego (S, SE←E, E, NE←N, N, NW←N, W, SW←W) como `tiny_<enemigo>_<anim>.png` y se dibujan a 5×.
+Enemigos: espectro, gárgola, necrófago, acólito, araña, hongo, chamán, druida, pantera, piromante, ascua, salamandra, ceniciento, ojo, errante del vacío y heraldo.
+
+Arquero (héroe): "Arcane archer" (autor y licencia por confirmar), de perfil y mirando a la derecha; filas del original: 0 correr, 1 muerte, 3 disparo, 5 quieto, 6 habilidad, 7 herido. Celdas de 64 px, pies en (32, 48), a 4×; se voltea para mirar a la izquierda.
