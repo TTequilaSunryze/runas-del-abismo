@@ -69,6 +69,13 @@ const WALL_OVERLAP = 38;
 const WALL_H = 195;
 /** Frecuencia de cada losa (índices de ISO1.floors): las lisas y la de piedrecitas son las normales; musgo, huesos y runa, raras. */
 const FLOOR_MIX = [0, 1, 2, 0, 1, 2, 0, 1, 2, 5, 5, 5, 0, 1, 2, 3, 4, 6, 7];
+/** Obstáculos de la zona 1: imagen y ancho de su base respecto al rombo; los pilares enteros salen más a menudo. */
+const PROPS1: Array<{ img: HTMLImageElement | null; scale: number }> = [
+  ...ISO1.pillars.flatMap((img) => [{ img, scale: 0.74 }, { img, scale: 0.74 }, { img, scale: 0.74 }]),
+  { img: art('iso/z1/pillar_03.png'), scale: 0.74 }, { img: art('iso/z1/pillar_04.png'), scale: 0.74 },
+  // pilares rotos y barriles: de la hoja de piezas (menos resolución que el resto)
+  { img: art('iso/z1/barrels.png'), scale: 0.95 },
+];
 /** variante fija por casilla */
 const pick = <T,>(list: T[], x: number, y: number): T => list[(((x * 73856093) ^ (y * 19349663)) >>> 0) % list.length]!;
 const STATUS_COLOR: Record<string, string> = { burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0', charm: '#ff9ad8', vuln: '#c9a0ff', bleed: '#e03040', hobble: '#9ad0e8', guarded: '#7fe0b0', deathmark: '#ff3a4a', verdugo: '#ff8a30', frenzy: '#ff5030', orbita: '#b07cff', chained: '#a0a8c0', rooted: '#c89a5a', anchor: '#5ac8ff', silver: '#e0e8ff', smoke: '#9a8ab8', immune: '#7ae8ff', kinetic: '#58a6ff', prism: '#c8a0ff', fading: '#b0b8d0' };
@@ -838,8 +845,8 @@ export class Board {
           this.drawFlame(q.x + this.shake[0], q.y + w / 4 - h + h * 0.09 + this.shake[1], 34, now, p.x * 7 + p.y, true);
           g.globalAlpha = 1; continue;
         }
-        const isoPillar = this.iso && zone === ZONES[0] ? pick(ISO1.pillars, p.x, p.y) : null;
-        if (this.iso && !p.brazier && !p.fence && ready(isoPillar)) { this.screen(); this.drawIsoProp(c, isoPillar, p.x, p.y); g.globalAlpha = 1; continue; }
+        const prop = this.iso && zone === ZONES[0] ? pick(PROPS1, p.x, p.y) : null;
+        if (this.iso && !p.brazier && !p.fence && prop && ready(prop.img)) { this.screen(); this.drawIsoProp(c, prop.img, p.x, p.y, prop.scale); g.globalAlpha = 1; continue; }
         if (this.iso && !p.brazier && !p.fence && !(zone === ZONES[0] && ready(Z1.pillar))) { this.screen(); this.drawIsoBlock(c, zone, p.x, p.y); g.globalAlpha = 1; continue; }
         this.upright(p.x, p.y);
         if (p.brazier) this.drawBrazier(p.x, p.y, now); else if (p.fence) this.drawFence(p.x, p.y, now); else this.drawWall(c, zone, p.x, p.y);
