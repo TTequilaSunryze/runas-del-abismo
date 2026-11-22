@@ -16,7 +16,12 @@ L = col_top(xs.min(), 'l'); R = col_top(xs.max(), 'r')
 thick = ((col_bot(xs.min(), 'l') - L[1]) + (col_bot(xs.max(), 'r') - R[1])) / 2
 T = (xs[ys.argmin()], ys.min())
 # esquina de abajo de la cara superior: el punto más bajo menos el grosor
-bx = xs[ys.argmax()]; B = (bx, ys.max() - thick)
+# esquinas a mano (sobre la imagen de entrada): --pts Lx,Ly,Tx,Ty,Rx,Ry
+if '--pts' in sys.argv:
+    v = [float(n) for n in sys.argv[sys.argv.index('--pts') + 1].split(',')]
+    L, T, R = (v[0], v[1]), (v[2], v[3]), (v[4], v[5])
+# la cara de arriba es un paralelogramo: la esquina de abajo es L + R - T
+B = (L[0] + R[0] - T[0], L[1] + R[1] - T[1])
 print('L', L, 'T', T, 'R', R, 'B', B, 'grosor', round(thick))
 # transformación de perspectiva: rombo 256x128 <- cuadrilátero de la cara superior
 dstp = [(0, 64), (128, 0), (256, 64), (128, 128)]; srcp = [L, T, R, B]
@@ -47,9 +52,20 @@ def blur(arr):
     return arr
 m = blur(mk) + 1e-3
 low = np.dstack([blur(rgb[..., k]) / m for k in range(3)]) + 1
-flat = rgb / low
-target = np.array([84, 80, 90], float)  # piedra oscura con un toque violeta, como el suelo actual
-res = np.clip(flat * target, 0, 255).astype(np.uint8)
+inside = mk > 0
+if '--color' in sys.argv:
+    # conserva el color (musgo, runas…): solo suaviza el degradado de brillo
+    lum = rgb.mean(axis=2)
+    lowl = blur(lum) / m + 1
+    k = (lum[inside].mean() / lowl) ** 0.6
+    res = rgb * k[..., None]
+else:
+    # quita el degradado de luz de cada canal (luz pintada en la losa)
+    res = rgb / low * 82
+# mismo tono medio para todas las losas (conserva las diferencias: musgo, runas, huesos)
+TONE = np.array([79, 78, 85], float)
+res = res + (TONE - res[inside].mean(axis=0))
+res = np.clip(res, 0, 255).astype(np.uint8)
 # máscara del rombo exacto
 yy, xx = np.mgrid[0:128, 0:256]
 mask = (np.abs(xx - 127.5) / 128 + np.abs(yy - 63.5) / 64) <= 1.0

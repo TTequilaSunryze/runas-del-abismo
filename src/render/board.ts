@@ -50,7 +50,9 @@ const art = (src: string): HTMLImageElement | null => { if (typeof Image === 'un
 const Z1 = { floor: art('tiles/z1_floor.png'), pillar: art('tiles/z1_pillar.png') };
 const ready = (i: HTMLImageElement | null): i is HTMLImageElement => !!i && i.complete && i.naturalWidth > 0;
 /** Arte isométrico de la zona 1 (lote 1): pilares de 256 px de ancho con la base en el borde inferior. */
-const ISO1 = { pillars: [art('iso/z1/pillar_01.png'), art('iso/z1/pillar_02.png')], floors: [art('iso/z1/floor_01.png'), art('iso/z1/floor_02.png'), art('iso/z1/floor_03.png')] };
+const ISO1 = { pillars: [art('iso/z1/pillar_01.png'), art('iso/z1/pillar_02.png')], floors: [1, 2, 3, 4, 5, 6, 7].map((n) => art(`iso/z1/floor_0${n}.png`)) };
+/** Frecuencia de cada losa (índices de ISO1.floors): las lisas y la de piedrecitas son las normales; musgo, huesos y runa, raras. */
+const FLOOR_MIX = [0, 1, 2, 0, 1, 2, 0, 1, 2, 5, 5, 5, 0, 1, 2, 3, 4, 6];
 /** variante fija por casilla */
 const pick = <T,>(list: T[], x: number, y: number): T => list[(((x * 73856093) ^ (y * 19349663)) >>> 0) % list.length]!;
 const STATUS_COLOR: Record<string, string> = { burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0', charm: '#ff9ad8', vuln: '#c9a0ff', bleed: '#e03040', hobble: '#9ad0e8', guarded: '#7fe0b0', deathmark: '#ff3a4a', verdugo: '#ff8a30', frenzy: '#ff5030', orbita: '#b07cff', chained: '#a0a8c0', rooted: '#c89a5a', anchor: '#5ac8ff', silver: '#e0e8ff', smoke: '#9a8ab8', immune: '#7ae8ff', kinetic: '#58a6ff', prism: '#c8a0ff', fading: '#b0b8d0' };
@@ -395,7 +397,7 @@ export class Board {
     for (let y = 0; y < c.h; y++)
       for (let x = 0; x < c.w; x++) {
         if (pit.has(`${x},${y}`)) continue;
-        const img = pick(ISO1.floors, x, y)!, p = isoPoint(x + 0.5, y + 0.5, c.h);
+        const img = ISO1.floors[pick(FLOOR_MIX, x, y)]!, p = isoPoint(x + 0.5, y + 0.5, c.h);
         const flip = ((x * 31 + y * 17) & 1) === 1;
         g.save(); g.translate(p.x + sx, p.y + sy); if (flip) g.scale(-1, 1);
         // un píxel de más para que no se vean juntas finas entre rombos

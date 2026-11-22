@@ -11,7 +11,7 @@ Las partes van en orden de prioridad. Con las partes 1 a 3 la sala de la zona 1 
 
 ---
 
-## PARTE 1: Losas del suelo (5 imágenes)
+## PARTE 1: Losas del suelo (5 imágenes) ✅ hecha (falta `floor_08`, opcional)
 
 Me pasas: `floor_04` … `floor_08`. Son iguales que las que ya hiciste, cambiando el detalle. El grosor y la luz los arreglo yo.
 
