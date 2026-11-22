@@ -35,3 +35,6 @@ Hojas `sheets/classic/skeleton_classic_<anim>.png` tal cual: fotogramas de 96 px
 Para añadir otro: copiar sus hojas como `<nombre>_<idle|walk|attack|hurt|death>.png` y registrarlo en `SHEETS` (src/render/board.ts) con la clase del enemigo.
 
 Devorador (zona 4): modelo 3D de demonio en 16 direcciones ("Assembled_Shadow_Optimized_Spritesheets", sin licencia en el ZIP: pendiente de confirmar su origen), pasado a pixel art con `pixelar_hoja.py` a escala 0.5 (celdas de 160 px, pie en (80, 104)).
+Larva abisal (zona 4): ciempiés gigante 3D, `pixelar_hoja.py ... centipede 0.5 "idle=Idle,walk=Walk,attack=Attack,hurt=Hit,death=Death" 2` (celdas de 160, pie (80, 80)).
+Ent podrido (zona 2): árbol maldito 3D, `pixelar_hoja.py ... tree 0.55 "idle=Idle,walk=Walk (Loop),attack=Attack_01,hurt=Hit,death=Death" 1` (celdas de 176, pie (86, 95)).
+Los tres modelos 3D venían sin licencia en el ZIP: pendiente de confirmar su origen.

@@ -103,6 +103,9 @@ const SHEETS: Record<string, Sheet> = {
   esqueleto: sheet('skeleton', { idle: 8, walk: 8, attack: 8, hurt: 5, death: 10 }),
   // demonio renderizado en 3D y pasado a pixel art (tools/arte/pixelar_hoja.py): celdas de 160 px
   devorador: sheet('demon', { idle: 8, walk: 10, attack: 10, hurt: 4, death: 12 }, 160, [80, 104]),
+  // ciempiés gigante (larva abisal) y árbol maldito (ent podrido): mismos modelos 3D pasados a pixel art
+  larva: sheet('centipede', { idle: 8, walk: 6, attack: 6, hurt: 5, death: 8 }, 160, [80, 80]),
+  ent: sheet('tree', { idle: 9, walk: 8, attack: 9, hurt: 6, death: 9 }, 176, [86, 95]),
 };
 const sheetOf = (u: { kind: string; team: string }): Sheet | undefined => (u.team === 'enemy' ? SHEETS[u.kind] : undefined);
 const sheetReady = (s: Sheet): boolean => Object.values(s.img).every(ready);
