@@ -97,7 +97,13 @@ type SheetAnim = 'idle' | 'walk' | 'attack' | 'hurt' | 'death' | 'cast';
  * img: una imagen por animación (filas = direcciones). dirs 8 = S, SE, E, NE, N, NW, W, SW; dirs 1 = de perfil mirando
  * a la derecha (se voltea para mirar a la izquierda). foot = pies dentro del fotograma; scale = aumento entero.
  */
-interface Sheet { img: Partial<Record<SheetAnim, HTMLImageElement | null>>; frames: Partial<Record<SheetAnim, number>>; size: number; foot: [number, number]; scale: number; dirs: 8 | 1 }
+interface Sheet {
+  img: Partial<Record<SheetAnim, HTMLImageElement | null>>; frames: Partial<Record<SheetAnim, number>>; size: number; foot: [number, number]; scale: number; dirs: 8 | 1;
+  /** duración de ataque/lanzamiento (ms) y en qué fracción sale el proyectil */
+  actMs?: number; release?: number;
+  /** proyectil propio (sustituye al genérico en los ataques que viajan), y su altura de salida sobre los pies */
+  arrow?: HTMLImageElement | null; arrowY?: number;
+}
 const sheet = (name: string, frames: Sheet['frames'], size = 96, foot: [number, number] = [48, 80], scale = 2, dirs: 8 | 1 = 8): Sheet => ({
   img: Object.fromEntries(Object.keys(frames).map((a) => [a, art(`iso/units/${name}_${a}.png`)])) as Sheet['img'],
   frames, size, foot, scale, dirs,
@@ -120,7 +126,8 @@ const SHEETS: Record<string, Sheet> = {
 };
 /** héroes con hoja (por clase). Arquero: «Arcane archer», de perfil. */
 const HERO_SHEETS: Record<string, Sheet> = {
-  arquero: sheet('archer', { idle: 4, walk: 8, attack: 7, cast: 4, hurt: 2, death: 8 }, 64, [32, 48], 4, 1),
+  // a 3×: unos 96 px de alto; tensa el arco y suelta la flecha en el 7.º fotograma (de 7)
+  arquero: { ...sheet('archer', { idle: 4, walk: 8, attack: 7, cast: 4, hurt: 2, death: 8 }, 64, [32, 48], 3, 1), actMs: 800, release: 6 / 7, arrow: art('iso/units/archer_arrow.png'), arrowY: 23 },
 };
 const sheetOf = (u: { kind: string; team: string; summoner?: number }): Sheet | undefined =>
   u.team === 'enemy' ? SHEETS[u.kind] : u.summoner === undefined ? HERO_SHEETS[u.kind] : undefined;
@@ -237,8 +244,12 @@ export class Board {
   private ghosts: Ghost[] = [];
   private lunge = new Map<number, { t0: number; dx: number; dy: number }>();
   /** animación de hechizo en curso (modelos animados) */
-  private acts = new Map<number, { t0: number; anim: Anim }>();
+  private acts = new Map<number, { t0: number; anim: Anim; ms?: number }>();
+  /** flechas propias en vuelo (pantalla isométrica) */
+  private arrows: Array<{ img: HTMLImageElement; from: Pos; at: Pos; t0: number; dur: number; lift: number }> = [];
   private faceLeft = new Map<number, boolean>();
+  /** destello de golpe: dura 180 ms desde que llega el golpe */
+  private flashing(id: number, now: number): boolean { const end = this.flash.get(id) ?? 0; return now < end && now >= end - 180; }
   /** dirección de cada personaje con hoja de 8 direcciones, y cuándo le golpearon por última vez */
   private facing = new Map<number, number>();
   private hurtAt = new Map<number, number>();
@@ -334,17 +345,22 @@ export class Board {
   applyEvents(events: GameEvent[]): void {
     const c = this.c;
     if (!c) return;
-    const now = performance.now();
+    const now0 = performance.now();
+    /** retraso de lo que viene detrás de un disparo con flecha propia: el golpe se ve cuando llega */
+    let late = 0;
     const float = (id: number, text: string, color: string): void => {
-      const u = c.units.find((x) => x.id === id);
+      const u = c.units.find((x) => x.id === id), t0 = now0 + late;
       const p = this.shown.get(id) ?? u?.pos;
-      if (p) this.floats.push({ x: (p.x + 0.5) * TILE + (Math.random() * 16 - 8), y: p.y * TILE + 8 - this.floats.filter((f) => now - f.t0 < 200).length * 14, text, color, t0: now });
+      if (p) this.floats.push({ x: (p.x + 0.5) * TILE + (Math.random() * 16 - 8), y: p.y * TILE + 8 - this.floats.filter((f) => Math.abs(f.t0 - t0) < 200).length * 14, text, color, t0 });
     };
     const heroIdx = teamIdx(c);
     for (const e of events) {
+      // lo que no es el propio lanzamiento llega con el retraso de la flecha
+      const now = e.t === 'cast' ? now0 : now0 + late;
       const u = 'unit' in e ? c.units.find((x) => x.id === e.unit) : undefined;
       const from = u ? this.shown.get(u.id) ?? u.pos : undefined;
-      if (e.t === 'cast' && u) this.acts.set(u.id, { t0: now, anim: animFor(e.spell, !!SPELLS[e.spell]?.dmg) });
+      const shc = this.iso && u ? sheetOf(u) : undefined;
+      if (e.t === 'cast' && u) this.acts.set(u.id, { t0: now, anim: animFor(e.spell, !!SPELLS[e.spell]?.dmg), ms: shc?.actMs });
       if (e.t === 'cast' && u && from && SPIN_SPELLS.includes(e.spell)) {
         // giro: el personaje da una vuelta y un tajo circular le rodea (también a su Sombra)
         this.spins.set(u.id, now);
@@ -379,7 +395,16 @@ export class Board {
         }
         // H6: el resto de hechizos se dibuja con su receta de efectos (proyectil, haz, arco, área, impacto, temblor)
         const def = SPELLS[e.spell];
-        if (def && !def.bounce && !SPIN_SPELLS.includes(e.spell)) this.fx.cast(recipeFor(def, u.kind), from, e.at, fxCells(def, from, e.at, c.w, c.h), now);
+        if (def && !def.bounce && !SPIN_SPELLS.includes(e.spell)) {
+          // con hoja propia: el efecto espera a que suelte (p. ej. el arquero tensa el arco) y usa su flecha
+          const r = recipeFor(def, u.kind), rel = shc?.release && shc.actMs ? shc.release * shc.actMs : 0;
+          if (shc?.arrow && ready(shc.arrow) && (r.travel === 'line' || r.travel === 'arc')) {
+            const len = Math.hypot(e.at.x - from.x, e.at.y - from.y), dur = Math.min(420, 110 + len * 45);
+            this.arrows.push({ img: shc.arrow, from: { ...from }, at: { ...e.at }, t0: now + rel, dur, lift: (shc.arrowY ?? 20) * shc.scale });
+            this.fx.cast({ ...r, travel: 'instant', onSelf: 'none' }, from, e.at, fxCells(def, from, e.at, c.w, c.h), now + rel + dur);
+            late = rel + dur;
+          } else { this.fx.cast(r, from, e.at, fxCells(def, from, e.at, c.w, c.h), now + rel); late = rel; }
+        }
       } else if (e.t === 'move' && u && e.path.length) {
         const last = e.path[e.path.length - 1]!;
         if (from && last.x !== Math.round(from.x)) this.faceLeft.set(u.id, last.x < from.x);
@@ -606,7 +631,7 @@ export class Board {
 
   /** Personaje con hoja de 8 direcciones: ataque, herido, andar o reposo, mirando a su objetivo o al enemigo más cercano. */
   private drawSheetUnit(c: CombatState, u: Unit, s: Pos, sh: Sheet, now: number, moving: boolean): void {
-    const ac = this.acts.get(u.id), ak = ac ? (now - ac.t0) / ACT_MS : 1, lg = this.lunge.get(u.id), hurt = now - (this.hurtAt.get(u.id) ?? -1e9);
+    const ac = this.acts.get(u.id), ak = ac ? (now - ac.t0) / (ac.ms ?? ACT_MS) : 1, lg = this.lunge.get(u.id), hurt = now - (this.hurtAt.get(u.id) ?? -1e9);
     let dir = this.facing.get(u.id);
     if (ac && ak < 1 && lg) dir = sheetDir(lg.dx, lg.dy);
     else if (moving) dir = sheetDir(u.pos.x - s.x, u.pos.y - s.y);
@@ -623,7 +648,7 @@ export class Board {
     if (ac && ak < 1) { anim = ac.anim !== 'attack' && sh.frames.cast ? 'cast' : 'attack'; fr = Math.min(n(anim) - 1, Math.floor(ak * n(anim))); }
     else if (hurt < 500) { anim = 'hurt'; fr = Math.min(n('hurt') - 1, Math.floor(hurt / 120)); }
     else if (moving) { anim = 'walk'; fr = Math.floor(now / 100) % n('walk'); }
-    this.sheetFrame(c, sh, anim, fr, dir, s.x, s.y, u.statuses.invis ? 0.4 : 1, (this.flash.get(u.id) ?? 0) > now);
+    this.sheetFrame(c, sh, anim, fr, dir, s.x, s.y, u.statuses.invis ? 0.4 : 1, this.flashing(u.id, now));
     this.upright(s.x, s.y);
   }
 
@@ -1070,7 +1095,7 @@ export class Board {
       const sh8 = this.iso ? sheetOf(u) : undefined;
       if (sh8 && sheetReady(sh8)) this.drawSheetUnit(c, u, s, sh8, now, moving);
       else drawUnit(g, lookKind(u), u.team, heroIdx.get(u.id) ?? 0, cx + (lg ? lg.dx * swing * TILE * 0.3 : 0), by + bob + (lg ? lg.dy * swing * TILE * 0.3 : 0), Math.round(TILE * 1.18),
-        { flash: (this.flash.get(u.id) ?? 0) > now, swing, flip: def0 ? left : !left, alpha: u.statuses.invis ? 0.4 : u.ai === 'decoy' ? 0.55 : 1, anim, frame, skin: look?.cls === u.kind ? look.skin : undefined });
+        { flash: this.flashing(u.id, now), swing, flip: def0 ? left : !left, alpha: u.statuses.invis ? 0.4 : u.ai === 'decoy' ? 0.55 : 1, anim, frame, skin: look?.cls === u.kind ? look.skin : undefined });
       // Marca de la muerte: calavera con el daño guardado
       const dmk = u.statuses.deathmark;
       if (dmk) {
@@ -1139,6 +1164,18 @@ export class Board {
     }
     // H6: efectos de habilidades (recetas)
     this.fx.draw(g, now);
+    if (this.iso && this.arrows.length) {
+      // flechas propias: vuelan en línea recta en pantalla, giradas hacia el blanco
+      this.screen();
+      this.arrows = this.arrows.filter((a) => now - a.t0 < a.dur);
+      for (const a of this.arrows) {
+        if (now < a.t0) continue;
+        const p0 = this.top(c, a.from.x + 0.5, a.from.y + 0.5), p1 = this.top(c, a.at.x + 0.5, a.at.y + 0.5), k = (now - a.t0) / a.dur;
+        const y0 = p0.y + ISO_FOOT - a.lift, y1 = p1.y - 40, x = p0.x + (p1.x - p0.x) * k, y = y0 + (y1 - y0) * k;
+        g.save(); g.translate(x, y); g.rotate(Math.atan2(y1 - y0, p1.x - p0.x)); g.drawImage(a.img, -a.img.naturalWidth * 1.5, -a.img.naturalHeight, a.img.naturalWidth * 2, a.img.naturalHeight * 2); g.restore();
+      }
+      this.ground();
+    }
     // luz de antorchas en las esquinas y viñeta
     if (this.iso) this.screen();
     const W = this.iso ? size.w : c.w * TILE, H = this.iso ? size.h : c.h * TILE, fl = 0.1 + 0.03 * Math.sin(now / 130);
@@ -1153,6 +1190,7 @@ export class Board {
     this.floats = this.floats.filter((f) => now - f.t0 < 1100);
     g.font = 'bold 16px ui-monospace, monospace'; g.textAlign = 'center';
     for (const f of this.floats) {
+      if (now < f.t0) continue;
       const k = (now - f.t0) / 1100;
       if (this.iso) { this.upright(Math.floor(f.x / TILE), Math.floor(f.y / TILE)); g.font = 'bold 16px ui-monospace, monospace'; g.textAlign = 'center'; }
       g.globalAlpha = 1 - k * k; g.lineWidth = 4; g.strokeStyle = '#000';
