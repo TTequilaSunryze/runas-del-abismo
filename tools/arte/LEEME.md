@@ -15,13 +15,15 @@ python3 losa_iso.py losa_sin_fondo.png ../../public/iso/z1/floor_04.png
 - `--pts`: esquinas izquierda, superior y derecha de la cara de arriba, marcadas a mano sobre la imagen de entrada, para cuando la base sobresale y la detección automática falla.
 - Todas las losas se llevan al mismo tono medio para que no se vean parches.
 
-## Pack de escenario (public/iso/pack)
+## Escenario (public/iso/crypt)
 
-Piezas del "Fantasy Isometric Pixel Art Pack" de Kabukidanshi (atribución obligatoria: está en el pie de la página y en `public/iso/pack/CREDITOS.txt`).
-Se copian tal cual (32 px) y se oscurecen multiplicando el color: losas y bloques ×(0.52, 0.50, 0.47), objetos ×(0.74, 0.70, 0.66). El juego las dibuja a 4× sin suavizado.
+"Stone Crypt FREE" de dotplays (crédito agradecido, no obligatorio; no se pueden redistribuir las piezas sueltas).
+Se usan los PNG de `sprites/@128` (rombo 128×64, el del tablero), oscurecidos: suelos ×(0.66, 0.66, 0.70), muros ×(0.62, 0.62, 0.66), objetos ×(0.72, 0.70, 0.68), marcas ×0.8. La llama es `fx/@128/fx_flame.png` (8 fotogramas).
+Cada sala se genera con una semilla (partida, zona, sala y tamaño): manchas de musgo o piedra rota con autotile por esquinas, marcas en el suelo, de 0 a 2 arcos con puerta cerrada, abierta o sin puerta, y antorchas cada 2 a 4 tramos (`buildRoom` en src/render/board.ts).
+Tono por zona (multiplicar) en `ZONE_TINT`.
 
 ## Objetos (public/iso/props)
 
 "Pixel Worlds - 202 Dungeon, Castle & Mine Props (Free)" de SdavGha: sin atribución obligatoria; no se pueden redistribuir sueltos ni usar para entrenar IA.
 Se usan los PNG `_2x` (rombo 128×64, igual que el tablero), oscurecidos ×(0.70, 0.67, 0.63). Punto de apoyo: centro de abajo de la imagen sobre el vértice de abajo de la casilla.
-Obstáculos por zona en `ZONE_PROPS` (src/render/board.ts); la trampa de púas es `d03_14`.
+Obstáculos por zona en `ZONE_PROPS` (src/render/board.ts); la trampa de púas es la del Stone Crypt (`spike_trap_up`).

@@ -52,46 +52,94 @@ const art = (src: string): HTMLImageElement | null => { if (typeof Image === 'un
 const Z1 = { floor: art('tiles/z1_floor.png'), pillar: art('tiles/z1_pillar.png') };
 const ready = (i: HTMLImageElement | null): i is HTMLImageElement => !!i && i.complete && i.naturalWidth > 0;
 /** Arte isométrico de la zona 1 (lote 1): pilares de 256 px de ancho con la base en el borde inferior. */
-const ISO1 = { flame: art('iso/z1/flame.png') };
 /**
- * Pack «Fantasy Isometric Pixel Art» (Kabukidanshi, gratis con atribución): piezas de 32 px que se dibujan a 4× (PX)
- * sin suavizado. Losas planas con canto, bloques para muros y columnas, y objetos. Ya vienen oscurecidas (tools/arte).
+ * «Stone Crypt FREE» (dotplays): suelos, muros, puertas, antorchas y objetos en la rejilla 2:1 de 128×64 (la del tablero).
+ * Punto de apoyo de muros y objetos: centro de abajo de la imagen, sobre el punto (x + ancho, y + fondo) de su huella.
+ * Ya vienen oscurecidas (tools/arte).
  */
-const PX = 4;
-const packSet = (tag: string): { floors: Array<HTMLImageElement | null>; cubes: Array<HTMLImageElement | null> } => ({
-  floors: [1, 2, 3, 4, 5].map((n) => art(`iso/pack/floor_${tag}${n}.png`)),
-  cubes: Array.from({ length: 14 }, (_, i) => art(`iso/pack/cube_${tag}${i + 1}.png`)),
-});
-const PACK = {
-  gray: packSet('g'), brown: packSet('b'),
-  window: art('iso/pack/window_closed.png'), door: art('iso/pack/door_closed.png'), torch: art('iso/pack/torch.png'),
-  empty: art('iso/pack/cauldron_empty.png'),
-  cauldron: [1, 2, 3, 4, 5, 6].map((n) => art(`iso/pack/cauldron${n}.png`)),
+const cr = (id: string): HTMLImageElement | null => art(`iso/crypt/${id}.png`);
+const CRYPT = {
+  flag: cr('floor_flag'), cracked: cr('floor_cracked'), moss: cr('floor_moss'), broken: cr('floor_broken'),
+  // transiciones (autotile por esquinas): índice = máscara N=1 E=2 S=4 O=8
+  flagMoss: [null, ...Array.from({ length: 14 }, (_, i) => cr(`floor_flag_moss_${String(i + 1).padStart(2, '0')}`))],
+  flagBroken: [null, ...Array.from({ length: 14 }, (_, i) => cr(`floor_flag_broken_${String(i + 1).padStart(2, '0')}`))],
+  decals: ['decal_blood', 'decal_cracks', 'decal_debris', 'decal_moss'].map(cr),
+  wallX: cr('wall_tall_x'), wallY: cr('wall_tall_y'), doorwayX: cr('wall_doorway_x'), doorwayY: cr('wall_doorway_y'),
+  doorClosedX: cr('door_closed_x'), doorClosedY: cr('door_closed_y'), doorOpenX: cr('door_open_x'), doorOpenY: cr('door_open_y'), corner: cr('corner_tall'),
+  torch: cr('wall_torch'), brazier: cr('brazier'), spikes: cr('spike_trap_up'), flame: cr('fx_flame'),
+  barrel: cr('barrel'), crates: cr('crates'), sacks: cr('sacks'), rubble: cr('rubble'), stalagmites: cr('stalagmites'), table: cr('table'), bones: cr('bone_pile'),
 };
+const cryptReady = (): boolean => [CRYPT.flag, CRYPT.cracked, CRYPT.moss, CRYPT.broken, ...CRYPT.flagMoss.slice(1), ...CRYPT.flagBroken.slice(1), CRYPT.wallX, CRYPT.wallY, CRYPT.corner, CRYPT.torch, CRYPT.flame].every(ready);
+/** posición de la llama pintada respecto al punto de apoyo (según el pack) */
+const TORCH_FLAME = [-5.7, -137] as const, BRAZIER_FLAME = [-0.7, -84] as const;
 /**
- * Objetos del pack «Pixel Worlds - 202 Dungeon, Castle & Mine Props» (SdavGha), a 2× (su rombo es de 128×64, como el
- * tablero). Su punto de apoyo es el centro de abajo de la imagen, sobre el vértice de abajo de la casilla.
- * Obstáculos por zona; 0 = columna de bloques del otro pack.
+ * Objetos de «Pixel Worlds - 202 Dungeon, Castle & Mine Props» (SdavGha), a 2× (rombo 128×64), con el mismo punto de apoyo.
+ * Obstáculos por zona: se mezclan con los del Stone Crypt.
  */
 const prop = (id: string): HTMLImageElement | null => art(`iso/props/${id}.png`);
-const ZONE_PROPS: Array<Array<HTMLImageElement | null | 0>> = [
-  // catacumbas: pilar roto, jaula, altar, calavera en estaca, pilar con cadenas, ángel, gárgola, candelabro, lápidas, calaveras, cascotes
-  [0, 0, 0, ...['d01_13', 'd01_11', 'd01_14', 'd01_09', 'd10_14', 'd05_04', 'd05_15', 'd05_05', 'd05_13', 'd05_03', 'd05_10', 'd01_15'].map(prop)],
-  // bosque: tótem, estalagmita, cascotes, pilar roto, lápida, calavera en estaca, setas
-  [0, 0, ...['d05_07', 'd04_01', 'd01_15', 'd01_13', 'd05_13', 'd01_09', 'd04_08', 'd05_07', 'd04_01'].map(prop)],
-  // ruinas de ceniza: pilar roto, cascotes, armadura, alabardas, estandarte, trono, gárgola
-  [0, 0, ...['d01_13', 'd01_15', 'd06_16', 'd06_04', 'd06_08', 'd06_07', 'd05_15', 'd01_13'].map(prop)],
-  // abismo: obelisco, cristales, pilar de invocación, cristal de barrera, runas flotantes, piedra rúnica, pilar con cadenas
-  [0, 0, ...['d10_09', 'd04_02', 'd10_07', 'd10_06', 'd11_10', 'd07_05', 'd10_14', 'd10_09'].map(prop)],
+const ZONE_PROPS: Array<Array<HTMLImageElement | null>> = [
+  // catacumbas: barriles, cajas, cascotes, pilar roto, jaula, altar, calavera en estaca, pilar con cadenas, ángel, gárgola, candelabro, lápidas, calaveras
+  [CRYPT.barrel, CRYPT.crates, CRYPT.rubble, ...['d01_13', 'd01_11', 'd01_14', 'd01_09', 'd10_14', 'd05_04', 'd05_15', 'd05_05', 'd05_13', 'd05_03', 'd05_10'].map(prop)],
+  // bosque: estalagmitas, sacos, tótem, estalagmita, cascotes, pilar roto, lápida, calavera en estaca, setas
+  [CRYPT.stalagmites, CRYPT.sacks, CRYPT.rubble, CRYPT.barrel, ...['d05_07', 'd04_01', 'd01_13', 'd05_13', 'd01_09', 'd04_08', 'd05_07'].map(prop)],
+  // ruinas de ceniza: cascotes, mesa, cajas, pilar roto, armadura, alabardas, estandarte, trono, gárgola
+  [CRYPT.rubble, CRYPT.table, CRYPT.crates, CRYPT.rubble, ...['d01_13', 'd06_16', 'd06_04', 'd06_08', 'd06_07', 'd05_15'].map(prop)],
+  // abismo: estalagmitas, cascotes, obelisco, cristales, pilar de invocación, cristal de barrera, runas flotantes, piedra rúnica, pilar con cadenas
+  [CRYPT.stalagmites, CRYPT.rubble, ...['d10_09', 'd04_02', 'd10_07', 'd10_06', 'd11_10', 'd07_05', 'd10_14', 'd10_09'].map(prop)],
 ];
-/** objetos con velas o fuego: dan luz */
+/** objetos con velas: dan luz */
 const LIT_PROPS = new Set(['d05_05', 'd01_14'].map(prop));
-const TRAP = { idle: prop('d01_05'), up: prop('d03_14') };
-/** juego de piezas de cada zona: piedra gris (catacumbas, abismo) o parda (bosque, ruinas) */
-const packFor = (zone: number): ReturnType<typeof packSet> => (zone === 1 || zone === 2 ? PACK.brown : PACK.gray);
-const packReady = (zone: number): boolean => { const s = packFor(zone); return [...s.floors, ...s.cubes, PACK.window, PACK.door, PACK.torch, ...PACK.cauldron].every(ready); };
-/** altura de los muros del fondo, en bloques */
-const WALL_LEVELS = 3;
+/** tono de cada zona sobre suelo y muros (multiplicar) */
+const ZONE_TINT = ['#e6e2ee', '#bccfa8', '#e8bfa0', '#c8b0ea'];
+
+/** Sala generada a partir de una semilla: manchas de musgo o piedra rota, marcas en el suelo, puertas y antorchas. */
+interface RoomLook {
+  seed: number;
+  /** losa de cada casilla */
+  floor: Array<HTMLImageElement | null>;
+  decals: Array<{ x: number; y: number; img: HTMLImageElement | null }>;
+  /** tramos de muro: lado, posición y tipo */
+  walls: Array<{ side: 'x' | 'y'; i: number; kind: 'wall' | 'closed' | 'open' | 'arch' }>;
+  torches: Array<{ side: 'x' | 'y'; i: number }>;
+}
+function rng(seed: number): () => number {
+  let s = seed >>> 0 || 1;
+  return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return (s >>> 0) / 4294967296; };
+}
+function buildRoom(seed: number, w: number, h: number): RoomLook {
+  const r = rng(seed);
+  // segundo suelo de la sala: musgo, piedra rota o nada
+  const kind = r() < 0.45 ? 'moss' : r() < 0.85 ? 'broken' : 'none';
+  const blobs = Array.from({ length: kind === 'none' ? 0 : 2 + Math.floor(r() * 3) }, () => ({ x: r() * (w + 1), y: r() * (h + 1), r: 1.2 + r() * 2.2 }));
+  const corner = (x: number, y: number): number => (blobs.some((b) => Math.hypot(x - b.x, (y - b.y) * 1.1) < b.r) ? 1 : 0);
+  const floor: RoomLook['floor'] = [];
+  const set = kind === 'moss' ? CRYPT.flagMoss : CRYPT.flagBroken, full = kind === 'moss' ? CRYPT.moss : CRYPT.broken;
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      // esquinas del rombo: N = (x, y), E = (x+1, y), S = (x+1, y+1), O = (x, y+1)
+      const m = corner(x, y) * 1 + corner(x + 1, y) * 2 + corner(x + 1, y + 1) * 4 + corner(x, y + 1) * 8;
+      floor.push(m === 0 ? (r() < 0.22 ? CRYPT.cracked : CRYPT.flag) : m === 15 ? full : set[m] ?? CRYPT.flag);
+    }
+  const decals = Array.from({ length: 2 + Math.floor(r() * 5) }, () => ({ x: Math.floor(r() * w), y: Math.floor(r() * h), img: CRYPT.decals[Math.floor(r() * CRYPT.decals.length)] ?? null }));
+  // muros: de 0 a 2 arcos (con puerta cerrada, abierta o sin puerta), nunca en los extremos
+  const walls: RoomLook['walls'] = [];
+  for (let i = 0; i < w; i++) walls.push({ side: 'x', i, kind: 'wall' });
+  for (let i = 0; i < h; i++) walls.push({ side: 'y', i, kind: 'wall' });
+  const arches = Math.floor(r() * 3);
+  for (let n = 0; n < arches; n++) {
+    const side = r() < 0.5 ? 'x' : 'y', len = side === 'x' ? w : h, i = 1 + Math.floor(r() * Math.max(1, len - 2));
+    const wl = walls.find((q) => q.side === side && q.i === i);
+    if (wl && wl.kind === 'wall') { const k = r(); wl.kind = k < 0.4 ? 'closed' : k < 0.7 ? 'open' : 'arch'; }
+  }
+  // antorchas cada 2 a 4 tramos, fuera de los arcos
+  const torches: RoomLook['torches'] = [];
+  for (const side of ['x', 'y'] as const) {
+    const len = side === 'x' ? w : h;
+    for (let i = Math.floor(r() * 2); i < len; i += 2 + Math.floor(r() * 3)) if (walls.find((q) => q.side === side && q.i === i)?.kind === 'wall') torches.push({ side, i });
+  }
+  return { seed, floor, decals, walls, torches };
+}
+
 /** variante fija por casilla */
 const pick = <T,>(list: T[], x: number, y: number): T => list[(((x * 73856093) ^ (y * 19349663)) >>> 0) % list.length]!;
 const STATUS_COLOR: Record<string, string> = { burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0', charm: '#ff9ad8', vuln: '#c9a0ff', bleed: '#e03040', hobble: '#9ad0e8', guarded: '#7fe0b0', deathmark: '#ff3a4a', verdugo: '#ff8a30', frenzy: '#ff5030', orbita: '#b07cff', chained: '#a0a8c0', rooted: '#c89a5a', anchor: '#5ac8ff', silver: '#e0e8ff', smoke: '#9a8ab8', immune: '#7ae8ff', kinetic: '#58a6ff', prism: '#c8a0ff', fading: '#b0b8d0' };
@@ -427,21 +475,19 @@ export class Board {
     g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 2; g.strokeRect(X + 1, topY + 1, TILE - 2, (front ? Y + TILE : topY + topH) - topY - 2);
   }
 
-  /** Llama ilustrada que se mueve (se estira, se encoge y se balancea) con su halo. Base de la llama en (x, y). */
+  /** Llama animada del pack (8 fotogramas), con la base en (x, y) y h de alto; con halo si glow. */
   private drawFlame(x: number, y: number, h: number, now: number, seed: number, glow = false): void {
-    const g = this.g, img = ISO1.flame;
+    const g = this.g, img = CRYPT.flame;
     if (!ready(img)) return;
-    const k = now / 90 + seed * 1.37;
-    const sy = 1 + 0.12 * Math.sin(k) + 0.05 * Math.sin(k * 2.3), sx = 1 - 0.06 * Math.sin(k * 1.3), sway = 0.08 * Math.sin(k * 0.7);
-    const w = (h * img.naturalWidth) / img.naturalHeight;
+    const fw = img.naturalWidth / 8, fh = img.naturalHeight, fr = Math.floor(now / 83 + seed * 3.7) % 8;
+    const w = (h * fw) / fh;
     if (glow) {
       g.save(); g.globalCompositeOperation = 'lighter';
       const gr = g.createRadialGradient(x, y - h * 0.4, 2, x, y - h * 0.4, h * 2.4);
-      gr.addColorStop(0, `rgba(255,140,50,${(0.3 + 0.05 * Math.sin(k)).toFixed(3)})`); gr.addColorStop(1, 'rgba(255,110,40,0)');
+      gr.addColorStop(0, `rgba(255,140,50,${(0.3 + 0.05 * Math.sin(now / 90 + seed)).toFixed(3)})`); gr.addColorStop(1, 'rgba(255,110,40,0)');
       g.fillStyle = gr; g.beginPath(); g.arc(x, y - h * 0.4, h * 2.4, 0, 6.3); g.fill(); g.restore();
     }
-    g.save(); g.translate(x, y); g.transform(sx, 0, sway, sy, 0, 0);
-    g.drawImage(img, -w / 2, -h, w, h); g.restore();
+    g.drawImage(img, fr * fw, 0, fw, fh, x - w / 2, y - h, w, h);
   }
 
   /** Cosas a ras de suelo en isométrico: braseros volcados y llamas del fuego del suelo. */
@@ -450,11 +496,12 @@ export class Board {
     if (c.round < this.lastRound) this.brazierSeen.clear();
     this.lastRound = c.round;
     for (const k of c.braziers ?? []) this.brazierSeen.add(k);
-    // caldero volcado (vacío) donde había un brasero y ya no está
-    if (ready(PACK.empty)) for (const k of this.brazierSeen) {
+    // brasero roto: escombros y huesos chamuscados donde estaba
+    for (const k of this.brazierSeen) {
       if ((c.braziers ?? []).includes(k)) continue;
-      const [x, y] = k.split(',').map(Number) as [number, number], p = this.top(c, x, y);
-      this.px(PACK.empty, p.x - 14 * PX, p.y + 16 * PX - 30 * PX + 6);
+      const [x, y] = k.split(',').map(Number) as [number, number], q = this.top(c, x + 0.5, y + 0.5);
+      g.fillStyle = 'rgba(0,0,0,.45)'; g.beginPath(); g.ellipse(q.x, q.y, 44, 20, 0, 0, 6.3); g.fill();
+      if (ready(CRYPT.decals[2] ?? null)) { const d = CRYPT.decals[2]!; g.drawImage(d, q.x - d.naturalWidth / 2, q.y - d.naturalHeight / 2); }
     }
     // fuego: tres llamas por casilla, de atrás adelante, con los turnos que le quedan
     const cells = Object.entries(c.fire ?? {}).map(([k, t]) => { const [x, y] = k.split(',').map(Number) as [number, number]; return { x, y, t }; }).sort((a, b) => a.x + a.y - (b.x + b.y));
@@ -491,88 +538,95 @@ export class Board {
     }
   }
 
-  /** Pieza del pack a 4×, con su esquina de arriba a la izquierda en (x, y); volteada si flip. */
-  private px(img: HTMLImageElement, x: number, y: number, flip = false): void {
-    const g = this.g, w = img.naturalWidth * PX, h = img.naturalHeight * PX;
-    if (!flip) { g.drawImage(img, Math.round(x), Math.round(y), w, h); return; }
-    g.save(); g.translate(Math.round(x) + w, Math.round(y)); g.scale(-1, 1); g.drawImage(img, 0, 0, w, h); g.restore();
-  }
-
-  /** Vértice de arriba del rombo de la casilla (x, y), con el temblor. */
+  /** Punto de pantalla (con temblor) del punto del mundo (x, y). */
   private top(c: CombatState, x: number, y: number): { x: number; y: number } {
     const p = isoPoint(x, y, c.h); return { x: p.x + this.shake[0], y: p.y + this.shake[1] };
   }
 
-  /** Bloque de piedra del pack en la casilla (x, y), apilado en el nivel l (0 = apoyado en el suelo). */
-  private cube(c: CombatState, x: number, y: number, l: number, seed: number, other = false): void {
-    const z = this.session.run?.zone ?? 0, base = packFor(z), set = other ? (base === PACK.gray ? PACK.brown : PACK.gray) : base, p = this.top(c, x, y);
-    this.px(pick(set.cubes, x * 3 + l + seed, y * 5 - l)!, p.x - ISO_W / 2, p.y - 8 * PX - 16 * PX * l);
+  /** Imagen con su punto de apoyo (centro de abajo) en el punto del mundo (wx, wy); volteada si flip. */
+  private pivot(c: CombatState, img: HTMLImageElement, wx: number, wy: number, flip = false): { x: number; y: number } {
+    const p = this.top(c, wx, wy), w = img.naturalWidth, h = img.naturalHeight;
+    if (!flip) this.g.drawImage(img, Math.round(p.x - w / 2), Math.round(p.y - h));
+    else { this.g.save(); this.g.translate(Math.round(p.x + w / 2), Math.round(p.y - h)); this.g.scale(-1, 1); this.g.drawImage(img, 0, 0); this.g.restore(); }
+    return p;
   }
 
-  /**
-   * Muros del fondo: tres bloques de alto por los dos bordes de atrás (columna x = −1 y fila y = −1), de atrás adelante.
-   * Llevan una puerta, ventanas y antorchas (con llama animada y luz).
-   */
-  private drawPackWalls(c: CombatState): void {
-    this.torches = [];
-    const cells: Array<[number, number]> = [[-1, -1]];
-    for (let i = 0; i < Math.max(c.w, c.h); i++) { if (i < c.h) cells.push([-1, i]); if (i < c.w) cells.push([i, -1]); }
-    cells.sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
-    for (const [x, y] of cells) for (let l = 0; l < WALL_LEVELS; l++) this.cube(c, x, y, l, 0);
-    // adornos: en el muro izquierdo (x = −1) la imagen va volteada
-    const door = Math.floor(c.h / 2), win = [Math.floor(c.w / 3), Math.floor((c.w * 2) / 3)];
-    for (let y = 0; y < c.h; y++) {
-      const p = this.top(c, -1, y);
-      if (y === door) this.px(PACK.door!, p.x - 24 * PX, p.y - 44 * PX, true);
-      else if (y % 3 === 1) { this.px(PACK.torch!, p.x - 10 * PX, p.y - 20 * PX, true); this.torches.push({ x: p.x - 7 * PX, y: p.y - 20 * PX, side: 1, lit: false }); }
-    }
-    for (let x = 0; x < c.w; x++) {
-      const p = this.top(c, x, -1);
-      if (win.includes(x)) this.px(PACK.window!, p.x + 2 * PX, p.y - 36 * PX);
-      else if (x % 3 === 2) { this.px(PACK.torch!, p.x + 4 * PX, p.y - 20 * PX); this.torches.push({ x: p.x + 7 * PX, y: p.y - 20 * PX, side: -1, lit: false }); }
-    }
+  /** Sala de este combate (se genera una vez por semilla). */
+  private room: RoomLook | null = null;
+  private roomFor(c: CombatState): RoomLook {
+    const run = this.session.run;
+    // semilla estable durante el combate: partida, zona, sala y tamaño del mapa
+    let s = 2166136261;
+    for (const ch of `${run?.code ?? ''}|${run?.zone ?? 0}|${run?.step ?? 0}|${c.w}x${c.h}|${c.units.length}`) s = Math.imul(s ^ ch.charCodeAt(0), 16777619);
+    if (!this.room || this.room.seed !== s >>> 0 || this.room.floor.length !== c.w * c.h) this.room = buildRoom(s >>> 0, c.w, c.h);
+    return this.room;
   }
 
-  /** Suelo del pack: una losa con canto por casilla, de atrás adelante (el canto de las de delante es el borde del tablero). */
-  private drawPackFloor(c: CombatState): void {
-    const set = packFor(this.session.run?.zone ?? 0), pit = new Set(c.abyss ?? []);
-    for (let d = 0; d < c.w + c.h; d++)
-      for (let x = Math.max(0, d - c.h + 1); x <= Math.min(c.w - 1, d); x++) {
-        const y = d - x;
+  /** Suelo de la sala, marcas, borde y tono de la zona. */
+  private drawCryptFloor(c: CombatState, room: RoomLook): void {
+    const g = this.g, pit = new Set(c.abyss ?? []);
+    // borde de roca bajo los dos lados de delante del tablero
+    const [sx, sy] = this.shake, D = 34, P = (x: number, y: number): [number, number] => { const q = isoPoint(x, y, c.h); return [q.x + sx, q.y + sy]; };
+    const [lx, ly] = P(0, c.h), [bx, by] = P(c.w, c.h), [rx, ry] = P(c.w, 0);
+    for (const [ax, ay, cx2, cy2, col] of [[lx, ly, bx, by, '#2a2a33'], [bx, by, rx, ry, '#1c1c24']] as const) {
+      const gr = g.createLinearGradient(0, Math.min(ay, cy2), 0, Math.max(ay, cy2) + D); gr.addColorStop(0, col); gr.addColorStop(1, '#050507');
+      g.fillStyle = gr; g.beginPath(); g.moveTo(ax, ay); g.lineTo(cx2, cy2); g.lineTo(cx2, cy2 + D); g.lineTo(ax, ay + D); g.closePath(); g.fill();
+    }
+    for (let y = 0; y < c.h; y++)
+      for (let x = 0; x < c.w; x++) {
         if (pit.has(`${x},${y}`)) continue;
+        const img = room.floor[y * c.w + x];
+        if (!img || !ready(img)) continue;
         const p = this.top(c, x, y);
-        // la losa lisa es la más común; las demás, de vez en cuando
-        const v = pick([0, 0, 0, 1, 2, 3, 4, 0, 1], x, y);
-        this.px(set.floors[v]!, p.x - ISO_W / 2, p.y);
+        g.drawImage(img, Math.round(p.x - ISO_W / 2), Math.round(p.y));
       }
-  }
-
-  /** Objeto del pack de props apoyado en el vértice de abajo de la casilla (x, y). */
-  private drawProp(c: CombatState, img: HTMLImageElement, x: number, y: number): void {
-    const p = this.top(c, x + 1, y + 1);
-    this.g.drawImage(img, Math.round(p.x - img.naturalWidth / 2), Math.round(p.y - img.naturalHeight), img.naturalWidth, img.naturalHeight);
-  }
-
-  /** Obstáculo: un objeto de la zona (lápida, estatua, jaula…) o una columna de bloques (casi siempre de 2). */
-  private drawPackObstacle(c: CombatState, x: number, y: number): void {
-    const list = ZONE_PROPS[this.session.run?.zone ?? 0] ?? ZONE_PROPS[0]!, it = pick(list, x * 7 + 3, y * 3 + 1);
-    if (it && ready(it)) {
-      // sombra de contacto bajo el objeto
-      const q = this.top(c, x + 0.5, y + 0.5), g = this.g;
-      g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(q.x, q.y + 4, 34, 15, 0, 0, 6.3); g.fill();
-      this.drawProp(c, it, x, y);
-      if (LIT_PROPS.has(it)) {
-        const now = performance.now(), ly = q.y - it.naturalHeight * 0.75;
-        g.save(); g.globalCompositeOperation = 'lighter';
-        const gr = g.createRadialGradient(q.x, ly, 2, q.x, ly, 110);
-        gr.addColorStop(0, `rgba(255,170,70,${(0.22 + 0.04 * Math.sin(now / 100 + x * 3)).toFixed(3)})`); gr.addColorStop(1, 'rgba(255,130,40,0)');
-        g.fillStyle = gr; g.beginPath(); g.arc(q.x, ly, 110, 0, 6.3); g.fill(); g.restore();
-      }
-      return;
+    for (const d of room.decals) {
+      if (!d.img || !ready(d.img) || pit.has(`${d.x},${d.y}`)) continue;
+      const p = this.top(c, d.x + 0.5, d.y + 0.5);
+      g.drawImage(d.img, Math.round(p.x - d.img.naturalWidth / 2), Math.round(p.y - d.img.naturalHeight / 2));
     }
-    const kind = pick([2, 2, 2, 2, 1, 2, 2, 2], x, y);
-    // en el otro color de piedra, para que se distingan del suelo y de los muros
-    for (let l = 0; l < kind; l++) this.cube(c, x, y, l, 11, true);
+  }
+
+  /** Muros del fondo (fila de arriba y columna de la izquierda), con arcos, puertas y antorchas. */
+  private drawCryptWalls(c: CombatState, room: RoomLook): void {
+    this.torches = [];
+    const T = 0.25;
+    // de atrás adelante: la esquina, y luego los tramos por x + y
+    if (ready(CRYPT.corner)) this.pivot(c, CRYPT.corner, 0, 0);
+    const order = [...room.walls].sort((a, b) => a.i - b.i);
+    for (const wl of order) {
+      const isX = wl.side === 'x';
+      // tramo a lo largo de x en la línea y = −T (pie en (i + 1, 0)); a lo largo de y en x = −T (pie en (0, i + 1))
+      const wx = isX ? wl.i + 1 : -T + T, wy = isX ? 0 : wl.i + 1;
+      const base = wl.kind === 'wall' ? (isX ? CRYPT.wallX : CRYPT.wallY) : (isX ? CRYPT.doorwayX : CRYPT.doorwayY);
+      if (!ready(base)) continue;
+      this.pivot(c, base, wx, wy);
+      const door = wl.kind === 'closed' ? (isX ? CRYPT.doorClosedX : CRYPT.doorClosedY) : wl.kind === 'open' ? (isX ? CRYPT.doorOpenX : CRYPT.doorOpenY) : null;
+      if (door && ready(door)) this.pivot(c, door, wx, wy);
+    }
+    // antorchas: pintadas para muros a lo largo de y; volteadas para los de x
+    for (const tc of room.torches) {
+      if (!ready(CRYPT.torch)) continue;
+      const isX = tc.side === 'x', wx = isX ? tc.i + 1 : 1, wy = isX ? 1 : tc.i + 1;
+      const p = this.pivot(c, CRYPT.torch, wx, wy, isX);
+      this.torches.push({ x: p.x + (isX ? -TORCH_FLAME[0] : TORCH_FLAME[0]), y: p.y + TORCH_FLAME[1] + 3, side: isX ? -1 : 1, lit: false });
+    }
+  }
+
+  /** Obstáculo: un objeto de la zona (barriles, lápidas, estatuas, jaulas…), distinto en cada sala. */
+  private drawCryptObstacle(c: CombatState, x: number, y: number, seed: number): void {
+    const list = ZONE_PROPS[this.session.run?.zone ?? 0] ?? ZONE_PROPS[0]!, it = pick(list, x * 7 + seed, y * 3 + (seed >>> 4));
+    if (!it || !ready(it)) return;
+    const g = this.g, q = this.top(c, x + 0.5, y + 0.5);
+    g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(q.x, q.y + 4, 36, 16, 0, 0, 6.3); g.fill();
+    this.pivot(c, it, x + 1, y + 1);
+    if (LIT_PROPS.has(it)) {
+      const now = performance.now(), ly = q.y - it.naturalHeight * 0.75;
+      g.save(); g.globalCompositeOperation = 'lighter';
+      const gr = g.createRadialGradient(q.x, ly, 2, q.x, ly, 110);
+      gr.addColorStop(0, `rgba(255,170,70,${(0.22 + 0.04 * Math.sin(now / 100 + x * 3)).toFixed(3)})`); gr.addColorStop(1, 'rgba(255,130,40,0)');
+      g.fillStyle = gr; g.beginPath(); g.arc(q.x, ly, 110, 0, 6.3); g.fill(); g.restore();
+    }
   }
 
   /** Brasero: cuenco de hierro con llamas; se rompe con un golpe y deja una línea de fuego. */
@@ -623,8 +677,15 @@ export class Board {
     // H6: temblor de pantalla de los golpes fuertes
     this.shake = this.fx.offset(now);
     g.imageSmoothingEnabled = !this.iso;
-    this.isoFloor = this.iso && packReady(this.session.run?.zone ?? 0);
-    if (this.isoFloor) { this.drawPackWalls(c); this.drawPackFloor(c); this.drawTorchLight(now); }
+    this.isoFloor = this.iso && cryptReady();
+    if (this.isoFloor) {
+      const room = this.roomFor(c);
+      this.drawCryptFloor(c, room); this.drawCryptWalls(c, room);
+      // tono de la zona sobre suelo y muros
+      g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'multiply'; g.fillStyle = ZONE_TINT[this.session.run?.zone ?? 0] ?? ZONE_TINT[0]!;
+      g.fillRect(0, 0, this.canvas.width, this.canvas.height); g.restore();
+      this.drawTorchLight(now);
+    }
     this.ground();
     const zone = ZONES[this.session.run?.zone ?? 0] ?? ZONES[0]!;
     this.drawFloor(c, zone, now);
@@ -750,18 +811,18 @@ export class Board {
       g.strokeStyle = '#d8b060'; g.lineWidth = 3; g.beginPath(); g.arc((x + 0.5) * TILE, (y + 0.6) * TILE, TILE * 0.26, 0, 6.3); g.stroke();
       g.fillStyle = '#d8b060'; for (let i = 0; i < 6; i++) { const a = i * 1.047; g.fillRect((x + 0.5) * TILE + Math.cos(a) * TILE * 0.26 - 2, (y + 0.6) * TILE + Math.sin(a) * TILE * 0.26 - 2, 4, 4); }
     }
-    if (this.isoFloor && ready(TRAP.up)) {
+    if (this.isoFloor && ready(CRYPT.spikes)) {
       // isométrico: placa de púas del pack con un brillo rojo que late
       this.screen();
       for (const k of c.traps ?? []) {
         const [x, y] = k.split(',').map(Number) as [number, number], q = this.top(c, x + 0.5, y + 0.5);
         g.save(); g.globalCompositeOperation = 'lighter'; g.fillStyle = `rgba(255,50,40,${(0.12 + 0.08 * Math.sin(now / 240 + x + y)).toFixed(3)})`;
         g.beginPath(); g.ellipse(q.x, q.y, 54, 26, 0, 0, 6.3); g.fill(); g.restore();
-        this.drawProp(c, TRAP.up, x, y);
+        this.pivot(c, CRYPT.spikes, x + 1, y + 1);
       }
       this.ground();
     }
-    for (const k of this.isoFloor && ready(TRAP.up) ? [] : c.traps ?? []) {
+    for (const k of this.isoFloor && ready(CRYPT.spikes) ? [] : c.traps ?? []) {
       const [x, y] = k.split(',').map(Number) as [number, number];
       // púas: placa hundida con borde rojo encendido y pinchos con brillo
       g.fillStyle = '#1a0c10'; g.fillRect(x * TILE + 5, y * TILE + 5, TILE - 10, TILE - 10);
@@ -853,18 +914,18 @@ export class Board {
         const p = props[pi++]!;
         // en isométrico, un muro que tapa a alguien que está justo detrás se vuelve translúcido
         g.globalAlpha = this.iso && c.units.some((u) => alive(u) && (() => { const d = p.x - u.pos.x + (p.y - u.pos.y); return d >= 1 && d <= 2 && Math.abs(p.x - p.y - (u.pos.x - u.pos.y)) <= 1; })()) ? 0.42 : 1;
-        if (this.isoFloor && p.brazier) {
-          // brasero: caldero del pack con fuego animado y su luz
+        if (this.isoFloor && p.brazier && ready(CRYPT.brazier)) {
+          // brasero del pack con su llama animada y su luz
           this.screen();
-          const q = this.top(c, p.x, p.y), fr = PACK.cauldron[Math.floor(now / 120 + p.x) % 6]!;
-          this.px(fr, q.x - 14 * PX, q.y + 16 * PX - 30 * PX + 6);
+          const q = this.pivot(c, CRYPT.brazier, p.x + 1, p.y + 1);
+          this.drawFlame(q.x + BRAZIER_FLAME[0], q.y + BRAZIER_FLAME[1] + 6, 34, now, p.x + p.y, true);
           g.save(); g.globalCompositeOperation = 'lighter';
-          const gr = g.createRadialGradient(q.x, q.y + 4, 4, q.x, q.y + 4, 150);
-          gr.addColorStop(0, `rgba(255,120,40,${(0.32 + 0.05 * Math.sin(now / 90 + p.x)).toFixed(3)})`); gr.addColorStop(1, 'rgba(255,100,30,0)');
-          g.fillStyle = gr; g.beginPath(); g.arc(q.x, q.y + 4, 150, 0, 6.3); g.fill(); g.restore();
+          const gr = g.createRadialGradient(q.x, q.y - 20, 4, q.x, q.y - 20, 160);
+          gr.addColorStop(0, `rgba(255,120,40,${(0.28 + 0.05 * Math.sin(now / 90 + p.x)).toFixed(3)})`); gr.addColorStop(1, 'rgba(255,100,30,0)');
+          g.fillStyle = gr; g.beginPath(); g.arc(q.x, q.y - 20, 160, 0, 6.3); g.fill(); g.restore();
           g.globalAlpha = 1; continue;
         }
-        if (this.isoFloor && !p.brazier && !p.fence) { this.screen(); this.drawPackObstacle(c, p.x, p.y); g.globalAlpha = 1; continue; }
+        if (this.isoFloor && !p.brazier && !p.fence) { this.screen(); this.drawCryptObstacle(c, p.x, p.y, this.room?.seed ?? 0); g.globalAlpha = 1; continue; }
         if (p.brazier) this.drawBrazier(p.x, p.y, now); else if (p.fence) this.drawFence(p.x, p.y, now); else this.drawWall(c, zone, p.x, p.y);
         g.globalAlpha = 1;
       }
