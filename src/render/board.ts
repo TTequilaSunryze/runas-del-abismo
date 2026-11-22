@@ -50,7 +50,7 @@ const art = (src: string): HTMLImageElement | null => { if (typeof Image === 'un
 const Z1 = { floor: art('tiles/z1_floor.png'), pillar: art('tiles/z1_pillar.png') };
 const ready = (i: HTMLImageElement | null): i is HTMLImageElement => !!i && i.complete && i.naturalWidth > 0;
 /** Arte isométrico de la zona 1 (lote 1): pilares de 256 px de ancho con la base en el borde inferior. */
-const ISO1 = { pillars: [art('iso/z1/pillar_01.png'), art('iso/z1/pillar_02.png')], floors: [1, 2, 3, 4, 5, 6, 7, 8].map((n) => art(`iso/z1/floor_0${n}.png`)) };
+const ISO1 = { brazier: art('iso/z1/brazier.png'), broken: art('iso/z1/brazier_broken.png'), flame: art('iso/z1/flame.png'), pillars: [art('iso/z1/pillar_01.png'), art('iso/z1/pillar_02.png')], floors: [1, 2, 3, 4, 5, 6, 7, 8].map((n) => art(`iso/z1/floor_0${n}.png`)) };
 /**
  * Muros del fondo (zona 1). Imágenes de 360 px de alto que suben hacia la derecha (borde izquierdo del tablero);
  * el borde derecho usa las mismas, volteadas. foot = altura (en la imagen) del pie del muro en su extremo izquierdo;
@@ -121,6 +121,9 @@ export class Board {
   private acts = new Map<number, { t0: number; anim: Anim }>();
   private faceLeft = new Map<number, boolean>();
   private raf = 0;
+  /** braseros vistos en este combate (para dejar el brasero volcado donde se rompió) */
+  private brazierSeen = new Set<string>();
+  private lastRound = 0;
   /** antorchas de los muros del fondo en este fotograma (coordenadas de pantalla) */
   private torches: Array<{ x: number; y: number; side: number; lit: boolean }> = [];
   /** este fotograma el suelo se ha dibujado con losas isométricas */
@@ -357,6 +360,8 @@ export class Board {
       const [x, y] = k.split(',').map(Number) as [number, number];
       const X = x * TILE, Y = y * TILE;
       g.fillStyle = 'rgba(255,90,20,.22)'; g.fillRect(X + 2, Y + 2, TILE - 4, TILE - 4);
+      // en isométrico las llamas se dibujan de pie (drawIsoGround)
+      if (this.isoFloor) continue;
       for (let i = 0; i < 4; i++) {
         const fx = X + 10 + i * 11, fl = 10 + 6 * Math.sin(now / 90 + i * 1.7 + x);
         g.fillStyle = '#ff5a1a'; g.beginPath(); g.moveTo(fx - 5, Y + TILE - 8); g.quadraticCurveTo(fx, Y + TILE - 8 - fl * 2, fx + 5, Y + TILE - 8); g.fill();
@@ -434,6 +439,46 @@ export class Board {
         if (wl.torch) this.torches.push({ x: ox + dir * wl.torch[0] * w, y: oy + wl.torch[1] * WALL_H, side: dir, lit: !!wl.lit });
         i += k;
       }
+    }
+  }
+
+  /** Llama ilustrada que se mueve (se estira, se encoge y se balancea) con su halo. Base de la llama en (x, y). */
+  private drawFlame(x: number, y: number, h: number, now: number, seed: number, glow = false): void {
+    const g = this.g, img = ISO1.flame;
+    if (!ready(img)) return;
+    const k = now / 90 + seed * 1.37;
+    const sy = 1 + 0.12 * Math.sin(k) + 0.05 * Math.sin(k * 2.3), sx = 1 - 0.06 * Math.sin(k * 1.3), sway = 0.08 * Math.sin(k * 0.7);
+    const w = (h * img.naturalWidth) / img.naturalHeight;
+    if (glow) {
+      g.save(); g.globalCompositeOperation = 'lighter';
+      const gr = g.createRadialGradient(x, y - h * 0.4, 2, x, y - h * 0.4, h * 2.4);
+      gr.addColorStop(0, `rgba(255,140,50,${(0.3 + 0.05 * Math.sin(k)).toFixed(3)})`); gr.addColorStop(1, 'rgba(255,110,40,0)');
+      g.fillStyle = gr; g.beginPath(); g.arc(x, y - h * 0.4, h * 2.4, 0, 6.3); g.fill(); g.restore();
+    }
+    g.save(); g.translate(x, y); g.transform(sx, 0, sway, sy, 0, 0);
+    g.drawImage(img, -w / 2, -h, w, h); g.restore();
+  }
+
+  /** Cosas a ras de suelo en isométrico: braseros volcados y llamas del fuego del suelo. */
+  private drawIsoGround(c: CombatState, now: number): void {
+    const g = this.g, [sx, sy] = this.shake;
+    if (c.round < this.lastRound) this.brazierSeen.clear();
+    this.lastRound = c.round;
+    for (const k of c.braziers ?? []) this.brazierSeen.add(k);
+    // brasero volcado donde había uno y ya no está
+    if (ready(ISO1.broken)) for (const k of this.brazierSeen) {
+      if ((c.braziers ?? []).includes(k)) continue;
+      const [x, y] = k.split(',').map(Number) as [number, number], p = isoPoint(x + 0.5, y + 0.5, c.h);
+      const w = ISO_W * 0.9, h = (w * ISO1.broken.naturalHeight) / ISO1.broken.naturalWidth;
+      g.drawImage(ISO1.broken, p.x - w / 2 + sx, p.y - h * 0.62 + sy, w, h);
+    }
+    // fuego: tres llamas por casilla, de atrás adelante, con los turnos que le quedan
+    const cells = Object.entries(c.fire ?? {}).map(([k, t]) => { const [x, y] = k.split(',').map(Number) as [number, number]; return { x, y, t }; }).sort((a, b) => a.x + a.y - (b.x + b.y));
+    for (const f of cells) {
+      const p = isoPoint(f.x + 0.5, f.y + 0.5, c.h);
+      for (const [dx, dy, hh] of [[-18, -4, 40], [16, -2, 36], [0, 8, 48]] as const) this.drawFlame(p.x + dx + sx, p.y + dy + sy, hh, now, f.x * 3 + f.y * 5 + dx, dx === 0);
+      g.font = 'bold 13px monospace'; g.textAlign = 'center'; g.lineWidth = 3; g.strokeStyle = '#000';
+      g.strokeText(String(f.t), p.x + 30 + sx, p.y + 4 + sy); g.fillStyle = '#fff3c0'; g.fillText(String(f.t), p.x + 30 + sx, p.y + 4 + sy);
     }
   }
 
@@ -572,6 +617,7 @@ export class Board {
     this.ground();
     const zone = ZONES[this.session.run?.zone ?? 0] ?? ZONES[0]!;
     this.drawFloor(c, zone, now);
+    if (this.isoFloor) { this.screen(); this.drawIsoGround(c, now); this.ground(); }
     const me0 = this.session.myUnit();
     for (const k of c.puddles ?? []) {
       const [x, y] = k.split(',').map(Number) as [number, number];
@@ -785,6 +831,13 @@ export class Board {
         const p = props[pi++]!;
         // en isométrico, un muro que tapa a alguien que está justo detrás se vuelve translúcido
         g.globalAlpha = this.iso && c.units.some((u) => alive(u) && (() => { const d = p.x - u.pos.x + (p.y - u.pos.y); return d >= 1 && d <= 4 && Math.abs(p.x - p.y - (u.pos.x - u.pos.y)) <= 1; })()) ? 0.42 : 1;
+        if (this.iso && p.brazier && this.isoFloor && ready(ISO1.brazier) && ready(ISO1.flame)) {
+          this.screen(); this.drawIsoProp(c, ISO1.brazier, p.x, p.y, 0.5);
+          // llama sobre las brasas del cuenco
+          const q = isoPoint(p.x + 0.5, p.y + 0.5, c.h), w = ISO_W * 0.5, h = (w * ISO1.brazier.naturalHeight) / ISO1.brazier.naturalWidth;
+          this.drawFlame(q.x + this.shake[0], q.y + w / 4 - h + h * 0.09 + this.shake[1], 34, now, p.x * 7 + p.y, true);
+          g.globalAlpha = 1; continue;
+        }
         const isoPillar = this.iso && zone === ZONES[0] ? pick(ISO1.pillars, p.x, p.y) : null;
         if (this.iso && !p.brazier && !p.fence && ready(isoPillar)) { this.screen(); this.drawIsoProp(c, isoPillar, p.x, p.y); g.globalAlpha = 1; continue; }
         if (this.iso && !p.brazier && !p.fence && !(zone === ZONES[0] && ready(Z1.pillar))) { this.screen(); this.drawIsoBlock(c, zone, p.x, p.y); g.globalAlpha = 1; continue; }

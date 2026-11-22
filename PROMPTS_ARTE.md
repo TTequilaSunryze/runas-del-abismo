@@ -75,7 +75,7 @@ isometric pixel art, dark fantasy dungeon, detailed HD pixel art, dark outlines,
 
 ---
 
-## PARTE 3: Fuego y brasero (3 imágenes)
+## PARTE 3: Fuego y brasero (3 imágenes) ✅ hecha
 
 Me pasas: `flame`, `brazier` y `brazier_broken`. Si la llama sale como un solo dibujo, la animo yo.
 
