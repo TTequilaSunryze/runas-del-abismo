@@ -50,7 +50,7 @@ const art = (src: string): HTMLImageElement | null => { if (typeof Image === 'un
 const Z1 = { floor: art('tiles/z1_floor.png'), pillar: art('tiles/z1_pillar.png') };
 const ready = (i: HTMLImageElement | null): i is HTMLImageElement => !!i && i.complete && i.naturalWidth > 0;
 /** Arte isométrico de la zona 1 (lote 1): pilares de 256 px de ancho con la base en el borde inferior. */
-const ISO1 = { pillars: [art('iso/z1/pillar_01.png'), art('iso/z1/pillar_02.png')] };
+const ISO1 = { pillars: [art('iso/z1/pillar_01.png'), art('iso/z1/pillar_02.png')], floors: [art('iso/z1/floor_01.png'), art('iso/z1/floor_02.png'), art('iso/z1/floor_03.png')] };
 /** variante fija por casilla */
 const pick = <T,>(list: T[], x: number, y: number): T => list[(((x * 73856093) ^ (y * 19349663)) >>> 0) % list.length]!;
 const STATUS_COLOR: Record<string, string> = { burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0', charm: '#ff9ad8', vuln: '#c9a0ff', bleed: '#e03040', hobble: '#9ad0e8', guarded: '#7fe0b0', deathmark: '#ff3a4a', verdugo: '#ff8a30', frenzy: '#ff5030', orbita: '#b07cff', chained: '#a0a8c0', rooted: '#c89a5a', anchor: '#5ac8ff', silver: '#e0e8ff', smoke: '#9a8ab8', immune: '#7ae8ff', kinetic: '#58a6ff', prism: '#c8a0ff', fading: '#b0b8d0' };
@@ -103,6 +103,8 @@ export class Board {
   private acts = new Map<number, { t0: number; anim: Anim }>();
   private faceLeft = new Map<number, boolean>();
   private raf = 0;
+  /** este fotograma el suelo se ha dibujado con losas isométricas */
+  private isoFloor = false;
   /** vista isométrica (se recuerda en el navegador) */
   iso = isoPref();
   setIso(on: boolean): void { this.iso = on; try { localStorage.setItem(ISO_KEY, on ? '1' : '0'); } catch { /* sin almacenamiento */ } }
@@ -286,6 +288,12 @@ export class Board {
           continue;
         }
         const light = (x + y) % 2 === 0;
+        if (this.isoFloor) {
+          // losas isométricas ya dibujadas: solo el damero suave para leer las casillas y la sombra de los muros
+          g.fillStyle = light ? 'rgba(255,240,210,.035)' : 'rgba(0,0,0,.16)'; g.fillRect(X, Y, TILE, TILE);
+          if (wall.has(`${x},${y - 1}`)) { const sg = g.createLinearGradient(0, Y, 0, Y + TILE * 0.45); sg.addColorStop(0, 'rgba(0,0,0,.55)'); sg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = sg; g.fillRect(X, Y, TILE, TILE * 0.45); }
+          continue;
+        }
         if (zone === ZONES[0] && ready(Z1.floor)) {
           // losas ilustradas: una de las 16 variantes, fija por casilla; el damero se conserva para leer las casillas
           const v = (((x * 73856093) ^ (y * 19349663)) >>> 0) % 16;
@@ -381,6 +389,21 @@ export class Board {
     g.drawImage(img, p.x - w / 2 + sx, bottom - h, w, h);
   }
 
+  /** Suelo con losas isométricas (rombo 256×128): una variante fija por casilla, girada a veces para que no se repita. */
+  private drawIsoFloor(c: CombatState): void {
+    const g = this.g, [sx, sy] = this.shake, pit = new Set(c.abyss ?? []);
+    for (let y = 0; y < c.h; y++)
+      for (let x = 0; x < c.w; x++) {
+        if (pit.has(`${x},${y}`)) continue;
+        const img = pick(ISO1.floors, x, y)!, p = isoPoint(x + 0.5, y + 0.5, c.h);
+        const flip = ((x * 31 + y * 17) & 1) === 1;
+        g.save(); g.translate(p.x + sx, p.y + sy); if (flip) g.scale(-1, 1);
+        // un píxel de más para que no se vean juntas finas entre rombos
+        g.drawImage(img, -ISO_W / 2 - 0.5, -ISO_H / 2 - 0.5, ISO_W + 1, ISO_H + 1);
+        g.restore();
+      }
+  }
+
   /** Grosor del suelo en isométrico: los dos bordes delanteros del tablero son un bloque de roca. */
   private drawSlab(c: CombatState, zone: (typeof ZONES)[number]): void {
     const g = this.g, [sx, sy] = this.shake, D = Math.round(ISO_H * 0.55);
@@ -466,6 +489,8 @@ export class Board {
     // H6: temblor de pantalla de los golpes fuertes
     this.shake = this.fx.offset(now);
     if (this.iso) this.drawSlab(c, ZONES[this.session.run?.zone ?? 0] ?? ZONES[0]!);
+    this.isoFloor = this.iso && (this.session.run?.zone ?? 0) === 0 && ISO1.floors.every(ready);
+    if (this.isoFloor) this.drawIsoFloor(c);
     this.ground();
     const zone = ZONES[this.session.run?.zone ?? 0] ?? ZONES[0]!;
     this.drawFloor(c, zone, now);

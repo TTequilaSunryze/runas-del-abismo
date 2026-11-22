@@ -248,7 +248,7 @@ Con solo el lote 1 y el Pistolero (unas 38 imágenes), la sala de la zona 1 ya s
 | Paso | Estado | Qué cambia |
 |---|---|---|
 | 1. Tablero isométrico | ✅ Hecho | Proyección en rombos, clic y casillas resaltadas correctos, pilares translúcidos si tapan a alguien, grosor del borde, botón 🔷 / tecla I para comparar con la vista plana |
-| 2. Cargador de escenario | En curso: `pillar_01` y `pillar_02` ya están en el juego | Losas reales, muros del fondo con antorchas animadas, abismo, braseros |
+| 2. Cargador de escenario | En curso: `pillar_01`, `pillar_02` y `floor_01`–`floor_03` ya están en el juego. Las losas con grosor y luz pintada se pueden aprovechar: `tools/arte/losa_iso.py` saca la cara de arriba y quita el degradado | Losas reales, muros del fondo con antorchas animadas, abismo, braseros |
 | 3. Luz | Con el lote 1 | Halo de cada antorcha y brasero sobre el suelo, oscuridad en los rincones |
 | 4. Personajes y enemigos | Al llegar los lotes 2 y 3 | Hojas de animación de 256 px, retratos |
 | 5. Interfaz | Al llegar el lote 5 | Marcos, botones y pergamino como en la captura |
