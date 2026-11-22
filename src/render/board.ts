@@ -129,9 +129,17 @@ const SHEETS: Record<string, Sheet> = {
   // Arquero óseo: lámina dibujada con IA (tools/arte/hoja_ia.py), una dirección; suelta la flecha en el 5.º fotograma de 8
   arquero: { ...sheet('boneArcher', { idle: 6, walk: 10, attack: 8, hurt: 5, death: 6 }, 96, [48, 92], 2, 1), head: 66, actMs: 800, release: 4 / 8 },
   // Caballero sepulcral: lámina JPG con fondo gris (se quita rellenando desde los bordes), celdas de 160; el tajo llega en el 5.º fotograma
-  caballero: { ...sheet('knight', { idle: 4, walk: 8, attack: 8, hurt: 4, death: 6 }, 160, [80, 156], 2, 1), head: 66, actMs: 800, release: 4 / 8 },
+  caballero: { ...sheet('knight', { idle: 3, walk: 8, attack: 8, hurt: 4, death: 6 }, 160, [80, 156], 2, 1), head: 66, actMs: 800, release: 4 / 8 },
   // Momia del osario: lámina JPG con fondo gris oscuro (quitado), celdas de 160; el zarpazo llega en el 5.º fotograma de 8
   momia: { ...sheet('mummy', { idle: 4, walk: 9, attack: 8, hurt: 3, death: 5 }, 160, [80, 156], 2, 1), head: 68, actMs: 800, release: 4 / 8 },
+  // láminas dibujadas con IA (tools/arte/detectar.py + hoja_ia.py), una dirección
+  calavera: { ...sheet('calavera', { idle: 4, walk: 8, attack: 7, hurt: 3, death: 7 }, 96, [48, 92], 2, 1), head: 40, actMs: 800, release: 4 / 7 },
+  sepulturero: { ...sheet('sepulturero', { idle: 4, walk: 7, attack: 6, cast: 6, hurt: 3, death: 6 }, 96, [48, 92], 2, 1), head: 52, actMs: 800, release: 3 / 6 },
+  abominacion: { ...sheet('abominacion', { idle: 3, walk: 8, attack: 4, cast: 4, hurt: 3, death: 4 }, 160, [80, 156], 2, 1), head: 86, actMs: 900, release: 2 / 4 },
+  lobo: { ...sheet('lobo', { idle: 6, walk: 6, attack: 6, cast: 4, hurt: 2, death: 6 }, 144, [72, 140], 2, 1), head: 54, actMs: 700, release: 3 / 6 },
+  // El Prior Hueco: en la fase 2 cambia de hoja («prior2»); su «cast» es la transformación
+  prior: { ...sheet('prior', { idle: 4, walk: 3, attack: 4, hurt: 3, death: 5 }, 160, [80, 156], 2, 1), head: 76, actMs: 900, release: 3 / 4 },
+  prior2: { ...sheet('prior2', { idle: 4, walk: 3, attack: 4, cast: 5, hurt: 3, death: 4 }, 160, [80, 156], 2, 1), head: 84, actMs: 900, release: 3 / 4 },
   tejedora: withHead(sheet('weaver', { idle: 12, walk: 8, attack: 10, hurt: 8, death: 12 }, 159, [80, 84]), 27),
   // Tiny Enemies
   espectro: tiny('espectro', T4), gargola: tiny('gargola', T4), necrofago: tiny('necrofago', T4), acolito: tiny('acolito', T4),
@@ -144,8 +152,8 @@ const HERO_SHEETS: Record<string, Sheet> = {
   // a 3×: unos 96 px de alto; tensa el arco y suelta la flecha en el 7.º fotograma (de 7)
   arquero: { ...sheet('archer', { idle: 4, walk: 8, attack: 7, cast: 4, hurt: 2, death: 8 }, 64, [32, 48], 3, 1), actMs: 800, release: 6 / 7, arrow: art('iso/units/archer_arrow.png'), arrowY: 23, head: 32 },
 };
-const sheetOf = (u: { kind: string; team: string; summoner?: number }): Sheet | undefined =>
-  u.team === 'enemy' ? SHEETS[u.kind] : u.summoner === undefined ? HERO_SHEETS[u.kind] : undefined;
+const sheetOf = (u: { kind: string; team: string; summoner?: number; phase?: number }): Sheet | undefined =>
+  u.team === 'enemy' ? ((u.phase ?? 1) >= 2 && SHEETS[`${u.kind}2`]) || SHEETS[u.kind] : u.summoner === undefined ? HERO_SHEETS[u.kind] : undefined;
 const sheetReady = (s: Sheet): boolean => Object.values(s.img).every(ready);
 /** alto del personaje sobre sus pies, en pantalla */
 const sheetHeight = (s: Sheet): number => (s.head ?? s.foot[1]) * s.scale;
@@ -472,7 +480,12 @@ export class Board {
       else if (e.t === 'devour') float(e.unit, 'Devora', '#c9a0ff');
       else if (e.t === 'raise') float(e.unit, 'Alza muertos', '#c9a0ff');
       else if (e.t === 'summon') float(e.unit, 'Invocado', '#c77dff');
-      else if (e.t === 'phase') float(e.unit, '¡FASE 2!', '#ff3060');
+      else if (e.t === 'phase') {
+        float(e.unit, '¡FASE 2!', '#ff3060');
+        // hojas con segunda fase: se ve la transformación (su animación de lanzar)
+        const pu = c.units.find((x) => x.id === e.unit), ps = pu && SHEETS[`${pu.kind}2`];
+        if (ps?.frames.cast) this.acts.set(e.unit, { t0: now, anim: 'special' as Anim, ms: 1400 });
+      }
       else if (e.t === 'detonate') float(e.unit, `¡Marca de la muerte! ${e.amount}`, '#ff3a4a');
       else if (e.t === 'caged') float(e.unit, '¡La caja!', '#7fe0b0');
       else if (e.t === 'reset') float(e.unit, `¡Remate! ${SPELLS[e.spell]?.name ?? ''} gratis`, '#4ad0ff');
@@ -681,11 +694,13 @@ export class Board {
     }
     dir ??= 0; this.facing.set(u.id, dir);
     const n = (a: SheetAnim): number => sh.frames[a] ?? 1;
-    let anim: SheetAnim = 'idle', fr = Math.floor(now / 125 + u.id * 3) % n('idle');
+    // reposo: ciclo de ida y vuelta (0 1 2 3 2 1…) y lento, unos 1,2 s por vuelta sea cual sea el número de dibujos
+    const ni = n('idle'), idleMs = Math.max(170, 1200 / ni), loop = ni > 2 ? ni * 2 - 2 : ni, step = Math.floor((now + u.id * 397) / idleMs) % loop;
+    let anim: SheetAnim = 'idle', fr = step < ni ? step : loop - step;
     // hechizos sin daño: animación de lanzar si la hoja la tiene
     if (ac && ak < 1) { anim = ac.anim !== 'attack' && sh.frames.cast ? 'cast' : 'attack'; fr = Math.min(n(anim) - 1, Math.floor(ak * n(anim))); }
     else if (hurt < 500) { anim = 'hurt'; fr = Math.min(n('hurt') - 1, Math.floor(hurt / 120)); }
-    else if (moving) { anim = 'walk'; fr = Math.floor(now / 100) % n('walk'); }
+    else if (moving) { anim = 'walk'; fr = Math.floor(now / Math.max(90, 800 / n('walk'))) % n('walk'); }
     this.sheetFrame(c, sh, anim, fr, dir, s.x, s.y, u.statuses.invis ? 0.4 : 1, this.flashing(u.id, now));
     this.upright(s.x, s.y);
   }
