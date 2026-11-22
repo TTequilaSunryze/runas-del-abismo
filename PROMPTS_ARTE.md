@@ -42,7 +42,7 @@ isometric pixel art, dark fantasy dungeon, detailed HD pixel art, dark outlines,
 
 ---
 
-## PARTE 2: Muros del fondo (5 imágenes)
+## PARTE 2: Muros del fondo (5 imágenes) ✅ hecha (la esquina no hace falta)
 
 Rodean la sala por los dos lados de atrás, como en la captura. **Solo necesito el muro de un lado:** el del otro lado lo saco yo dándole la vuelta a la imagen.
 

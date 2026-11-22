@@ -24,7 +24,7 @@ const PAD = 42;
 /** ancho y alto del rombo de una casilla */
 export const ISO_W = TILE * 2, ISO_H = TILE;
 /** espacio por encima del rombo más alto, para muros y personajes */
-const ISO_PAD = 150;
+const ISO_PAD = 215;
 /** margen inferior */
 const ISO_BOTTOM = 24;
 /** escala de lo que está de pie respecto a la vista plana */
@@ -50,9 +50,25 @@ const art = (src: string): HTMLImageElement | null => { if (typeof Image === 'un
 const Z1 = { floor: art('tiles/z1_floor.png'), pillar: art('tiles/z1_pillar.png') };
 const ready = (i: HTMLImageElement | null): i is HTMLImageElement => !!i && i.complete && i.naturalWidth > 0;
 /** Arte isométrico de la zona 1 (lote 1): pilares de 256 px de ancho con la base en el borde inferior. */
-const ISO1 = { pillars: [art('iso/z1/pillar_01.png'), art('iso/z1/pillar_02.png')], floors: [1, 2, 3, 4, 5, 6, 7].map((n) => art(`iso/z1/floor_0${n}.png`)) };
+const ISO1 = { pillars: [art('iso/z1/pillar_01.png'), art('iso/z1/pillar_02.png')], floors: [1, 2, 3, 4, 5, 6, 7, 8].map((n) => art(`iso/z1/floor_0${n}.png`)) };
+/**
+ * Muros del fondo (zona 1). Imágenes de 360 px de alto que suben hacia la derecha (borde izquierdo del tablero);
+ * el borde derecho usa las mismas, volteadas. foot = altura (en la imagen) del pie del muro en su extremo izquierdo;
+ * cells = casillas de borde que cubre.
+ */
+const WALLS1: Array<{ img: HTMLImageElement | null; foot: number; cells: number; w: number; torch?: [number, number]; lit?: boolean }> = [
+  // torch: posición de la antorcha (fracción del ancho y del alto de la imagen); lit: la llama ya viene pintada
+  { img: art('iso/z1/wall_01.png'), foot: 340, cells: 2, w: 3, torch: [0.54, 0.33], lit: true },
+  { img: art('iso/z1/wall_02.png'), foot: 314, cells: 2, w: 2, torch: [0.68, 0.3], lit: true },
+  { img: art('iso/z1/wall_torch.png'), foot: 349, cells: 1, w: 3, torch: [0.585, 0.42] },
+  { img: art('iso/z1/wall_arch.png'), foot: 320, cells: 1, w: 1, torch: [0.825, 0.28], lit: true },
+];
+/** solape entre tramos de muro, para que no se vean las juntas */
+const WALL_OVERLAP = 38;
+/** alto de los muros en pantalla */
+const WALL_H = 195;
 /** Frecuencia de cada losa (índices de ISO1.floors): las lisas y la de piedrecitas son las normales; musgo, huesos y runa, raras. */
-const FLOOR_MIX = [0, 1, 2, 0, 1, 2, 0, 1, 2, 5, 5, 5, 0, 1, 2, 3, 4, 6];
+const FLOOR_MIX = [0, 1, 2, 0, 1, 2, 0, 1, 2, 5, 5, 5, 0, 1, 2, 3, 4, 6, 7];
 /** variante fija por casilla */
 const pick = <T,>(list: T[], x: number, y: number): T => list[(((x * 73856093) ^ (y * 19349663)) >>> 0) % list.length]!;
 const STATUS_COLOR: Record<string, string> = { burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0', charm: '#ff9ad8', vuln: '#c9a0ff', bleed: '#e03040', hobble: '#9ad0e8', guarded: '#7fe0b0', deathmark: '#ff3a4a', verdugo: '#ff8a30', frenzy: '#ff5030', orbita: '#b07cff', chained: '#a0a8c0', rooted: '#c89a5a', anchor: '#5ac8ff', silver: '#e0e8ff', smoke: '#9a8ab8', immune: '#7ae8ff', kinetic: '#58a6ff', prism: '#c8a0ff', fading: '#b0b8d0' };
@@ -105,6 +121,8 @@ export class Board {
   private acts = new Map<number, { t0: number; anim: Anim }>();
   private faceLeft = new Map<number, boolean>();
   private raf = 0;
+  /** antorchas de los muros del fondo en este fotograma (coordenadas de pantalla) */
+  private torches: Array<{ x: number; y: number; side: number; lit: boolean }> = [];
   /** este fotograma el suelo se ha dibujado con losas isométricas */
   private isoFloor = false;
   /** vista isométrica (se recuerda en el navegador) */
@@ -391,6 +409,62 @@ export class Board {
     g.drawImage(img, p.x - w / 2 + sx, bottom - h, w, h);
   }
 
+  /** Muros del fondo por los dos bordes de atrás del tablero, de la esquina de arriba hacia fuera (lo de atrás primero). */
+  private drawIsoWalls(c: CombatState): void {
+    this.torches = [];
+    const g = this.g, [sx, sy] = this.shake, s = WALL_H / 360;
+    const bag = WALLS1.flatMap((w) => Array<typeof w>(w.w).fill(w));
+    for (const side of ['left', 'right'] as const) {
+      const len = side === 'left' ? c.h : c.w;
+      let i = 0, n = 0;
+      while (i < len) {
+        const wl = pick(bag, side === 'left' ? 101 : 7, n++ * 13 + (side === 'left' ? 0 : 50));
+        const k = Math.min(wl.cells, len - i), img = wl.img!;
+        // ancho: el del tramo más un solape (se estira un poco si hace falta)
+        const w = Math.max(img.naturalWidth * s, (k * ISO_W) / 2 + WALL_OVERLAP);
+        const dir = side === 'left' ? 1 : -1;
+        const p = side === 'left' ? isoPoint(0, i + k, c.h) : isoPoint(i + k, 0, c.h);
+        const ox = p.x + sx, oy = p.y + sy - wl.foot * s;
+        g.save();
+        // borde x = 0: el muro sube hacia la derecha y su pie izquierdo va en el extremo de abajo del tramo;
+        // borde y = 0: la misma imagen volteada, con el pie en el extremo de abajo a la derecha
+        g.translate(ox, oy); g.scale(dir, 1);
+        g.drawImage(img, 0, 0, w, WALL_H);
+        g.restore();
+        if (wl.torch) this.torches.push({ x: ox + dir * wl.torch[0] * w, y: oy + wl.torch[1] * WALL_H, side: dir, lit: !!wl.lit });
+        i += k;
+      }
+    }
+  }
+
+  /** Luz de las antorchas: halo cálido que parpadea sobre el muro y sobre el suelo de delante, y llama en los soportes apagados. */
+  private drawTorchLight(now: number): void {
+    const g = this.g;
+    g.save(); g.globalCompositeOperation = 'lighter';
+    for (const [i, t] of this.torches.entries()) {
+      const fl = 0.85 + 0.15 * Math.sin(now / 110 + i * 1.7) + 0.06 * Math.sin(now / 37 + i);
+      // halo en el muro
+      let gr = g.createRadialGradient(t.x, t.y, 2, t.x, t.y, 70);
+      gr.addColorStop(0, `rgba(255,150,60,${(0.28 * fl).toFixed(3)})`); gr.addColorStop(1, 'rgba(255,120,40,0)');
+      g.fillStyle = gr; g.fillRect(t.x - 70, t.y - 70, 140, 140);
+      // charco de luz en el suelo, delante del muro (elipse aplastada como el suelo)
+      const fx = t.x + t.side * 70, fy = t.y + 150;
+      g.save(); g.translate(fx, fy); g.scale(1, 0.5);
+      gr = g.createRadialGradient(0, 0, 4, 0, 0, 190);
+      gr.addColorStop(0, `rgba(255,140,50,${(0.2 * fl).toFixed(3)})`); gr.addColorStop(1, 'rgba(255,110,40,0)');
+      g.fillStyle = gr; g.beginPath(); g.arc(0, 0, 190, 0, 6.3); g.fill(); g.restore();
+    }
+    g.restore();
+    // llama en los soportes que venían apagados
+    for (const [i, t] of this.torches.entries()) {
+      if (t.lit) continue;
+      const h = 13 + 4 * Math.sin(now / 80 + i * 2), x = t.x, y = t.y;
+      g.fillStyle = '#ff5a1a'; g.beginPath(); g.moveTo(x - 6, y); g.quadraticCurveTo(x, y - h * 1.7, x + 6, y); g.fill();
+      g.fillStyle = '#ffd24a'; g.beginPath(); g.moveTo(x - 3, y); g.quadraticCurveTo(x, y - h, x + 3, y); g.fill();
+      g.fillStyle = '#fff6d0'; g.fillRect(x - 1, y - 4, 2, 3);
+    }
+  }
+
   /** Suelo con losas isométricas (rombo 256×128): una variante fija por casilla, girada a veces para que no se repita. */
   private drawIsoFloor(c: CombatState): void {
     const g = this.g, [sx, sy] = this.shake, pit = new Set(c.abyss ?? []);
@@ -492,7 +566,9 @@ export class Board {
     this.shake = this.fx.offset(now);
     if (this.iso) this.drawSlab(c, ZONES[this.session.run?.zone ?? 0] ?? ZONES[0]!);
     this.isoFloor = this.iso && (this.session.run?.zone ?? 0) === 0 && ISO1.floors.every(ready);
+    if (this.isoFloor && WALLS1.every((w) => ready(w.img))) this.drawIsoWalls(c);
     if (this.isoFloor) this.drawIsoFloor(c);
+    if (this.isoFloor && this.torches.length) this.drawTorchLight(now);
     this.ground();
     const zone = ZONES[this.session.run?.zone ?? 0] ?? ZONES[0]!;
     this.drawFloor(c, zone, now);
@@ -830,7 +906,7 @@ export class Board {
     // luz de antorchas en las esquinas y viñeta
     if (this.iso) this.screen();
     const W = this.iso ? size.w : c.w * TILE, H = this.iso ? size.h : c.h * TILE, fl = 0.1 + 0.03 * Math.sin(now / 130);
-    for (const [lx, ly] of [[0, 0], [W, 0], [0, H], [W, H]] as const) {
+    for (const [lx, ly] of (this.isoFloor && this.torches.length ? [] : [[0, 0], [W, 0], [0, H], [W, H]]) as Array<readonly [number, number]>) {
       const gr = g.createRadialGradient(lx, ly, 0, lx, ly, 280);
       gr.addColorStop(0, `rgba(${zone.light},${fl})`); gr.addColorStop(1, `rgba(${zone.light},0)`);
       g.fillStyle = gr; g.fillRect(0, 0, W, H);
