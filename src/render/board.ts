@@ -68,6 +68,25 @@ const PACK = {
   empty: art('iso/pack/cauldron_empty.png'),
   cauldron: [1, 2, 3, 4, 5, 6].map((n) => art(`iso/pack/cauldron${n}.png`)),
 };
+/**
+ * Objetos del pack «Pixel Worlds - 202 Dungeon, Castle & Mine Props» (SdavGha), a 2× (su rombo es de 128×64, como el
+ * tablero). Su punto de apoyo es el centro de abajo de la imagen, sobre el vértice de abajo de la casilla.
+ * Obstáculos por zona; 0 = columna de bloques del otro pack.
+ */
+const prop = (id: string): HTMLImageElement | null => art(`iso/props/${id}.png`);
+const ZONE_PROPS: Array<Array<HTMLImageElement | null | 0>> = [
+  // catacumbas: pilar roto, jaula, altar, calavera en estaca, pilar con cadenas, ángel, gárgola, candelabro, lápidas, calaveras, cascotes
+  [0, 0, 0, ...['d01_13', 'd01_11', 'd01_14', 'd01_09', 'd10_14', 'd05_04', 'd05_15', 'd05_05', 'd05_13', 'd05_03', 'd05_10', 'd01_15'].map(prop)],
+  // bosque: tótem, estalagmita, cascotes, pilar roto, lápida, calavera en estaca, setas
+  [0, 0, ...['d05_07', 'd04_01', 'd01_15', 'd01_13', 'd05_13', 'd01_09', 'd04_08', 'd05_07', 'd04_01'].map(prop)],
+  // ruinas de ceniza: pilar roto, cascotes, armadura, alabardas, estandarte, trono, gárgola
+  [0, 0, ...['d01_13', 'd01_15', 'd06_16', 'd06_04', 'd06_08', 'd06_07', 'd05_15', 'd01_13'].map(prop)],
+  // abismo: obelisco, cristales, pilar de invocación, cristal de barrera, runas flotantes, piedra rúnica, pilar con cadenas
+  [0, 0, ...['d10_09', 'd04_02', 'd10_07', 'd10_06', 'd11_10', 'd07_05', 'd10_14', 'd10_09'].map(prop)],
+];
+/** objetos con velas o fuego: dan luz */
+const LIT_PROPS = new Set(['d05_05', 'd01_14'].map(prop));
+const TRAP = { idle: prop('d01_05'), up: prop('d03_14') };
 /** juego de piezas de cada zona: piedra gris (catacumbas, abismo) o parda (bosque, ruinas) */
 const packFor = (zone: number): ReturnType<typeof packSet> => (zone === 1 || zone === 2 ? PACK.brown : PACK.gray);
 const packReady = (zone: number): boolean => { const s = packFor(zone); return [...s.floors, ...s.cubes, PACK.window, PACK.door, PACK.torch, ...PACK.cauldron].every(ready); };
@@ -528,8 +547,29 @@ export class Board {
       }
   }
 
-  /** Columna del pack (casi siempre de 2 bloques) en lugar del pilar. */
+  /** Objeto del pack de props apoyado en el vértice de abajo de la casilla (x, y). */
+  private drawProp(c: CombatState, img: HTMLImageElement, x: number, y: number): void {
+    const p = this.top(c, x + 1, y + 1);
+    this.g.drawImage(img, Math.round(p.x - img.naturalWidth / 2), Math.round(p.y - img.naturalHeight), img.naturalWidth, img.naturalHeight);
+  }
+
+  /** Obstáculo: un objeto de la zona (lápida, estatua, jaula…) o una columna de bloques (casi siempre de 2). */
   private drawPackObstacle(c: CombatState, x: number, y: number): void {
+    const list = ZONE_PROPS[this.session.run?.zone ?? 0] ?? ZONE_PROPS[0]!, it = pick(list, x * 7 + 3, y * 3 + 1);
+    if (it && ready(it)) {
+      // sombra de contacto bajo el objeto
+      const q = this.top(c, x + 0.5, y + 0.5), g = this.g;
+      g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(q.x, q.y + 4, 34, 15, 0, 0, 6.3); g.fill();
+      this.drawProp(c, it, x, y);
+      if (LIT_PROPS.has(it)) {
+        const now = performance.now(), ly = q.y - it.naturalHeight * 0.75;
+        g.save(); g.globalCompositeOperation = 'lighter';
+        const gr = g.createRadialGradient(q.x, ly, 2, q.x, ly, 110);
+        gr.addColorStop(0, `rgba(255,170,70,${(0.22 + 0.04 * Math.sin(now / 100 + x * 3)).toFixed(3)})`); gr.addColorStop(1, 'rgba(255,130,40,0)');
+        g.fillStyle = gr; g.beginPath(); g.arc(q.x, ly, 110, 0, 6.3); g.fill(); g.restore();
+      }
+      return;
+    }
     const kind = pick([2, 2, 2, 2, 1, 2, 2, 2], x, y);
     // en el otro color de piedra, para que se distingan del suelo y de los muros
     for (let l = 0; l < kind; l++) this.cube(c, x, y, l, 11, true);
@@ -710,7 +750,18 @@ export class Board {
       g.strokeStyle = '#d8b060'; g.lineWidth = 3; g.beginPath(); g.arc((x + 0.5) * TILE, (y + 0.6) * TILE, TILE * 0.26, 0, 6.3); g.stroke();
       g.fillStyle = '#d8b060'; for (let i = 0; i < 6; i++) { const a = i * 1.047; g.fillRect((x + 0.5) * TILE + Math.cos(a) * TILE * 0.26 - 2, (y + 0.6) * TILE + Math.sin(a) * TILE * 0.26 - 2, 4, 4); }
     }
-    for (const k of c.traps ?? []) {
+    if (this.isoFloor && ready(TRAP.up)) {
+      // isométrico: placa de púas del pack con un brillo rojo que late
+      this.screen();
+      for (const k of c.traps ?? []) {
+        const [x, y] = k.split(',').map(Number) as [number, number], q = this.top(c, x + 0.5, y + 0.5);
+        g.save(); g.globalCompositeOperation = 'lighter'; g.fillStyle = `rgba(255,50,40,${(0.12 + 0.08 * Math.sin(now / 240 + x + y)).toFixed(3)})`;
+        g.beginPath(); g.ellipse(q.x, q.y, 54, 26, 0, 0, 6.3); g.fill(); g.restore();
+        this.drawProp(c, TRAP.up, x, y);
+      }
+      this.ground();
+    }
+    for (const k of this.isoFloor && ready(TRAP.up) ? [] : c.traps ?? []) {
       const [x, y] = k.split(',').map(Number) as [number, number];
       // púas: placa hundida con borde rojo encendido y pinchos con brillo
       g.fillStyle = '#1a0c10'; g.fillRect(x * TILE + 5, y * TILE + 5, TILE - 10, TILE - 10);

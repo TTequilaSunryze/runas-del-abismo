@@ -19,3 +19,9 @@ python3 losa_iso.py losa_sin_fondo.png ../../public/iso/z1/floor_04.png
 
 Piezas del "Fantasy Isometric Pixel Art Pack" de Kabukidanshi (atribución obligatoria: está en el pie de la página y en `public/iso/pack/CREDITOS.txt`).
 Se copian tal cual (32 px) y se oscurecen multiplicando el color: losas y bloques ×(0.52, 0.50, 0.47), objetos ×(0.74, 0.70, 0.66). El juego las dibuja a 4× sin suavizado.
+
+## Objetos (public/iso/props)
+
+"Pixel Worlds - 202 Dungeon, Castle & Mine Props (Free)" de SdavGha: sin atribución obligatoria; no se pueden redistribuir sueltos ni usar para entrenar IA.
+Se usan los PNG `_2x` (rombo 128×64, igual que el tablero), oscurecidos ×(0.70, 0.67, 0.63). Punto de apoyo: centro de abajo de la imagen sobre el vértice de abajo de la casilla.
+Obstáculos por zona en `ZONE_PROPS` (src/render/board.ts); la trampa de púas es `d03_14`.
