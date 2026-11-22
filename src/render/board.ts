@@ -92,7 +92,7 @@ const ZONE_PROPS: Array<Array<HTMLImageElement | null>> = [
  * filas S, SE, E, NE, N, NW, W, SW. Se dibujan a 2×.
  * Guerrero esqueleto: «Skeleton Series» de MEKAI GAMES.
  */
-type SheetAnim = 'idle' | 'walk' | 'attack' | 'hurt' | 'death' | 'cast';
+type SheetAnim = 'idle' | 'walk' | 'attack' | 'hurt' | 'death' | 'cast' | 'transform';
 /**
  * img: una imagen por animación (filas = direcciones). dirs 8 = S, SE, E, NE, N, NW, W, SW; dirs 1 = de perfil mirando
  * a la derecha (se voltea para mirar a la izquierda). foot = pies dentro del fotograma; scale = aumento entero.
@@ -137,9 +137,11 @@ const SHEETS: Record<string, Sheet> = {
   sepulturero: { ...sheet('sepulturero', { idle: 4, walk: 7, attack: 6, cast: 6, hurt: 3, death: 6 }, 96, [48, 92], 2, 1), head: 52, actMs: 800, release: 3 / 6 },
   abominacion: { ...sheet('abominacion', { idle: 3, walk: 8, attack: 4, cast: 4, hurt: 3, death: 4 }, 160, [80, 156], 2, 1), head: 86, actMs: 900, release: 2 / 4 },
   lobo: { ...sheet('lobo', { idle: 6, walk: 6, attack: 6, cast: 4, hurt: 2, death: 6 }, 144, [72, 140], 2, 1), head: 54, actMs: 700, release: 3 / 6 },
-  // El Prior Hueco: en la fase 2 cambia de hoja («prior2»); su «cast» es la transformación
+  // jefes con dos fases: en la fase 2 cambian de hoja («…2»); su «transform» se ve al cambiar de fase
   prior: { ...sheet('prior', { idle: 4, walk: 3, attack: 4, hurt: 3, death: 5 }, 160, [80, 156], 2, 1), head: 76, actMs: 900, release: 3 / 4 },
-  prior2: { ...sheet('prior2', { idle: 4, walk: 3, attack: 4, cast: 5, hurt: 3, death: 4 }, 160, [80, 156], 2, 1), head: 84, actMs: 900, release: 3 / 4 },
+  prior2: { ...sheet('prior2', { idle: 4, walk: 3, attack: 4, transform: 5, hurt: 3, death: 4 }, 160, [80, 156], 2, 1), head: 84, actMs: 900, release: 3 / 4 },
+  planidera: { ...sheet('planidera', { idle: 5, walk: 5, attack: 5, cast: 4, hurt: 2, death: 4 }, 224, [112, 220], 2, 1), head: 74, actMs: 900, release: 3 / 5 },
+  planidera2: { ...sheet('planidera2', { idle: 5, walk: 5, attack: 5, cast: 4, hurt: 2, death: 4, transform: 5 }, 224, [112, 220], 2, 1), head: 74, actMs: 900, release: 3 / 5 },
   tejedora: withHead(sheet('weaver', { idle: 12, walk: 8, attack: 10, hurt: 8, death: 12 }, 159, [80, 84]), 27),
   // Tiny Enemies
   espectro: tiny('espectro', T4), gargola: tiny('gargola', T4), necrofago: tiny('necrofago', T4), acolito: tiny('acolito', T4),
@@ -484,7 +486,7 @@ export class Board {
         float(e.unit, '¡FASE 2!', '#ff3060');
         // hojas con segunda fase: se ve la transformación (su animación de lanzar)
         const pu = c.units.find((x) => x.id === e.unit), ps = pu && SHEETS[`${pu.kind}2`];
-        if (ps?.frames.cast) this.acts.set(e.unit, { t0: now, anim: 'special' as Anim, ms: 1400 });
+        if (ps?.frames.transform) this.acts.set(e.unit, { t0: now, anim: 'phase' as Anim, ms: 1400 });
       }
       else if (e.t === 'detonate') float(e.unit, `¡Marca de la muerte! ${e.amount}`, '#ff3a4a');
       else if (e.t === 'caged') float(e.unit, '¡La caja!', '#7fe0b0');
@@ -698,7 +700,7 @@ export class Board {
     const ni = n('idle'), idleMs = Math.max(170, 1200 / ni), loop = ni > 2 ? ni * 2 - 2 : ni, step = Math.floor((now + u.id * 397) / idleMs) % loop;
     let anim: SheetAnim = 'idle', fr = step < ni ? step : loop - step;
     // hechizos sin daño: animación de lanzar si la hoja la tiene
-    if (ac && ak < 1) { anim = ac.anim !== 'attack' && sh.frames.cast ? 'cast' : 'attack'; fr = Math.min(n(anim) - 1, Math.floor(ak * n(anim))); }
+    if (ac && ak < 1) { anim = (ac.anim as string) === 'phase' && sh.frames.transform ? 'transform' : ac.anim !== 'attack' && sh.frames.cast ? 'cast' : 'attack'; fr = Math.min(n(anim) - 1, Math.floor(ak * n(anim))); }
     else if (hurt < 500) { anim = 'hurt'; fr = Math.min(n('hurt') - 1, Math.floor(hurt / 120)); }
     else if (moving) { anim = 'walk'; fr = Math.floor(now / Math.max(90, 800 / n('walk'))) % n('walk'); }
     this.sheetFrame(c, sh, anim, fr, dir, s.x, s.y, u.statuses.invis ? 0.4 : 1, this.flashing(u.id, now));
