@@ -103,7 +103,7 @@ export function combatScreen(events: GameEvent[]): void {
   const board = ui.board!;
   board.showBars = ui.hpBars;
   board.applyEvents(events);
-  (document.getElementById('cv') as HTMLCanvasElement).style.setProperty('--ar', String((c.w * 56) / (c.h * 56 + 22)));
+  (document.getElementById('cv') as HTMLCanvasElement).style.setProperty('--ar', String(board.aspect(c)));
   const cur = current(c), me = s.myUnit(), myTurn = s.isMyTurn();
   const omenDef = run.omen ? OMENS.find((o) => o.id === run.omen) : undefined;
   if (!myTurn && board.sel) board.sel = null;

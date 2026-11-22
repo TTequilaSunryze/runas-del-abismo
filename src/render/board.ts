@@ -17,6 +17,34 @@ const TILE = 56;
 /** margen superior: los muros y los personajes sobresalen por arriba de su casilla */
 const PAD = 42;
 
+// ---------- vista isométrica (prototipo) ----------
+// La lógica sigue en casillas. Solo cambia la proyección: el suelo se dibuja con una transformación afín
+// (cada casilla cuadrada se convierte en un rombo 2:1) y lo que está «de pie» (personajes, pilares, textos)
+// se dibuja sin deformar, anclado al centro de su rombo.
+/** ancho y alto del rombo de una casilla */
+export const ISO_W = TILE * 2, ISO_H = TILE;
+/** espacio por encima del rombo más alto, para muros y personajes */
+const ISO_PAD = 150;
+/** margen inferior */
+const ISO_BOTTOM = 24;
+/** escala de lo que está de pie respecto a la vista plana */
+const ISO_UP = 1.4;
+/** el pie de los personajes queda un poco por debajo del centro del rombo */
+const ISO_FOOT = ISO_H * 0.18;
+const ISO_KEY = 'runas.iso';
+const isoPref = (): boolean => { try { return localStorage.getItem(ISO_KEY) !== '0'; } catch { return true; } };
+/** Tamaño del lienzo isométrico para un mapa de w×h casillas. */
+export const isoSize = (w: number, h: number): { w: number; h: number } => ({ w: ((w + h) * ISO_W) / 2, h: ((w + h) * ISO_H) / 2 + ISO_PAD + ISO_BOTTOM });
+/** Casilla → punto de pantalla (centro del rombo), en un mapa de h filas. Coordenadas de casilla con decimales. */
+export function isoPoint(x: number, y: number, h: number): { x: number; y: number } {
+  return { x: (h * ISO_W) / 2 + ((x - y) * ISO_W) / 2, y: ISO_PAD + ((x + y) * ISO_H) / 2 };
+}
+/** Punto de pantalla → casilla (la inversa de isoPoint, sin redondear). */
+export function isoCell(sx: number, sy: number, h: number): { x: number; y: number } {
+  const u = (sx - (h * ISO_W) / 2) / (ISO_W / 2), v = (sy - ISO_PAD) / (ISO_H / 2);
+  return { x: (u + v) / 2, y: (v - u) / 2 };
+}
+
 /** Arte ilustrado de la zona 1 (Catacumbas): losas (hoja 4×4 de 64 px) y pilar. Si aún no ha cargado, se dibuja lo de siempre. */
 const art = (src: string): HTMLImageElement | null => { if (typeof Image === 'undefined') return null; const i = new Image(); i.src = `${import.meta.env.BASE_URL}${src}`; return i; };
 const Z1 = { floor: art('tiles/z1_floor.png'), pillar: art('tiles/z1_pillar.png') };
@@ -71,6 +99,29 @@ export class Board {
   private acts = new Map<number, { t0: number; anim: Anim }>();
   private faceLeft = new Map<number, boolean>();
   private raf = 0;
+  /** vista isométrica (se recuerda en el navegador) */
+  iso = isoPref();
+  setIso(on: boolean): void { this.iso = on; try { localStorage.setItem(ISO_KEY, on ? '1' : '0'); } catch { /* sin almacenamiento */ } }
+  /** temblor de pantalla del fotograma actual */
+  private shake: [number, number] = [0, 0];
+  /** Proporción ancho/alto del lienzo, para el CSS. */
+  aspect(c: CombatState): number { if (this.iso) { const s = isoSize(c.w, c.h); return s.w / s.h; } return (c.w * TILE) / (c.h * TILE + 22); }
+  /** Dibujo sobre el suelo: en isométrico, la casilla cuadrada se proyecta en un rombo. */
+  private ground(): void {
+    const [sx, sy] = this.shake, c = this.c;
+    if (!this.iso || !c) { this.g.setTransform(1, 0, 0, 1, sx, PAD + sy); return; }
+    const o = isoPoint(0, 0, c.h), a = ISO_W / 2 / TILE, b = ISO_H / 2 / TILE;
+    this.g.setTransform(a, b, -a, b, o.x + sx, o.y + sy);
+  }
+  /** Dibujo de pie sobre la casilla (x, y): el código de la vista plana se reutiliza tal cual, desplazado al rombo y sin deformar. */
+  private upright(x: number, y: number): void {
+    const [sx, sy] = this.shake, c = this.c;
+    if (!this.iso || !c) { this.g.setTransform(1, 0, 0, 1, sx, PAD + sy); return; }
+    const p = isoPoint(x + 0.5, y + 0.5, c.h), fx = (x + 0.5) * TILE, fy = (y + 1) * TILE, k = ISO_UP;
+    this.g.setTransform(k, 0, 0, k, p.x - fx * k + sx, p.y + ISO_FOOT - fy * k + sy);
+  }
+  /** Sin transformación (luces, avisos y ventanas que ocupan todo el lienzo). */
+  private screen(): void { this.g.setTransform(1, 0, 0, 1, 0, 0); }
 
   constructor(private canvas: HTMLCanvasElement, private session: Session) {
     this.g = canvas.getContext('2d')!;
@@ -106,6 +157,11 @@ export class Board {
     const c = this.c;
     if (!c) return null;
     const r = this.canvas.getBoundingClientRect();
+    if (this.iso) {
+      const q = isoCell(((e.clientX - r.left) / r.width) * this.canvas.width, ((e.clientY - r.top) / r.height) * this.canvas.height, c.h);
+      const p = { x: Math.floor(q.x), y: Math.floor(q.y) };
+      return p.x >= 0 && p.y >= 0 && p.x < c.w && p.y < c.h ? p : null;
+    }
     const p = { x: Math.floor(((e.clientX - r.left) / r.width) * c.w), y: Math.floor((((e.clientY - r.top) / r.height) * (c.h * TILE + PAD) - PAD) / TILE) };
     return p.x >= 0 && p.y >= 0 && p.x < c.w && p.y < c.h ? p : null;
   }
@@ -311,6 +367,43 @@ export class Board {
     g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 2; g.strokeRect(X + 1, topY + 1, TILE - 2, (front ? Y + TILE : topY + topH) - topY - 2);
   }
 
+  /** Grosor del suelo en isométrico: los dos bordes delanteros del tablero son un bloque de roca. */
+  private drawSlab(c: CombatState, zone: (typeof ZONES)[number]): void {
+    const g = this.g, [sx, sy] = this.shake, D = Math.round(ISO_H * 0.55);
+    const P = (x: number, y: number): [number, number] => { const q = isoPoint(x, y, c.h); return [q.x + sx, q.y + sy]; };
+    const [lx, ly] = P(0, c.h), [bx, by] = P(c.w, c.h), [rx, ry] = P(c.w, 0);
+    const face = (ax: number, ay: number, bx2: number, by2: number, col: string): void => {
+      const gr = g.createLinearGradient(0, Math.min(ay, by2), 0, Math.max(ay, by2) + D);
+      gr.addColorStop(0, col); gr.addColorStop(1, '#050307');
+      g.fillStyle = gr; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx2, by2); g.lineTo(bx2, by2 + D); g.lineTo(ax, ay + D); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(255,255,255,.08)'; g.lineWidth = 2; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx2, by2); g.stroke();
+    };
+    face(lx, ly, bx, by, zone.rock[1]);
+    face(bx, by, rx, ry, zone.rock[2]);
+  }
+
+  /** Muro en isométrico: un bloque de piedra con cara superior iluminada y dos caras laterales en sombra. */
+  private drawIsoBlock(c: CombatState, zone: (typeof ZONES)[number], x: number, y: number): void {
+    const g = this.g, [sx, sy] = this.shake, p = isoPoint(x + 0.5, y + 0.5, c.h), hw = ISO_W / 2, hh = ISO_H / 2, L = Math.round(ISO_H * 1.1);
+    const X = p.x + sx, Y = p.y + sy, T = Y - L;
+    const poly = (pts: number[], fill: string): void => { g.fillStyle = fill; g.beginPath(); g.moveTo(pts[0]!, pts[1]!); for (let i = 2; i < pts.length; i += 2) g.lineTo(pts[i]!, pts[i + 1]!); g.closePath(); g.fill(); };
+    // cara izquierda (más clara que la derecha: la luz llega por la izquierda)
+    poly([X - hw, T, X, T + hh, X, Y + hh, X - hw, Y], zone.rock[1]);
+    poly([X, T + hh, X + hw, T, X + hw, Y, X, Y + hh], zone.rock[2]);
+    // juntas de los sillares
+    g.strokeStyle = 'rgba(0,0,0,.3)'; g.lineWidth = 1;
+    for (let r = 1; r < 4; r++) {
+      const k = (L * r) / 4;
+      g.beginPath(); g.moveTo(X - hw, T + k); g.lineTo(X, T + hh + k); g.lineTo(X + hw, T + k); g.stroke();
+    }
+    // cara superior con bisel claro
+    poly([X, T - hh, X + hw, T, X, T + hh, X - hw, T], zone.rock[0]);
+    g.strokeStyle = 'rgba(255,255,255,.18)'; g.lineWidth = 2; g.beginPath(); g.moveTo(X - hw + 3, T); g.lineTo(X, T - hh + 2); g.lineTo(X + hw - 3, T); g.stroke();
+    g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(X, T - hh); g.lineTo(X + hw, T); g.lineTo(X + hw, Y); g.lineTo(X, Y + hh); g.lineTo(X - hw, Y); g.lineTo(X - hw, T); g.closePath(); g.stroke();
+    g.beginPath(); g.moveTo(X - hw, T); g.lineTo(X, T + hh); g.lineTo(X + hw, T); g.moveTo(X, T + hh); g.lineTo(X, Y + hh); g.stroke();
+  }
+
   /** Brasero: cuenco de hierro con llamas; se rompe con un golpe y deja una línea de fuego. */
   /** Cercado de púas del Arquitecto: cristales de runas azules. */
   private drawFence(x: number, y: number, now: number): void {
@@ -346,17 +439,20 @@ export class Board {
     const c = this.c;
     const g = this.g;
     if (!c) return;
-    if (this.canvas.width !== c.w * TILE || this.canvas.height !== c.h * TILE + PAD) {
-      this.canvas.width = c.w * TILE;
-      this.canvas.height = c.h * TILE + PAD;
+    const size = this.iso ? isoSize(c.w, c.h) : { w: c.w * TILE, h: c.h * TILE + PAD };
+    if (this.canvas.width !== size.w || this.canvas.height !== size.h) {
+      this.canvas.width = size.w;
+      this.canvas.height = size.h;
       this.shown.clear();
     }
     g.setTransform(1, 0, 0, 1, 0, 0);
-    g.fillStyle = '#07050a'; g.fillRect(0, 0, this.canvas.width, PAD);
+    g.fillStyle = '#07050a';
+    if (this.iso) g.fillRect(0, 0, size.w, size.h); else g.fillRect(0, 0, this.canvas.width, PAD);
     const now = performance.now();
     // H6: temblor de pantalla de los golpes fuertes
-    const [sx, sy] = this.fx.offset(now);
-    g.setTransform(1, 0, 0, 1, sx, PAD + sy);
+    this.shake = this.fx.offset(now);
+    if (this.iso) this.drawSlab(c, ZONES[this.session.run?.zone ?? 0] ?? ZONES[0]!);
+    this.ground();
     const zone = ZONES[this.session.run?.zone ?? 0] ?? ZONES[0]!;
     this.drawFloor(c, zone, now);
     const me0 = this.session.myUnit();
@@ -367,6 +463,7 @@ export class Board {
     }
     // aliados caídos: charco, lápida y su nombre donde cayeron
     for (const d of c.units.filter((x) => x.hp <= 0 && x.team === 'hero' && x.summoner === undefined && x.ai !== 'decoy' && !c.units.some((o) => o.hp > 0 && o.pos.x === x.pos.x && o.pos.y === x.pos.y))) {
+      this.upright(d.pos.x, d.pos.y);
       const cx = (d.pos.x + 0.5) * TILE, cy = (d.pos.y + 0.5) * TILE;
       g.fillStyle = 'rgba(110,10,18,.55)'; g.beginPath(); g.ellipse(cx + 3, cy + 12, TILE * 0.36, TILE * 0.17, 0.2, 0, 6.3); g.fill();
       g.fillStyle = 'rgba(0,0,0,.45)'; g.beginPath(); g.ellipse(cx, cy + 14, 13, 4, 0, 0, 6.3); g.fill();
@@ -378,8 +475,9 @@ export class Board {
       g.font = 'bold 9px "Pixelify Sans", ui-monospace, monospace'; g.textAlign = 'center';
       g.lineWidth = 3; g.strokeStyle = '#000'; g.strokeText(`✝ ${d.name}`, cx, cy + 24); g.fillStyle = '#ff9a9a'; g.fillText(`✝ ${d.name}`, cx, cy + 24);
     }
-    // marcadores en el suelo (esferas oscuras…)
+    // marcadores en el suelo (esferas oscuras…); los que flotan o están de pie no se deforman
     for (const m of c.marks ?? []) {
+      if (['sphere', 'shadow', 'flame', 'soul', 'lantern'].includes(m.kind)) this.upright(m.pos.x, m.pos.y); else this.ground();
       const cx = (m.pos.x + 0.5) * TILE, cy = (m.pos.y + 0.45) * TILE, pulse = 1 + Math.sin(performance.now() / 260 + m.id) * 0.06;
       if (m.kind === 'sphere') {
         // esfera oscura como en la ficha: halo violeta, anillo claro y núcleo brillante que flota
@@ -461,6 +559,7 @@ export class Board {
       }
       if (m.kind !== 'inertia' && m.kind !== 'smoke' && m.kind !== 'fence' && m.kind !== 'gravglyph') { g.fillStyle = '#f0d8ff'; g.font = 'bold 11px monospace'; g.fillText(String(m.turns), m.pos.x * TILE + TILE - 14, m.pos.y * TILE + 14); }
     }
+    this.ground();
     for (const t of c.snares ?? []) {
       // los cepos rivales no se ven
       if (me0 && t.team !== me0.team) continue;
@@ -560,17 +659,30 @@ export class Board {
     const heroIdx = teamIdx(c);
     // 2.5D: muros y braseros se dibujan por filas junto a las unidades, para que lo de delante tape lo de detrás
     const fences = new Set((c.marks ?? []).filter((m) => m.kind === 'fence').map((m) => `${m.pos.x},${m.pos.y}`));
-    const props = [...c.obstacles].map((k) => { const [x, y] = k.split(',').map(Number) as [number, number]; return { x, y, brazier: (c.braziers ?? []).includes(k), fence: fences.has(k) }; }).sort((a, b) => a.y - b.y || a.x - b.x);
+    // profundidad: en plano, por filas; en isométrico, por diagonales (x + y)
+    const depth = (p: Pos): number => (this.iso ? p.x + p.y : p.y);
+    const props = [...c.obstacles].map((k) => { const [x, y] = k.split(',').map(Number) as [number, number]; return { x, y, brazier: (c.braziers ?? []).includes(k), fence: fences.has(k) }; }).sort((a, b) => depth(a) - depth(b) || a.x - b.x);
     let pi = 0;
-    const flushProps = (row: number): void => { while (pi < props.length && props[pi]!.y <= row) { const p = props[pi++]!; if (p.brazier) this.drawBrazier(p.x, p.y, now); else if (p.fence) this.drawFence(p.x, p.y, now); else this.drawWall(c, zone, p.x, p.y); } };
-    for (const u of c.units.filter(alive).sort((a, b) => a.pos.y - b.pos.y)) {
-      flushProps(u.pos.y);
+    const flushProps = (row: number): void => {
+      while (pi < props.length && depth(props[pi]!) <= row) {
+        const p = props[pi++]!;
+        // en isométrico, un muro que tapa a alguien que está justo detrás se vuelve translúcido
+        g.globalAlpha = this.iso && c.units.some((u) => alive(u) && (() => { const d = p.x - u.pos.x + (p.y - u.pos.y); return d >= 1 && d <= 4 && Math.abs(p.x - p.y - (u.pos.x - u.pos.y)) <= 1; })()) ? 0.42 : 1;
+        if (this.iso && !p.brazier && !p.fence && !(zone === ZONES[0] && ready(Z1.pillar))) { this.screen(); this.drawIsoBlock(c, zone, p.x, p.y); continue; }
+        this.upright(p.x, p.y);
+        if (p.brazier) this.drawBrazier(p.x, p.y, now); else if (p.fence) this.drawFence(p.x, p.y, now); else this.drawWall(c, zone, p.x, p.y);
+        g.globalAlpha = 1;
+      }
+    };
+    for (const u of c.units.filter(alive).sort((a, b) => depth(a.pos) - depth(b.pos))) {
+      flushProps(depth(u.pos));
       // posición mostrada: se acerca suavemente a la real
       const s = this.shown.get(u.id) ?? { ...u.pos };
       s.x += (u.pos.x - s.x) * 0.25; s.y += (u.pos.y - s.y) * 0.25;
       if (Math.abs(u.pos.x - s.x) < 0.02) s.x = u.pos.x;
       if (Math.abs(u.pos.y - s.y) < 0.02) s.y = u.pos.y;
       this.shown.set(u.id, s);
+      this.upright(s.x, s.y);
       const cx = (s.x + 0.5) * TILE, by = (s.y + 1) * TILE - 6;
       if (cur?.id === u.id) { g.strokeStyle = u.team === 'hero' ? '#f2c14e' : '#e0475b'; g.lineWidth = 3; g.beginPath(); g.ellipse(cx, by - 2, TILE * 0.36, 8, 0, 0, 6.3); g.stroke(); }
       // sombra bajo los pies (más oscura en el centro)
@@ -621,19 +733,22 @@ export class Board {
       }
       this.bars(u, cx, s.y * TILE - 8, heroIdx.get(u.id));
     }
-    flushProps(c.h);
+    flushProps(this.iso ? c.w + c.h : c.h);
     // caídos: se desvanecen hacia arriba
     this.ghosts = this.ghosts.filter((d) => now - d.t0 < (isModel(d.kind) ? DEATH_MS : 600));
     for (const d of this.ghosts) {
       if (isModel(d.kind)) {
         // modelos animados: animación de muerte y luego se desvanecen
         const k = (now - d.t0) / DEATH_MS;
+        this.upright(d.x, d.y);
         drawUnit(g, d.kind, d.team, d.idx, (d.x + 0.5) * TILE, (d.y + 1) * TILE - 6, TILE, { anim: 'death', frame: Math.min(ANIM_FRAMES.death - 1, Math.floor(k * 1.4 * ANIM_FRAMES.death)), alpha: k < 0.7 ? 1 : (1 - k) / 0.3 });
         continue;
       }
       const k = (now - d.t0) / 600;
+      this.upright(d.x, d.y);
       drawUnit(g, d.kind, d.team, d.idx, (d.x + 0.5) * TILE, (d.y + 1) * TILE - 6 - k * 14, TILE, { alpha: 1 - k, flash: k < 0.3 });
     }
+    this.ground();
     // ondas: un aro que se abre; los giros, un tajo en arco que da la vuelta
     this.rings = this.rings.filter((r) => now - r.t0 < r.dur);
     for (const r of this.rings) {
@@ -670,7 +785,8 @@ export class Board {
     // H6: efectos de habilidades (recetas)
     this.fx.draw(g, now);
     // luz de antorchas en las esquinas y viñeta
-    const W = c.w * TILE, H = c.h * TILE, fl = 0.1 + 0.03 * Math.sin(now / 130);
+    if (this.iso) this.screen();
+    const W = this.iso ? size.w : c.w * TILE, H = this.iso ? size.h : c.h * TILE, fl = 0.1 + 0.03 * Math.sin(now / 130);
     for (const [lx, ly] of [[0, 0], [W, 0], [0, H], [W, H]] as const) {
       const gr = g.createRadialGradient(lx, ly, 0, lx, ly, 280);
       gr.addColorStop(0, `rgba(${zone.light},${fl})`); gr.addColorStop(1, `rgba(${zone.light},0)`);
@@ -683,19 +799,21 @@ export class Board {
     g.font = 'bold 16px ui-monospace, monospace'; g.textAlign = 'center';
     for (const f of this.floats) {
       const k = (now - f.t0) / 1100;
+      if (this.iso) { this.upright(Math.floor(f.x / TILE), Math.floor(f.y / TILE)); g.font = 'bold 16px ui-monospace, monospace'; g.textAlign = 'center'; }
       g.globalAlpha = 1 - k * k; g.lineWidth = 4; g.strokeStyle = '#000';
       g.strokeText(f.text, f.x, f.y - k * 30); g.fillStyle = f.color; g.fillText(f.text, f.x, f.y - k * 30);
     }
     g.globalAlpha = 1;
-    if (this.hover) this.tooltip(c);
+    if (this.hover) { if (this.iso) this.screen(); else this.ground(); this.tooltip(c); }
     // táctil: recordatorio de que el segundo toque confirma
     if (this.touch && this.session.isMyTurn() && !c.over && (this.hover || this.sel)) {
       const d = this.sel && me ? spellOf(me, this.sel) : undefined;
       const g = this.g, txt = this.hover ? (this.sel ? 'Toca otra vez la casilla para lanzar' : 'Toca otra vez la casilla para moverte') : `${d?.name ?? ''}: toca una casilla iluminada`;
       g.font = 'bold 16px "Pixelify Sans", ui-monospace, monospace'; g.textAlign = 'center';
-      const w = g.measureText(txt).width + 24, X = (c.w * TILE) / 2;
+      if (this.iso) this.screen();
+      const w = g.measureText(txt).width + 24, X = this.iso ? size.w / 2 : (c.w * TILE) / 2;
       // el aviso va abajo, salvo que tape la casilla que estás mirando
-      const Y = this.hover && this.hover.y >= c.h - 2 ? 26 : c.h * TILE - 14;
+      const Y = this.iso ? size.h - 14 : this.hover && this.hover.y >= c.h - 2 ? 26 : c.h * TILE - 14;
       g.fillStyle = 'rgba(10,8,6,.85)'; g.fillRect(X - w / 2, Y - 18, w, 26);
       g.strokeStyle = '#e3b04b'; g.lineWidth = 2; g.strokeRect(X - w / 2, Y - 18, w, 26);
       g.fillStyle = '#ffe2a0'; g.fillText(txt, X, Y);
@@ -704,6 +822,7 @@ export class Board {
     const tnow = Date.now();
     this.pings = this.pings.filter((p) => tnow - p.at < 4000);
     for (const p of this.pings) {
+      this.upright(p.x, p.y);
       const t = (tnow - p.at) / 1000, cx = (p.x + 0.5) * TILE, cy = (p.y + 0.5) * TILE;
       for (let r = 0; r < 2; r++) { const k = ((t * 1.3 + r * 0.5) % 1); g.strokeStyle = p.col; g.globalAlpha = 1 - k; g.lineWidth = 3; g.beginPath(); g.arc(cx, cy, 8 + k * TILE * 0.6, 0, 6.3); g.stroke(); }
       g.globalAlpha = 1;
@@ -792,7 +911,12 @@ export class Board {
     const lines = L.map((l) => l[0]);
     g.font = '14px ui-monospace, monospace'; g.textAlign = 'left';
     const w = Math.max(...lines.map((l) => g.measureText(l).width)) + 14, hh = lines.length * 18 + 8;
-    const x = Math.min(c.w * TILE - w - 4, (h.x + 1) * TILE), y = Math.max(4, Math.min(c.h * TILE - hh - 4, h.y * TILE - 10));
+    let x = Math.min(c.w * TILE - w - 4, (h.x + 1) * TILE), y = Math.max(4, Math.min(c.h * TILE - hh - 4, h.y * TILE - 10));
+    if (this.iso) {
+      // en isométrico la ventana va junto al rombo, en coordenadas de pantalla
+      const p = isoPoint(h.x + 1, h.y, c.h);
+      x = Math.max(4, Math.min(this.canvas.width - w - 4, p.x + 10)); y = Math.max(4, Math.min(this.canvas.height - hh - 4, p.y - 90));
+    }
     g.fillStyle = 'rgba(10,6,20,.93)'; g.fillRect(x, y, w, hh); g.strokeStyle = '#3b2f57'; g.lineWidth = 2; g.strokeRect(x, y, w, hh);
     L.forEach(([l, col], i) => { g.fillStyle = col; g.fillText(l, x + 7, y + 18 + i * 18); });
   }

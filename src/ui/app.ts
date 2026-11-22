@@ -333,6 +333,7 @@ document.addEventListener('click', (e) => {
     case 'gotok': ui.got = null; lastKey = ''; render([]); break;
     case 'deployready': s?.act({ a: 'deployready' }); break;
     case 'readyall': s?.act({ a: 'deployready', force: true }); break;
+    case 'isoview': if (ui.board) { ui.board.setIso(!ui.board.iso); } lastKey = ''; render([]); break;
     case 'bars': ui.hpBars = !ui.hpBars; if (ui.board) ui.board.showBars = ui.hpBars; lastKey = ''; render([]); break;
     case 'side': ui.sideOpen = !ui.sideOpen; lastKey = ''; render([]); break;
     case 'map': ui.mapOpen = !ui.mapOpen; lastKey = ''; render([]); break;
@@ -399,6 +400,7 @@ document.addEventListener('keydown', (e) => {
   const s = ui.session;
   if ((e.target as HTMLElement).tagName !== 'INPUT' && s?.run && !s.run.arena && (e.key === 'm' || e.key === 'M' || (e.key === 'Escape' && ui.mapOpen))) { ui.mapOpen = e.key === 'Escape' ? false : !ui.mapOpen; lastKey = ''; render([]); return; }
   if ((e.target as HTMLElement).tagName !== 'INPUT' && s?.run && !s.run.arena && (e.key === 's' || e.key === 'S' || (e.key === 'Escape' && ui.statsOpen))) { ui.statsOpen = e.key === 'Escape' ? false : !ui.statsOpen; lastKey = ''; render([]); return; }
+  if (ui.screen === 'combat' && (e.target as HTMLElement).tagName !== 'INPUT' && (e.key === 'i' || e.key === 'I') && ui.board) { ui.board.setIso(!ui.board.iso); lastKey = ''; render([]); return; }
   if (ui.screen === 'combat' && (e.target as HTMLElement).tagName !== 'INPUT' && (e.key === 'v' || e.key === 'V')) { ui.hpBars = !ui.hpBars; if (ui.board) ui.board.showBars = ui.hpBars; lastKey = ''; render([]); return; }
   // G: señal táctica en la casilla bajo el ratón (la ven todos)
   if (ui.screen === 'combat' && (e.key === 'g' || e.key === 'G') && (e.target as HTMLElement).tagName !== 'INPUT') { const p = ui.board?.hoverCell(); if (p && s) s.ping(p.x, p.y); return; }
