@@ -134,6 +134,8 @@ export interface Unit {
   tearUsed?: boolean;
   /** Furia del Bárbaro (0 a 100) */
   fury?: number;
+  /** Semilla oscura de la Tejedora: daño extra acumulado de su Implosión (0 a 10) */
+  seed?: number;
   /** ha atacado o recibido daño desde su último turno (si no, pierde Furia) */
   furyHot?: boolean;
   /** Negarse a morir ya usado en este combate */

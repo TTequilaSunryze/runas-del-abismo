@@ -58,7 +58,7 @@ export const BOON_MODS: Record<string, BoonMod> = Object.fromEntries(([
   M('zm_impulso_veloz', 'z_impulso', 'Impulso amplio', 'Puedes desplazarte hasta 4 casillas.', (d) => { d.range = [1, 4]; }),
   M('zm_fuego_vivo', 'z_fuego', 'Fuego vivo', '+2 de daño y quema 3 turnos.', (d) => { more(d, 1.2); d.status = { kind: 'burn', turns: 3 }; }),
   // Tejedora de Esferas
-  M('tm_cinco', 't_pulso', 'Constelación', 'Hasta 4 esferas a la vez y duran 3 turnos.', (d) => { d.sphere = { turns: 3, max: 4 }; }),
+  M('tm_cinco', 't_pulso', 'Constelación', 'Hasta 5 esferas a la vez y duran 3 turnos.', (d) => { d.sphere = { turns: 3, max: 5 }; }),
   M('tm_pulso', 't_pulso', 'Pulso profundo', '+2 de daño.', (d) => { more(d, 1.25); }),
   M('tm_descarga', 't_descarga', 'Descarga total', '+4 de daño extra por esfera.', (d) => { d.consume = { per: (d.consume?.per ?? 16) + 4 }; }),
   M('tm_dispersion', 't_dispersion', 'Dispersión rápida', 'Cuesta 1 PA menos.', (d) => { d.ap = Math.max(1, d.ap - 1); }),

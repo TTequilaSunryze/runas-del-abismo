@@ -65,20 +65,20 @@ describe('Tejedora de Esferas', () => {
     const s = board([tej()], [{ x: 4, y: 3 }]);
     expect(castProblem(s, s.units[0]!, SPELLS.t_pulso!, { x: 4, y: 3 })).toBe('Hay un obstáculo');
   });
-  it('máximo 3 esferas: la cuarta borra la más antigua', () => {
+  it('máximo 4 esferas: la quinta borra la más antigua', () => {
     const s = board([tej()]);
     const h = s.units[0]!;
-    for (const x of [3, 4, 5, 6]) { h.ap = 9; h.spells.forEach((sp) => delete sp.uses); cast(s, h.id, 't_pulso', { x, y: 3 }); }
+    for (const x of [2, 3, 4, 5, 6]) { h.ap = 9; h.spells.forEach((sp) => delete sp.uses); cast(s, h.id, 't_pulso', { x, y: 3 }); }
     const m = marksOf(s, 'sphere', h.id);
-    expect(m).toHaveLength(3);
-    expect(m.map((x) => x.pos.x)).toEqual([4, 5, 6]);
+    expect(m).toHaveLength(4);
+    expect(m.map((x) => x.pos.x)).toEqual([3, 4, 5, 6]);
   });
-  it('con Constelación caben 4', () => {
+  it('con Constelación caben 5', () => {
     const s = board([tej()]);
     const h = s.units[0]!;
     h.spells.find((sp) => sp.id === 't_pulso')!.ups = ['tm_cinco'];
-    for (const at of [{ x: 3, y: 3 }, { x: 4, y: 3 }, { x: 5, y: 3 }, { x: 6, y: 3 }, { x: 3, y: 5 }]) { h.ap = 9; h.spells.forEach((sp) => delete sp.uses); expect(cast(s, h.id, 't_pulso', at).ok).toBe(true); }
-    expect(marksOf(s, 'sphere', h.id)).toHaveLength(4);
+    for (const at of [{ x: 3, y: 3 }, { x: 4, y: 3 }, { x: 5, y: 3 }, { x: 6, y: 3 }, { x: 3, y: 5 }, { x: 4, y: 5 }]) { h.ap = 9; h.spells.forEach((sp) => delete sp.uses); expect(cast(s, h.id, 't_pulso', at).ok).toBe(true); }
+    expect(marksOf(s, 'sphere', h.id)).toHaveLength(5);
   });
   it('Descarga consume las esferas y suma daño por cada una', () => {
     const dmgWith = (n: number): number => {
@@ -117,14 +117,17 @@ describe('Tejedora de Esferas', () => {
     cast(s, h!.id, 't_dispersion', { x: 2, y: 3 });
     expect(e!.statuses.stun).toBeUndefined();
   });
-  it('Implosión detona las esferas junto a enemigos', () => {
+  it('Implosión detona las semillas (no las esferas) junto a enemigos', () => {
     const s = board([tej(), foe({ x: 5, y: 3 })]);
     const [h, e] = s.units;
-    h!.spells.push({ id: 't_implosion', cd: 0 });
+    h!.spells.push({ id: 't_implosion', cd: 0 }, { id: 't_semilla', cd: 0 });
     addMark(s, { kind: 'sphere', pos: { x: 5, y: 2 }, team: 'hero', turns: 3, owner: h!.id }, []);
+    expect(cast(s, h!.id, 't_implosion', h!.pos).ok).toBe(false);
+    expect(cast(s, h!.id, 't_semilla', { x: 4, y: 4 }).ok).toBe(true);
     const r = cast(s, h!.id, 't_implosion', h!.pos);
     expect(r.ok && r.events.some((ev) => ev.t === 'damage' && ev.unit === e!.id)).toBe(true);
-    expect(marksOf(s, 'sphere')).toHaveLength(0);
+    expect(marksOf(s, 'sphere')).toHaveLength(1);
+    expect(s.units.filter((x) => x.seed !== undefined && x.hp > 0)).toHaveLength(0);
   });
   it('la IA sabe jugarla (sin errores ni bucles)', () => {
     const s = board([{ ...tej(), ai: 'champ' }, foe({ x: 6, y: 3 }, 80), foe({ x: 8, y: 2 }, 80)]);

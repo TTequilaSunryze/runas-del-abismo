@@ -142,8 +142,8 @@ describe('Hechicera Zorro', () => {
 
 describe('Tejedora de Esferas', () => {
   const tej = (extra: string[], traits: string[] = []) => hero('esferas', { x: 2, y: 3 }, extra, traits);
-  it('Descarga cuesta 4 PA y las esferas pegan más', () => {
-    expect(SPELLS.t_descarga!.ap).toBe(4);
+  it('Descarga cuesta 3 PA y cada esfera suma 8', () => {
+    expect(SPELLS.t_descarga!.ap).toBe(3);
     expect(SPELLS.t_descarga!.consume!.per).toBeGreaterThanOrEqual(8);
   });
   it('Fuerza de voluntad: lanza la esfera, daña en cruz y quita 2 PM', () => {
@@ -156,7 +156,7 @@ describe('Tejedora de Esferas', () => {
     expect(s.units[2]!.hp).toBeLessThan(999);
     expect(s.units[1]!.statuses.slow).toBeTruthy();
   });
-  it('Gravedad inversa atrae hacia la esfera; Resonancia daña sin consumir; Transfusión da 2 PA', () => {
+  it('Gravedad inversa atrae hacia la esfera; Resonancia hace explotar las esferas; Transfusión da 2 PA', () => {
     const s = board([tej(['t_gravedad', 't_resonancia', 't_transfusion']), foe({ x: 8, y: 3 })]);
     const u = me(s);
     addMark(s, { kind: 'sphere', pos: { x: 6, y: 3 }, team: 'hero', turns: 3, owner: u.id }, []);
@@ -165,7 +165,8 @@ describe('Tejedora de Esferas', () => {
     const hp = s.units[1]!.hp;
     ok(s, u, 't_resonancia', u.pos);
     expect(s.units[1]!.hp).toBeLessThan(hp);
-    expect(marksOf(s, 'sphere', u.id)).toHaveLength(1);
+    expect(marksOf(s, 'sphere', u.id)).toHaveLength(0);
+    addMark(s, { kind: 'sphere', pos: { x: 3, y: 5 }, team: 'hero', turns: 3, owner: u.id }, []);
     const ap = u.ap;
     ok(s, u, 't_transfusion', u.pos);
     expect(u.ap).toBe(ap - 1 + 2);
@@ -226,15 +227,19 @@ describe('Carcelero de Almas', () => {
     expect(e.hp).toBeLessThan(999);
     expect(e.mp).toBe(0);
   });
-  it('Cadenas vinculantes: si uno se mueve, el otro sufre y pierde 2 PM', () => {
-    const s = board([kc(['k_vinculo']), foe({ x: 6, y: 3 }), foe({ x: 7, y: 4 })]);
+  it('Cadenas vinculantes: el daño que recibe uno lo recibe también el otro a la mitad', () => {
+    const s = board([kc(['k_vinculo']), foe({ x: 6, y: 3 }), foe({ x: 8, y: 4 })]);
     const u = me(s), [a, b] = [s.units[1]!, s.units[2]!];
     ok(s, u, 'k_vinculo', a.pos);
     expect(a.statuses.chained?.link).toBe(b.id);
-    ok(s, u, 'k_sentencia', a.pos);
-    expect(b.hp).toBeLessThan(999);
-    expect(b.mpMod).toBe(-2);
-    expect(b.statuses.chained).toBeUndefined();
+    const ha = a.hp, hb = b.hp;
+    u.ap = 9;
+    const r = cast(s, u.id, 'k_sentencia', a.pos);
+    expect(r.ok).toBe(true);
+    const toA = (r.ok ? r.events : []).filter((ev) => ev.t === 'damage' && ev.unit === a.id && ev.source === 'k_sentencia').reduce((n, ev) => n + (ev as { amount: number; absorbed: number }).amount + (ev as { absorbed: number }).absorbed, 0);
+    expect(ha - a.hp).toBeGreaterThan(0);
+    expect(hb - b.hp).toBe(Math.max(1, Math.round(toA * 0.5)));
+    expect(b.statuses.chained).toBeTruthy();
   });
   it('Tormento reduce la Huida; Sacrificio del guardián desvía el 40% del daño', () => {
     const s = board([kc(['k_tormento', 'k_sacrificio']), foe({ x: 3, y: 3 }), hero('zorro', { x: 2, y: 5 })]);
@@ -303,7 +308,7 @@ describe('Acechador de Sombras', () => {
     const s = board([ac([], ['maestro', 'persistente']), foe({ x: 12, y: 7 })]);
     const u = me(s);
     ok(s, u, 's_sombra', { x: 4, y: 3 });
-    u.spells.find((x) => x.id === 's_sombra')!.cd = 0;
+    const sl = u.spells.find((x) => x.id === 's_sombra')!; sl.cd = 0; delete sl.uses;
     ok(s, u, 's_sombra', { x: 2, y: 5 });
     expect(marksOf(s, 'shadow', u.id)).toHaveLength(2);
     expect(marksOf(s, 'shadow', u.id)[0]!.turns).toBe(3);
@@ -354,16 +359,21 @@ describe('Bárbaro Desatado', () => {
     expect(u.pos).toEqual({ x: 5, y: 3 });
     expect(s.units[1]!.hp).toBeLessThan(999);
     expect(s.units[2]!.hp).toBeLessThan(999);
-    expect(u.fury).toBe(20);
+    // 20 de Furia por cada enemigo dañado
+    expect(u.fury).toBe(40);
     expect(u.ap).toBe(ap - 2 + 1);
     expect(castProblem(s, u, SPELLS.b_embiste!, { x: 6, y: 3 })).toMatch(/turno/);
   });
-  it('Golpe colosal pide 50 de Furia, empuja y aturde si choca', () => {
+  it('Golpe colosal: siempre golpea; con 100 de Furia empuja y aturde si choca (sin gastarla)', () => {
     const s = board([bb(['b_colosal']), foe({ x: 3, y: 3 }), foe({ x: 5, y: 3 })]);
     const u = me(s), e = s.units[1]!;
-    expect(castProblem(s, u, SPELLS.b_colosal!, e.pos)).toMatch(/Furia/);
     u.fury = 60;
     ok(s, u, 'b_colosal', e.pos);
+    expect(e.pos).toEqual({ x: 3, y: 3 });
+    expect(e.statuses.stun).toBeUndefined();
+    u.ap = 9; u.fury = 100;
+    ok(s, u, 'b_colosal', e.pos);
+    expect(u.fury).toBe(100);
     expect(e.pos).toEqual({ x: 4, y: 3 });
     expect(e.statuses.stun).toBeTruthy();
   });
@@ -372,14 +382,15 @@ describe('Bárbaro Desatado', () => {
     const u = me(s);
     ok(s, u, 'b_grito', u.pos);
     expect(u.fury).toBe(30);
-    expect(s.units[1]!.apMod).toBe(-2);
-    const hp = u.hp, mp = u.mp;
+    // Desmoralizado: −5 de armadura 2 turnos
+    expect(s.units[1]!.statuses.exposed?.stacks).toBe(5);
+    const hp = u.hp, pow = u.power;
     ok(s, u, 'b_pacto', u.pos);
-    expect(u.hp).toBe(hp - Math.round(hp * 0.15));
-    expect(u.fury).toBe(70);
-    expect(u.mp).toBe(mp + 1);
+    expect(u.hp).toBe(hp - Math.round(hp * 0.2));
+    expect(u.power).toBe(pow + 3);
+    expect(u.fury).toBe(30);
     ok(s, u, 'b_cuchillada', u.pos);
-    expect(u.fury).toBe(90);
+    expect(u.fury).toBe(50);
     ok(s, u, 'b_mirada', { x: 3, y: 3 });
     expect(s.units[1]!.statuses.verdugo?.from).toBe(u.id);
     ok(s, u, 'b_frenesi', u.pos);

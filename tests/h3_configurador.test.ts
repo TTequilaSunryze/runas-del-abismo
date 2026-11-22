@@ -104,7 +104,8 @@ describe('H3 · Salón de héroes', () => {
 
 describe('H3 · alternativas sin tiempo de espera', () => {
   it('todas las alternativas del catálogo tienen enfriamiento 0; las iniciales no cambian', () => {
-    for (const c of PLAYABLE) for (const id of SPELL_CATALOG[c]!.alts) expect(SPELLS[id]!.cd, id).toBe(0);
+    const rework = new Set(['k_caja', 'k_sacrificio', 'k_condena', 'z_espejismo', 'z_drenaje', 'z_velo', 'z_resguardo', 't_singularidad', 's_velo', 's_ejecucion']);
+    for (const c of PLAYABLE) for (const id of SPELL_CATALOG[c]!.alts) if (!rework.has(id)) expect(SPELLS[id]!.cd, id).toBe(0);
     expect(SPELLS.z_encanto!.cd).toBe(2);
     expect(SPELLS.ojo_halcon!.cd).toBe(3);
     expect(catalogSpells('barbaro')).toHaveLength(14);

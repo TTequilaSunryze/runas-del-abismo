@@ -196,8 +196,8 @@ function pickSpell(id: string): void {
   const s = ui.session, u = s?.myUnit();
   const d = u && spellOf(u, id);
   if (!d || !u || !ui.board || !s?.isMyTurn()) return;
-  if (d.range[1] === 0) s.act({ a: 'cast', spell: id, at: u.pos });
-  else ui.board.select(ui.board.sel === id ? null : id);
+  // todas se lanzan con clic, también las que son sobre ti (se ilumina tu casilla y el área que alcanzan)
+  ui.board.select(ui.board.sel === id ? null : id);
 }
 
 document.addEventListener('click', (e) => {

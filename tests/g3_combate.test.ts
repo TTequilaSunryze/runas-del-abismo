@@ -248,13 +248,14 @@ describe('G3.3 · clases', () => {
 
 describe('G3.4 · habilidades de jefe', () => {
   const AP: Record<string, number> = {
-    z_espejismo: 2, t_singularidad: 4, s_marca: 3, s_velo: 2, k_sacrificio: 2, b_mirada: 2, b_frenesi: 2,
+    z_espejismo: 2, t_singularidad: 3, s_marca: 3, s_velo: 1, k_sacrificio: 2, b_mirada: 2, b_frenesi: 2,
     r_inercia: 3, r_matriz: 3, r_ciudadela: 4, g_plata: 3, a_letal: 4, a_halcon: 3, a_conmocion: 3,
   };
   const POOL = Object.values(PATRONS).filter((p) => PLAYABLE.includes(p.cls)).flatMap((p) => p.spells).filter((id) => SPELLS[id]?.route === 'boon');
-  it('las habilidades de jefe de las 8 clases no tienen enfriamiento y conservan su coste de PA', () => {
+  it('las habilidades de jefe de las 8 clases no tienen enfriamiento (salvo las del ajuste de habilidades) y conservan su coste de PA', () => {
     expect(POOL.length).toBe(56);
-    for (const id of POOL) expect(SPELLS[id]!.cd, id).toBe(0);
+    const rework = new Set(['k_caja', 'k_sacrificio', 'k_condena', 'z_espejismo', 'z_drenaje', 'z_velo', 'z_resguardo', 't_singularidad', 's_velo', 's_ejecucion']);
+    for (const id of POOL) if (!rework.has(id)) expect(SPELLS[id]!.cd, id).toBe(0);
     for (const [id, ap] of Object.entries(AP)) expect(SPELLS[id]!.ap, id).toBe(ap);
   });
   it('sin enfriamiento se pueden repetir en el mismo turno mientras haya PA', () => {

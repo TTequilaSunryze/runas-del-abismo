@@ -31,7 +31,8 @@ export interface CombatSetup {
 export type ActionResult = { ok: true; events: GameEvent[] } | { ok: false; reason: string };
 
 const BURN_DMG = 3;
-const CHARM_DMG = 3;
+/** Encantado: +2 de daño de cada golpe recibido */
+const CHARM_FLAT = 2;
 /** Estados perjudiciales (para la inmunidad de la Ciudadela de cristal). */
 const NEGATIVE = new Set<StatusKind>(['burn', 'poison', 'slow', 'stun', 'mark', 'exposed', 'charm', 'vuln', 'bleed', 'hobble', 'deathmark', 'verdugo', 'chained', 'rooted', 'anchor']);
 /** Pistolero Arcano: cargas del cargador y daño elemental del disparo con el cargador lleno. */
@@ -84,7 +85,13 @@ export const essenceNeed = (u: Unit): number => (hasTrait(u, 'esencia2') ? 2 : 3
 const VULN_FLAT = 2;
 const FRENZY_FLAT = 1;
 const BLEED_DMG = 3;
-const DEATHMARK_PCT = 0.35;
+const DEATHMARK_PCT = 0.5;
+/** Cadenas vinculantes: parte del daño que pasa al otro encadenado */
+const CHAIN_SHARE = 0.5;
+/** Pacto de sangre: daño que suma cada vez */
+const PACT_POWER = 3;
+/** Semillas oscuras: vida, daño base de la Implosión, crecimiento por turno, máximo de crecimiento y de semillas */
+export const SEED_HP = 20, SEED_DMG = 14, SEED_GROW = 2, SEED_MAX = 10, SEED_CAP = 6;
 const GUARD_SHARE = 0.4;
 /** G3.3: Sed de batalla cura 2 + 20 por cada 100 de Furia. */
 export const THIRST_PER_FURY = 0.2;
@@ -116,7 +123,7 @@ let castingSchool: 'phys' | 'magic' | null = null;
 export function dmgFlat(u: Unit, t: Unit, extra = 0): number {
   const school = castingSchool === 'magic' ? (u.powerMagic ?? 0) : castingSchool === 'phys' ? (u.powerPhys ?? 0) : 0;
   return u.power + school + extra + (u.statuses.empower?.stacks ?? 0) + furyPower(u)
-    + (t.statuses.mark ? MARK_FLAT : 0) + (t.statuses.vuln ? VULN_FLAT : 0) + (t.statuses.frenzy ? FRENZY_FLAT : 0)
+    + (t.statuses.mark ? MARK_FLAT : 0) + (t.statuses.charm ? CHARM_FLAT : 0) + (t.statuses.vuln ? VULN_FLAT : 0) + (t.statuses.frenzy ? FRENZY_FLAT : 0)
     + (hasTrait(u, 'desprecio') && t.hp < t.maxHp / 2 ? 3 : 0)
     // Sello de anclaje: +4 de daño de los hechizos de quien lo selló
     + (t.statuses.anchor && t.statuses.anchor.from === u.id ? ANCHOR_FLAT : 0);
@@ -273,6 +280,12 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
   }
   u.hp = Math.max(0, u.hp - dmg);
   ev.push({ t: 'damage', unit: u.id, amount: dmg, absorbed, crit: !!opts.crit, source });
+  // Cadenas vinculantes: el otro encadenado recibe la mitad del daño
+  const chn = u.statuses.chained;
+  if (chn && source !== 'cadenas' && dmg + absorbed > 0) {
+    const o = chn.link === undefined ? undefined : getUnit(s, chn.link);
+    if (o && alive(o) && o.statuses.chained?.link === u.id) hurt(s, o, Math.max(1, Math.round((dmg + absorbed) * CHAIN_SHARE)), ev, 'cadenas', { pierce: true, element: 'shadow' });
+  }
   if (attacker && attacker.team !== u.team && alive(attacker)) {
     // Baluarte prismático: devuelve el 15% de todo el daño recibido
     if (u.statuses.prism && dmg + absorbed > 0) hurt(s, attacker, Math.max(1, (dmg + absorbed) * 0.15), ev, 'prism', { pierce: true });
@@ -286,12 +299,16 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
   if (alive(u) && hasTrait(u, 'lagrima') && !u.tearUsed && u.hp < u.maxHp * 0.3) { u.tearUsed = true; heal(u, u.maxHp * 0.25, ev); }
   // Reacción visceral: un crítico recibido da +15 de Furia
   if (opts.crit && u.fury !== undefined && hasTrait(u, 'visceral')) addFury(u, 15, ev);
-  // Marca de la muerte: guarda el 35% del daño que le hacen el Acechador y sus sombras
+  // Marca de la muerte: guarda el 50% del daño que le hacen el Acechador y sus sombras
   const dm = u.statuses.deathmark;
   if (dm && dmg > 0 && casting !== null && dm.from === casting && source !== 'marca') dm.stacks += Math.round(dmg * DEATHMARK_PCT);
   if (!alive(u)) {
     ev.push({ t: 'death', unit: u.id });
     clearMarksOf(s, u.id, ev);
+    // Hechicera: si un enemigo muere por cualquier daño suyo, su próximo Impulso espiritual cuesta 0 PA
+    const zKiller = casting !== null ? getUnit(s, casting) : undefined;
+    const imp = zKiller && zKiller.team !== u.team && alive(zKiller) ? zKiller.spells.find((sp) => sp.id === 'z_impulso') : undefined;
+    if (imp && !imp.free) { imp.free = true; ev.push({ t: 'reset', unit: zKiller!.id, spell: 'z_impulso' }); }
     // Cosecha de almas: cada enemigo de verdad (no invocaciones ni pilares) que muere con el Carcelero vivo
     if (u.summoner === undefined && u.ai !== 'pillar') {
       for (const k of s.units) {
@@ -449,20 +466,16 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     if (s.round >= SUDDEN_ROUND && u.ai !== 'pillar') hurt(s, u, u.maxHp * 0.05 * (s.round - SUDDEN_ROUND + 1), ev, 'abismo', { pierce: true });
     if (!alive(u) || s.over) continue;
     if (u.statuses.burn) hurt(s, u, BURN_DMG, ev, 'burn', { pierce: true, element: 'fire' });
-    // Encantado: 3 de daño al empezar cada turno mientras dure
-    if (u.statuses.charm && alive(u)) hurt(s, u, CHARM_DMG, ev, 'charm', { pierce: true });
     if (alive(u) && u.statuses.poison) hurt(s, u, POISON_DMG * u.statuses.poison.stacks, ev, 'poison', { pierce: true, element: 'poison' });
     if (alive(u) && u.statuses.bleed) hurt(s, u, BLEED_DMG * u.statuses.bleed.stacks, ev, 'bleed', { pierce: true });
     tick(u, 'burn');
     tick(u, 'poison');
     tick(u, 'bleed');
-    // Marca de la muerte: al acabarse, estalla con todo el daño guardado
+    // Marca de la muerte: si quien la puso ya no está, se pierde (estalla al final del turno de su dueño, en endTurn)
     const dmk = u.statuses.deathmark;
-    if (alive(u) && dmk && --dmk.turns <= 0) {
-      delete u.statuses.deathmark;
-      ev.push({ t: 'detonate', unit: u.id, amount: dmk.stacks });
-      if (dmk.stacks > 0) hurt(s, u, dmk.stacks, ev, 'marca', { pierce: true });
-    }
+    if (dmk && !s.units.some((x) => x.id === dmk.from && alive(x))) delete u.statuses.deathmark;
+    // Semillas oscuras: cada turno de su dueña sin detonarlas crecen (+2, máx. +10)
+    for (const sd of s.units) if (sd.seed !== undefined && sd.summoner === u.id && alive(sd)) sd.seed = Math.min(SEED_MAX, sd.seed + SEED_GROW);
     if (!alive(u) || s.over) continue;
     u.ap = Math.max(0, u.maxAp + u.apMod);
     u.mp = Math.max(0, u.maxMp + u.mpMod - (u.statuses.slow?.stacks ?? 0));
@@ -602,18 +615,6 @@ function stepOn(s: CombatState, u: Unit, ev: GameEvent[]): boolean {
   const here = key(u.pos);
   if (alive(u) && (s.roots ?? []).includes(here)) addStatus(u, 'poison', 2, 1, ev);
   if (alive(u) && (s.fire?.[here] ?? 0) > 0) addStatus(u, 'burn', 2, 1, ev);
-  const ch = u.statuses.chained;
-  if (ch && alive(u)) {
-    // al moverse uno de los encadenados, el otro sufre: daño y −2 PM; la cadena se rompe
-    delete u.statuses.chained;
-    const o = ch.link === undefined ? undefined : getUnit(s, ch.link);
-    if (o && alive(o)) {
-      delete o.statuses.chained;
-      const src = ch.from === undefined ? undefined : getUnit(s, ch.from);
-      hurt(s, o, 12 + (src ? dmgFlat(src, o) : 0), ev, 'cadenas', { element: 'shadow' });
-      if (alive(o)) { const n = landed(s, o, 2); if (n) { o.mpMod -= n; if (current(s)?.id === o.id) o.mp = Math.max(0, o.mp - n); ev.push({ t: 'drain', unit: o.id, ap: 0, mp: -n }); } }
-    }
-  }
   // glifos del Arquitecto: el fulminante explota (y se gasta); la matriz quita PA y sigue ahí
   for (const g of (s.marks ?? []).filter((m) => m.kind === 'glyph' && m.team !== u.team && same(m.pos, u.pos) && (m.sub === 'fulminante' || m.sub === 'matriz'))) {
     if (!alive(u)) break;
@@ -673,6 +674,8 @@ export function castProblem(s: CombatState, u: Unit, base: SpellDef, at: Pos): s
   if (def.special === 'reap' && !u.syncHit) return 'Tu Sombra y tú no habéis golpeado al mismo enemigo este turno';
   if (def.special === 'converge' && !marksOf(s, 'shadow', u.id).length) return 'No tienes Sombra';
   if (def.special === 'absorb' && !marksOf(s, 'soul').length) return 'No hay almas en el tablero';
+  if (def.special === 'seed' && seedsOf(s, u).length >= SEED_CAP) return `Máximo ${SEED_CAP} semillas`;
+  if (def.special === 'implode' && !seedsOf(s, u).length) return 'No tienes Semillas oscuras';
   if (def.swapShadow) {
     const sh = marksOf(s, 'shadow', u.id).at(-1);
     if (!sh) return 'No tienes Sombra';
@@ -712,7 +715,7 @@ export function castProblem(s: CombatState, u: Unit, base: SpellDef, at: Pos): s
   if (def.target === 'ally' && (!t || t.team !== u.team)) return 'Necesitas un aliado como objetivo';
   if (def.hookOnly && t?.id !== u.hooked) return 'Solo sobre el enemigo enganchado';
   if (def.behind && t && !behindCell(s, u, t)) return 'No hay hueco a su espalda';
-  if (def.special === 'chainlink' && t && !chainPartner(s, u, t)) return 'Necesitas otro enemigo a 2 casillas del objetivo';
+  if (def.special === 'chainlink' && t && !chainPartner(s, u, t)) return 'Necesitas otro enemigo a 3 casillas del objetivo';
   if (def.dash && !dashCell(s, u, at)) return 'No hay hueco junto al objetivo';
   return null;
 }
@@ -729,9 +732,11 @@ export function apCost(u: Unit, id: string, s?: CombatState): number {
   const sym = u.symphony && base >= 3 ? 1 : 0;
   // Dominio esférico: hechizos de esferas a 2 casillas o menos de una esfera tuya
   const dom = s && d && hasTrait(u, 'dominio') && isSphereSpell(d) && marksOf(s, 'sphere', u.id).some((m) => dist(m.pos, u.pos) <= 2) ? 1 : 0;
+  // Marca de la muerte: 1 PA menos si ya tienes una Sombra en el tablero
+  const shade = s && d?.special === 'deathmark' && marksOf(s, 'shadow', u.id).length ? 1 : 0;
   // Primera Runa: el primer hechizo del turno cuesta 1 PA menos
   const first = hasTrait(u, 'primera') && !u.firstCast ? 1 : 0;
-  const cost = Math.max(0, base - Math.max(u.discount ?? 0, sym) - dom - first);
+  const cost = Math.max(0, base - Math.max(u.discount ?? 0, sym) - dom - first - shade);
   // Pacto de la Magia Desatada: 1 PA menos (mínimo 1)
   return hasTrait(u, 'desatada') && cost > 1 ? cost - 1 : cost;
 }
@@ -748,7 +753,7 @@ function behindCell(s: CombatState, u: Unit, t: Unit): Pos | null {
 
 /** Otro enemigo a 2 casillas o menos de `t` (el más cercano), para Cadenas vinculantes. */
 function chainPartner(s: CombatState, u: Unit, t: Unit): Unit | undefined {
-  return s.units.filter((x) => x !== t && alive(x) && x.team === t.team && x.team !== u.team && x.ai !== 'pillar' && dist(x.pos, t.pos) <= 2).sort((a, b) => dist(a.pos, t.pos) - dist(b.pos, t.pos))[0];
+  return s.units.filter((x) => x !== t && alive(x) && x.team === t.team && x.team !== u.team && x.ai !== 'pillar' && dist(x.pos, t.pos) <= 3).sort((a, b) => dist(a.pos, t.pos) - dist(b.pos, t.pos))[0];
 }
 
 /** Un paso de `t` hacia `to` (si la casilla está libre). */
@@ -837,7 +842,8 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
   // Recarga táctica: la Recarga acrobática no tiene espera
   if (def.special === 'reload' && hasTrait(u, 'recargatac')) slotUsed.cd = 0;
   if (slotUsed.charges !== undefined) slotUsed.charges--;
-  // atacar rompe la invisibilidad
+  // atacar rompe la invisibilidad (Ejecución silenciosa: el crítico se decide con la invisibilidad de antes)
+  const wasInvis = !!u.statuses.invis;
   if (def.dmg && u.statuses.invis) delete u.statuses.invis;
   if (def.dmg && u.fury !== undefined) u.furyHot = true;
   // Robo de esencia: con 3 cargas (2 con Esencia desbordante), la siguiente habilidad de daño te cura el 15% y reinicia el contador
@@ -930,6 +936,7 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
     }
     if (def.shadow) placeShadow(s, u, at, def.shadow.turns, ev);
     if (def.special === 'charge') charge(s, u, def, at, ev);
+    if (def.special === 'seed') plantSeed(s, u, at, ev);
     if (def.lantern) {
       const ln = def.lantern;
       addMark(s, { kind: 'lantern', pos: at, team: u.team, turns: ln.turns, owner: u.id, max: 1 }, ev);
@@ -1020,7 +1027,7 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
   if (def.detonate) {
     const dn = def.detonate;
     for (const m of marksOf(s, 'sphere', u.id)) {
-      for (const t of s.units.filter((x) => alive(x) && x.team !== u.team && dist(x.pos, m.pos) <= dn.area)) {
+      for (const t of s.units.filter((x) => alive(x) && x.team !== u.team && (dn.square ? Math.max(Math.abs(x.pos.x - m.pos.x), Math.abs(x.pos.y - m.pos.y)) : dist(x.pos, m.pos)) <= dn.area)) {
         if (s.over) break;
         hurt(s, t, randInt(s, dn.dmg[0], dn.dmg[1]) + dmgFlat(u, t), ev, def.id, { element: def.element });
       }
@@ -1040,7 +1047,7 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
       const astute = s.units.some((z) => alive(z) && z.team !== u.team && hasTrait(z, 'astucia') && dist(z.pos, u.pos) <= 1) ? 10 : 0;
       // Tirador nato: a más de 4 casillas, +15% de crítico; Tiro certero: probabilidad doble
       const far = (hasTrait(u, 'tiradornato') && dist(u.pos, t.pos) > 4 ? 15 : 0) + (hasTrait(u, 'ojocert') && u.statuses.reach ? 15 : 0);
-      const crit = flank || fullMag || rand(s) * 100 < (u.crit + furyCrit(u) + (def.crit ?? 0) + far) * (def.critMul ?? 1) - astute;
+      const crit = flank || fullMag || (!!def.invisCrit && wasInvis) || rand(s) * 100 < (u.crit + furyCrit(u) + (def.crit ?? 0) + far) * (def.critMul ?? 1) - astute;
       const melee = dist(u.pos, t.pos) <= 1;
       const furyBefore = u.fury ?? 0;
       // Doble filo letal: con una Sombra al otro lado, los críticos ignoran la armadura
@@ -1048,7 +1055,7 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
       const pen = hasTrait(u, 'titanico') && furyBefore > 80 && melee ? 0.2 : 0;
       const pack = hasTrait(u, 'pack') ? s.units.filter((o) => o !== u && o.team === u.team && alive(o) && hasTrait(o, 'pack')).length * PACK_BONUS : 0;
       const fury = hasTrait(u, 'enrage') && u.hp < u.maxHp / 2 ? ENRAGE_POWER : 0;
-      const raw = (randInt(s, def.dmg[0], def.dmg[1]) + (t === main ? flat : 0) + flatAll + dmgFlat(u, t, pack + fury) + (crit ? critFlat(u) : 0)) * (t === main || def.range[1] === 0 || def.line || def.cone || def.fullArea || square2.length ? 1 : 0.5);
+      const raw = (randInt(s, def.dmg[0], def.dmg[1]) + (t === main ? flat : 0) + flatAll + dmgFlat(u, t, pack + fury) + (crit ? critFlat(u) : 0)) * (t === main || def.range[1] === 0 || def.line || def.cone || square2.length ? 1 : def.areaPct ?? (def.fullArea ? 1 : 0.5)) * (pass ? 0.5 : 1);
       // Lanza resonante: +4 contra enemigos sobre o junto a un glifo tuyo
       const lres = def.id === 'r_lanza' && hasTrait(u, 'lanzares') && marksOf(s, 'glyph', u.id).some((m) => dist(m.pos, t.pos) <= 1) ? 4 : 0;
       // G3.4: daño extra contra objetivos con un estado concreto (Flecha ígnea contra quemados…); G3.3: Distancia letal
@@ -1173,7 +1180,7 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
     if (sh > 0) { u.shield += sh; ev.push({ t: 'shield', unit: u.id, amount: sh }); }
   }
   if (def.sphere && alive(u)) addSphere(s, u, at, def.sphere.turns, def.sphere.max, ev);
-  if (def.special === 'singularity' && alive(u)) for (const p of [at, square2[3]!]) if (p.x < s.w && p.y < s.h && !s.obstacles.includes(key(p))) addSphere(s, u, p, 2, 3, ev);
+  if (def.special === 'singularity' && alive(u)) for (const p of [at, square2[3]!]) if (p.x < s.w && p.y < s.h && !s.obstacles.includes(key(p))) addSphere(s, u, p, 2, 4, ev);
   if (u.essence !== undefined && hits > 0 && !essenceSpent) gainEssence(u, 1, ev);
   if (u.essence !== undefined && def.pull && hasTrait(u, 'mirada') && main && !essenceSpent) gainEssence(u, 1, ev);
   if (def.lifesteal && dealt > 0) heal(u, dealt * def.lifesteal, ev);
@@ -1298,6 +1305,14 @@ export function endTurn(s: CombatState, unitId: number): ActionResult {
   if (typeof u === 'string') return fail(u);
   const ev: GameEvent[] = [];
   flamesFly(s, u, ev);
+  // Marca de la muerte: estalla al final del turno de quien la puso, con todo el daño guardado
+  for (const t of s.units) {
+    const dmk = t.statuses.deathmark;
+    if (!dmk || dmk.from !== u.id || !alive(t) || s.over) continue;
+    delete t.statuses.deathmark;
+    ev.push({ t: 'detonate', unit: t.id, amount: dmk.stacks });
+    if (dmk.stacks > 0) hurt(s, t, dmk.stacks, ev, 'marca', { pierce: true });
+  }
   if (!s.over) beginNext(s, ev);
   return { ok: true, events: ev };
 }
@@ -1339,6 +1354,19 @@ function addSphere(s: CombatState, u: Unit, at: Pos, turns: number, max: number,
   if (touching) resonate(s, u, at, ev);
 }
 
+/** Semillas oscuras vivas de `u`. */
+export const seedsOf = (s: CombatState, u: Unit): Unit[] => s.units.filter((x) => x.seed !== undefined && x.summoner === u.id && alive(x));
+
+/** Semilla oscura: una unidad quieta de 20 de vida que ocupa la casilla (no juega turnos). */
+function plantSeed(s: CombatState, u: Unit, at: Pos, ev: GameEvent[]): void {
+  const sd = summon(s, { team: u.team, kind: 'semilla', name: 'Semilla oscura', owner: null, pos: at, hp: SEED_HP, maxHp: SEED_HP, shield: 0, armor: 0, power: 0, crit: 0,
+    ap: 0, maxAp: 0, mp: 0, maxMp: 0, initiative: 0, apMod: 0, mpMod: 0, resist: {}, statusBonus: 0, statuses: {}, spells: [], ai: 'pillar', summoner: u.id, traits: ['semilla'] }, at, ev);
+  if (!sd) return;
+  sd.seed = 0;
+  // no juega turnos: fuera del orden
+  s.order = s.order.filter((id) => id !== sd.id);
+}
+
 /** Pone una Sombra del Acechador (Maestro de las sombras: hasta 2; Sombra persistente: 1 turno más). */
 function placeShadow(s: CombatState, u: Unit, at: Pos, turns: number, ev: GameEvent[]): void {
   addMark(s, { kind: 'shadow', pos: at, team: u.team, turns: turns + (hasTrait(u, 'persistente') ? 1 : 0), owner: u.id, max: hasTrait(u, 'maestro') ? 2 : 1 }, ev);
@@ -1362,6 +1390,9 @@ function flamesFly(s: CombatState, u: Unit, ev: GameEvent[]): void {
   const def = spellOf(u, 'z_fuego');
   const dmg = def?.dmg ?? [3, 4];
   const resSum = (t: Unit): number => !FEATURES.resistances ? 0 : Object.values(t.resist ?? {}).reduce((a, b) => a + (b ?? 0), 0);
+  const prev = casting;
+  casting = u.id;
+  try {
   for (const f of flames) {
     removeMark(s, f, ev);
     if (s.over || !alive(u)) continue;
@@ -1373,6 +1404,7 @@ function flamesFly(s: CombatState, u: Unit, ev: GameEvent[]): void {
     if (def?.status && alive(t)) applyStatuses(s, u, t, def, ev);
     if (u.essence !== undefined) u.essence = Math.min(essenceNeed(u), u.essence + 1);
   }
+  } finally { casting = prev; }
 }
 
 /** Embiste giratorio: carga en línea recta ignorando el placaje; daña a quien atraviesa y a los pegados al aterrizar. */
@@ -1385,12 +1417,16 @@ function charge(s: CombatState, u: Unit, def: SpellDef, at: Pos, ev: GameEvent[]
   ev.push({ t: 'move', unit: u.id, path });
   springSnare(s, u, ev);
   const hit = [...new Set([...passed, ...s.units.filter((t) => alive(t) && t.team !== u.team && t.ai !== 'pillar' && dist(t.pos, u.pos) === 1)])];
+  // +2 de daño por cada 20 de Furia que tengas al lanzarlo
+  const furyBonus = Math.floor((u.fury ?? 0) / 20) * 2;
+  const damaged: Unit[] = [];
   for (const t of hit) {
     if (s.over || !alive(t) || !def.dmg) continue;
     const crit = rand(s) * 100 < u.crit + furyCrit(u) + (def.crit ?? 0);
-    hurt(s, t, randInt(s, def.dmg[0], def.dmg[1]) + dmgFlat(u, t) + (crit ? critFlat(u) : 0), ev, def.id, { crit });
+    const got = hurt(s, t, randInt(s, def.dmg[0], def.dmg[1]) + furyBonus + dmgFlat(u, t) + (crit ? critFlat(u) : 0), ev, def.id, { crit });
+    if (got > 0) damaged.push(t);
   }
-  if (hit.length) { u.furyHot = true; addFury(u, 20 * (hit.some((t) => t.statuses.verdugo?.from === u.id) ? 2 : 1), ev); }
+  if (damaged.length) { u.furyHot = true; addFury(u, furyGain(u, damaged.reduce((n, t) => n + 20 * (t.statuses.verdugo?.from === u.id ? 2 : 1), 0)), ev); }
   // Torbellino sangriento: si golpea a 2 o más, cuesta 1 PA menos
   if (hit.length >= 2 && hasTrait(u, 'torbellino')) { u.ap++; ev.push({ t: 'drain', unit: u.id, ap: 1, mp: 0 }); }
 }
@@ -1441,6 +1477,22 @@ const SELF_SPECIALS: Record<string, SelfSpecial> = {
     u.ap += 2;
     ev.push({ t: 'drain', unit: u.id, ap: 2, mp: 0 });
   },
+  // Implosión: detona las Semillas oscuras; 14 (+ lo que hayan crecido) a los enemigos de las 8 casillas de alrededor
+  implode: (s, u, d, _at, ev) => {
+    let hitAny = false;
+    for (const sd of seedsOf(s, u)) {
+      const dmg = SEED_DMG + (sd.seed ?? 0);
+      ev.push({ t: 'markAdd', kind: 'pulse', at: { ...sd.pos } }, { t: 'explode', unit: sd.id });
+      sd.hp = 0;
+      ev.push({ t: 'death', unit: sd.id });
+      for (const t of s.units.filter((x) => alive(x) && x.team !== u.team && Math.max(Math.abs(x.pos.x - sd.pos.x), Math.abs(x.pos.y - sd.pos.y)) <= 1)) {
+        if (s.over) break;
+        if (hurt(s, t, dmg + dmgFlat(u, t), ev, d.id, { element: d.element ?? 'shadow' }) > 0) hitAny = true;
+      }
+    }
+    if (hitAny && alive(u)) { u.ap += 1; ev.push({ t: 'drain', unit: u.id, ap: 1, mp: 0 }); }
+    checkOver(s, ev);
+  },
   // Cosecha oscura: +2 PA si la Sombra y él golpearon al mismo enemigo este turno
   reap: (_s, u, _d, _at, ev) => { u.ap += 2; u.syncHit = false; ev.push({ t: 'drain', unit: u.id, ap: 2, mp: 0 }); },
   // Atracción del abismo: absorbe las almas del suelo; escudo por cada una
@@ -1459,8 +1511,8 @@ const SELF_SPECIALS: Record<string, SelfSpecial> = {
     heal(u, 2 + f * THIRST_PER_FURY, ev);
     addFury(u, -(hasTrait(u, 'inagotable') ? Math.ceil(f / 2) : f), ev);
   },
-  // Pacto de sangre: (la vida ya se pagó) +40 de Furia y +1 PM
-  pact: (_s, u, _d, _at, ev) => { addFury(u, furyGain(u, 40), ev); u.mp++; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: 1 }); },
+  // Pacto de sangre: (la vida ya se pagó) +3 de daño hasta el final del combate
+  pact: (_s, u, _d, _at, ev) => { u.power += PACT_POWER; ev.push({ t: 'resist', unit: u.id, what: `+${PACT_POWER} de daño` }); },
   // Velo de penumbra: (ya es invisible) deja una Sombra en su casilla
   veil: (s, u, _d, _at, ev) => placeShadow(s, u, u.pos, 1, ev),
   // La caja: muros espectrales en el anillo alrededor de la casilla, hasta su próximo turno
@@ -1473,12 +1525,11 @@ const SELF_SPECIALS: Record<string, SelfSpecial> = {
     addStatus(a, 'guarded', 1, 1, ev);
     a.statuses.guarded!.from = u.id;
   },
-  // Grito desmoralizador: 3×3 a su alrededor: −2 PA y +15 de Furia por enemigo
+  // Grito desmoralizador: 3×3 a su alrededor: Desmoralizado (−5 de armadura 2 turnos) y +15 de Furia por enemigo
   roar: (s, u, _d, _at, ev) => {
     for (const t of s.units.filter((x) => alive(x) && x.team !== u.team && x.ai !== 'pillar' && Math.max(Math.abs(x.pos.x - u.pos.x), Math.abs(x.pos.y - u.pos.y)) <= 1)) {
-      const n = landed(s, t, 2);
-      if (n < 2) ev.push({ t: 'resist', unit: t.id, what: `Resiste ${2 - n} PA` });
-      if (n) { t.apMod -= n; ev.push({ t: 'drain', unit: t.id, ap: -n, mp: 0 }); }
+      addStatus(t, 'exposed', 2, 5, ev);
+      ev.push({ t: 'resist', unit: t.id, what: 'Desmoralizado' });
       addFury(u, furyGain(u, 15 * (t.statuses.verdugo?.from === u.id ? 2 : 1)), ev);
     }
   },
@@ -1515,9 +1566,9 @@ const TARGET_SPECIALS: Record<string, TargetSpecial> = {
     if (!o) return;
     for (const [a, b] of [[main, o], [o, main]] as const) { addStatus(a, 'chained', 2, 1, ev); a.statuses.chained!.link = b.id; a.statuses.chained!.from = u.id; }
   },
-  // Golpe colosal: empuja 2; si choca, aturde
+  // Golpe colosal: con 100 de Furia, empuja 2; si choca, aturde
   colossal: (s, u, _d, _at, main, _t, _h, ev) => {
-    if (!main || !alive(main)) return;
+    if (!main || !alive(main) || (u.fury ?? 0) < FURY_MAX) return;
     const n = landed(s, main, 2);
     if (n < 2) ev.push({ t: 'resist', unit: main.id, what: n ? 'Resiste parte del empujón' : 'Resiste el empujón' });
     const crashed = n ? push(s, u.pos, main, n, ev) : false;
@@ -1530,9 +1581,9 @@ const TARGET_SPECIALS: Record<string, TargetSpecial> = {
   // Descarga desatada con Eco oscuro: si mata, deja caer 2 esferas
   descarga: (s, u, _d, _at, main, _t, _h, ev) => {
     if (!main || alive(main) || !hasTrait(u, 'eco_oscuro')) return;
-    addSphere(s, u, main.pos, 2, 3, ev);
+    addSphere(s, u, main.pos, 2, 4, ev);
     const p = around(s, main.pos).find((q) => !marksAt(s, 'sphere', q).length);
-    if (p) addSphere(s, u, p, 2, 3, ev);
+    if (p) addSphere(s, u, p, 2, 4, ev);
   },
   // Explosión de almas: se cura por cada alma gastada (el daño extra ya se sumó)
   soulburst: (_s, u, _d, _at, _m, _t, _h, ev) => { const n = u.spentSouls ?? 0; if (n) heal(u, 5 * n, ev); delete u.spentSouls; },

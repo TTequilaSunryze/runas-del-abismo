@@ -153,8 +153,8 @@ describe('v14', () => {
     expect(s.units[1]!.hp).toBe(0);
     expect(s.units[2]!.hp).toBe(0);
   });
-  it('La caja: 3 PA y sin espera; Siega del condenado existe', () => {
-    expect(SPELLS.k_caja!.ap).toBe(3); expect(SPELLS.k_caja!.cd).toBe(0);
+  it('La caja: 2 PA, una vez cada 2 turnos; Siega del condenado existe', () => {
+    expect(SPELLS.k_caja!.ap).toBe(2); expect(SPELLS.k_caja!.cd).toBe(1);
     expect(SPELLS.k_siega).toBeTruthy(); expect(SPELLS.k_tormento).toBeTruthy();
   });
 });

@@ -25,12 +25,12 @@ describe('Acechador de Sombras', () => {
     expect(unitAt(s, { x: 3, y: 3 })).toBeUndefined();
     expect(move(s, h.id, { x: 4, y: 3 }).ok).toBe(true);
   });
-  it('el shuriken golpea al primer enemigo de la línea', () => {
-    const s = board([ace(), foe({ x: 3, y: 3 }), foe({ x: 5, y: 3 })]);
+  it('el shuriken golpea al enemigo elegido, también fuera de línea recta', () => {
+    const s = board([ace(), foe({ x: 3, y: 3 }), foe({ x: 4, y: 5 })]);
     const [h, a, b] = s.units;
-    const r = cast(s, h!.id, 's_shuriken', { x: 5, y: 3 });
-    expect(dmgTo(r, a!.id)).toHaveLength(1);
-    expect(dmgTo(r, b!.id)).toHaveLength(0);
+    const r = cast(s, h!.id, 's_shuriken', { x: 4, y: 5 });
+    expect(dmgTo(r, b!.id)).toHaveLength(1);
+    expect(dmgTo(r, a!.id)).toHaveLength(0);
   });
   it('con Sombra, el shuriken se replica al mismo enemigo al 50%', () => {
     const s = board([ace(), foe({ x: 5, y: 3 })]);

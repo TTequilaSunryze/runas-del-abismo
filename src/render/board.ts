@@ -253,6 +253,23 @@ export class Board {
   /** flechas propias en vuelo (pantalla isométrica) */
   private arrows: Array<{ img: HTMLImageElement; from: Pos; at: Pos; t0: number; dur: number; lift: number }> = [];
   private faceLeft = new Map<number, boolean>();
+  /** Semilla oscura: un orbe que late; pasa de violeta a rojo encendido según lo que ha crecido (0 a +10). */
+  private drawSeed(u: Unit, cx: number, by: number, now: number): void {
+    const g = this.g, k = Math.min(1, (u.seed ?? 0) / 10), pulse = 1 + 0.08 * Math.sin(now / (260 - k * 140) + u.id);
+    const mix = (a: number[], b: number[]): string => `rgb(${a.map((v, i) => Math.round(v + (b[i]! - v) * k)).join(',')})`;
+    const core = mix([150, 90, 240], [255, 70, 50]), rim = mix([60, 20, 110], [120, 10, 20]), glow = mix([170, 110, 255], [255, 120, 60]);
+    const y = by - TILE * 0.32, r = TILE * (0.2 + k * 0.06) * pulse;
+    const gr = g.createRadialGradient(cx, y, 2, cx, y, r * 2.4); gr.addColorStop(0, glow.replace('rgb', 'rgba').replace(')', ',.45)')); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.beginPath(); g.arc(cx, y, r * 2.4, 0, 6.3); g.fill();
+    g.fillStyle = rim; g.beginPath(); g.arc(cx, y, r, 0, 6.3); g.fill();
+    g.fillStyle = core; g.beginPath(); g.arc(cx, y, r * 0.62, 0, 6.3); g.fill();
+    g.fillStyle = '#fff6f0'; g.beginPath(); g.arc(cx - r * 0.25, y - r * 0.3, r * 0.18, 0, 6.3); g.fill();
+    // raíces en el suelo
+    g.strokeStyle = rim; g.lineWidth = 2;
+    for (let i = 0; i < 4; i++) { const a = i * 1.57 + 0.4; g.beginPath(); g.moveTo(cx, by - 4); g.lineTo(cx + Math.cos(a) * TILE * 0.3, by - 4 + Math.sin(a) * TILE * 0.1); g.stroke(); }
+    if (u.seed) { g.font = 'bold 11px ui-monospace, monospace'; g.textAlign = 'center'; g.lineWidth = 3; g.strokeStyle = '#000'; g.strokeText(`+${u.seed}`, cx, y + 4); g.fillStyle = '#fff'; g.fillText(`+${u.seed}`, cx, y + 4); }
+  }
+
   /** destello de golpe: dura 180 ms desde que llega el golpe */
   private flashing(id: number, now: number): boolean { const end = this.flash.get(id) ?? 0; return now < end && now >= end - 180; }
   /** dirección de cada personaje con hoja de 8 direcciones, y cuándo le golpearon por última vez */
@@ -373,7 +390,13 @@ export class Board {
         for (const p of [from, ...(sh ? [sh.pos] : [])]) this.rings.push({ x: (p.x + 0.5) * TILE, y: (p.y + 0.55) * TILE, color: e.element ? ELEMENT_COLOR[e.element] ?? '#e8e0ff' : '#e8e0ff', t0: now, dur: SPIN_MS, r: TILE * 0.85, spin: true });
       }
       if (e.t === 'markAdd' && e.kind === 'pulse') this.rings.push({ x: (e.at.x + 0.5) * TILE, y: (e.at.y + 0.45) * TILE, color: '#c9a0ff', t0: now, dur: 420, r: TILE * 1.2 });
-      if (e.t === 'flame') this.shots.push({ x0: (e.from.x + 0.5) * TILE, y0: (e.from.y + 0.4) * TILE, x1: (e.at.x + 0.5) * TILE, y1: (e.at.y + 0.4) * TILE, color: '#4ad0ff', t0: now, dur: 300, orb: true });
+      if (e.t === 'flame') {
+        const souls = u?.souls !== undefined;
+        // Atracción del abismo: las almas vuelan en verde hacia el Carcelero, una tras otra, y se funden en un aro
+        const k = souls ? this.shots.filter((p) => p.color === '#9af0d0' && p.t0 >= now).length : 0;
+        this.shots.push({ x0: (e.from.x + 0.5) * TILE, y0: (e.from.y + 0.4) * TILE, x1: (e.at.x + 0.5) * TILE, y1: (e.at.y + 0.4) * TILE, color: souls ? '#9af0d0' : '#4ad0ff', t0: now + k * 120, dur: souls ? 650 : 300, orb: true });
+        if (souls) this.rings.push({ x: (e.at.x + 0.5) * TILE, y: (e.at.y + 0.55) * TILE, color: '#9af0d0', t0: now + k * 120 + 650, dur: 420, r: TILE * 0.9 });
+      }
       if (e.t === 'markAdd' && e.kind === 'sphere') {
         // la esfera aparece con una pequeña explosión
         const x = (e.at.x + 0.5) * TILE, y = (e.at.y + 0.45) * TILE;
@@ -414,7 +437,7 @@ export class Board {
         const last = e.path[e.path.length - 1]!;
         if (from && last.x !== Math.round(from.x)) this.faceLeft.set(u.id, last.x < from.x);
       } else if (e.t === 'death' && u && from) {
-        this.ghosts.push({ kind: lookKind(u), team: u.team, idx: heroIdx.get(u.id) ?? 0, x: from.x, y: from.y, t0: now, sheet: sheetOf(u) ? u.kind : undefined, dir: this.facing.get(u.id) ?? 0 });
+        if (u.seed === undefined) this.ghosts.push({ kind: lookKind(u), team: u.team, idx: heroIdx.get(u.id) ?? 0, x: from.x, y: from.y, t0: now, sheet: sheetOf(u) ? u.kind : undefined, dir: this.facing.get(u.id) ?? 0 });
       }
       if (e.t === 'damage' && e.amount > 0) this.hurtAt.set(e.unit, now);
       if (e.t === 'damage') {
@@ -982,8 +1005,10 @@ export class Board {
             if (!castProblem(c, me, SPELLS[def.id]!, p)) { g.strokeStyle = '#f2c14e'; g.lineWidth = 3; g.strokeRect(x * TILE + 4, y * TILE + 4, TILE - 8, TILE - 8); }
           }
         if (this.hover && def.cone && !castProblem(c, me, SPELLS[def.id]!, this.hover)) for (const p of coneCells(me.pos, this.hover, def.cone)) if (!c.obstacles.includes(`${p.x},${p.y}`)) fill(p, 'rgba(255,60,60,.25)');
-        if (this.hover && def.area) {
-          for (let y = 0; y < c.h; y++) for (let x = 0; x < c.w; x++) if ((def.square ? Math.max(Math.abs(x - this.hover.x), Math.abs(y - this.hover.y)) : dist({ x, y }, this.hover)) <= def.area) fill({ x, y }, 'rgba(255,60,60,.2)');
+        // área: alrededor de la casilla del ratón, o de ti si la habilidad es sobre ti
+        const ac = def.range[1] === 0 ? me.pos : this.hover;
+        if (ac && def.area) {
+          for (let y = 0; y < c.h; y++) for (let x = 0; x < c.w; x++) if ((def.square ? Math.max(Math.abs(x - ac.x), Math.abs(y - ac.y)) : dist({ x, y }, ac)) <= def.area && !(x === me.pos.x && y === me.pos.y && def.range[1] === 0)) fill({ x, y }, 'rgba(255,60,60,.2)');
         }
       } else {
         const reach = reachable(c, me.pos, usableMp(c, me));
@@ -1098,7 +1123,8 @@ export class Board {
       const aura = auraDef(look?.aura);
       if (aura && !u.statuses.invis) drawAura(g, aura, cx, by - 2, TILE * 0.36, 8, now);
       const sh8 = this.iso ? sheetOf(u) : undefined;
-      if (sh8 && sheetReady(sh8)) this.drawSheetUnit(c, u, s, sh8, now, moving);
+      if (u.seed !== undefined) this.drawSeed(u, cx, by, now);
+      else if (sh8 && sheetReady(sh8)) this.drawSheetUnit(c, u, s, sh8, now, moving);
       else drawUnit(g, lookKind(u), u.team, heroIdx.get(u.id) ?? 0, cx + (lg ? lg.dx * swing * TILE * 0.3 : 0), by + bob + (lg ? lg.dy * swing * TILE * 0.3 : 0), Math.round(TILE * 1.18),
         { flash: this.flashing(u.id, now), swing, flip: def0 ? left : !left, alpha: u.statuses.invis ? 0.4 : u.ai === 'decoy' ? 0.55 : 1, anim, frame, skin: look?.cls === u.kind ? look.skin : undefined });
       // Marca de la muerte: calavera con el daño guardado
@@ -1285,7 +1311,7 @@ export class Board {
       const res = FEATURES.resistances && def.element ? Math.min(75, u.resist[def.element] ?? 0) : 0;
       const school = me.team === 'hero' ? (schoolOf(me.kind) === 'magic' ? me.powerMagic ?? 0 : me.powerPhys ?? 0) : 0;
       // daño plano: fijo del hechizo + daño del personaje y de su tipo + potenciado + Marcado/Vulnerable − armadura
-      const bonus = me.power + school + (me.statuses.empower?.stacks ?? 0) + (u.statuses.mark ? 2 : 0) + (u.statuses.vuln ? 2 : 0) + (u.statuses.frenzy ? 1 : 0);
+      const bonus = me.power + school + (me.statuses.empower?.stacks ?? 0) + (u.statuses.mark ? 2 : 0) + (u.statuses.charm ? 2 : 0) + (u.statuses.vuln ? 2 : 0) + (u.statuses.frenzy ? 1 : 0);
       const arm = def.pierce ? 0 : Math.max(0, u.armor - (u.statuses.exposed?.stacks ?? 0));
       const v = Math.max(1, Math.round((def.dmg[0] + bonus) * (1 - res / 100)) - arm);
       const crit = Math.max(1, Math.round((def.dmg[0] + bonus + CRIT_FLAT) * (1 - res / 100)) - arm);

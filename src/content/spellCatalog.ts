@@ -87,14 +87,15 @@ export const SPELL_CATALOG: Record<string, ClassCatalog> = {
  * Dependencias que el configurador (H3) mostrará como aviso, nunca como bloqueo: la habilidad necesita algo que
  * genere su recurso.
  */
-const SPHERES: Need = { label: 'Necesita algo que cree Esferas oscuras', anyOf: ['t_pulso', 't_singularidad', 't_semilla'] };
+const SPHERES: Need = { label: 'Necesita algo que cree Esferas oscuras', anyOf: ['t_pulso', 't_singularidad'] };
+const SEEDS: Need = { label: 'Necesita Semilla oscura', anyOf: ['t_semilla'] };
 const SHADOW: Need = { label: 'Necesita algo que cree una Sombra', anyOf: ['s_sombra', 's_velo', 's_marca'] };
 const GLYPHS: Need = { label: 'Necesita algo que dibuje glifos', anyOf: ['r_glifo', 'r_ciudadela'] };
 const FURY: Need = { label: 'Necesita algo que genere Furia', anyOf: ['b_tajo', 'b_embiste', 'b_grito', 'b_cuchillada', 'b_pacto', 'b_mirada'] };
 const CHARGES: Need = { label: 'Necesita disparos que llenen el cargador', anyOf: ['g_disparo', 'g_rebote', 'g_recarga'] };
 const COMPANION: Need = { label: 'En solitario necesita un compañero (Halcón)', anyOf: ['a_halcon'] };
 export const SPELL_NEEDS: Record<string, Need> = {
-  t_descarga: SPHERES, t_voluntad: SPHERES, t_gravedad: SPHERES, t_orbita: SPHERES, t_resonancia: SPHERES, t_transfusion: SPHERES, t_implosion: SPHERES,
+  t_descarga: SPHERES, t_voluntad: SPHERES, t_gravedad: SPHERES, t_orbita: SPHERES, t_resonancia: SPHERES, t_transfusion: SPHERES, t_implosion: SEEDS,
   s_cosecha: SHADOW, s_convergencia: SHADOW,
   r_pulsar: GLYPHS, r_arquitectonico: GLYPHS,
   b_sed: FURY, b_colosal: FURY, b_frenesi: FURY, b_piel: FURY, b_decapitar: FURY,
