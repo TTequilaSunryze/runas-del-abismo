@@ -47,3 +47,4 @@ Tejedora (zona 2): araña gigante 3D (celdas de 256: el conversor lo detecta por
 `head` en cada hoja = alto real del dibujo sobre los pies, para colocar la barra de vida.
 
 Limo de osario: hoja dibujada con IA (una dirección, mira a la derecha), fondo ya transparente. Fotogramas recortados por zonas, reducidos a 1/3, alfa duro, alineados por la base (el ataque, por el lado izquierdo del cuerpo) en celdas de 96×96 con los pies en (48, 92); a 2×. Herido: 3 primeros fotogramas (el 4.º, el estallido, no se usa).
+Murciélago de cripta: hoja dibujada con IA sin transparencia real (cuadriculado gris pintado): se quita el gris poco saturado y claro, se tapan las etiquetas de las filas, se cortan los fotogramas por los huecos de cada fila, se descartan manchas sueltas (<60 px) y se alinean por la sombra. Celdas de 72 px, sombra en (36, 69), a 2×, una dirección (mira a la derecha).

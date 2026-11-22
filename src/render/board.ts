@@ -124,6 +124,8 @@ const SHEETS: Record<string, Sheet> = {
   // araña gigante 3D (celdas de 256 en origen)
   // Limo de osario: hoja de una dirección (mira a la derecha), fotogramas de 96×96 con los pies en (48, 92), a 2×
   limo: { ...sheet('limo', { idle: 4, walk: 7, attack: 7, hurt: 3, death: 8 }, 96, [48, 92], 2, 1), head: 46 },
+  // Murciélago de cripta: hoja dibujada con IA (una dirección, mira a la derecha), celdas de 72 px con la sombra en (36, 69), a 2×
+  murcielago: { ...sheet('bat', { idle: 4, walk: 8, attack: 8, hurt: 4, death: 5 }, 72, [36, 68], 2, 1), head: 60 },
   tejedora: withHead(sheet('weaver', { idle: 12, walk: 8, attack: 10, hurt: 8, death: 12 }, 159, [80, 84]), 27),
   // Tiny Enemies
   espectro: tiny('espectro', T4), gargola: tiny('gargola', T4), necrofago: tiny('necrofago', T4), acolito: tiny('acolito', T4),
