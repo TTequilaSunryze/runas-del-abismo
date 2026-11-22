@@ -49,6 +49,10 @@ export function isoCell(sx: number, sy: number, h: number): { x: number; y: numb
 const art = (src: string): HTMLImageElement | null => { if (typeof Image === 'undefined') return null; const i = new Image(); i.src = `${import.meta.env.BASE_URL}${src}`; return i; };
 const Z1 = { floor: art('tiles/z1_floor.png'), pillar: art('tiles/z1_pillar.png') };
 const ready = (i: HTMLImageElement | null): i is HTMLImageElement => !!i && i.complete && i.naturalWidth > 0;
+/** Arte isométrico de la zona 1 (lote 1): pilares de 256 px de ancho con la base en el borde inferior. */
+const ISO1 = { pillars: [art('iso/z1/pillar_01.png'), art('iso/z1/pillar_02.png')] };
+/** variante fija por casilla */
+const pick = <T,>(list: T[], x: number, y: number): T => list[(((x * 73856093) ^ (y * 19349663)) >>> 0) % list.length]!;
 const STATUS_COLOR: Record<string, string> = { burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0', charm: '#ff9ad8', vuln: '#c9a0ff', bleed: '#e03040', hobble: '#9ad0e8', guarded: '#7fe0b0', deathmark: '#ff3a4a', verdugo: '#ff8a30', frenzy: '#ff5030', orbita: '#b07cff', chained: '#a0a8c0', rooted: '#c89a5a', anchor: '#5ac8ff', silver: '#e0e8ff', smoke: '#9a8ab8', immune: '#7ae8ff', kinetic: '#58a6ff', prism: '#c8a0ff', fading: '#b0b8d0' };
 export const STATUS_NAME: Record<string, string> = { burn: 'Quemadura', poison: 'Veneno', slow: 'Ralentizado', stun: 'Aturdido', mark: 'Marcado', empower: 'Potenciado', reach: 'Alcance+', invis: 'Invisible', exposed: 'Expuesto', charm: 'Encantado', vuln: 'Vulnerable', bleed: 'Sangrado', hobble: 'Atrapado', guarded: 'Protegido', deathmark: 'Marca de la muerte', verdugo: 'Presa', frenzy: 'Frenesí', orbita: 'Órbita', chained: 'Encadenado', rooted: 'Inmovilizado', anchor: 'Sello de anclaje', silver: 'Balas de plata', smoke: 'En el humo', immune: 'Inmune', kinetic: 'Barrera cinética', prism: 'Baluarte prismático', fading: 'Desvaneciéndose' };
 
@@ -367,6 +371,16 @@ export class Board {
     g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 2; g.strokeRect(X + 1, topY + 1, TILE - 2, (front ? Y + TILE : topY + topH) - topY - 2);
   }
 
+  /** Objeto isométrico ilustrado: la base (un rombo del ancho de la imagen) se apoya en el rombo de la casilla. */
+  private drawIsoProp(c: CombatState, img: HTMLImageElement, x: number, y: number, scale = 0.74): void {
+    const g = this.g, [sx, sy] = this.shake, p = isoPoint(x + 0.5, y + 0.5, c.h);
+    const w = ISO_W * scale, h = (w * img.naturalHeight) / img.naturalWidth;
+    // la punta inferior de la base queda w/4 por debajo del centro del rombo
+    const bottom = p.y + w / 4 + sy;
+    g.fillStyle = 'rgba(0,0,0,.45)'; g.beginPath(); g.ellipse(p.x + sx, p.y + sy + 4, w * 0.55, w * 0.22, 0, 0, Math.PI * 2); g.fill();
+    g.drawImage(img, p.x - w / 2 + sx, bottom - h, w, h);
+  }
+
   /** Grosor del suelo en isométrico: los dos bordes delanteros del tablero son un bloque de roca. */
   private drawSlab(c: CombatState, zone: (typeof ZONES)[number]): void {
     const g = this.g, [sx, sy] = this.shake, D = Math.round(ISO_H * 0.55);
@@ -668,7 +682,9 @@ export class Board {
         const p = props[pi++]!;
         // en isométrico, un muro que tapa a alguien que está justo detrás se vuelve translúcido
         g.globalAlpha = this.iso && c.units.some((u) => alive(u) && (() => { const d = p.x - u.pos.x + (p.y - u.pos.y); return d >= 1 && d <= 4 && Math.abs(p.x - p.y - (u.pos.x - u.pos.y)) <= 1; })()) ? 0.42 : 1;
-        if (this.iso && !p.brazier && !p.fence && !(zone === ZONES[0] && ready(Z1.pillar))) { this.screen(); this.drawIsoBlock(c, zone, p.x, p.y); continue; }
+        const isoPillar = this.iso && zone === ZONES[0] ? pick(ISO1.pillars, p.x, p.y) : null;
+        if (this.iso && !p.brazier && !p.fence && ready(isoPillar)) { this.screen(); this.drawIsoProp(c, isoPillar, p.x, p.y); g.globalAlpha = 1; continue; }
+        if (this.iso && !p.brazier && !p.fence && !(zone === ZONES[0] && ready(Z1.pillar))) { this.screen(); this.drawIsoBlock(c, zone, p.x, p.y); g.globalAlpha = 1; continue; }
         this.upright(p.x, p.y);
         if (p.brazier) this.drawBrazier(p.x, p.y, now); else if (p.fence) this.drawFence(p.x, p.y, now); else this.drawWall(c, zone, p.x, p.y);
         g.globalAlpha = 1;

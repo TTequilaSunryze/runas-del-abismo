@@ -20,6 +20,10 @@ Estas reglas son lo más importante. Si una imagen no las cumple, no encaja en e
 | Estilo | Pixel art detallado "HD": píxeles visibles, contorno oscuro, 3–4 tonos por color, paleta apagada (piedra gris verdosa, musgo, óxido) con acentos de color vivos (fuego naranja, magia azul o violeta). |
 | Tamaño | Genera **grande** (el tamaño de cada tabla, o el doble). Yo lo reduzco al tamaño del juego. Nunca más pequeño. |
 
+**Si la herramienta no da transparencia real** (muchas pintan un cuadriculado gris o blanco *dentro* de la imagen, y los JPG nunca tienen transparencia), pide un **fondo de color plano magenta puro (#FF00FF)**: `on a flat solid magenta #FF00FF background`. Yo lo quito sin problemas. El cuadriculado pintado y los fondos oscuros parecidos a las grietas de la piedra dan problemas al recortar.
+
+**Las losas del suelo, con luz uniforme.** La luz cálida de las antorchas la pone el juego. Si cada losa trae su propio degradado (naranja a un lado, violeta al otro), al repetirla 100 veces se ve un patrón de rayas.
+
 **Frase de estilo para pegar al principio de todas las peticiones.** Las herramientas de IA suelen entender mejor el inglés:
 
 > `isometric 2:1 pixel art, dark fantasy dungeon, detailed HD pixel art, dark outlines, muted stone palette with warm torchlight from the upper left, cool purple shadows, transparent background, no text, game asset, consistent style`
@@ -80,7 +84,9 @@ Ocho variantes de la misma losa de piedra, para que el suelo no se vea repetido.
 | floor_07 | Con huesos pequeños o restos encima |
 | floor_08 | Partida en dos piezas |
 
-> Petición de ejemplo: `[frase de estilo] single isometric floor tile, worn grey stone slab with a diagonal crack, beveled edges, diamond shape filling a 256x128 canvas, transparent outside the diamond`
+> Petición de ejemplo: `[frase de estilo] single flat isometric floor tile seen from above, worn grey stone slab with a diagonal crack, only the top face, no side faces, no thickness, even neutral lighting with no gradient, diamond shape filling a 256x128 canvas, flat solid magenta #FF00FF background outside the diamond`
+
+**La losa es plana: solo la cara de arriba**, sin los laterales de bloque. El grosor solo se ve en el borde delantero del tablero, y para eso están `edge_left` y `edge_right`.
 
 **Importante:** el brillo medio tiene que ser parecido en las 8 losas. Si una es mucho más clara, se notará como un parche.
 
@@ -242,7 +248,7 @@ Con solo el lote 1 y el Pistolero (unas 38 imágenes), la sala de la zona 1 ya s
 | Paso | Estado | Qué cambia |
 |---|---|---|
 | 1. Tablero isométrico | ✅ Hecho | Proyección en rombos, clic y casillas resaltadas correctos, pilares translúcidos si tapan a alguien, grosor del borde, botón 🔷 / tecla I para comparar con la vista plana |
-| 2. Cargador de escenario | Al llegar el lote 1 | Losas reales, muros del fondo con antorchas animadas, abismo, braseros |
+| 2. Cargador de escenario | En curso: `pillar_01` y `pillar_02` ya están en el juego | Losas reales, muros del fondo con antorchas animadas, abismo, braseros |
 | 3. Luz | Con el lote 1 | Halo de cada antorcha y brasero sobre el suelo, oscuridad en los rincones |
 | 4. Personajes y enemigos | Al llegar los lotes 2 y 3 | Hojas de animación de 256 px, retratos |
 | 5. Interfaz | Al llegar el lote 5 | Marcos, botones y pergamino como en la captura |
