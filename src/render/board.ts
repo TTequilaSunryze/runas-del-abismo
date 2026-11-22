@@ -94,13 +94,15 @@ const ZONE_PROPS: Array<Array<HTMLImageElement | null>> = [
  */
 type SheetAnim = 'idle' | 'walk' | 'attack' | 'hurt' | 'death';
 interface Sheet { img: Record<SheetAnim, HTMLImageElement | null>; frames: Record<SheetAnim, number>; size: number; foot: [number, number]; scale: number }
-const sheet = (name: string, frames: Record<SheetAnim, number>): Sheet => ({
+const sheet = (name: string, frames: Record<SheetAnim, number>, size = 96, foot: [number, number] = [48, 80]): Sheet => ({
   img: { idle: art(`iso/units/${name}_idle.png`), walk: art(`iso/units/${name}_walk.png`), attack: art(`iso/units/${name}_attack.png`), hurt: art(`iso/units/${name}_hurt.png`), death: art(`iso/units/${name}_death.png`) },
-  frames, size: 96, foot: [48, 80], scale: 2,
+  frames, size, foot, scale: 2,
 });
 /** qué enemigos usan una hoja (por su clase) */
 const SHEETS: Record<string, Sheet> = {
   esqueleto: sheet('skeleton', { idle: 8, walk: 8, attack: 8, hurt: 5, death: 10 }),
+  // demonio renderizado en 3D y pasado a pixel art (tools/arte/pixelar_hoja.py): celdas de 160 px
+  devorador: sheet('demon', { idle: 8, walk: 10, attack: 10, hurt: 4, death: 12 }, 160, [80, 104]),
 };
 const sheetOf = (u: { kind: string; team: string }): Sheet | undefined => (u.team === 'enemy' ? SHEETS[u.kind] : undefined);
 const sheetReady = (s: Sheet): boolean => Object.values(s.img).every(ready);
@@ -1049,7 +1051,7 @@ export class Board {
         g.fillStyle = '#1a0610'; g.fillRect(mx - 9, my - 9, 18 + String(dmk.stacks).length * 7, 16);
         g.fillStyle = '#ff3a4a'; g.font = 'bold 12px ui-monospace, monospace'; g.textAlign = 'left'; g.fillText(`☠${dmk.stacks}`, mx - 7, my + 3);
       }
-      this.bars(u, cx, s.y * TILE - (sh8 ? 34 : 8), heroIdx.get(u.id));
+      this.bars(u, cx, s.y * TILE - (sh8 ? (sh8.size > 100 ? 44 : 34) : 8), heroIdx.get(u.id));
     }
     flushProps(this.iso ? c.w + c.h : c.h);
     // caídos: se desvanecen hacia arriba
@@ -1058,7 +1060,7 @@ export class Board {
       const gs = d.sheet && this.iso ? SHEETS[d.sheet] : undefined;
       if (gs && sheetReady(gs)) {
         // hoja de animación: cae (10 fotogramas en 1 s), se queda en el suelo y se desvanece
-        const t0 = now - d.t0, fr = Math.min(gs.frames.death - 1, Math.floor(t0 / 100));
+        const t0 = now - d.t0, fr = Math.min(gs.frames.death - 1, Math.floor((t0 / 1000) * gs.frames.death));
         this.sheetFrame(c, gs, 'death', fr, d.dir ?? 0, d.x, d.y, t0 < 1100 ? 1 : Math.max(0, 1 - (t0 - 1100) / 500));
         continue;
       }

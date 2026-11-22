@@ -33,3 +33,5 @@ Obstáculos por zona en `ZONE_PROPS` (src/render/board.ts); la trampa de púas e
 Guerrero esqueleto: "Skeleton Series" de MEKAI GAMES (crédito agradecido; no redistribuir ni usar para entrenar IA).
 Hojas `sheets/classic/skeleton_classic_<anim>.png` tal cual: fotogramas de 96 px, pies en (48, 80), filas S, SE, E, NE, N, NW, W, SW. Se dibujan a 2×.
 Para añadir otro: copiar sus hojas como `<nombre>_<idle|walk|attack|hurt|death>.png` y registrarlo en `SHEETS` (src/render/board.ts) con la clase del enemigo.
+
+Devorador (zona 4): modelo 3D de demonio en 16 direcciones ("Assembled_Shadow_Optimized_Spritesheets", sin licencia en el ZIP: pendiente de confirmar su origen), pasado a pixel art con `pixelar_hoja.py` a escala 0.5 (celdas de 160 px, pie en (80, 104)).
