@@ -122,6 +122,8 @@ const SHEETS: Record<string, Sheet> = {
   larva: withHead(sheet('centipede', { idle: 8, walk: 6, attack: 6, hurt: 5, death: 8 }, 160, [80, 80]), 41),
   ent: withHead(sheet('tree', { idle: 9, walk: 8, attack: 9, hurt: 6, death: 9 }, 176, [86, 95]), 67),
   // araña gigante 3D (celdas de 256 en origen)
+  // Limo de osario: hoja de una dirección (mira a la derecha), fotogramas de 96×96 con los pies en (48, 92), a 2×
+  limo: { ...sheet('limo', { idle: 4, walk: 7, attack: 7, hurt: 3, death: 8 }, 96, [48, 92], 2, 1), head: 46 },
   tejedora: withHead(sheet('weaver', { idle: 12, walk: 8, attack: 10, hurt: 8, death: 12 }, 159, [80, 84]), 27),
   // Tiny Enemies
   espectro: tiny('espectro', T4), gargola: tiny('gargola', T4), necrofago: tiny('necrofago', T4), acolito: tiny('acolito', T4),
