@@ -22,26 +22,28 @@ const PAD = 42;
 // (cada casilla cuadrada se convierte en un rombo 2:1) y lo que está «de pie» (personajes, pilares, textos)
 // se dibuja sin deformar, anclado al centro de su rombo.
 /** ancho y alto del rombo de una casilla */
-export const ISO_W = TILE * 2, ISO_H = TILE;
+export const ISO_W = 128, ISO_H = 64;
+/** margen a los lados del lienzo (los muros del fondo sobresalen del tablero) */
+const ISO_SIDE = 72;
 /** espacio por encima del rombo más alto, para muros y personajes */
-const ISO_PAD = 215;
+const ISO_PAD = 250;
 /** margen inferior */
 const ISO_BOTTOM = 24;
 /** escala de lo que está de pie respecto a la vista plana */
-const ISO_UP = 1.4;
+const ISO_UP = 1.6;
 /** el pie de los personajes queda un poco por debajo del centro del rombo */
 const ISO_FOOT = ISO_H * 0.18;
 const ISO_KEY = 'runas.iso';
 const isoPref = (): boolean => { try { return localStorage.getItem(ISO_KEY) !== '0'; } catch { return true; } };
 /** Tamaño del lienzo isométrico para un mapa de w×h casillas. */
-export const isoSize = (w: number, h: number): { w: number; h: number } => ({ w: ((w + h) * ISO_W) / 2, h: ((w + h) * ISO_H) / 2 + ISO_PAD + ISO_BOTTOM });
+export const isoSize = (w: number, h: number): { w: number; h: number } => ({ w: ((w + h) * ISO_W) / 2 + ISO_SIDE * 2, h: ((w + h) * ISO_H) / 2 + ISO_PAD + ISO_BOTTOM });
 /** Casilla → punto de pantalla (centro del rombo), en un mapa de h filas. Coordenadas de casilla con decimales. */
 export function isoPoint(x: number, y: number, h: number): { x: number; y: number } {
-  return { x: (h * ISO_W) / 2 + ((x - y) * ISO_W) / 2, y: ISO_PAD + ((x + y) * ISO_H) / 2 };
+  return { x: ISO_SIDE + (h * ISO_W) / 2 + ((x - y) * ISO_W) / 2, y: ISO_PAD + ((x + y) * ISO_H) / 2 };
 }
 /** Punto de pantalla → casilla (la inversa de isoPoint, sin redondear). */
 export function isoCell(sx: number, sy: number, h: number): { x: number; y: number } {
-  const u = (sx - (h * ISO_W) / 2) / (ISO_W / 2), v = (sy - ISO_PAD) / (ISO_H / 2);
+  const u = (sx - ISO_SIDE - (h * ISO_W) / 2) / (ISO_W / 2), v = (sy - ISO_PAD) / (ISO_H / 2);
   return { x: (u + v) / 2, y: (v - u) / 2 };
 }
 
@@ -50,32 +52,27 @@ const art = (src: string): HTMLImageElement | null => { if (typeof Image === 'un
 const Z1 = { floor: art('tiles/z1_floor.png'), pillar: art('tiles/z1_pillar.png') };
 const ready = (i: HTMLImageElement | null): i is HTMLImageElement => !!i && i.complete && i.naturalWidth > 0;
 /** Arte isométrico de la zona 1 (lote 1): pilares de 256 px de ancho con la base en el borde inferior. */
-const ISO1 = { brazier: art('iso/z1/brazier.png'), broken: art('iso/z1/brazier_broken.png'), flame: art('iso/z1/flame.png'), pillars: [art('iso/z1/pillar_01.png'), art('iso/z1/pillar_02.png')], floors: [1, 2, 3, 4, 5, 6, 7, 8].map((n) => art(`iso/z1/floor_0${n}.png`)) };
+const ISO1 = { flame: art('iso/z1/flame.png') };
 /**
- * Muros del fondo (zona 1). Imágenes de 360 px de alto que suben hacia la derecha (borde izquierdo del tablero);
- * el borde derecho usa las mismas, volteadas. foot = altura (en la imagen) del pie del muro en su extremo izquierdo;
- * cells = casillas de borde que cubre.
+ * Pack «Fantasy Isometric Pixel Art» (Kabukidanshi, gratis con atribución): piezas de 32 px que se dibujan a 4× (PX)
+ * sin suavizado. Losas planas con canto, bloques para muros y columnas, y objetos. Ya vienen oscurecidas (tools/arte).
  */
-const WALLS1: Array<{ img: HTMLImageElement | null; foot: number; cells: number; w: number; torch?: [number, number]; lit?: boolean }> = [
-  // torch: posición de la antorcha (fracción del ancho y del alto de la imagen); lit: la llama ya viene pintada
-  { img: art('iso/z1/wall_01.png'), foot: 340, cells: 2, w: 3, torch: [0.54, 0.33], lit: true },
-  { img: art('iso/z1/wall_02.png'), foot: 314, cells: 2, w: 2, torch: [0.68, 0.3], lit: true },
-  { img: art('iso/z1/wall_torch.png'), foot: 349, cells: 1, w: 3, torch: [0.585, 0.42] },
-  { img: art('iso/z1/wall_arch.png'), foot: 320, cells: 1, w: 1, torch: [0.825, 0.28], lit: true },
-];
-/** solape entre tramos de muro, para que no se vean las juntas */
-const WALL_OVERLAP = 38;
-/** alto de los muros en pantalla */
-const WALL_H = 195;
-/** Frecuencia de cada losa (índices de ISO1.floors): las lisas y la de piedrecitas son las normales; musgo, huesos y runa, raras. */
-const FLOOR_MIX = [0, 1, 2, 0, 1, 2, 0, 1, 2, 5, 5, 5, 0, 1, 2, 3, 4, 6, 7];
-/** Obstáculos de la zona 1: imagen y ancho de su base respecto al rombo; los pilares enteros salen más a menudo. */
-const PROPS1: Array<{ img: HTMLImageElement | null; scale: number }> = [
-  ...ISO1.pillars.flatMap((img) => [{ img, scale: 0.74 }, { img, scale: 0.74 }, { img, scale: 0.74 }]),
-  { img: art('iso/z1/pillar_03.png'), scale: 0.74 }, { img: art('iso/z1/pillar_04.png'), scale: 0.74 },
-  // pilares rotos y barriles: de la hoja de piezas (menos resolución que el resto)
-  { img: art('iso/z1/barrels.png'), scale: 0.95 },
-];
+const PX = 4;
+const packSet = (tag: string): { floors: Array<HTMLImageElement | null>; cubes: Array<HTMLImageElement | null> } => ({
+  floors: [1, 2, 3, 4, 5].map((n) => art(`iso/pack/floor_${tag}${n}.png`)),
+  cubes: Array.from({ length: 14 }, (_, i) => art(`iso/pack/cube_${tag}${i + 1}.png`)),
+});
+const PACK = {
+  gray: packSet('g'), brown: packSet('b'),
+  window: art('iso/pack/window_closed.png'), door: art('iso/pack/door_closed.png'), torch: art('iso/pack/torch.png'),
+  empty: art('iso/pack/cauldron_empty.png'),
+  cauldron: [1, 2, 3, 4, 5, 6].map((n) => art(`iso/pack/cauldron${n}.png`)),
+};
+/** juego de piezas de cada zona: piedra gris (catacumbas, abismo) o parda (bosque, ruinas) */
+const packFor = (zone: number): ReturnType<typeof packSet> => (zone === 1 || zone === 2 ? PACK.brown : PACK.gray);
+const packReady = (zone: number): boolean => { const s = packFor(zone); return [...s.floors, ...s.cubes, PACK.window, PACK.door, PACK.torch, ...PACK.cauldron].every(ready); };
+/** altura de los muros del fondo, en bloques */
+const WALL_LEVELS = 3;
 /** variante fija por casilla */
 const pick = <T,>(list: T[], x: number, y: number): T => list[(((x * 73856093) ^ (y * 19349663)) >>> 0) % list.length]!;
 const STATUS_COLOR: Record<string, string> = { burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0', charm: '#ff9ad8', vuln: '#c9a0ff', bleed: '#e03040', hobble: '#9ad0e8', guarded: '#7fe0b0', deathmark: '#ff3a4a', verdugo: '#ff8a30', frenzy: '#ff5030', orbita: '#b07cff', chained: '#a0a8c0', rooted: '#c89a5a', anchor: '#5ac8ff', silver: '#e0e8ff', smoke: '#9a8ab8', immune: '#7ae8ff', kinetic: '#58a6ff', prism: '#c8a0ff', fading: '#b0b8d0' };
@@ -411,44 +408,6 @@ export class Board {
     g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 2; g.strokeRect(X + 1, topY + 1, TILE - 2, (front ? Y + TILE : topY + topH) - topY - 2);
   }
 
-  /** Objeto isométrico ilustrado: la base (un rombo del ancho de la imagen) se apoya en el rombo de la casilla. */
-  private drawIsoProp(c: CombatState, img: HTMLImageElement, x: number, y: number, scale = 0.74): void {
-    const g = this.g, [sx, sy] = this.shake, p = isoPoint(x + 0.5, y + 0.5, c.h);
-    const w = ISO_W * scale, h = (w * img.naturalHeight) / img.naturalWidth;
-    // la punta inferior de la base queda w/4 por debajo del centro del rombo
-    const bottom = p.y + w / 4 + sy;
-    g.fillStyle = 'rgba(0,0,0,.45)'; g.beginPath(); g.ellipse(p.x + sx, p.y + sy + 4, w * 0.55, w * 0.22, 0, 0, Math.PI * 2); g.fill();
-    g.drawImage(img, p.x - w / 2 + sx, bottom - h, w, h);
-  }
-
-  /** Muros del fondo por los dos bordes de atrás del tablero, de la esquina de arriba hacia fuera (lo de atrás primero). */
-  private drawIsoWalls(c: CombatState): void {
-    this.torches = [];
-    const g = this.g, [sx, sy] = this.shake, s = WALL_H / 360;
-    const bag = WALLS1.flatMap((w) => Array<typeof w>(w.w).fill(w));
-    for (const side of ['left', 'right'] as const) {
-      const len = side === 'left' ? c.h : c.w;
-      let i = 0, n = 0;
-      while (i < len) {
-        const wl = pick(bag, side === 'left' ? 101 : 7, n++ * 13 + (side === 'left' ? 0 : 50));
-        const k = Math.min(wl.cells, len - i), img = wl.img!;
-        // ancho: el del tramo más un solape (se estira un poco si hace falta)
-        const w = Math.max(img.naturalWidth * s, (k * ISO_W) / 2 + WALL_OVERLAP);
-        const dir = side === 'left' ? 1 : -1;
-        const p = side === 'left' ? isoPoint(0, i + k, c.h) : isoPoint(i + k, 0, c.h);
-        const ox = p.x + sx, oy = p.y + sy - wl.foot * s;
-        g.save();
-        // borde x = 0: el muro sube hacia la derecha y su pie izquierdo va en el extremo de abajo del tramo;
-        // borde y = 0: la misma imagen volteada, con el pie en el extremo de abajo a la derecha
-        g.translate(ox, oy); g.scale(dir, 1);
-        g.drawImage(img, 0, 0, w, WALL_H);
-        g.restore();
-        if (wl.torch) this.torches.push({ x: ox + dir * wl.torch[0] * w, y: oy + wl.torch[1] * WALL_H, side: dir, lit: !!wl.lit });
-        i += k;
-      }
-    }
-  }
-
   /** Llama ilustrada que se mueve (se estira, se encoge y se balancea) con su halo. Base de la llama en (x, y). */
   private drawFlame(x: number, y: number, h: number, now: number, seed: number, glow = false): void {
     const g = this.g, img = ISO1.flame;
@@ -472,12 +431,11 @@ export class Board {
     if (c.round < this.lastRound) this.brazierSeen.clear();
     this.lastRound = c.round;
     for (const k of c.braziers ?? []) this.brazierSeen.add(k);
-    // brasero volcado donde había uno y ya no está
-    if (ready(ISO1.broken)) for (const k of this.brazierSeen) {
+    // caldero volcado (vacío) donde había un brasero y ya no está
+    if (ready(PACK.empty)) for (const k of this.brazierSeen) {
       if ((c.braziers ?? []).includes(k)) continue;
-      const [x, y] = k.split(',').map(Number) as [number, number], p = isoPoint(x + 0.5, y + 0.5, c.h);
-      const w = ISO_W * 0.9, h = (w * ISO1.broken.naturalHeight) / ISO1.broken.naturalWidth;
-      g.drawImage(ISO1.broken, p.x - w / 2 + sx, p.y - h * 0.62 + sy, w, h);
+      const [x, y] = k.split(',').map(Number) as [number, number], p = this.top(c, x, y);
+      this.px(PACK.empty, p.x - 14 * PX, p.y + 16 * PX - 30 * PX + 6);
     }
     // fuego: tres llamas por casilla, de atrás adelante, con los turnos que le quedan
     const cells = Object.entries(c.fire ?? {}).map(([k, t]) => { const [x, y] = k.split(',').map(Number) as [number, number]; return { x, y, t }; }).sort((a, b) => a.x + a.y - (b.x + b.y));
@@ -510,63 +468,71 @@ export class Board {
     // llama en los soportes que venían apagados
     for (const [i, t] of this.torches.entries()) {
       if (t.lit) continue;
-      const h = 13 + 4 * Math.sin(now / 80 + i * 2), x = t.x, y = t.y;
-      g.fillStyle = '#ff5a1a'; g.beginPath(); g.moveTo(x - 6, y); g.quadraticCurveTo(x, y - h * 1.7, x + 6, y); g.fill();
-      g.fillStyle = '#ffd24a'; g.beginPath(); g.moveTo(x - 3, y); g.quadraticCurveTo(x, y - h, x + 3, y); g.fill();
-      g.fillStyle = '#fff6d0'; g.fillRect(x - 1, y - 4, 2, 3);
+      this.drawFlame(t.x, t.y + 4, 30, now, i * 3.1);
     }
   }
 
-  /** Suelo con losas isométricas (rombo 256×128): una variante fija por casilla, girada a veces para que no se repita. */
-  private drawIsoFloor(c: CombatState): void {
-    const g = this.g, [sx, sy] = this.shake, pit = new Set(c.abyss ?? []);
-    for (let y = 0; y < c.h; y++)
-      for (let x = 0; x < c.w; x++) {
+  /** Pieza del pack a 4×, con su esquina de arriba a la izquierda en (x, y); volteada si flip. */
+  private px(img: HTMLImageElement, x: number, y: number, flip = false): void {
+    const g = this.g, w = img.naturalWidth * PX, h = img.naturalHeight * PX;
+    if (!flip) { g.drawImage(img, Math.round(x), Math.round(y), w, h); return; }
+    g.save(); g.translate(Math.round(x) + w, Math.round(y)); g.scale(-1, 1); g.drawImage(img, 0, 0, w, h); g.restore();
+  }
+
+  /** Vértice de arriba del rombo de la casilla (x, y), con el temblor. */
+  private top(c: CombatState, x: number, y: number): { x: number; y: number } {
+    const p = isoPoint(x, y, c.h); return { x: p.x + this.shake[0], y: p.y + this.shake[1] };
+  }
+
+  /** Bloque de piedra del pack en la casilla (x, y), apilado en el nivel l (0 = apoyado en el suelo). */
+  private cube(c: CombatState, x: number, y: number, l: number, seed: number, other = false): void {
+    const z = this.session.run?.zone ?? 0, base = packFor(z), set = other ? (base === PACK.gray ? PACK.brown : PACK.gray) : base, p = this.top(c, x, y);
+    this.px(pick(set.cubes, x * 3 + l + seed, y * 5 - l)!, p.x - ISO_W / 2, p.y - 8 * PX - 16 * PX * l);
+  }
+
+  /**
+   * Muros del fondo: tres bloques de alto por los dos bordes de atrás (columna x = −1 y fila y = −1), de atrás adelante.
+   * Llevan una puerta, ventanas y antorchas (con llama animada y luz).
+   */
+  private drawPackWalls(c: CombatState): void {
+    this.torches = [];
+    const cells: Array<[number, number]> = [[-1, -1]];
+    for (let i = 0; i < Math.max(c.w, c.h); i++) { if (i < c.h) cells.push([-1, i]); if (i < c.w) cells.push([i, -1]); }
+    cells.sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
+    for (const [x, y] of cells) for (let l = 0; l < WALL_LEVELS; l++) this.cube(c, x, y, l, 0);
+    // adornos: en el muro izquierdo (x = −1) la imagen va volteada
+    const door = Math.floor(c.h / 2), win = [Math.floor(c.w / 3), Math.floor((c.w * 2) / 3)];
+    for (let y = 0; y < c.h; y++) {
+      const p = this.top(c, -1, y);
+      if (y === door) this.px(PACK.door!, p.x - 24 * PX, p.y - 44 * PX, true);
+      else if (y % 3 === 1) { this.px(PACK.torch!, p.x - 10 * PX, p.y - 20 * PX, true); this.torches.push({ x: p.x - 7 * PX, y: p.y - 20 * PX, side: 1, lit: false }); }
+    }
+    for (let x = 0; x < c.w; x++) {
+      const p = this.top(c, x, -1);
+      if (win.includes(x)) this.px(PACK.window!, p.x + 2 * PX, p.y - 36 * PX);
+      else if (x % 3 === 2) { this.px(PACK.torch!, p.x + 4 * PX, p.y - 20 * PX); this.torches.push({ x: p.x + 7 * PX, y: p.y - 20 * PX, side: -1, lit: false }); }
+    }
+  }
+
+  /** Suelo del pack: una losa con canto por casilla, de atrás adelante (el canto de las de delante es el borde del tablero). */
+  private drawPackFloor(c: CombatState): void {
+    const set = packFor(this.session.run?.zone ?? 0), pit = new Set(c.abyss ?? []);
+    for (let d = 0; d < c.w + c.h; d++)
+      for (let x = Math.max(0, d - c.h + 1); x <= Math.min(c.w - 1, d); x++) {
+        const y = d - x;
         if (pit.has(`${x},${y}`)) continue;
-        const img = ISO1.floors[pick(FLOOR_MIX, x, y)]!, p = isoPoint(x + 0.5, y + 0.5, c.h);
-        const flip = ((x * 31 + y * 17) & 1) === 1;
-        g.save(); g.translate(p.x + sx, p.y + sy); if (flip) g.scale(-1, 1);
-        // un píxel de más para que no se vean juntas finas entre rombos
-        g.drawImage(img, -ISO_W / 2 - 0.5, -ISO_H / 2 - 0.5, ISO_W + 1, ISO_H + 1);
-        g.restore();
+        const p = this.top(c, x, y);
+        // la losa lisa es la más común; las demás, de vez en cuando
+        const v = pick([0, 0, 0, 1, 2, 3, 4, 0, 1], x, y);
+        this.px(set.floors[v]!, p.x - ISO_W / 2, p.y);
       }
   }
 
-  /** Grosor del suelo en isométrico: los dos bordes delanteros del tablero son un bloque de roca. */
-  private drawSlab(c: CombatState, zone: (typeof ZONES)[number]): void {
-    const g = this.g, [sx, sy] = this.shake, D = Math.round(ISO_H * 0.55);
-    const P = (x: number, y: number): [number, number] => { const q = isoPoint(x, y, c.h); return [q.x + sx, q.y + sy]; };
-    const [lx, ly] = P(0, c.h), [bx, by] = P(c.w, c.h), [rx, ry] = P(c.w, 0);
-    const face = (ax: number, ay: number, bx2: number, by2: number, col: string): void => {
-      const gr = g.createLinearGradient(0, Math.min(ay, by2), 0, Math.max(ay, by2) + D);
-      gr.addColorStop(0, col); gr.addColorStop(1, '#050307');
-      g.fillStyle = gr; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx2, by2); g.lineTo(bx2, by2 + D); g.lineTo(ax, ay + D); g.closePath(); g.fill();
-      g.strokeStyle = 'rgba(255,255,255,.08)'; g.lineWidth = 2; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx2, by2); g.stroke();
-    };
-    face(lx, ly, bx, by, zone.rock[1]);
-    face(bx, by, rx, ry, zone.rock[2]);
-  }
-
-  /** Muro en isométrico: un bloque de piedra con cara superior iluminada y dos caras laterales en sombra. */
-  private drawIsoBlock(c: CombatState, zone: (typeof ZONES)[number], x: number, y: number): void {
-    const g = this.g, [sx, sy] = this.shake, p = isoPoint(x + 0.5, y + 0.5, c.h), hw = ISO_W / 2, hh = ISO_H / 2, L = Math.round(ISO_H * 1.1);
-    const X = p.x + sx, Y = p.y + sy, T = Y - L;
-    const poly = (pts: number[], fill: string): void => { g.fillStyle = fill; g.beginPath(); g.moveTo(pts[0]!, pts[1]!); for (let i = 2; i < pts.length; i += 2) g.lineTo(pts[i]!, pts[i + 1]!); g.closePath(); g.fill(); };
-    // cara izquierda (más clara que la derecha: la luz llega por la izquierda)
-    poly([X - hw, T, X, T + hh, X, Y + hh, X - hw, Y], zone.rock[1]);
-    poly([X, T + hh, X + hw, T, X + hw, Y, X, Y + hh], zone.rock[2]);
-    // juntas de los sillares
-    g.strokeStyle = 'rgba(0,0,0,.3)'; g.lineWidth = 1;
-    for (let r = 1; r < 4; r++) {
-      const k = (L * r) / 4;
-      g.beginPath(); g.moveTo(X - hw, T + k); g.lineTo(X, T + hh + k); g.lineTo(X + hw, T + k); g.stroke();
-    }
-    // cara superior con bisel claro
-    poly([X, T - hh, X + hw, T, X, T + hh, X - hw, T], zone.rock[0]);
-    g.strokeStyle = 'rgba(255,255,255,.18)'; g.lineWidth = 2; g.beginPath(); g.moveTo(X - hw + 3, T); g.lineTo(X, T - hh + 2); g.lineTo(X + hw - 3, T); g.stroke();
-    g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 2;
-    g.beginPath(); g.moveTo(X, T - hh); g.lineTo(X + hw, T); g.lineTo(X + hw, Y); g.lineTo(X, Y + hh); g.lineTo(X - hw, Y); g.lineTo(X - hw, T); g.closePath(); g.stroke();
-    g.beginPath(); g.moveTo(X - hw, T); g.lineTo(X, T + hh); g.lineTo(X + hw, T); g.moveTo(X, T + hh); g.lineTo(X, Y + hh); g.stroke();
+  /** Columna del pack (casi siempre de 2 bloques) en lugar del pilar. */
+  private drawPackObstacle(c: CombatState, x: number, y: number): void {
+    const kind = pick([2, 2, 2, 2, 1, 2, 2, 2], x, y);
+    // en el otro color de piedra, para que se distingan del suelo y de los muros
+    for (let l = 0; l < kind; l++) this.cube(c, x, y, l, 11, true);
   }
 
   /** Brasero: cuenco de hierro con llamas; se rompe con un golpe y deja una línea de fuego. */
@@ -616,11 +582,9 @@ export class Board {
     const now = performance.now();
     // H6: temblor de pantalla de los golpes fuertes
     this.shake = this.fx.offset(now);
-    if (this.iso) this.drawSlab(c, ZONES[this.session.run?.zone ?? 0] ?? ZONES[0]!);
-    this.isoFloor = this.iso && (this.session.run?.zone ?? 0) === 0 && ISO1.floors.every(ready);
-    if (this.isoFloor && WALLS1.every((w) => ready(w.img))) this.drawIsoWalls(c);
-    if (this.isoFloor) this.drawIsoFloor(c);
-    if (this.isoFloor && this.torches.length) this.drawTorchLight(now);
+    g.imageSmoothingEnabled = !this.iso;
+    this.isoFloor = this.iso && packReady(this.session.run?.zone ?? 0);
+    if (this.isoFloor) { this.drawPackWalls(c); this.drawPackFloor(c); this.drawTorchLight(now); }
     this.ground();
     const zone = ZONES[this.session.run?.zone ?? 0] ?? ZONES[0]!;
     this.drawFloor(c, zone, now);
@@ -837,18 +801,19 @@ export class Board {
       while (pi < props.length && depth(props[pi]!) <= row) {
         const p = props[pi++]!;
         // en isométrico, un muro que tapa a alguien que está justo detrás se vuelve translúcido
-        g.globalAlpha = this.iso && c.units.some((u) => alive(u) && (() => { const d = p.x - u.pos.x + (p.y - u.pos.y); return d >= 1 && d <= 4 && Math.abs(p.x - p.y - (u.pos.x - u.pos.y)) <= 1; })()) ? 0.42 : 1;
-        if (this.iso && p.brazier && this.isoFloor && ready(ISO1.brazier) && ready(ISO1.flame)) {
-          this.screen(); this.drawIsoProp(c, ISO1.brazier, p.x, p.y, 0.5);
-          // llama sobre las brasas del cuenco
-          const q = isoPoint(p.x + 0.5, p.y + 0.5, c.h), w = ISO_W * 0.5, h = (w * ISO1.brazier.naturalHeight) / ISO1.brazier.naturalWidth;
-          this.drawFlame(q.x + this.shake[0], q.y + w / 4 - h + h * 0.09 + this.shake[1], 34, now, p.x * 7 + p.y, true);
+        g.globalAlpha = this.iso && c.units.some((u) => alive(u) && (() => { const d = p.x - u.pos.x + (p.y - u.pos.y); return d >= 1 && d <= 2 && Math.abs(p.x - p.y - (u.pos.x - u.pos.y)) <= 1; })()) ? 0.42 : 1;
+        if (this.isoFloor && p.brazier) {
+          // brasero: caldero del pack con fuego animado y su luz
+          this.screen();
+          const q = this.top(c, p.x, p.y), fr = PACK.cauldron[Math.floor(now / 120 + p.x) % 6]!;
+          this.px(fr, q.x - 14 * PX, q.y + 16 * PX - 30 * PX + 6);
+          g.save(); g.globalCompositeOperation = 'lighter';
+          const gr = g.createRadialGradient(q.x, q.y + 4, 4, q.x, q.y + 4, 150);
+          gr.addColorStop(0, `rgba(255,120,40,${(0.32 + 0.05 * Math.sin(now / 90 + p.x)).toFixed(3)})`); gr.addColorStop(1, 'rgba(255,100,30,0)');
+          g.fillStyle = gr; g.beginPath(); g.arc(q.x, q.y + 4, 150, 0, 6.3); g.fill(); g.restore();
           g.globalAlpha = 1; continue;
         }
-        const prop = this.iso && zone === ZONES[0] ? pick(PROPS1, p.x, p.y) : null;
-        if (this.iso && !p.brazier && !p.fence && prop && ready(prop.img)) { this.screen(); this.drawIsoProp(c, prop.img, p.x, p.y, prop.scale); g.globalAlpha = 1; continue; }
-        if (this.iso && !p.brazier && !p.fence && !(zone === ZONES[0] && ready(Z1.pillar))) { this.screen(); this.drawIsoBlock(c, zone, p.x, p.y); g.globalAlpha = 1; continue; }
-        this.upright(p.x, p.y);
+        if (this.isoFloor && !p.brazier && !p.fence) { this.screen(); this.drawPackObstacle(c, p.x, p.y); g.globalAlpha = 1; continue; }
         if (p.brazier) this.drawBrazier(p.x, p.y, now); else if (p.fence) this.drawFence(p.x, p.y, now); else this.drawWall(c, zone, p.x, p.y);
         g.globalAlpha = 1;
       }

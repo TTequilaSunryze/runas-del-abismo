@@ -14,3 +14,8 @@ python3 losa_iso.py losa_sin_fondo.png ../../public/iso/z1/floor_04.png
 - `--color`: para losas que ya vienen con luz pareja y tienen color propio (musgo, runas): solo suaviza el brillo.
 - `--pts`: esquinas izquierda, superior y derecha de la cara de arriba, marcadas a mano sobre la imagen de entrada, para cuando la base sobresale y la detección automática falla.
 - Todas las losas se llevan al mismo tono medio para que no se vean parches.
+
+## Pack de escenario (public/iso/pack)
+
+Piezas del "Fantasy Isometric Pixel Art Pack" de Kabukidanshi (atribución obligatoria: está en el pie de la página y en `public/iso/pack/CREDITOS.txt`).
+Se copian tal cual (32 px) y se oscurecen multiplicando el color: losas y bloques ×(0.52, 0.50, 0.47), objetos ×(0.74, 0.70, 0.66). El juego las dibuja a 4× sin suavizado.

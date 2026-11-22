@@ -11,6 +11,8 @@ Las partes van en orden de prioridad. Con las partes 1 a 3 la sala de la zona 1 
 
 ---
 
+> **Cambio de rumbo (22-11):** el escenario (partes 1 a 5) ahora se hace con el pack «Fantasy Isometric Pixel Art Pack» de Kabukidanshi, oscurecido, porque las piezas de la IA no encajaban entre sí. Las partes 1 a 5 quedan como referencia; lo pendiente es la parte 6 en adelante (personajes, enemigos e interfaz). Para que casen con el pack, los personajes deberían ser pixel art pequeño y limpio, no HD.
+
 ## PARTE 1: Losas del suelo (5 imágenes) ✅ hecha (falta `floor_08`, opcional)
 
 Me pasas: `floor_04` … `floor_08`. Son iguales que las que ya hiciste, cambiando el detalle. El grosor y la luz los arreglo yo.
