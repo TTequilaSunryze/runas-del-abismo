@@ -421,7 +421,9 @@ function creatorBox(m: ReturnType<typeof meta>): string {
     <div class="lbl">🧪 Laboratorio</div><p class="dim sm">Todas las habilidades de la clase. Invoca enemigos y jefes, carga tus salas, controla a la IA y usa trucos.</p>
     <div class="row center" style="flex-wrap:wrap;gap:4px">${PLAYABLE.map((c) => `<button class="mini" data-act="trainstart" data-id="${c}">${esc(CLASSES[c].name)}</button>`).join('')}</div>
     <div class="lbl">🛠️ Salas</div><p class="dim sm">Crea salas: forma, calderos y terreno, enemigos con sus ajustes, oleadas, casillas de inicio y objetivo.</p>
-    <div class="row center"><button class="pri" data-act="editor">🛠️ Editor de salas</button></div></div>`;
+    <div class="row center"><button class="pri" data-act="editor">🛠️ Editor de salas</button></div>
+    <div class="lbl">⚖️ Equilibrio</div><p class="dim sm">Sube o baja cualquier estadística de las clases, cada número de cada habilidad y de cada enemigo, para todos.</p>
+    <div class="row center"><button class="pri" data-act="balance">⚖️ Equilibrio</button></div></div>`;
 }
 
 /** H3: configurador de las 4 habilidades equipadas (gratis; queda fijo durante la expedición). */

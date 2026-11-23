@@ -25,6 +25,11 @@ export interface EnemyDef {
   resist?: Partial<Record<Element, number>>;
   /** rasgos especiales: ver Unit.traits */
   traits?: string[];
+  /** ajustes de equilibrio del creador: daño plano, crítico, placaje y huida (sin ellos, los de su forma de luchar) */
+  power?: number;
+  crit?: number;
+  tackle?: number;
+  dodge?: number;
 }
 
 /** Aliados que se unen al grupo (jaulas y eventos). Usan la IA de los enemigos, pero en vuestro bando. */
@@ -80,12 +85,12 @@ export function makeEnemy(id: string, pos: Pos, depth = 0, players = 1, opts: En
   const hp = Math.round(e.hp * ENEMY_SCALING.flatHp * common * (opts.laterList && common > 1 ? ENEMY_SCALING.laterListHp : 1) * (1 + depth * ENEMY_SCALING.hpPerDepth) * (e.scales || e.ai === 'pillar' ? 1 + 0.35 * (players - 1) : 1) * (opts.hpMul ?? 1));
   const u: UnitSpec = {
     team: 'enemy', kind: e.id, name: e.name, owner: null, pos,
-    hp, maxHp: hp, shield: 0, armor: e.armor, power: Math.round(depth * ENEMY_SCALING.powerPerDepth + (opts.power ?? 0)), crit: 0,
+    hp, maxHp: hp, shield: 0, armor: e.armor, power: Math.round(depth * ENEMY_SCALING.powerPerDepth + (opts.power ?? 0) + (e.power ?? 0)), crit: e.crit ?? 0,
     ap: e.ap, maxAp: e.ap, mp: e.mp, maxMp: e.mp, initiative: e.initiative, apMod: 0, mpMod: 0, resist: { ...e.resist }, statusBonus: 0,
     statuses: {}, spells: [e.spell, ...(e.more ?? [])].map((sid) => ({ id: sid, cd: 0 })), ai: e.ai, traits: e.traits ? [...e.traits] : undefined,
     // placaje según su forma de luchar; los jefes retienen mucho
-    tackle: e.ai === 'boss' ? 10 : e.ai === 'melee' ? 5 + Math.floor(depth / 3) : e.ai === 'pillar' ? 0 : 2,
-    dodge: e.ai === 'boss' ? 6 : e.ai === 'ranged' ? 5 : 3,
+    tackle: e.tackle ?? (e.ai === 'boss' ? 10 : e.ai === 'melee' ? 5 + Math.floor(depth / 3) : e.ai === 'pillar' ? 0 : 2),
+    dodge: e.dodge ?? (e.ai === 'boss' ? 6 : e.ai === 'ranged' ? 5 : 3),
     ...(e.ai === 'boss' ? { rank: 'boss' as const } : {}),
   };
   const names: string[] = [];

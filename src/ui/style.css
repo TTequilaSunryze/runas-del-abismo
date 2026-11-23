@@ -875,5 +875,14 @@ button.armed { background: #7a1f2c; border-color: var(--red); }
 @media (max-width: 1100px) { .edgrid { grid-template-columns: 1fr; } .edside { max-height: none; } }
 .storybox { max-width: 560px; white-space: normal; }
 .storybox p { line-height: 1.5; margin: 6px 0 10px; }
-.edside textarea { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; font-size: 13px; background: #15110d; color: var(--txt); border: 1px solid var(--iron); border-radius: 4px; padding: 4px; }
-.edside label.sm { display: block; }
+.edside textarea, .bamain textarea { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; font-size: 13px; background: #15110d; color: var(--txt); border: 1px solid var(--iron); border-radius: 4px; padding: 4px; }
+.edside label.sm, .bamain label.sm { display: block; }
+.bagrid { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 8px; align-items: start; }
+.bamain { min-width: 0; }
+.bacols { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: 8px; align-items: start; }
+.bacols2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 300px); gap: 8px; align-items: start; margin-top: 8px; }
+.baspells { display: flex; flex-wrap: wrap; gap: 4px; }
+.batable input.ednum { width: 58px; text-align: center; }
+.batable tr.bach td:first-child { color: var(--gold); }
+.tipcard { font-size: 13px; }
+@media (max-width: 1100px) { .bagrid, .bacols, .bacols2 { grid-template-columns: 1fr; } }

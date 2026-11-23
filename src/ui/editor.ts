@@ -145,7 +145,7 @@ function topBar(r: RoomDef): string {
     <label class="sm">Alto <input type="number" data-edc="h" min="${ROOM_MIN.h}" max="${ROOM_MAX.h}" value="${r.h}" class="ednum"></label>
     <button class="mini" data-ed="iso">🔷 Vista</button>
     <span class="grow"></span>${ed.msg ? `<span class="sm good">${esc(ed.msg)}</span>` : ''}
-    <button class="pri" data-ed="test">▶ Probar sala</button><button data-ed="exit">Volver</button>`;
+    <button data-act="balance">⚖️ Equilibrio</button><button class="pri" data-ed="test">▶ Probar sala</button><button data-ed="exit">Volver</button>`;
 }
 
 function leftPanel(r: RoomDef): string {

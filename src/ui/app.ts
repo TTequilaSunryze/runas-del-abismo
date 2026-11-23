@@ -11,7 +11,10 @@ import { joinRoom, loadRun, submitDaily, topDaily } from '../net/transport';
 import { readSnapshot } from '../game/snapshot';
 import { addLog, closeIntro, combatScreen, labClick } from './combat';
 import { closeEditor, editorScreen } from './editor';
+import { balanceScreen, closeBalance } from './balance';
+import { testDraft } from '../net/balance';
 import { fetchGlobalRooms, globalRooms } from '../net/salas';
+import { initBalance } from '../net/balance';
 import { setRoomSource, type LabScene, type LabSetup } from '../game/run';
 import { esc, mine, params, randomText, store, today, ui } from './ctx';
 import { BAG_SIZE, PRICE } from '../core/items/items';
@@ -41,6 +44,7 @@ function publish(): void {
 }
 
 function home(msg = ''): void {
+  testDraft(false);
   setZoneMusic('menu');
   setRoom(null);
   ui.session?.leave();
@@ -186,6 +190,7 @@ setRoomSource(() => {
   return [...globalRooms().filter((r) => !mine.some((x) => x.id === r.id)), ...mine];
 });
 void fetchGlobalRooms();
+void initBalance();
 
 /** Laboratorio: partida local con todas las habilidades de la clase, muñecos, salas creadas, jefes e invocaciones. */
 async function training(cls: ClassId, setup?: Partial<LabSetup>, scene?: LabScene): Promise<void> {
@@ -195,6 +200,17 @@ async function training(cls: ClassId, setup?: Partial<LabSetup>, scene?: LabScen
   ui.log.length = 0;
   ui.me.cls = cls;
   ui.session?.startTraining(currentAccount()?.name ?? ui.me.name, cls, setup, scene);
+}
+
+/** Pantalla de equilibrio (solo cuentas de creador). */
+function openBalance(cls?: ClassId): void {
+  if (!isCreatorAccount()) return;
+  if (ui.screen === 'editor') closeEditor();
+  if (ui.session) { ui.session.leave(); ui.session = null; ui.board?.destroy(); ui.board = null; setRoom(null); }
+  hideTip();
+  setMenuScene(null);
+  setCombatBg(0);
+  balanceScreen({ cls, onTest: (c) => void training(c), onExit: () => { closeBalance(); home(''); } });
 }
 
 /** Editor de salas (solo cuentas de creador). Sale de la partida o del laboratorio en el que esté. */
@@ -238,6 +254,7 @@ document.addEventListener('click', (e) => {
     case 'creator': { if (!isCreatorAccount()) break; const m = meta(); m.creator = !m.creator; saveMeta(); homeScreen(''); break; }
     case 'trainstart': void training(id as ClassId); break;
     case 'editor': openEditor(id || undefined); break;
+    case 'balance': openBalance((ui.session?.run?.heroes[0]?.cls ?? undefined) as ClassId | undefined); break;
     case 'introok': closeIntro(id); break;
     case 'labsetup': case 'labscene': case 'labboss': case 'labroom': case 'labtool': labClick(el.dataset.act, id); break;
     case 'train': s?.act({ a: 'train', op: id }); break;
