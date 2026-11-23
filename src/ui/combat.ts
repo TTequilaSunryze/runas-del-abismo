@@ -1,6 +1,12 @@
 // Pantalla de combate: tablero, orden de iniciativa, barra de hechizos y registro.
 import { CLASSES, PLAYABLE } from '../core/classes/classes';
-import { isTraining } from '../game/run';
+import { allRooms, isTraining, labOn, labSceneOf, labSetupOf, type LabCheat, type LabSetup } from '../game/run';
+import { MAX_LEVEL } from '../core/classes/classes';
+import { ENEMIES } from '../content/enemies';
+import { ZONES } from '../content/zones';
+import { ZONE_SHORT } from '../game/salas';
+import { enemyOptions } from './editor';
+import type { ClassId } from '../core/state';
 import { SPELLS } from '../core/classes/spells';
 import { MAG_MAX, SOULS_PER_ARMOR, SOUL_ARMOR, apCost, current, essenceNeed, furyCrit, furyPower, getUnit, scytheBonus, spellOf, usableMp } from '../core/combat/engine';
 import { marksOf } from '../core/combat/marks';
@@ -68,17 +74,95 @@ const TRAIT_TEXT: Record<string, string> = {
   raise: 'Alza a los muertos como aliados.', ghost: 'Atraviesa obstáculos.', hunter: 'Persigue al héroe más frágil.', pack: 'Más daño por cada compañero de manada.',
 };
 
-/** Herramientas de la sala de pruebas: muñecos a distancia, recargar, enfriamientos, curar, nivel y clase. */
+/** Estado del panel del laboratorio (borrador del montaje, herramienta de clic e invocación elegida). */
+const lab = { draft: null as LabSetup | null, tool: null as null | 'spawn' | 'remove', kind: 'esqueleto', team: 'enemy' as 'enemy' | 'hero', room: '', html: '' };
+const GEAR = ['Sin objetos', 'Comunes o mejores', 'Poco comunes o mejores', 'Raros o mejores', 'Legendarios'];
+
+/** Objetivo y refuerzos de las salas creadas. */
+function goalHtml(c: CombatState): string {
+  const out: string[] = [];
+  if (c.goal?.kind === 'survive') out.push(`<span class="pill sm" ${tip('Ganáis al aguantar estas rondas (o acabando antes con todos los enemigos).')}>🎯 Sobrevivid: ronda ${Math.min(c.round, c.goal.rounds)}/${c.goal.rounds}</span>`);
+  if (c.goal?.kind === 'targets' && c.units.some((u) => u.goal)) out.push(`<span class="pill sm" ${tip('Ganáis al acabar con los enemigos marcados con ★.')}>★ Objetivos: ${c.units.filter((u) => u.goal && u.hp > 0).length} en pie</span>`);
+  const next = c.waves?.[0];
+  if (next) out.push(`<span class="pill sm bad" ${tip('Llegan más enemigos al empezar esa ronda (o en cuanto no quede ninguno).')}>⚠ Refuerzos: ronda ${next.round}${c.waves!.length > 1 ? ` (+${c.waves!.length - 1} oleada${c.waves!.length > 2 ? 's' : ''})` : ''}</span>`);
+  return out.join('');
+}
+
+/** Laboratorio del creador: montaje, escenario, invocar, IA y trucos. */
 function trainingTools(c: CombatState): string {
-  const me = c.units.find((u) => u.owner === ui.myId && u.team === 'hero' && u.summoner === undefined);
+  const run = ui.session!.run!;
+  const st = labSetupOf(run), sc = labSceneOf(run), d = (lab.draft ??= { ...st, heroes: [...st.heroes] });
   const dummies = c.units.filter((u) => u.hp > 0 && u.traits?.includes('dummy'));
-  const dmg = dummies.reduce((n, d) => n + (d.maxHp - d.hp), 0);
-  const lvl = ui.session?.run?.heroes[0]?.level ?? 1;
-  return `<div class="sm">Muñecos: ${dummies.length} · daño recibido desde su último turno: <b>${dmg}</b></div>
-    <div class="row sm" style="flex-wrap:wrap;gap:3px">Muñeco a ${[1, 2, 3, 4, 5, 6, 8].map((n) => `<button class="mini" data-act="train" data-id="dummy:${n}">${n}</button>`).join('')} casillas</div>
-    <div class="row sm" style="flex-wrap:wrap;gap:3px"><button class="mini" data-act="train" data-id="refill">⚡ PA y PM</button><button class="mini" data-act="train" data-id="cd">⏱️ Sin esperas</button><button class="mini" data-act="train" data-id="heal">❤️ Curar todo</button></div>
-    <div class="row sm" style="flex-wrap:wrap;gap:3px">Nivel ${[1, 4, 8, 12].map((n) => `<button class="mini ${n === lvl ? 'on' : ''}" data-act="train" data-id="level:${n}">${n}</button>`).join('')}</div>
-    <div class="row sm" style="flex-wrap:wrap;gap:3px">${PLAYABLE.map((k) => `<button class="mini ${me?.kind === k ? 'on' : ''}" data-act="train" data-id="cls:${k}">${esc(CLASSES[k].name.split(' ')[0]!)}</button>`).join('')}</div>`;
+  const dmg = dummies.reduce((n, x) => n + (x.maxHp - x.hp), 0);
+  const sel = (name: string, opts: Array<[string | number, string]>, v: string | number): string => `<select data-labset="${name}">${opts.map(([k, txt]) => `<option value="${k}" ${String(k) === String(v) ? 'selected' : ''}>${esc(txt)}</option>`).join('')}</select>`;
+  const changedSetup = JSON.stringify(d) !== JSON.stringify(st);
+  const rooms = allRooms();
+  if (!rooms.some((r) => r.id === lab.room)) lab.room = (sc.kind === 'room' ? sc.id : rooms.at(-1)?.id) ?? '';
+  const ai = labOn(run, 'puppet') ? 'puppet' : labOn(run, 'still') ? 'still' : 'normal';
+  const on = (k: LabCheat): string => (labOn(run, k) ? 'on' : '');
+  const sceneName = sc.kind === 'room' ? `Sala: ${rooms.find((r) => r.id === sc.id)?.name ?? '?'}` : sc.kind === 'fight' ? (sc.fight === 'boss' ? `Jefe: ${ENEMIES[ZONES[st.zone]?.bosses[sc.boss ?? 0]?.id ?? '']?.name ?? '?'}` : `${sc.fight === 'elite' ? 'Élite' : 'Combate'} de la zona ${st.zone + 1}`) : 'Muñecos';
+  return `<div class="labsec"><div class="lbl">👥 Montaje</div>
+      <div class="labrow">${[0, 1, 2, 3].map((i) => sel(`hero${i}`, [...(i ? [['', '—'] as [string, string]] : []), ...PLAYABLE.map((k) => [k, CLASSES[k].name] as [string, string])], d.heroes[i] ?? '')).join('')}</div>
+      <div class="labrow sm">Nivel ${sel('level', Array.from({ length: MAX_LEVEL }, (_, i) => [i + 1, String(i + 1)]), d.level)} Zona ${sel('zone', ZONE_SHORT.map((z, i) => [i, `${i + 1} · ${z}`]), d.zone)}</div>
+      <div class="labrow sm">Ascensión ${sel('asc', Array.from({ length: 11 }, (_, i) => [i, String(i)]), d.asc)} Profundidad ${sel('depth', Array.from({ length: 6 }, (_, i) => [i, i ? `sala ${i + 1}` : 'primera sala']), d.depth)}</div>
+      <div class="labrow sm">Objetos ${sel('gear', GEAR.map((g, i) => [i - 1, g]), d.gear)}</div>
+      <button class="mini ${changedSetup ? 'pri' : ''}" data-act="labsetup" ${changedSetup ? '' : 'disabled'}>Aplicar montaje</button></div>
+    <div class="labsec"><div class="lbl">🗺️ Escenario <span class="dim sm">· ${esc(sceneName)}</span></div>
+      <div class="labrow"><button class="mini" data-act="labscene" data-id='{"kind":"dummies"}'>🎯 Muñecos</button><button class="mini" data-act="labscene" data-id='{"kind":"fight","fight":"combat"}'>⚔️ Combate</button><button class="mini" data-act="labscene" data-id='{"kind":"fight","fight":"elite"}'>☠️ Élite</button><button class="mini" data-act="train" data-id="replay">↺ Repetir</button></div>
+      <div class="labrow">${ZONES.map((z) => z.bosses.map((b, bi) => `<button class="mini" data-act="labboss" data-id="${ZONES.indexOf(z)}:${bi}" title="Zona ${ZONES.indexOf(z) + 1}">👑 ${esc(ENEMIES[b.id]?.name ?? b.id)}</button>`).join('')).join('')}</div>
+      ${rooms.length ? `<div class="labrow"><select data-labset="room">${rooms.map((r) => `<option value="${esc(r.id)}" ${r.id === lab.room ? 'selected' : ''}>${esc(r.name)} · Z${r.zone + 1}</option>`).join('')}</select><button class="mini" data-act="labroom">Cargar sala</button>${sc.kind === 'room' ? `<button class="mini" data-act="editor" data-id="${esc(sc.id)}">🛠️ Editarla</button>` : ''}</div>` : '<div class="dim sm">Aún no has creado salas: ábrelas desde el Editor de salas.</div>'}
+      <div class="dim sm">Combate, élite y jefes salen como en una expedición, con la zona y profundidad del montaje.</div></div>
+    <div class="labsec"><div class="lbl">✨ Invocar</div>
+      <div class="labrow"><select data-labset="kind">${enemyOptions(lab.kind)}</select>${sel('team', [['enemy', 'Enemigo'], ['hero', 'Aliado']], lab.team)}</div>
+      <div class="labrow"><button class="mini ${lab.tool === 'spawn' ? 'on' : ''}" data-act="labtool" data-id="spawn">📍 Colocar con clic</button><button class="mini ${lab.tool === 'remove' ? 'on' : ''}" data-act="labtool" data-id="remove">❌ Quitar con clic</button><button class="mini" data-act="train" data-id="kill">💀 Matar enemigos</button></div>
+      ${lab.tool ? `<div class="sm good">${lab.tool === 'spawn' ? 'Haz clic en el tablero para colocarlo' : 'Haz clic en un personaje para quitarlo'} · clic otra vez en el botón para volver a jugar</div>` : ''}</div>
+    <div class="labsec"><div class="lbl">🤖 IA de los enemigos</div>
+      <div class="labrow"><button class="mini ${ai === 'normal' ? 'on' : ''}" data-act="train" data-id="aimode:normal">Normal</button><button class="mini ${ai === 'still' ? 'on' : ''}" data-act="train" data-id="aimode:still">Quieta</button><button class="mini ${ai === 'puppet' ? 'on' : ''}" data-act="train" data-id="aimode:puppet">🎮 La llevas tú</button></div>
+      ${ai !== 'normal' ? '<div class="labrow"><button class="mini" data-act="train" data-id="ai">▶ Que juegue la IA este turno</button><button class="mini" data-act="train" data-id="skip">⏭ Pasar turno</button></div>' : ''}
+      <div class="dim sm">${ai === 'puppet' ? 'En el turno de cada enemigo mueves y lanzas sus ataques tú, con su barra de hechizos.' : ai === 'still' ? 'Los enemigos esperan: pasa su turno o deja que juegue la IA.' : 'Los enemigos juegan solos.'}</div></div>
+    <div class="labsec"><div class="lbl">🧪 Trucos</div>
+      <div class="labrow"><button class="mini ${on('god')}" data-act="train" data-id="flag:god">❤️ Vida infinita</button><button class="mini ${on('ap')}" data-act="train" data-id="flag:ap">⚡ PA y PM infinitos</button><button class="mini ${on('cd')}" data-act="train" data-id="flag:cd">⏱️ Sin esperas</button></div>
+      <div class="labrow"><button class="mini" data-act="train" data-id="refill">⚡ Recargar</button><button class="mini" data-act="train" data-id="cd">⏱️ Reiniciar esperas</button><button class="mini" data-act="train" data-id="heal">💚 Curar todo</button></div>
+      <div class="labrow sm">Muñeco a ${[1, 2, 3, 4, 6, 8].map((n) => `<button class="mini" data-act="train" data-id="dummy:${n}">${n}</button>`).join('')} · daño a muñecos: <b>${dmg}</b></div></div>`;
+}
+
+/** Repinta el panel del laboratorio (solo si cambia: así no se cierra un desplegable abierto) y engancha los clics del tablero. */
+function paintLab(): void {
+  const s = ui.session, c = s?.run?.combat, board = ui.board;
+  if (!s || !c || !board) return;
+  const tb = document.getElementById('train');
+  if (!tb) { board.pick = null; return; }
+  const html = trainingTools(c);
+  if (html !== lab.html || !tb.innerHTML) { tb.innerHTML = html; lab.html = html; }
+  board.pick = lab.tool ? (p) => { s.act({ a: 'train', op: lab.tool === 'spawn' ? `spawn:${lab.kind}:${p.x}:${p.y}:${lab.team}` : `remove:${p.x}:${p.y}` }); } : null;
+}
+
+/** Cambios en los desplegables del laboratorio. */
+document.addEventListener('change', (ev) => {
+  const el = ev.target as HTMLSelectElement;
+  const k = el.dataset?.labset;
+  if (!k || !ui.session?.run) return;
+  const run = ui.session.run, d = (lab.draft ??= { ...labSetupOf(run) });
+  if (k.startsWith('hero')) { const i = Number(k.slice(4)); const h = [...d.heroes]; if (el.value) h[i] = el.value as ClassId; else h.splice(i, 1); d.heroes = h.filter(Boolean).slice(0, 4); }
+  else if (k === 'kind') { lab.kind = el.value; lab.tool = 'spawn'; }
+  else if (k === 'team') lab.team = el.value === 'hero' ? 'hero' : 'enemy';
+  else if (k === 'room') lab.room = el.value;
+  else (d as unknown as Record<string, number>)[k] = Number(el.value);
+  paintLab();
+});
+
+/** Botones del laboratorio que no son una acción directa sobre el combate. */
+export function labClick(act: string, id: string): boolean {
+  const s = ui.session, run = s?.run;
+  if (!s || !run || !isTraining(run)) return false;
+  if (act === 'labsetup') { if (lab.draft) s.act({ a: 'train', op: `setup:${JSON.stringify(lab.draft)}` }); lab.draft = null; }
+  else if (act === 'labscene') { lab.tool = null; s.act({ a: 'train', op: `scene:${id}` }); }
+  else if (act === 'labboss') { const [z, b] = id.split(':').map(Number); lab.draft = { ...(lab.draft ?? labSetupOf(run)), zone: z! }; s.act({ a: 'train', op: `setup:${JSON.stringify(lab.draft)}` }); s.act({ a: 'train', op: `scene:${JSON.stringify({ kind: 'fight', fight: 'boss', boss: b })}` }); lab.draft = null; }
+  else if (act === 'labroom') { if (lab.room) s.act({ a: 'train', op: `scene:${JSON.stringify({ kind: 'room', id: lab.room })}` }); lab.draft = null; }
+  else if (act === 'labtool') lab.tool = lab.tool === id ? null : id as 'spawn' | 'remove';
+  else return false;
+  paintLab();
+  return true;
 }
 
 export function combatScreen(events: GameEvent[]): void {
@@ -86,7 +170,7 @@ export function combatScreen(events: GameEvent[]): void {
   if (ui.screen !== 'combat') {
     ui.root.innerHTML = `<div id="info" class="bar cinfo"></div>
       <div class="cgrid"><div class="stage"><canvas id="cv"></canvas><div id="toast" class="casttoast"></div></div>
-      <aside class="cside">${isTraining(run) ? '<div class="cbox trainbox"><div class="cboxh">🎯 Sala de pruebas</div><div id="train"></div></div>' : ''}<div class="cbox"><div class="cboxh">⏳ Orden de turnos <span id="rnd" class="dim sm"></span></div><div id="init" class="timeline"></div></div>
+      <aside class="cside">${isTraining(run) ? '<div class="cbox trainbox"><div class="cboxh">🧪 Laboratorio</div><div id="train"></div></div>' : ''}<div class="cbox"><div class="cboxh">⏳ Orden de turnos <span id="rnd" class="dim sm"></span></div><div id="init" class="timeline"></div></div>
       <div class="cbox grow"><div class="cboxh">📜 Registro de combate <span class="dim sm">G: señalar casilla</span></div><div id="log" class="clog"></div></div></aside></div>
       <div id="hud" class="dhud"></div>`;
     ui.board?.destroy();
@@ -108,9 +192,9 @@ export function combatScreen(events: GameEvent[]): void {
   const omenDef = run.omen ? OMENS.find((o) => o.id === run.omen) : undefined;
   if (!myTurn && board.sel) board.sel = null;
   const left = s.turnEndsAt ? Math.max(0, Math.ceil((s.turnEndsAt - Date.now()) / 1000)) : 0;
-  const kind = run.arena ? `🏟️ Duelo: ${esc(run.arena.nameA)} contra ${esc(run.arena.nameB)}` : run.kind === 'boss' ? '👑 JEFE' : run.kind === 'elite' ? '☠️ Élite' : '⚔️ Combate';
+  const kind = isTraining(run) ? '🧪 Laboratorio' : run.arena ? `🏟️ Duelo: ${esc(run.arena.nameA)} contra ${esc(run.arena.nameB)}` : run.kind === 'boss' ? '👑 JEFE' : run.kind === 'elite' ? '☠️ Élite' : '⚔️ Combate';
   const owners = new Set(c.units.filter((u) => u.team === 'hero' && u.owner && u.hp > 0).map((u) => u.owner));
-  document.getElementById('info')!.innerHTML = `${run.arena ? '' : blessingBar(run)}<b>${kind}</b><span class="dim sm">${run.arena ? '' : `Zona ${run.zone + 1} · sala ${run.step + 1}/${run.map.length} · `}ronda ${c.round}${c.biome ? ` · ${esc(c.biome)}` : ''}</span>${c.round >= 30 ? `<span class="bad sm" ${tip('Muerte súbita: el Abismo consume a todos al empezar su turno (5% de la vida máxima por cada ronda desde la 30).')}>☠ El Abismo consume</span>` : c.round >= 26 ? `<span class="bad sm">☠ ronda 30: muerte súbita</span>` : ''}${c.round >= 20 ? `<span class="bad sm" ${tip('Desde la ronda 20 nadie se regenera ni recibe escudos automáticos, y los pilares dejan de curar.')}>⌛ Sin regeneración</span>` : c.round >= 16 ? `<span class="dim sm">⌛ ronda 20: fin de regeneración</span>` : ''}${(c.marks ?? []).some((m) => m.kind === 'omen') ? `<span class="bad sm" ${tip('El jefe ha marcado casillas en rojo: estallan al empezar su próximo turno. Salid de ellas (o cubríos tras un obstáculo si es una línea).')}>⚠ Ataque anunciado</span>` : ''}${omenDef ? `<span class="pill sm omen" ${tip(`<b>${omenDef.icon} ${esc(omenDef.name)}</b><div class="sm">${esc(omenDef.text)}</div>`)}>${omenDef.icon} ${esc(omenDef.name)}</span>` : ''}
+  document.getElementById('info')!.innerHTML = `${run.arena ? '' : blessingBar(run)}<b>${kind}</b><span class="dim sm">${run.arena ? '' : `Zona ${run.zone + 1} · sala ${run.step + 1}/${run.map.length} · `}ronda ${c.round}${c.biome ? ` · ${esc(c.biome)}` : ''}</span>${goalHtml(c)}${c.round >= 30 ? `<span class="bad sm" ${tip('Muerte súbita: el Abismo consume a todos al empezar su turno (5% de la vida máxima por cada ronda desde la 30).')}>☠ El Abismo consume</span>` : c.round >= 26 ? `<span class="bad sm">☠ ronda 30: muerte súbita</span>` : ''}${c.round >= 20 ? `<span class="bad sm" ${tip('Desde la ronda 20 nadie se regenera ni recibe escudos automáticos, y los pilares dejan de curar.')}>⌛ Sin regeneración</span>` : c.round >= 16 ? `<span class="dim sm">⌛ ronda 20: fin de regeneración</span>` : ''}${(c.marks ?? []).some((m) => m.kind === 'omen') ? `<span class="bad sm" ${tip('El jefe ha marcado casillas en rojo: estallan al empezar su próximo turno. Salid de ellas (o cubríos tras un obstáculo si es una línea).')}>⚠ Ataque anunciado</span>` : ''}${omenDef ? `<span class="pill sm omen" ${tip(`<b>${omenDef.icon} ${esc(omenDef.name)}</b><div class="sm">${esc(omenDef.text)}</div>`)}>${omenDef.icon} ${esc(omenDef.name)}</span>` : ''}
     <span class="turn ${myTurn || c.deploy ? 'mine' : ''}">${c.deploy ? 'COLOCACIÓN' : c.over ? (c.over === 'win' ? '¡Victoria!' : 'Derrota') : myTurn ? 'TU TURNO' : cur ? `Turno de ${esc(cur.name)}` : ''}</span><span id="clock" class="dim">${left && !c.over ? `${left}s` : ''}</span>
     ${ui.notice ? `<span class="bad">${esc(ui.notice)}</span>` : ''}${!s.t.connected() ? '<span class="bad">⚠ Conexión perdida: reconectando…</span>' : !s.hostPresent() ? '<span class="bad">Anfitrión desconectado: partida en pausa</span>' : ''}
     ${c.deploy ? `<span class="sm">Elige una de las casillas de inicio azules · listos ${c.deploy.ready.length}/${owners.size}</span>${s.isHost && c.deploy.ready.length ? '<button class="mini" data-act="readyall">Empezar ya</button>' : ''}` : ''}
@@ -119,8 +203,7 @@ export function combatScreen(events: GameEvent[]): void {
   const heroIdx = new Map(c.units.filter((u) => u.team === 'hero' && u.summoner === undefined).map((u, i) => [u.id, i]));
   const mineTeam = me?.team ?? 'hero';
   document.getElementById('rnd')!.textContent = `ronda ${c.round}`;
-  const tb = document.getElementById('train');
-  if (tb) tb.innerHTML = trainingTools(c);
+  paintLab();
   document.getElementById('init')!.innerHTML = c.order.map((id) => getUnit(c, id)!).filter((u) => u && u.hp > 0)
     .map((u) => { const tot = Math.max(u.maxHp, u.hp + u.shield); const pct = Math.max(0, Math.min(100, (u.hp / tot) * 100)); const spct = (u.shield / tot) * 100; const ally = u.team === mineTeam;
       return `<div class="tl ${cur?.id === u.id ? 'on' : ''} ${ally ? 'ally' : 'foe'} ${u.id === me?.id ? 'isme' : ''} ${u.rank === 'elite' || u.ai === 'boss' ? 'big' : ''}" ${tip(`<b>${esc(u.name)}</b><div class="sm">${u.hp}/${u.maxHp} PV${u.shield ? ` · 🛡 ${u.shield}` : ''} · iniciativa ${u.initiative}</div><div class="sm"><span class="lap">${u.ap} PA</span> · <span class="lmp">${u.mp} PM</span> · armadura ${Math.floor(u.armor)}</div>${Object.entries(u.statuses).filter(([, v]) => v).map(([k, v]) => `<div class="sm lst">${esc(STATUS_NAME[k as keyof typeof STATUS_NAME] ?? k)} (${v!.turns} t.)</div>`).join('')}${(u.traits ?? []).map((t) => TRAIT_TEXT[t] ? `<div class="sm dim">${esc(TRAIT_TEXT[t]!)}</div>` : '').join('')}`)}>

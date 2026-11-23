@@ -255,6 +255,11 @@ export class Board {
   onSelect: () => void = () => {};
   private g: CanvasRenderingContext2D;
   private hover: Pos | null = null;
+  /** editor de salas / laboratorio: si está puesto, los clics van aquí en vez de al combate (drag = arrastrando) */
+  pick: ((p: Pos, drag: boolean) => void) | null = null;
+  private painting: Pos | null = null;
+  /** marcas del editor sobre el suelo: color de relleno, borde y texto */
+  overlay: Array<{ x: number; y: number; fill: string; stroke?: string; text?: string }> = [];
   /** señales tácticas (tecla G) */
   pings: Array<{ x: number; y: number; at: number; col: string; name: string }> = [];
   /** Casilla bajo el ratón (para la tecla G). */
@@ -345,7 +350,12 @@ export class Board {
     canvas.addEventListener('mouseleave', () => { if (!this.touch) this.hover = null; });
     canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); this.select(null); });
     window.addEventListener('pointerdown', (e) => { this.touch = e.pointerType !== 'mouse'; });
+    // editor de salas: pintar al pulsar y al arrastrar
+    canvas.addEventListener('pointerdown', (e) => { if (!this.pick || e.button !== 0) return; const p = this.cell(e); this.painting = p; if (p) this.pick(p, false); });
+    canvas.addEventListener('pointermove', (e) => { if (!this.pick || !this.painting || !(e.buttons & 1)) return; const p = this.cell(e); if (p && (p.x !== this.painting.x || p.y !== this.painting.y)) { this.painting = p; this.pick(p, true); } });
+    window.addEventListener('pointerup', () => { this.painting = null; });
     canvas.addEventListener('click', (e) => {
+      if (this.pick) return;
       const p = this.cell(e);
       // en pantallas táctiles no hay «pasar el ratón»: el primer toque enseña la previsualización y el segundo confirma
       if (this.touch && p && !(this.hover && this.hover.x === p.x && this.hover.y === p.y) && !this.c?.deploy) { this.hover = p; return; }
@@ -522,10 +532,12 @@ export class Board {
   /** Suelo en damero con ruido pixel-art, abismos, raíces, fuego y la sombra que proyectan los muros. */
   private drawFloor(c: CombatState, zone: (typeof ZONES)[number], now: number): void {
     const g = this.g;
-    const wall = new Set(c.obstacles), pit = new Set(c.abyss ?? []);
+    const out = new Set(c.voids ?? []), wall = new Set(c.obstacles.filter((k) => !out.has(k))), pit = new Set(c.abyss ?? []);
     for (let y = 0; y < c.h; y++)
       for (let x = 0; x < c.w; x++) {
         const X = x * TILE, Y = y * TILE, k = `${x},${y}`;
+        // fuera de la sala (salas creadas): nada
+        if (out.has(k)) { if (!this.iso) { g.fillStyle = '#07050a'; g.fillRect(X, Y, TILE, TILE); } continue; }
         if (pit.has(k)) {
           // abismo: hueco negro con el borde de piedra iluminado y algún brillo lejano
           const gr = g.createLinearGradient(0, Y, 0, Y + TILE);
@@ -755,7 +767,10 @@ export class Board {
 
   /** Sala de este combate (se genera una vez por semilla). */
   private room: RoomLook | null = null;
+  /** semilla fija de la decoración (editor de salas: que no cambie al colocar cosas) */
+  roomSeed: number | null = null;
   private roomFor(c: CombatState): RoomLook {
+    if (this.roomSeed !== null) { const s = this.roomSeed >>> 0; if (!this.room || this.room.seed !== s || this.room.floor.length !== c.w * c.h) this.room = buildRoom(s, c.w, c.h); return this.room; }
     const run = this.session.run;
     // semilla estable durante el combate: partida, zona, sala y tamaño del mapa
     let s = 2166136261;
@@ -766,7 +781,7 @@ export class Board {
 
   /** Suelo de la sala, marcas, borde y tono de la zona. */
   private drawCryptFloor(c: CombatState, room: RoomLook): void {
-    const g = this.g, pit = new Set(c.abyss ?? []);
+    const g = this.g, pit = new Set([...(c.abyss ?? []), ...(c.voids ?? [])]);
     // borde de roca bajo los dos lados de delante del tablero
     const [sx, sy] = this.shake, D = 34, P = (x: number, y: number): [number, number] => { const q = isoPoint(x, y, c.h); return [q.x + sx, q.y + sy]; };
     const [lx, ly] = P(0, c.h), [bx, by] = P(c.w, c.h), [rx, ry] = P(c.w, 0);
@@ -794,9 +809,12 @@ export class Board {
     this.torches = [];
     const T = 0.25;
     // de atrás adelante: la esquina, y luego los tramos por x + y
-    if (ready(CRYPT.corner)) this.pivot(c, CRYPT.corner, 0, 0);
+    // salas creadas: sin muro del fondo donde la casilla del borde está fuera de la sala
+    const out = new Set(c.voids ?? []), edgeOut = (side: 'x' | 'y', i: number): boolean => out.has(side === 'x' ? `${i},0` : `0,${i}`);
+    if (ready(CRYPT.corner) && !out.has('0,0')) this.pivot(c, CRYPT.corner, 0, 0);
     const order = [...room.walls].sort((a, b) => a.i - b.i);
     for (const wl of order) {
+      if (edgeOut(wl.side, wl.i)) continue;
       const isX = wl.side === 'x';
       // tramo a lo largo de x en la línea y = −T (pie en (i + 1, 0)); a lo largo de y en x = −T (pie en (0, i + 1))
       const wx = isX ? wl.i + 1 : -T + T, wy = isX ? 0 : wl.i + 1;
@@ -808,7 +826,7 @@ export class Board {
     }
     // antorchas: pintadas para muros a lo largo de y; volteadas para los de x
     for (const tc of room.torches) {
-      if (!ready(CRYPT.torch)) continue;
+      if (!ready(CRYPT.torch) || edgeOut(tc.side, tc.i)) continue;
       const isX = tc.side === 'x', wx = isX ? tc.i + 1 : 1, wy = isX ? 1 : tc.i + 1;
       const p = this.pivot(c, CRYPT.torch, wx, wy, isX);
       this.torches.push({ x: p.x + (isX ? -TORCH_FLAME[0] : TORCH_FLAME[0]), y: p.y + TORCH_FLAME[1] + 3, side: isX ? -1 : 1, lit: false });
@@ -1104,6 +1122,22 @@ export class Board {
         }
       }
     }
+    for (const o of this.overlay) {
+      g.fillStyle = o.fill; g.fillRect(o.x * TILE + 3, o.y * TILE + 3, TILE - 6, TILE - 6);
+      if (o.stroke) { g.strokeStyle = o.stroke; g.lineWidth = 3; g.strokeRect(o.x * TILE + 4, o.y * TILE + 4, TILE - 8, TILE - 8); }
+    }
+    // los textos, de pie (sin la deformación del suelo)
+    if (this.overlay.some((o) => o.text)) {
+      this.screen();
+      g.font = 'bold 20px ui-monospace, monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 4; g.strokeStyle = '#000'; g.fillStyle = '#fff';
+      for (const o of this.overlay) {
+        if (!o.text) continue;
+        const q = this.iso ? this.top(c, o.x + 0.5, o.y + 0.5) : { x: (o.x + 0.5) * TILE, y: PAD + (o.y + 0.5) * TILE };
+        g.strokeText(o.text, q.x, q.y); g.fillText(o.text, q.x, q.y);
+      }
+      g.textBaseline = 'alphabetic';
+      this.ground();
+    }
     if (this.hover) { g.strokeStyle = 'rgba(255,255,255,.35)'; g.lineWidth = 2; g.strokeRect(this.hover.x * TILE + 2, this.hover.y * TILE + 2, TILE - 4, TILE - 4); }
 
     const heroIdx = teamIdx(c);
@@ -1111,7 +1145,8 @@ export class Board {
     const fences = new Set((c.marks ?? []).filter((m) => m.kind === 'fence').map((m) => `${m.pos.x},${m.pos.y}`));
     // profundidad: en plano, por filas; en isométrico, por diagonales (x + y)
     const depth = (p: Pos): number => (this.iso ? p.x + p.y : p.y);
-    const props = [...c.obstacles].map((k) => { const [x, y] = k.split(',').map(Number) as [number, number]; return { x, y, brazier: (c.braziers ?? []).includes(k), fence: fences.has(k) }; }).sort((a, b) => depth(a) - depth(b) || a.x - b.x);
+    const voids = new Set(c.voids ?? []);
+    const props = [...c.obstacles].filter((k) => !voids.has(k)).map((k) => { const [x, y] = k.split(',').map(Number) as [number, number]; return { x, y, brazier: (c.braziers ?? []).includes(k), fence: fences.has(k) }; }).sort((a, b) => depth(a) - depth(b) || a.x - b.x);
     let pi = 0;
     const flushProps = (row: number): void => {
       while (pi < props.length && depth(props[pi]!) <= row) {
@@ -1357,6 +1392,8 @@ export class Board {
     if (u.fury !== undefined) { g.fillStyle = '#000'; g.fillRect(x - 1, top - 6, w + 2, 5); g.fillStyle = '#ff6a20'; g.fillRect(x, top - 5, (w * u.fury) / 100, 3); }
     if (u.essence !== undefined) for (let i = 0; i < essenceNeed(u); i++) { g.fillStyle = i < u.essence ? '#ff8ad0' : '#3a2040'; g.fillRect(x + i * 7, top - 6, 5, 4); }
     }
+    // objetivo de la sala creada
+    if (u.goal) { g.font = 'bold 16px ui-monospace, monospace'; g.textAlign = 'center'; g.lineWidth = 3; g.strokeStyle = '#000'; g.strokeText('★', x - 9, top + 9); g.fillStyle = '#ffd24a'; g.fillText('★', x - 9, top + 9); }
     let ix = x;
     for (const k of Object.keys(u.statuses)) { g.fillStyle = STATUS_COLOR[k] ?? '#fff'; g.fillRect(ix, top + 14, 6, 6); ix += 8; }
     if (heroIdx !== undefined) {

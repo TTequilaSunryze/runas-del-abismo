@@ -96,6 +96,8 @@ export interface Unit {
   phase?: number;
   /** unidad que lo invocó */
   summoner?: number;
+  /** objetivo de la sala creada: hay que acabar con todos los marcados para ganar */
+  goal?: boolean;
   /** Robo de esencia (Hechicera Zorro): 0 a 3 cargas */
   essence?: number;
   /** Cosecha de almas (Carcelero): almas de toda la partida (dan armadura) */
@@ -215,7 +217,16 @@ export interface CombatState extends RngBox {
   round: number;
   over: null | 'win' | 'lose';
   nextId: number;
+  /** salas creadas: casillas fuera de la sala (bloquean como un muro y no se dibujan) */
+  voids?: string[];
+  /** salas creadas: objetivo (sin él, se gana acabando con todos los enemigos) */
+  goal?: CombatGoal | null;
+  /** salas creadas: refuerzos que entran al empezar la ronda indicada (o en cuanto no quede ningún enemigo) */
+  waves?: Array<{ round: number; units: Array<Omit<Unit, 'id'>> }>;
 }
+
+/** Objetivo de una sala creada: sobrevivir N rondas o acabar con los enemigos marcados. */
+export type CombatGoal = { kind: 'survive'; rounds: number } | { kind: 'targets' };
 
 /** Lo que pasó al ejecutar una acción; el render lo anima y la red lo reenvía. */
 export type GameEvent =

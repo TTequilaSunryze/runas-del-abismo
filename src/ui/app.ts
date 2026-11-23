@@ -9,7 +9,9 @@ import { Session } from '../game/session';
 import { dailyScore, dailyZone, loadable } from '../game/run';
 import { joinRoom, loadRun, submitDaily, topDaily } from '../net/transport';
 import { readSnapshot } from '../game/snapshot';
-import { addLog, combatScreen } from './combat';
+import { addLog, combatScreen, labClick } from './combat';
+import { closeEditor, editorScreen } from './editor';
+import { setRoomSource, type LabScene, type LabSetup } from '../game/run';
 import { esc, mine, params, randomText, store, today, ui } from './ctx';
 import { BAG_SIZE, PRICE } from '../core/items/items';
 import { archive, drainArchiveNotices, recordArchive, type ArchiveNotice } from '../game/archive';
@@ -19,7 +21,7 @@ import { applyLoadout, buyItem, currentLook, emblemOf, deleteLoadout, equipItem,
 import { setLooks } from '../render/looks';
 import { setCombatBg, setMenuScene } from '../render/menubg';
 import { claimSpecialReward, equipCosmetic } from '../game/specials';
-import { creatorOn, isCreatorAccount, maxAscOf, masteryOf, meta, myNemesis, myTeam, openRoutes, removeChampion, saveChampion, saveMeta, toggleTeam } from '../game/meta';
+import { creatorOn, isCreatorAccount, maxAscOf, masteryOf, meta, myNemesis, myRooms, myTeam, openRoutes, removeChampion, saveChampion, saveMeta, toggleTeam } from '../game/meta';
 import { currentAccount, fetchTeam, restoreAccount, signIn, signOut, signUp } from '../net/account';
 import { addFriend, invite, removeFriend, setRoom, socialHandlers } from '../net/social';
 import { championOf } from '../game/run';
@@ -176,13 +178,27 @@ function render(events: GameEvent[]): void {
 let submitted = '';
 ui.rerender = () => render([]);
 
-/** Sala de pruebas: partida local con todas las habilidades de la clase y muñecos de daño infinito. */
-async function training(cls: ClassId): Promise<void> {
+// las salas creadas por el creador pueden salir en las expediciones que aloje
+setRoomSource(() => (isCreatorAccount() ? myRooms() : []));
+
+/** Laboratorio: partida local con todas las habilidades de la clase, muñecos, salas creadas, jefes e invocaciones. */
+async function training(cls: ClassId, setup?: Partial<LabSetup>, scene?: LabScene): Promise<void> {
   if (!isCreatorAccount()) return;
+  if (ui.screen === 'editor') closeEditor();
   await enter(randomText(4, CODE_CHARS), true, true);
   ui.log.length = 0;
   ui.me.cls = cls;
-  ui.session?.startTraining(currentAccount()?.name ?? ui.me.name, cls);
+  ui.session?.startTraining(currentAccount()?.name ?? ui.me.name, cls, setup, scene);
+}
+
+/** Editor de salas (solo cuentas de creador). Sale de la partida o del laboratorio en el que esté. */
+function openEditor(id?: string): void {
+  if (!isCreatorAccount()) return;
+  if (ui.session) { ui.session.leave(); ui.session = null; ui.board?.destroy(); ui.board = null; setRoom(null); }
+  hideTip();
+  setMenuScene(null);
+  setCombatBg(0);
+  editorScreen({ open: id, onTest: (r) => void training(ui.me.cls, { zone: r.zone }, { kind: 'room', id: r.id }), onExit: () => { closeEditor(); home(''); } });
 }
 
 /** Duelo contra un equipo llevado por la IA, en una sala local. */
@@ -215,6 +231,8 @@ document.addEventListener('click', (e) => {
     // modo creador (solo cuentas de creador) y sala de pruebas
     case 'creator': { if (!isCreatorAccount()) break; const m = meta(); m.creator = !m.creator; saveMeta(); homeScreen(''); break; }
     case 'trainstart': void training(id as ClassId); break;
+    case 'editor': openEditor(id || undefined); break;
+    case 'labsetup': case 'labscene': case 'labboss': case 'labroom': case 'labtool': labClick(el.dataset.act, id); break;
     case 'train': s?.act({ a: 'train', op: id }); break;
     // H3: configurador de 4 habilidades (gratis; se guarda por clase y se anuncia a la sala)
     case 'kitslot': ui.kitSlot = Number(id) || 0; render([]); break;

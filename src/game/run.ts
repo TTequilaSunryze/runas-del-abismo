@@ -1,10 +1,10 @@
 // Estado de una partida (run): mapa, combates, botín, tienda y eventos de grupo.
 // Es lo que se sincroniza entre jugadores y lo que se guarda.
 import { ENEMY_SCALING, FEATURES, schoolOf } from '../core/tuning';
-import { AFFIXES, CAGE_ALLY, makeEnemy } from '../content/enemies';
+import { AFFIXES, CAGE_ALLY, ENEMIES, makeEnemy, type EnemyOpts } from '../content/enemies';
 import { DAILY_ASC, DAILY_POOL, OMENS, cleanMods } from '../content/modes';
 import { BASE_ZONES, ZONES, type BossDef, type ZoneDef } from '../content/zones';
-import type { BossInfo } from '../core/combat/ai';
+import { runAiTurn, type BossInfo } from '../core/combat/ai';
 import { RELIC_EVENTS, RELICS } from '../content/relics';
 import { CONSUMABLES, MAX_CONSUMABLE, patronBonus, patronOf, patronsOf } from '../content/boons';
 import { BLESSINGS, BOON_MODS } from '../core/boonmods';
@@ -12,12 +12,14 @@ import { CLASSES, MAX_LEVEL, PLAYABLE, canPickRoute } from '../core/classes/clas
 import { SPELLS } from '../core/classes/spells';
 import { MAX_SPELL_UPS, UPGRADES, canUpgrade } from '../core/upgrades';
 import { makeHero } from '../core/classes/factory';
-import { SOULS_PER_ARMOR, SOUL_ARMOR, createCombat, summon as engineSummon, type CombatSetup, type UnitSpec } from '../core/combat/engine';
+import { SOULS_PER_ARMOR, SOUL_ARMOR, createCombat, current, endTurn, summon as engineSummon, type CombatSetup, type UnitSpec } from '../core/combat/engine';
 import { reachable } from '../core/combat/grid';
 import { BAG_SIZE, PRICE, SLOTS, STAT_NAME, genItem, sumStats, type DropKind, type Item, type Rarity, type Slot, type StatKey, type Stats } from '../core/items/items';
 import { pick, rand, randInt, seedFrom, shuffle, type RngBox } from '../core/rng';
 import { makeActMap, type ActMap } from './map';
 import { CORRIDOR_CHANCE, genTerrain } from './terrain';
+import { cleanRoom, roomSetup, type RoomDef } from './salas';
+import BUILTIN_ROOMS from '../content/salas.json';
 import type { ClassId, CombatState, GameEvent, Pos } from '../core/state';
 import { enterRoom, roomAction, roomDone, roomPending, type RoomOp, type RoomState } from './rooms';
 import { pactEnemyHp, pactEnemyPower } from '../content/pacts';
@@ -614,6 +616,9 @@ export function buildFight(run: RunState): CombatSetup {
     a.hp = a.maxHp = Math.round(a.maxHp / ENEMY_SCALING.flatHp);
     return a;
   });
+  // salas creadas y publicadas por el creador (y las del juego)
+  const custom = pickCustomRoom(run);
+  if (custom) { const setup = customFight(run, custom, heroes, allies); if (setup) return setup; }
   const ids = enemyList(run);
   // los combates normales (no élites ni jefes) salen a veces como pasillo estrecho
   const corridor = run.kind === 'combat' && !run.ambush && rand(run) < CORRIDOR_CHANCE;
@@ -643,28 +648,70 @@ export function buildFight(run: RunState): CombatSetup {
     // los enemigos salen repartidos a 5 casillas como mucho de alguna casilla de inicio; los que placan o se mueven poco, más cerca
     for (const e of enemies) taken.delete(`${e.pos.x},${e.pos.y}`);
     for (const e of enemies) { const p = enemyCell(run, e, starts, taken, w, h); if (p) { e.pos = p; taken.add(`${p.x},${p.y}`); } else taken.add(`${e.pos.x},${e.pos.y}`); }
-    for (const e of enemies) {
-      if (omen === 'sangre') e.power += 1;
-      if (omen === 'eclipse' && !e.traits?.includes('regen')) e.traits = [...(e.traits ?? []), 'regen'];
-      if (omen === 'oro') e.hp = e.maxHp = Math.round(e.maxHp * 1.25);
-      if (omen === 'tormenta' || run.mods.includes('veloces')) { e.mp++; e.maxMp++; }
-      if (run.mods.includes('veloces')) e.initiative += 4;
-      if (omen && run.mods.includes('niebla')) e.hp = e.maxHp = Math.round(e.maxHp * 1.2);
-      if (run.mods.includes('reforzados')) e.shield = (e.shield ?? 0) + Math.round(e.maxHp * 0.15);
-      const add = (t: string): void => { if (!(e.traits ?? []).includes(t)) e.traits = [...(e.traits ?? []), t]; };
-      if (run.pact === 'presteza') { e.mp++; e.maxMp++; }
-      if (run.pact === 'cristal') e.crit += 15;
-      if (run.pact === 'vacio') add('hambriento');
-      // calor de la forja
-      if (run.overload) { add('ignifugo'); add('ignite'); }
-      if (run.overload === 'overload') { add('pavesa'); e.hp = e.maxHp = Math.round(e.maxHp * 1.2); }
-    }
+    for (const e of enemies) runEnemyMods(run, e);
     const setup: CombatSetup = { seed: randInt(run, 1, 2 ** 31 - 1), w, h, obstacles, traps, puddles, abyss: terrain?.abyss ?? [], braziers: terrain?.braziers ?? [], roots: terrain?.roots ?? [], biome: terrain?.name, units: [...heroes, ...allies, ...enemies], deployCells: starts };
     // todo el mundo debe poder llegar a todo el mundo
     const probe = createCombat(setup).state;
     const walk = reachable(probe, heroes[0]!.pos, 99, true).cost;
     if (setup.units.every((u) => walk.has(`${u.pos.x},${u.pos.y}`))) return setup;
   }
+}
+
+/** Presagio, retos, pacto y calor de la forja sobre un enemigo del combate. */
+function runEnemyMods(run: RunState, e: UnitSpec): void {
+  const omen = run.omen;
+  if (omen === 'sangre') e.power += 1;
+  if (omen === 'eclipse' && !e.traits?.includes('regen')) e.traits = [...(e.traits ?? []), 'regen'];
+  if (omen === 'oro') e.hp = e.maxHp = Math.round(e.maxHp * 1.25);
+  if (omen === 'tormenta' || run.mods.includes('veloces')) { e.mp++; e.maxMp++; }
+  if (run.mods.includes('veloces')) e.initiative += 4;
+  if (omen && run.mods.includes('niebla')) e.hp = e.maxHp = Math.round(e.maxHp * 1.2);
+  if (run.mods.includes('reforzados')) e.shield = (e.shield ?? 0) + Math.round(e.maxHp * 0.15);
+  const add = (t: string): void => { if (!(e.traits ?? []).includes(t)) e.traits = [...(e.traits ?? []), t]; };
+  if (run.pact === 'presteza') { e.mp++; e.maxMp++; }
+  if (run.pact === 'cristal') e.crit += 15;
+  if (run.pact === 'vacio') add('hambriento');
+  // calor de la forja
+  if (run.overload) { add('ignifugo'); add('ignite'); }
+  if (run.overload === 'overload') { add('pavesa'); e.hp = e.maxHp = Math.round(e.maxHp * 1.2); }
+}
+
+/** De dónde salen las salas creadas (la interfaz lo engancha al progreso del creador). Las del juego siempre están. */
+let roomSource: () => RoomDef[] = () => [];
+export function setRoomSource(fn: () => RoomDef[]): void { roomSource = fn; }
+/** Todas las salas creadas disponibles: las del juego y las del creador conectado. */
+const builtin = (BUILTIN_ROOMS as unknown[]).map(cleanRoom).filter((r): r is RoomDef => !!r).map((r) => ({ ...r, published: true }));
+export const allRooms = (): RoomDef[] => [...builtin, ...roomSource()];
+
+/** ¿Toca una sala creada? Cada sala publicada de esta zona y tipo tiene su probabilidad. */
+function pickCustomRoom(run: RunState): RoomDef | null {
+  if (run.arena || run.ambush || run.daily) return null;
+  const boss = run.kind === 'boss' ? bossOf(run).id : null;
+  const list = allRooms().filter((r) => r.published && r.zone === Math.min(run.zone, 3) && r.kind === run.kind && (!boss || r.enemies.some((e) => e.kind === boss)));
+  if (!list.length) return null;
+  for (const r of shuffle(run, list)) if (rand(run) * 100 < r.chance) return r;
+  return null;
+}
+
+/** Combate en una sala creada, escalado como uno normal. Null si no se llega a todo (se genera uno normal). */
+function customFight(run: RunState, r: RoomDef, heroes: UnitSpec[], allies: UnitSpec[]): CombatSetup | null {
+  const n = run.heroes.length;
+  const flames = run.mods.includes('llamas') || run.pact === 'ceniza';
+  const setup = roomSetup(r, heroes, { players: n, depth: Math.min(5, run.zoneFight), opts: (id, first) => { const o = enemyOpts(run, id, first); return { hpMul: o.hpMul, power: o.power, laterList: o.laterList, affixes: flames ? ['ardiente'] : [] }; } }, randInt(run, 1, 2 ** 31 - 1), true);
+  const taken = new Set(setup.units.map((u) => `${u.pos.x},${u.pos.y}`));
+  const blocked = new Set([...setup.obstacles, ...(setup.voids ?? []), ...(setup.abyss ?? []), ...(setup.braziers ?? [])].map((p) => `${p.x},${p.y}`));
+  for (const a of allies) {
+    const p = heroes.flatMap((q) => [{ x: q.pos.x + 1, y: q.pos.y }, { x: q.pos.x, y: q.pos.y + 1 }, { x: q.pos.x, y: q.pos.y - 1 }, { x: q.pos.x - 1, y: q.pos.y }])
+      .find((q) => q.x >= 0 && q.y >= 0 && q.x < r.w && q.y < r.h && !blocked.has(`${q.x},${q.y}`) && !taken.has(`${q.x},${q.y}`) && !(setup.deployCells ?? []).some((s) => s.x === q.x && s.y === q.y));
+    if (!p) continue;
+    a.pos = p; taken.add(`${p.x},${p.y}`); setup.units.push(a);
+  }
+  for (const e of setup.units.filter((u) => u.team === 'enemy')) runEnemyMods(run, e);
+  for (const w of setup.waves ?? []) for (const e of w.units) runEnemyMods(run, e);
+  const probe = createCombat(setup).state;
+  const walk = reachable(probe, heroes[0]!.pos, 99, true).cost;
+  if (!setup.units.every((u) => u.ai === 'pillar' || walk.has(`${u.pos.x},${u.pos.y}`))) return null;
+  return setup;
 }
 
 const manh = (a: Pos, b: Pos): number => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
@@ -1268,58 +1315,210 @@ export function trainingDummy(pos: Pos): UnitSpec {
   return { ...d, name: 'Muñeco de prueba', hp: DUMMY_HP, maxHp: DUMMY_HP, armor: 0, resist: {}, traits: ['dummy'], initiative: 0 };
 }
 
-/** Sala de pruebas: tu héroe con las 14 habilidades de su clase (sin coste de ecos) y un muñeco a 4 casillas. */
-export function newTraining(code: string, seed: number, owner: string, name: string, cls: ClassId): RunState {
-  const run = newRun(code, seed, [{ owner, name, cls, routes: ['base'] }]);
+/** Laboratorio: héroes, nivel, zona, ascensión, objetos (−1 = ninguno; 0 a 3 = rareza mínima) y profundidad de los enemigos (0 a 5). */
+export interface LabSetup { heroes: ClassId[]; level: number; zone: number; asc: number; gear: number; depth: number }
+/** Lo que hay montado en el laboratorio (para «Repetir»): muñecos, una sala creada o un combate real de la zona. */
+export type LabScene = { kind: 'dummies' } | { kind: 'room'; id: string } | { kind: 'fight'; fight: 'combat' | 'elite' | 'boss'; boss?: number };
+export const labDefault = (cls: ClassId): LabSetup => ({ heroes: [cls], level: 1, zone: 0, asc: 0, gear: -1, depth: 0 });
+/** Trucos del laboratorio (en run.flags como «lab:…»). */
+export const LAB_CHEATS = ['god', 'ap', 'cd', 'puppet', 'still'] as const;
+export type LabCheat = (typeof LAB_CHEATS)[number];
+export const labOn = (run: RunState | null | undefined, k: LabCheat): boolean => !!run?.flags.includes(`lab:${k}`);
+const readFlag = <T,>(run: RunState, name: string): T | null => { const f = run.flags.find((x) => x.startsWith(`lab${name}:`)); try { return f ? JSON.parse(f.slice(name.length + 4)) as T : null; } catch { return null; } };
+const writeFlag = (run: RunState, name: string, v: unknown): void => { run.flags = [...run.flags.filter((x) => !x.startsWith(`lab${name}:`)), `lab${name}:${JSON.stringify(v)}`]; };
+export const labSetupOf = (run: RunState): LabSetup => readFlag<LabSetup>(run, 'setup') ?? labDefault(run.heroes[0]?.cls ?? 'guerrero');
+export const labSceneOf = (run: RunState): LabScene => readFlag<LabScene>(run, 'scene') ?? { kind: 'dummies' };
+
+function cleanSetup(x: Partial<LabSetup>, cls: ClassId): LabSetup {
+  const heroes = (Array.isArray(x.heroes) ? x.heroes : []).filter((c) => (PLAYABLE as string[]).includes(c)).slice(0, 4) as ClassId[];
+  const n = (v: unknown, lo: number, hi: number, d: number): number => { const k = Math.round(Number(v)); return Number.isFinite(k) ? Math.max(lo, Math.min(hi, k)) : d; };
+  return { heroes: heroes.length ? heroes : [cls], level: n(x.level, 1, MAX_LEVEL, 1), zone: n(x.zone, 0, 3, 0), asc: n(x.asc, 0, 10, 0), gear: n(x.gear, -1, 3, -1), depth: n(x.depth, 0, 5, 0) };
+}
+
+/**
+ * Laboratorio del creador: sus héroes con todas las habilidades de su clase (sin coste de ecos), contra muñecos,
+ * una sala creada o un combate real de cualquier zona o jefe. Nada de aquí cuenta para el progreso.
+ */
+export function newTraining(code: string, seed: number, owner: string, name: string, cls: ClassId, setup?: Partial<LabSetup>, scene: LabScene = { kind: 'dummies' }): RunState {
+  const st = cleanSetup(setup ?? labDefault(cls), cls);
+  const run = newRun(code, seed, st.heroes.map((c, i) => ({ owner, name: i ? `${name.slice(0, 11)} ${i + 1}` : name, cls: c, routes: ['base'] })), { asc: st.asc, abyss: true });
   run.flags.push(TRAINING);
-  run.arena = { a: owner, b: null, nameA: name.slice(0, 14), nameB: 'Muñecos' };
-  run.note = 'Sala de pruebas: nada de aquí cuenta para tu progreso.';
-  const u = heroSpec(run.heroes[0]!, { x: 2, y: 4 });
-  u.spells = catalogSpells(cls).map((id) => ({ id, cd: 0 }));
-  // un par de columnas para probar la línea de visión
-  run.combat = createCombat({ seed: seed >>> 0 || 1, w: TW, h: TH, obstacles: [{ x: 9, y: 1 }, { x: 9, y: 2 }, { x: 9, y: 6 }], units: [u, trainingDummy({ x: 6, y: 4 })] }).state;
-  run.phase = 'combat';
-  run.kind = 'combat';
+  writeFlag(run, 'setup', st);
+  run.arena = { a: owner, b: null, nameA: name.slice(0, 14), nameB: 'Laboratorio' };
+  run.note = 'Laboratorio: nada de aquí cuenta para tu progreso.';
+  run.zone = st.zone;
+  for (const h of run.heroes) {
+    h.level = st.level;
+    if (st.gear >= 0) for (const slot of SLOTS) h.equip[slot] = genItem(run, ZONES[st.zone]!.items, st.zone, 'boss', st.gear as Rarity, slot, schoolOf(h.cls));
+    h.hp = heroMaxHp(h);
+  }
+  labScene(run, scene);
   return run;
 }
 
-/** Herramientas de la sala de pruebas. */
-function trainingAction(run: RunState, owner: string, op: string): string | null {
-  if (!isTraining(run) || !run.combat) return 'Solo en la sala de pruebas';
-  const c = run.combat, me = c.units.find((u) => u.owner === owner && u.team === 'hero' && u.summoner === undefined);
-  if (!me) return 'No tienes héroe aquí';
+/** Héroes del laboratorio listos para combatir (todas las habilidades de su clase). */
+function labHeroes(run: RunState): UnitSpec[] {
+  return run.heroes.map((h) => {
+    const u = heroSpec(h, { x: 2, y: 4 });
+    u.hp = u.maxHp;
+    u.spells = catalogSpells(h.cls).map((id) => ({ id, cd: 0 }));
+    if (labOn(run, 'god')) u.traits = [...(u.traits ?? []), 'labgod'];
+    return u;
+  });
+}
+
+/** Vida y daño base de un enemigo en una expedición (zona, ascensión y jugadores), sin retos ni pactos. */
+export function zoneOpts(zone: number, asc: number, players: number, id: string): EnemyOpts {
+  const boost = zoneBoost({ zone, asc, heroes: { length: players } as RunState['heroes'] }), boss = ENEMIES[id]?.ai === 'boss';
+  return { hpMul: Math.max(0.3, 1 + (boss && boost > 0 ? boost * BOSS_BOOST : boost)), power: boost * 5 };
+}
+/** Vida y daño de los enemigos invocados en el laboratorio según la zona y la ascensión elegidas. */
+const labOpts = (run: RunState, id: string): EnemyOpts => zoneOpts(run.zone, run.asc, run.heroes.length, id);
+
+/** Monta el combate del laboratorio. */
+function labScene(run: RunState, scene: LabScene): string | null {
+  const st = labSetupOf(run), seed = randInt(run, 1, 2 ** 31 - 1), heroes = labHeroes(run);
+  run.zone = st.zone; run.zoneFight = st.depth; run.kind = 'combat'; run.omen = null; run.ambush = false;
+  if (scene.kind === 'room') {
+    const r = allRooms().find((x) => x.id === scene.id);
+    if (!r) return 'No se encuentra esa sala';
+    run.zone = r.zone; run.kind = r.kind;
+    const boss = r.enemies.find((e) => ENEMIES[e.kind]?.ai === 'boss');
+    if (boss) setBossOf(run, boss.kind);
+    const setup = roomSetup(r, heroes, { players: heroes.length, depth: st.depth, opts: (id) => labOpts(run, id) }, seed, false);
+    run.combat = createCombat(setup).state;
+  } else if (scene.kind === 'fight') {
+    run.kind = scene.fight;
+    if (scene.boss !== undefined) run.bossPick[run.zone] = Math.max(0, Math.min(zoneOf(run).bosses.length - 1, scene.boss));
+    const setup = buildFight(run);
+    // los héroes del laboratorio llevan todas sus habilidades
+    const mine = labHeroes(run);
+    setup.units.filter((u) => u.team === 'hero' && u.owner).forEach((u, i) => { const m = mine[i]; if (m) { u.spells = m.spells; u.traits = m.traits; u.hp = u.maxHp; } });
+    run.combat = createCombat({ ...setup, deploy: false }).state;
+  } else {
+    heroes.forEach((u, i) => { u.pos = { x: 2, y: [4, 2, 6, 3][i] ?? 4 }; });
+    // un par de columnas para probar la línea de visión
+    run.combat = createCombat({ seed, w: TW, h: TH, obstacles: [{ x: 9, y: 1 }, { x: 9, y: 2 }, { x: 9, y: 6 }], units: [...heroes, trainingDummy({ x: 6, y: 4 })] }).state;
+  }
+  writeFlag(run, 'scene', scene);
+  run.phase = 'combat';
+  return null;
+}
+
+/** El jefe de esa zona en la partida pasa a ser `id` (sus esbirros y pilares dependen de ello). */
+function setBossOf(run: RunState, id: string): void {
+  const z = ZONES.findIndex((x) => x.bosses.some((b) => b.id === id));
+  if (z < 0) return;
+  run.zone = z;
+  run.bossPick[z] = ZONES[z]!.bosses.findIndex((b) => b.id === id);
+}
+
+/** Trucos activos después de cada cambio: vida, PA y PM y esperas de los héroes. */
+export function labTick(run: RunState): void {
+  const c = run.combat;
+  if (!isTraining(run) || !c) return;
+  for (const u of c.units) {
+    if (u.team !== 'hero' || u.summoner !== undefined || u.hp <= 0) continue;
+    const god = labOn(run, 'god');
+    if (god !== !!u.traits?.includes('labgod')) u.traits = god ? [...(u.traits ?? []), 'labgod'] : (u.traits ?? []).filter((t) => t !== 'labgod');
+    if (god) u.hp = u.maxHp;
+    if (labOn(run, 'ap')) { u.ap = Math.max(u.ap, u.maxAp); u.mp = Math.max(u.mp, u.maxMp); }
+    if (labOn(run, 'cd')) for (const sp of u.spells) { sp.cd = 0; delete sp.uses; }
+  }
+}
+
+/** Herramientas del laboratorio (las que devuelven sucesos para animarlos). */
+export function labAction(run: RunState, owner: string, op: string): { err: string | null; ev: GameEvent[] } {
+  const ev: GameEvent[] = [];
+  if (!isTraining(run) || !run.combat) return { err: 'Solo en el laboratorio', ev };
+  const c = run.combat, heroes = c.units.filter((u) => u.owner === owner && u.team === 'hero' && u.summoner === undefined);
+  const me = heroes.find((u) => u.hp > 0) ?? heroes[0];
+  if (!me) return { err: 'No tienes héroe aquí', ev };
   const dummies = c.units.filter((u) => u.hp > 0 && hasDummy(u));
-  const [kind, arg] = op.split(':');
-  if (kind === 'dummy') {
-    // muñeco a N casillas en tu misma fila (o lo más cerca posible)
-    if (dummies.length >= MAX_DUMMIES) return `Máximo ${MAX_DUMMIES} muñecos`;
-    const n = Math.max(1, Math.min(12, Number(arg) || 4));
-    const x = me.pos.x + n < TW ? me.pos.x + n : Math.max(0, me.pos.x - n);
-    const ev: GameEvent[] = [];
-    if (!engineSummon(c, trainingDummy({ x, y: me.pos.y }), { x, y: me.pos.y }, ev)) return 'No hay sitio para otro muñeco';
-    return null;
-  }
-  if (kind === 'refill') { me.ap = me.maxAp; me.mp = me.maxMp; return null; }
-  if (kind === 'cd') { for (const sp of me.spells) { sp.cd = 0; sp.uses = 0; } return null; }
-  if (kind === 'heal') { for (const d of dummies) { d.hp = d.maxHp; d.shield = 0; d.statuses = {}; } me.hp = me.maxHp; me.statuses = {}; return null; }
-  if (kind === 'level') {
-    const h = run.heroes.find((x) => x.owner === owner)!;
-    h.level = Math.max(1, Math.min(MAX_LEVEL, Number(arg) || 1));
-    return trainingAction(run, owner, `cls:${h.cls}`);
-  }
-  if (kind === 'cls') {
-    const cls = (PLAYABLE as string[]).includes(arg ?? '') ? (arg as ClassId) : me.kind as ClassId;
-    const h = run.heroes.find((x) => x.owner === owner)!;
-    const level = h.level;
-    const next = newTraining(run.code, run.rng, owner, h.name, cls);
-    next.heroes[0]!.level = level;
-    const u = heroSpec(next.heroes[0]!, { x: 2, y: 4 });
-    u.spells = catalogSpells(cls).map((id) => ({ id, cd: 0 }));
-    next.combat = createCombat({ seed: run.rng >>> 0 || 1, w: TW, h: TH, obstacles: [{ x: 9, y: 1 }, { x: 9, y: 2 }, { x: 9, y: 6 }], units: [u, trainingDummy({ x: 6, y: 4 })] }).state;
+  const i = op.indexOf(':'), kind = i < 0 ? op : op.slice(0, i), arg = i < 0 ? '' : op.slice(i + 1);
+  const ok = (): { err: null; ev: GameEvent[] } => ({ err: null, ev });
+  const fail = (err: string): { err: string; ev: GameEvent[] } => ({ err, ev });
+  const rebuild = (st: Partial<LabSetup>, scene = labSceneOf(run)): string | null => {
+    const h = run.heroes[0]!;
+    const next = newTraining(run.code, run.rng, owner, h.name, h.cls, { ...labSetupOf(run), ...st }, { kind: 'dummies' });
+    next.flags = [...next.flags.filter((f) => !f.startsWith('lab:')), ...run.flags.filter((f) => f.startsWith('lab:'))];
     Object.assign(run, next);
-    return null;
+    return labScene(run, scene);
+  };
+  switch (kind) {
+    case 'dummy': {
+      // muñeco a N casillas en tu misma fila (o lo más cerca posible)
+      if (dummies.length >= MAX_DUMMIES) return fail(`Máximo ${MAX_DUMMIES} muñecos`);
+      const n = Math.max(1, Math.min(12, Number(arg) || 4));
+      const x = me.pos.x + n < c.w ? me.pos.x + n : Math.max(0, me.pos.x - n);
+      if (!engineSummon(c, trainingDummy({ x, y: me.pos.y }), { x, y: me.pos.y }, ev)) return fail('No hay sitio para otro muñeco');
+      return ok();
+    }
+    case 'refill': for (const u of heroes) { u.ap = u.maxAp; u.mp = u.maxMp; } return ok();
+    case 'cd': for (const u of heroes) for (const sp of u.spells) { sp.cd = 0; sp.uses = 0; } return ok();
+    case 'heal':
+      for (const d of dummies) { d.hp = d.maxHp; d.shield = 0; d.statuses = {}; }
+      for (const u of heroes) if (u.hp > 0) { u.hp = u.maxHp; u.statuses = {}; }
+      return ok();
+    case 'level': return { err: rebuild({ level: Number(arg) || 1 }), ev };
+    case 'cls': return { err: rebuild({ heroes: [(PLAYABLE as string[]).includes(arg) ? arg as ClassId : me.kind as ClassId] }, { kind: 'dummies' }), ev };
+    case 'setup': { let st: Partial<LabSetup>; try { st = JSON.parse(arg) as Partial<LabSetup>; } catch { return fail('Configuración no válida'); } return { err: rebuild(st), ev }; }
+    case 'scene': { let sc: LabScene; try { sc = JSON.parse(arg) as LabScene; } catch { return fail('Escena no válida'); } return { err: rebuild({}, sc), ev }; }
+    case 'replay': return { err: rebuild({}), ev };
+    case 'aimode': {
+      run.flags = run.flags.filter((x) => x !== 'lab:puppet' && x !== 'lab:still');
+      if (arg === 'puppet' || arg === 'still') run.flags.push(`lab:${arg}`);
+      return ok();
+    }
+    case 'flag': {
+      if (!(LAB_CHEATS as readonly string[]).includes(arg)) return fail('Truco desconocido');
+      const f = `lab:${arg}`;
+      run.flags = run.flags.includes(f) ? run.flags.filter((x) => x !== f) : [...run.flags, f];
+      return ok();
+    }
+    case 'spawn': {
+      // spawn:tipo:x:y:bando
+      const [id, sx, sy, team] = arg.split(':');
+      const def = ENEMIES[id ?? ''];
+      if (!def) return fail('Enemigo desconocido');
+      const pos = { x: Number(sx) | 0, y: Number(sy) | 0 };
+      if (def.ai === 'boss') setBossOf(run, def.id);
+      const e = makeEnemy(def.id, pos, def.ai === 'boss' ? Math.min(2, run.zoneFight) : run.zoneFight, heroes.length, labOpts(run, def.id));
+      if (team === 'hero') { e.team = 'hero'; e.summoner = -1; }
+      if (!engineSummon(c, e, pos, ev)) return fail('No hay sitio libre cerca de esa casilla');
+      if (c.over) c.over = null;
+      return ok();
+    }
+    case 'remove': {
+      const [sx, sy] = arg.split(':').map(Number);
+      const u = c.units.find((x) => x.hp > 0 && x.pos.x === sx && x.pos.y === sy);
+      if (!u) return fail('No hay nadie en esa casilla');
+      if (current(c)?.id === u.id && !c.over) { const r = endTurn(c, u.id); if (r.ok) ev.push(...r.events); }
+      u.hp = 0; u.shield = 0;
+      ev.push({ t: 'death', unit: u.id });
+      return ok();
+    }
+    case 'kill':
+      for (const u of c.units) if (u.hp > 0 && u.team === 'enemy' && !hasDummy(u)) { u.hp = 0; ev.push({ t: 'death', unit: u.id }); }
+      return ok();
+    case 'skip': {
+      const cur = current(c);
+      if (!cur || c.over) return fail('No hay turno que pasar');
+      const r = endTurn(c, cur.id);
+      return r.ok ? { err: null, ev: r.events } : fail(r.reason);
+    }
+    case 'ai': {
+      const cur = current(c);
+      if (!cur?.ai || c.over) return fail('No le toca a un personaje con IA');
+      return { err: null, ev: runAiTurn(c, bossInfo(run)) };
+    }
   }
-  return 'Herramienta desconocida';
+  return fail('Herramienta desconocida');
+}
+
+/** Herramientas del laboratorio desde metaAction (sin animaciones). */
+function trainingAction(run: RunState, owner: string, op: string): string | null {
+  return labAction(run, owner, op).err;
 }
 const hasDummy = (u: { traits?: string[] }): boolean => !!u.traits?.includes('dummy');
 

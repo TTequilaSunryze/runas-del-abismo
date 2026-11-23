@@ -7,6 +7,7 @@ import { ACT_ROOMS } from './map';
 import type { Champion, HeroSave, RunState } from './run';
 import { mergeArchive, normalizeArchive, type Archive } from './archiveData';
 import { mergeContracts, normalizeContracts, type ContractBook } from './contractsData';
+import { cleanRoom, mergeRooms, type RoomDef } from './salas';
 import { mergeCosmetics, normalizeCosmetics, spentTotal, type Cosmetics } from './cosmetics';
 export type { Cosmetics } from './cosmetics';
 export type { Contract, ContractBook, ContractPeriod, ContractTarget, SpecialRecord, SpecialType } from './contractsData';
@@ -52,6 +53,9 @@ export interface Meta {
   kits?: Record<string, string[]>;
   /** Modo creador activado (solo surte efecto en las cuentas de creador). No borra ni cambia el progreso real. */
   creator?: boolean;
+  /** salas creadas por el creador (y las que borró, para que no vuelvan al fusionar dispositivos) */
+  rooms?: RoomDef[];
+  roomsGone?: string[];
 }
 
 // ---------- modo creador ----------
@@ -154,6 +158,8 @@ export function mergeMeta(a: Meta, b: Partial<Meta>): Meta {
     cosmetics: mergeCosmetics(a.cosmetics, b.cosmetics),
     // H3: la configuración de este dispositivo manda; de la otra, solo las clases que aquí no se han tocado
     kits: { ...cleanKits(b.kits), ...cleanKits(a.kits) },
+    roomsGone: uniq([...(a.roomsGone ?? []), ...(b.roomsGone ?? [])]).slice(-200),
+    rooms: mergeRooms(a.rooms, b.rooms, uniq([...(a.roomsGone ?? []), ...(b.roomsGone ?? [])])),
   };
 }
 /** H3: configuraciones guardadas con forma correcta (4 textos por clase); la validez se comprueba al usarlas. */
@@ -162,6 +168,22 @@ export function cleanKits(x: unknown): Record<string, string[]> {
   if (!x || typeof x !== 'object') return out;
   for (const [k, v] of Object.entries(x as Record<string, unknown>)) if (CLASSES[k as ClassId] && Array.isArray(v) && v.length === 4) out[k] = v.map(String).slice(0, 4);
   return out;
+}
+
+// ---------- salas creadas (solo cuentas de creador) ----------
+export const myRooms = (): RoomDef[] => (meta().rooms ?? []).map(cleanRoom).filter((r): r is RoomDef => !!r);
+/** Guarda (o actualiza) una sala y la sube a la nube con el resto del progreso. */
+export function putRoom(r: RoomDef): void {
+  const m = meta(), c = cleanRoom({ ...r, t: Date.now() });
+  if (!c) return;
+  m.rooms = [...(m.rooms ?? []).filter((x) => x.id !== c.id), c];
+  saveMeta();
+}
+export function dropRoom(id: string): void {
+  const m = meta();
+  m.rooms = (m.rooms ?? []).filter((x) => x.id !== id);
+  m.roomsGone = [...(m.roomsGone ?? []), id].slice(-200);
+  saveMeta();
 }
 
 // ---------- maestría de clase ----------

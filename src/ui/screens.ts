@@ -418,8 +418,10 @@ function creatorBox(m: ReturnType<typeof meta>): string {
   return `<div class="panel orn playbox creatorbox"><h3>🛠️ Creador</h3>
     <label class="row center sm"><input type="checkbox" data-act="creator" ${on ? 'checked' : ''}> Todo desbloqueado</label>
     <p class="dim sm">${on ? 'Activo: tienda, habilidades, ascensiones, El Abismo y maestría 5. Tu progreso real no cambia.' : 'Desactivado: ves tu progreso real.'}</p>
-    <div class="lbl">🎯 Sala de pruebas</div><p class="dim sm">Todas las habilidades de la clase y muñecos de daño infinito.</p>
-    <div class="row center" style="flex-wrap:wrap;gap:4px">${PLAYABLE.map((c) => `<button class="mini" data-act="trainstart" data-id="${c}">${esc(CLASSES[c].name)}</button>`).join('')}</div></div>`;
+    <div class="lbl">🧪 Laboratorio</div><p class="dim sm">Todas las habilidades de la clase. Invoca enemigos y jefes, carga tus salas, controla a la IA y usa trucos.</p>
+    <div class="row center" style="flex-wrap:wrap;gap:4px">${PLAYABLE.map((c) => `<button class="mini" data-act="trainstart" data-id="${c}">${esc(CLASSES[c].name)}</button>`).join('')}</div>
+    <div class="lbl">🛠️ Salas</div><p class="dim sm">Crea salas: forma, calderos y terreno, enemigos con sus ajustes, oleadas, casillas de inicio y objetivo.</p>
+    <div class="row center"><button class="pri" data-act="editor">🛠️ Editor de salas</button></div></div>`;
 }
 
 /** H3: configurador de las 4 habilidades equipadas (gratis; queda fijo durante la expedición). */

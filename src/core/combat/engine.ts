@@ -4,7 +4,7 @@ import { FEATURES, schoolOf } from '../tuning';
 import { SPELLS, type SpellDef } from '../classes/spells';
 import { rand, randInt } from '../rng';
 import { tuned } from '../upgrades';
-import { key, type BoardMark, type CombatState, type Element, type GameEvent, type Pos, type StatusKind, type Unit } from '../state';
+import { key, type BoardMark, type CombatGoal, type CombatState, type Element, type GameEvent, type Pos, type StatusKind, type Unit } from '../state';
 import { alive, dist, hasLineOfSight, isFree, lineCells, pathTo, reachable, same, unitAt } from './grid';
 import { addMark, clearMarksOf, coneCells, dirOf, marksAt, marksOf, removeMark, tickMarks } from './marks';
 
@@ -26,6 +26,10 @@ export interface CombatSetup {
   deploy?: boolean;
   /** casillas de inicio elegibles (si no, las 3 primeras columnas) */
   deployCells?: Pos[];
+  /** salas creadas: forma, objetivo y oleadas */
+  voids?: Pos[];
+  goal?: CombatGoal | null;
+  waves?: Array<{ round: number; units: UnitSpec[] }>;
 }
 
 export type ActionResult = { ok: true; events: GameEvent[] } | { ok: false; reason: string };
@@ -165,6 +169,9 @@ export function createCombat(setup: CombatSetup): { state: CombatState; events: 
     version: 1, rng: setup.seed >>> 0, w: setup.w, h: setup.h, obstacles: [...setup.obstacles, ...(setup.braziers ?? [])].map(key), abyss: (setup.abyss ?? []).map(key), braziers: (setup.braziers ?? []).map(key), roots: (setup.roots ?? []).map(key), fire: {}, biome: setup.biome, traps: (setup.traps ?? []).map(key), puddles: (setup.puddles ?? []).map(key),
     units, order, turn: -1, round: 1, over: null, nextId: units.length + 1,
   };
+  if (setup.voids?.length) { state.voids = setup.voids.map(key); state.obstacles.push(...state.voids.filter((k) => !state.obstacles.includes(k))); }
+  if (setup.goal) state.goal = { ...setup.goal };
+  if (setup.waves?.length) state.waves = setup.waves.filter((w) => w.units.length).map((w) => ({ round: Math.max(2, Math.floor(w.round)), units: w.units.map((u) => ({ ...u, pos: { ...u.pos }, statuses: { ...u.statuses }, spells: u.spells.map((sp) => ({ ...sp })) })) })).sort((a, b) => a.round - b.round);
   const events: GameEvent[] = [];
   if (setup.deploy) {
     // zona de despliegue: las 3 primeras columnas, sin obstáculos, trampas ni enemigos
@@ -223,8 +230,23 @@ function checkOver(s: CombatState, ev: GameEvent[]): void {
   // los pilares del jefe no cuentan: basta con vencer al resto
   const enemies = s.units.some((u) => u.team === 'enemy' && alive(u) && u.ai !== 'pillar');
   if (!heroes) s.over = 'lose';
-  else if (!enemies) s.over = 'win';
+  // sala con objetivo marcado: basta con acabar con los marcados
+  else if (s.goal?.kind === 'targets' && s.units.some((u) => u.goal)) { if (!s.units.some((u) => u.goal && alive(u))) s.over = 'win'; else if (!enemies && s.waves?.length) spawnWave(s, ev, true); }
+  // sin enemigos: si quedan refuerzos, entran ya
+  else if (!enemies) { if (s.waves?.length) spawnWave(s, ev, true); else s.over = 'win'; }
   if (s.over) ev.push({ t: 'over', result: s.over });
+}
+
+/** Entran los refuerzos de esta ronda (o, si `early`, la siguiente oleada pendiente). */
+function spawnWave(s: CombatState, ev: GameEvent[], early = false): void {
+  if (!s.waves?.length) return;
+  const round = early ? s.waves[0]!.round : s.round;
+  const now = s.waves.filter((w) => w.round <= round);
+  if (!now.length) return;
+  s.waves = s.waves.filter((w) => w.round > round);
+  if (!s.waves.length) delete s.waves;
+  ev.push({ t: 'note', text: '¡Llegan refuerzos!' });
+  for (const w of now) for (const spec of w.units) summon(s, spec, spec.pos, ev);
 }
 
 /** Aplica daño ya calculado (antes de armadura). Devuelve la vida perdida. */
@@ -278,6 +300,8 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
     addFury(u, -60, ev);
     ev.push({ t: 'resist', unit: u.id, what: '¡Se niega a morir!' });
   }
+  // laboratorio del creador: vida infinita
+  if (hasTrait(u, 'labgod')) dmg = Math.min(dmg, Math.max(0, u.hp - 1));
   u.hp = Math.max(0, u.hp - dmg);
   ev.push({ t: 'damage', unit: u.id, amount: dmg, absorbed, crit: !!opts.crit, source });
   // Cadenas vinculantes: el otro encadenado recibe la mitad del daño
@@ -425,6 +449,9 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     if (s.turn >= s.order.length) {
       s.turn = 0;
       s.round++;
+      // salas creadas: sobrevivir N rondas, y refuerzos
+      if (s.goal?.kind === 'survive' && s.round > s.goal.rounds) { s.over = 'win'; ev.push({ t: 'over', result: 'win' }); return; }
+      if (s.waves?.length) spawnWave(s, ev);
       tickMarks(s, undefined, ev);
       for (const k of Object.keys(s.fire ?? {})) if (--s.fire![k]! <= 0) delete s.fire![k];
     }

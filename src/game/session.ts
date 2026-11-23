@@ -10,7 +10,7 @@ import { meta } from './meta';
 import { cancel, every, later, type Timer } from '../net/clock';
 import { pendingOf, waitingFor, type HeroSave } from './run';
 import { mapChoice } from './run';
-import { bossInfo, chooseNode, recordEvents, finishFight, leaveNode, metaAction, newArena, newRun, newTraining, resolveEvent, type MetaAction, type RunState } from './run';
+import { bossInfo, chooseNode, recordEvents, finishFight, isTraining, labAction, labOn, labTick, leaveNode, metaAction, newArena, newRun, newTraining, resolveEvent, type LabScene, type LabSetup, type MetaAction, type RunState } from './run';
 
 export type Action = { a: 'move'; to: Pos } | { a: 'cast'; spell: string; at: Pos } | { a: 'end' } | { a: 'deploy'; to: Pos } | { a: 'deployready'; force?: boolean } | MetaAction;
 
@@ -189,14 +189,17 @@ export class Session {
     if (!c) return undefined;
     // en los duelos llevo varias unidades: la que juega ahora, o la primera que siga en pie
     const cur = current(c);
-    if (cur?.owner === this.myId) return cur;
+    if (cur?.owner === this.myId || (cur && this.puppet())) return cur;
     return c.units.find((u) => u.owner === this.myId && u.hp > 0) ?? c.units.find((u) => u.owner === this.myId);
   }
 
   isMyTurn(): boolean {
     const c = this.run?.combat;
-    return !!c && current(c)?.owner === this.myId;
+    return !!c && (current(c)?.owner === this.myId || (!!current(c) && this.puppet()));
   }
+
+  /** Laboratorio con «Controlar a todos»: el anfitrión juega también los turnos de la IA. */
+  puppet(): boolean { return this.isHost && isTraining(this.run) && labOn(this.run, 'puppet'); }
 
   // ---------- anfitrión ----------
   startRun(): void {
@@ -225,9 +228,9 @@ export class Session {
   }
 
   /** Sala de pruebas (solo en local): tu héroe con todas sus habilidades y muñecos de daño infinito. */
-  startTraining(myName: string, cls: ClassId): void {
+  startTraining(myName: string, cls: ClassId, setup?: Partial<LabSetup>, scene?: LabScene): void {
     if (!this.isHost) return;
-    this.run = newTraining(this.code, (Date.now() ^ (Math.random() * 2 ** 31)) >>> 0, this.myId, myName, cls);
+    this.run = newTraining(this.code, (Date.now() ^ (Math.random() * 2 ** 31)) >>> 0, this.myId, myName, cls, setup, scene);
     this.afterChange([]);
   }
 
@@ -352,6 +355,13 @@ export class Session {
       const ev = (a.force && from === this.myId && this.isHost) || owners.every((o) => c.deploy!.ready.includes(o)) ? startCombat(c) : [];
       return this.afterChange(ev);
     }
+    // laboratorio: herramientas con animación (solo el anfitrión, que es el creador en su sala local)
+    if (a.a === 'train') {
+      if (from !== this.myId) return;
+      const r = labAction(run, from, String(a.op));
+      if (r.err) return this.reject(from, r.err);
+      return this.afterChange(r.ev);
+    }
     if (a.a !== 'move' && a.a !== 'cast' && a.a !== 'end') {
       if (a.a === 'room' && a.op === 'seal' && !(from === this.myId && this.isHost)) return this.reject(from, 'Solo el anfitrión puede cerrar la votación');
       const err = metaAction(run, from, a);
@@ -364,7 +374,7 @@ export class Session {
     const c = run.combat;
     if (!c || c.over) return;
     const u = current(c);
-    if (!u || u.owner !== from) return;
+    if (!u || (u.owner !== from && !(from === this.myId && this.puppet()))) return;
     let r: ActionResult;
     if (a.a === 'move' && a.to) r = move(c, u.id, { x: a.to.x | 0, y: a.to.y | 0 });
     else if (a.a === 'cast' && a.at) r = cast(c, u.id, String(a.spell), { x: a.at.x | 0, y: a.at.y | 0 });
@@ -377,6 +387,7 @@ export class Session {
   private afterChange(events: GameEvent[]): void {
     const run = this.run!;
     if (this.isHost) recordEvents(run, events, this.track);
+    if (this.isHost && isTraining(run)) labTick(run);
     this.broadcast(events);
     this.noteTurn();
     this.onChange(events);
@@ -399,12 +410,14 @@ export class Session {
     cancel(this.aiTimer);
     this.aiTimer = null;
     if (!c || run.phase !== 'combat') return;
+    // en el laboratorio el combate se queda en pantalla al acabar (para repetirlo o seguir probando)
+    if (c.over && isTraining(run)) return;
     if (c.over) {
       this.aiTimer = later(() => {
         finishFight(run);
         this.afterChange([]);
       }, 1600);
-    } else if (current(c)?.ai) {
+    } else if (current(c)?.ai && !(isTraining(run) && (labOn(run, 'puppet') || labOn(run, 'still')))) {
       this.aiTimer = later(() => { if (this.run?.combat === c && !c.over && current(c)?.ai) this.afterChange(runAiTurn(c, bossInfo(run))); }, AI_DELAY);
     }
   }
@@ -421,8 +434,9 @@ export class Session {
     if (k === this.lastTurnKey) return;
     this.lastTurnKey = k;
     cancel(this.turnTimer);
-    this.turnEndsAt = u && !u.ai ? Date.now() + TURN_SECONDS * 1000 : 0;
-    if (this.isHost && c && u && !u.ai) {
+    const lab = isTraining(this.run);
+    this.turnEndsAt = u && !u.ai && !lab ? Date.now() + TURN_SECONDS * 1000 : 0;
+    if (this.isHost && c && u && !u.ai && !lab) {
       this.turnTimer = later(() => {
         if (this.run?.combat !== c || current(c)?.id !== u.id) return;
         const r = endTurn(c, u.id);
