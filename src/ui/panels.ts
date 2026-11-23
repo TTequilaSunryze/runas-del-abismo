@@ -162,6 +162,7 @@ export function victoryModal(run: RunState): string {
   const total = Math.max(1, ...r.damage.map((x) => x.dmg));
   return `<div class="modal victory" id="victorymodal"><div class="panel wide">
   <h2 class="vtitle">FIN DEL COMBATE - ¡HAS GANADO!</h2>
+  ${r.outro ? `<div class="panel note storybox">${r.title ? `<b>${esc(r.title)}</b>` : ''}<p>${esc(r.outro).replace(/\n/g, '<br>')}</p></div>` : ''}
   <div class="lbl">Has encontrado…</div>
   <div class="cells loot-icons">${chip('💰', `<b>Oro</b><div class="sm">+${r.gold} de oro para cada uno.</div>`)}${items}${mineLoot.map((l) => chip(l.icon, `<b>${esc(l.name)}</b><div class="sm">${esc(l.text)}</div>`, l.rare ? 'ir3' : 'ir1')).join('')}</div>
   ${stashRow(run)}

@@ -9,8 +9,9 @@ import { Session } from '../game/session';
 import { dailyScore, dailyZone, loadable } from '../game/run';
 import { joinRoom, loadRun, submitDaily, topDaily } from '../net/transport';
 import { readSnapshot } from '../game/snapshot';
-import { addLog, combatScreen, labClick } from './combat';
+import { addLog, closeIntro, combatScreen, labClick } from './combat';
 import { closeEditor, editorScreen } from './editor';
+import { fetchGlobalRooms, globalRooms } from '../net/salas';
 import { setRoomSource, type LabScene, type LabSetup } from '../game/run';
 import { esc, mine, params, randomText, store, today, ui } from './ctx';
 import { BAG_SIZE, PRICE } from '../core/items/items';
@@ -179,7 +180,12 @@ let submitted = '';
 ui.rerender = () => render([]);
 
 // las salas creadas por el creador pueden salir en las expediciones que aloje
-setRoomSource(() => (isCreatorAccount() ? myRooms() : []));
+setRoomSource(() => {
+  // las de todos y, para el creador, las suyas (su versión manda)
+  const mine = isCreatorAccount() ? myRooms() : [];
+  return [...globalRooms().filter((r) => !mine.some((x) => x.id === r.id)), ...mine];
+});
+void fetchGlobalRooms();
 
 /** Laboratorio: partida local con todas las habilidades de la clase, muñecos, salas creadas, jefes e invocaciones. */
 async function training(cls: ClassId, setup?: Partial<LabSetup>, scene?: LabScene): Promise<void> {
@@ -232,6 +238,7 @@ document.addEventListener('click', (e) => {
     case 'creator': { if (!isCreatorAccount()) break; const m = meta(); m.creator = !m.creator; saveMeta(); homeScreen(''); break; }
     case 'trainstart': void training(id as ClassId); break;
     case 'editor': openEditor(id || undefined); break;
+    case 'introok': closeIntro(id); break;
     case 'labsetup': case 'labscene': case 'labboss': case 'labroom': case 'labtool': labClick(el.dataset.act, id); break;
     case 'train': s?.act({ a: 'train', op: id }); break;
     // H3: configurador de 4 habilidades (gratis; se guarda por clase y se anuncia a la sala)

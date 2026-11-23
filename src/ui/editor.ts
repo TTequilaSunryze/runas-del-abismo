@@ -6,10 +6,11 @@ import { createCombat, type UnitSpec } from '../core/combat/engine';
 import type { CombatState, Pos } from '../core/state';
 import { dropRoom, myRooms, putRoom } from '../game/meta';
 import { allRooms, zoneOpts } from '../game/run';
-import { CELL_KINDS, ENEMY_ZONE, KIND_NAME, ROOM_MAX, ROOM_MIN, STAT_KEYS, ZONE_SHORT, applyMod, cleanRoom, enemiesAt, newRoom, resizeRoom, roomWarnings, startAt, type CellKind, type RoomDef, type RoomEnemy, type RoomKind, type StatMod } from '../game/salas';
+import { CELL_KINDS, ENEMY_ZONE, templateRoom, KIND_NAME, ROOM_MAX, ROOM_MIN, STAT_KEYS, ZONE_SHORT, applyMod, cleanRoom, enemiesAt, newRoom, resizeRoom, roomWarnings, startAt, type CellKind, type RoomDef, type RoomEnemy, type RoomKind, type StatMod } from '../game/salas';
 import type { Session } from '../game/session';
 import { Board } from '../render/board';
 import { esc, ui } from './ctx';
+import { globalRooms, globalStamp, publishRooms } from '../net/salas';
 
 const CELL_INFO: Record<CellKind | 'floor', { icon: string; name: string; text: string }> = {
   floor: { icon: '⬜', name: 'Suelo', text: 'Borra el terreno de la casilla.' },
@@ -152,12 +153,35 @@ function leftPanel(r: RoomDef): string {
   if (!list.some((x) => x.id === r.id)) list.push(r);
   const builtin = allRooms().filter((x) => !list.some((y) => y.id === x.id));
   return `<div class="cbox"><div class="cboxh">📚 Mis salas (${list.length})</div>
-      <div class="edlist">${list.map((x) => `<button class="edroom ${x.id === r.id ? 'on' : ''}" data-ed="open" data-id="${esc(x.id)}"><b>${esc(x.name)}</b><small>Zona ${x.zone + 1} · ${KIND_NAME[x.kind]} · ${x.w}×${x.h} · ${x.enemies.length} enem.${x.published ? ' · 🌍 publicada' : ''}</small></button>`).join('')}</div>
-      <div class="row" style="flex-wrap:wrap;gap:4px;margin-top:6px"><button class="mini" data-ed="new">＋ Nueva</button><button class="mini" data-ed="dup">⧉ Duplicar</button><button class="mini danger" data-ed="del">🗑 Borrar</button></div></div>
+      <div class="edlist">${list.map((x) => `<button class="edroom ${x.id === r.id ? 'on' : ''}" data-ed="open" data-id="${esc(x.id)}"><b>${esc(x.name)}</b><small>Zona ${x.zone + 1} · ${KIND_NAME[x.kind]} · ${x.w}×${x.h} · ${x.enemies.length} enem.${x.published ? ` · ${syncBadge(x)}` : ''}</small></button>`).join('')}</div>
+      <div class="row" style="flex-wrap:wrap;gap:4px;margin-top:6px"><button class="mini" data-ed="new">＋ Nueva</button><button class="mini" data-ed="dup">⧉ Duplicar</button><button class="mini danger" data-ed="del">🗑 Borrar</button></div>
+      <div class="row" style="gap:4px;margin-top:4px"><select id="edtpl" class="edsel">${templateOptions()}</select><button class="mini" data-ed="tpl">Crear</button></div></div>
+    ${globalPanel(list)}
     ${builtin.length ? `<div class="cbox"><div class="cboxh">🎮 Salas del juego</div><div class="dim sm">Salen para todos. Para cambiar una, duplícala.</div><div class="edlist">${builtin.map((x) => `<button class="edroom" data-ed="copy" data-id="${esc(x.id)}"><b>${esc(x.name)}</b><small>Zona ${x.zone + 1} · ${KIND_NAME[x.kind]}</small></button>`).join('')}</div></div>` : ''}
     <div class="cbox"><div class="cboxh">📦 Archivos</div>
       <div class="row" style="flex-wrap:wrap;gap:4px"><button class="mini" data-ed="export">⬇ Exportar esta</button><button class="mini" data-ed="exportall">⬇ Exportar todas</button><label class="mini btnlike">⬆ Importar<input type="file" id="edimport" accept=".json,application/json" hidden></label></div>
-      <p class="dim sm">Tus salas se guardan en tu cuenta y salen en las expediciones que tú alojes (también para tus compañeros). Para que salgan en las partidas de todos los jugadores, exporta las publicadas y pásame el archivo.</p></div>`;
+      <p class="dim sm">Copia de seguridad de tus salas, o para pasarlas a otro sitio.</p></div>`;
+}
+
+/** Plantillas: guaridas de cada jefe y salas de cada élite. */
+function templateOptions(): string {
+  return `<option value="">Plantilla de jefe o élite…</option>${ZONES.map((z, i) => `<optgroup label="Zona ${i + 1} · ${esc(ZONE_SHORT[i])}">${z.bosses.map((b) => `<option value="boss:${i}:${b.id}">👑 ${esc(ENEMIES[b.id]?.name ?? b.id)}</option>`).join('')}${z.elites.map((id) => `<option value="elite:${i}:${id}">☠️ ${esc(ENEMIES[id]?.name ?? id)}</option>`).join('')}</optgroup>`).join('')}`;
+}
+
+/** Estado de una sala publicada respecto a la versión que tienen todos los jugadores. */
+function syncBadge(r: RoomDef): string {
+  const g = globalRooms().find((x) => x.id === r.id);
+  return !g ? '🔸 sin subir' : JSON.stringify({ ...g, t: 0 }) === JSON.stringify({ ...cleanRoom(r)!, published: true, t: 0 }) ? '🌍 en el juego' : '✎ cambios sin subir';
+}
+
+function globalPanel(list: RoomDef[]): string {
+  const pub = list.filter((x) => x.published), live = globalRooms(), when = globalStamp();
+  const pending = pub.filter((x) => syncBadge(x) !== '🌍 en el juego').length + live.filter((g) => !pub.some((x) => x.id === g.id)).length;
+  return `<div class="cbox"><div class="cboxh">🌍 Para todos los jugadores</div>
+    <div class="sm">En el juego: <b>${live.length}</b> sala${live.length === 1 ? '' : 's'}${when ? ` <span class="dim">(subidas el ${new Date(when).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })})</span>` : ''}</div>
+    <div class="sm">Tus publicadas: <b>${pub.length}</b>${pending ? ` · <span class="bad">${pending} cambio${pending === 1 ? '' : 's'} sin subir</span>` : ' · todo al día'}</div>
+    <button class="pri mini" data-ed="publish" ${pending ? '' : 'disabled'}>🌍 Subir las publicadas a todos</button>
+    <p class="dim sm">Las salas publicadas ya salen en las partidas que alojas tú. Al subirlas, salen en las de todos los jugadores; las que despublicas dejan de salir en la próxima subida.</p></div>`;
 }
 
 function rightPanel(r: RoomDef): string {
@@ -175,10 +199,18 @@ function rightPanel(r: RoomDef): string {
     <div class="cbox"><div class="cboxh">🎯 Objetivo</div>
       <select data-edc="goal" class="edsel"><option value="kill" ${r.goal.kind === 'kill' ? 'selected' : ''}>Acabar con todos los enemigos</option><option value="survive" ${r.goal.kind === 'survive' ? 'selected' : ''}>Sobrevivir unas rondas</option><option value="targets" ${r.goal.kind === 'targets' ? 'selected' : ''}>Acabar con los marcados (★)</option></select>
       ${r.goal.kind === 'survive' ? `<label class="sm">Rondas <input type="number" class="ednum" data-edc="rounds" min="1" max="30" value="${r.goal.rounds}"></label>` : ''}</div>
+    <div class="cbox"><div class="cboxh">📜 Historia y recompensa</div>
+      <label class="sm">Al entrar (antes de colocarse)<textarea data-edc="intro" rows="3" maxlength="600" placeholder="Opcional: lo que veis al entrar…">${esc(r.intro ?? '')}</textarea></label>
+      <label class="sm">Al ganar<textarea data-edc="outro" rows="2" maxlength="600" placeholder="Opcional">${esc(r.outro ?? '')}</textarea></label>
+      <div class="sm">Recompensa extra para cada héroe:</div>
+      <div class="labrow sm"><label>Oro <input type="number" class="ednum" data-edc="rgold" min="0" max="500" step="5" value="${r.reward?.gold ?? 0}"></label>
+        <label>Escofinas <input type="number" class="ednum" data-edc="resc" min="0" max="9" value="${r.reward?.escofinas ?? 0}"></label></div>
+      <div class="labrow sm"><label>Objeto <select data-edc="ritem">${[['-1', 'Ninguno'], ['0', 'Común o mejor'], ['1', 'Poco común o mejor'], ['2', 'Raro o mejor'], ['3', 'Legendario']].map(([v, n]) => `<option value="${v}" ${String(r.reward?.item ?? -1) === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+        <label>Reliquia <select data-edc="rrelic">${[['0', 'Ninguna'], ['1', 'Normal'], ['2', 'Rara']].map(([v, n]) => `<option value="${v}" ${String(r.reward?.relic ?? 0) === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label></div></div>
     <div class="cbox"><div class="cboxh">🌍 Expediciones</div>
       <label class="row sm"><input type="checkbox" data-edc="published" ${r.published ? 'checked' : ''}> Publicada: puede salir en las expediciones</label>
       <label class="sm">Probabilidad cuando toca un ${KIND_NAME[r.kind].toLowerCase()} de la zona ${r.zone + 1}: <input type="number" class="ednum" data-edc="chance" min="1" max="100" value="${r.chance}">%</label>
-      ${r.kind === 'boss' ? '<div class="dim sm">Las salas de jefe solo salen si el jefe de la partida está colocado en ella.</div>' : ''}</div>
+      ${r.kind === 'boss' ? '<div class="dim sm">Las salas de jefe solo salen si el jefe de la partida está colocado en ella. Con 100% sustituyen siempre a la guarida normal (si hay varias del mismo jefe, sale una al azar).</div>' : r.kind === 'event' ? '<div class="dim sm">Las salas de evento salen en las casillas ❓ de evento del mapa: un combate con su historia y su recompensa en vez de un evento normal.</div>' : r.kind === 'elite' ? '<div class="dim sm">Con 100% sustituyen siempre al combate de élite normal de la zona.</div>' : ''}</div>
     ${warn.length ? `<div class="cbox edwarn">${warn.map((w) => `<div class="sm">⚠ ${esc(w)}</div>`).join('')}</div>` : '<div class="cbox sm good">✔ Sala lista</div>'}`;
 }
 
@@ -195,6 +227,7 @@ function enemyPanel(e: RoomEnemy): string {
   const m = e.mod ?? {};
   return `<div class="cbox edenemy"><div class="cboxh">✏️ ${esc(ENEMIES[e.kind]?.name ?? e.kind)} <span class="dim sm">(${e.x + 1}, ${e.y + 1})</span></div>
     <select data-edc="setkind" class="edsel">${enemyOptions(e.kind)}</select>
+    <input class="edsel" data-edc="ename" maxlength="32" placeholder="Nombre propio (opcional): p. ej. Mordrak el Roto" value="${esc(e.name ?? '')}">
     <div class="row sm" style="gap:8px;flex-wrap:wrap;margin:4px 0"><label><input type="checkbox" data-edc="elite" ${e.elite ? 'checked' : ''}> ☠️ Élite</label><label><input type="checkbox" data-edc="egoal" ${e.goal ? 'checked' : ''}> ★ Objetivo</label>
       <label>Ronda <input type="number" class="ednum" data-edc="ewave" min="1" max="30" value="${Math.max(1, e.wave ?? 1)}"></label>
       <label>Solo con <select data-edc="emin">${[1, 2, 3, 4].map((n) => `<option value="${n}" ${(e.min ?? 1) === n ? 'selected' : ''}>${n}+ jug.</option>`).join('')}</select></label></div>
@@ -290,7 +323,25 @@ function act(el: HTMLElement): void {
       return refresh();
     }
     case 'export': flush(); download(`sala_${slug(r.name)}.json`, r); return;
-    case 'exportall': flush(); download('salas.json', myRooms()); ed.msg = 'Para que salgan para todos, pásame este archivo'; return refresh();
+    case 'exportall': flush(); download('salas.json', myRooms()); return;
+    case 'tpl': {
+      const v = (document.getElementById('edtpl') as HTMLSelectElement | null)?.value ?? '';
+      const [k, z, id] = v.split(':');
+      if (!id) return;
+      const zd = ZONES[Number(z)]!, boss = zd.bosses.find((b) => b.id === id);
+      flush();
+      ed.room = templateRoom(Number(z), k === 'boss' ? 'boss' : 'elite', id, boss?.guard ?? [], zd.pools[1]);
+      ed.sel = -1; putRoom(ed.room); ed.msg = 'Plantilla creada: retócala y publícala';
+      return refresh();
+    }
+    case 'publish': {
+      flush();
+      const list = myRooms().filter((x) => x.published);
+      el.setAttribute('disabled', '');
+      el.textContent = 'Subiendo…';
+      void publishRooms(list).then((err) => { ed.msg = err ?? `${list.length} sala${list.length === 1 ? '' : 's'} en el juego para todos`; refresh(); });
+      return;
+    }
     case 'fill': {
       // rellena con «fuera de la sala» todo lo que no esté conectado con la primera casilla de inicio
       const start = r.starts[0];
@@ -324,7 +375,7 @@ function onChange(el: HTMLInputElement | HTMLSelectElement): void {
   const num = (lo: number, hi: number): number => Math.max(lo, Math.min(hi, Math.round(Number(v)) || lo));
   switch (el.dataset.edc) {
     case 'zone': r.zone = num(0, 3); break;
-    case 'kind': r.kind = (v === 'elite' || v === 'boss' ? v : 'combat'); break;
+    case 'kind': r.kind = (v === 'elite' || v === 'boss' || v === 'event' ? v : 'combat'); break;
     case 'w': resizeRoom(r, num(ROOM_MIN.w, ROOM_MAX.w), r.h); ed.sel = -1; break;
     case 'h': resizeRoom(r, r.w, num(ROOM_MIN.h, ROOM_MAX.h)); ed.sel = -1; break;
     case 'ekind': ed.kind = ENEMIES[v] ? v : ed.kind; ed.tool = 'enemy'; return refresh();
@@ -334,6 +385,18 @@ function onChange(el: HTMLInputElement | HTMLSelectElement): void {
     case 'published': r.published = (el as HTMLInputElement).checked; break;
     case 'chance': r.chance = num(1, 100); break;
     case 'setkind': if (e && ENEMIES[v]) e.kind = v; break;
+    case 'ename': if (e) { const n = v.trim().slice(0, 32); if (n) e.name = n; else delete e.name; } break;
+    case 'intro': { const s = v.trim().slice(0, 600); if (s) r.intro = s; else delete r.intro; break; }
+    case 'outro': { const s = v.trim().slice(0, 600); if (s) r.outro = s; else delete r.outro; break; }
+    case 'rgold': case 'resc': case 'ritem': case 'rrelic': {
+      const rw = { ...(r.reward ?? {}) }, n = Number(v) || 0;
+      if (el.dataset.edc === 'rgold') { if (n > 0) rw.gold = Math.min(500, Math.round(n)); else delete rw.gold; }
+      if (el.dataset.edc === 'resc') { if (n > 0) rw.escofinas = Math.min(9, Math.round(n)); else delete rw.escofinas; }
+      if (el.dataset.edc === 'ritem') { if (n >= 0 && v !== '-1') rw.item = Math.min(3, n); else delete rw.item; }
+      if (el.dataset.edc === 'rrelic') { if (n > 0) rw.relic = Math.min(2, n); else delete rw.relic; }
+      if (Object.keys(rw).length) r.reward = rw; else delete r.reward;
+      break;
+    }
     case 'elite': if (e) { if ((el as HTMLInputElement).checked) e.elite = true; else delete e.elite; } break;
     case 'egoal': if (e) { if ((el as HTMLInputElement).checked) e.goal = true; else delete e.goal; } break;
     case 'ewave': if (e) { const w = num(1, 30); if (w > 1) e.wave = w; else delete e.wave; } break;

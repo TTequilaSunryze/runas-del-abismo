@@ -873,3 +873,7 @@ button.armed { background: #7a1f2c; border-color: var(--red); }
 .labrow { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; margin: 3px 0; }
 .labrow select { max-width: 100%; font-size: 12px; }
 @media (max-width: 1100px) { .edgrid { grid-template-columns: 1fr; } .edside { max-height: none; } }
+.storybox { max-width: 560px; white-space: normal; }
+.storybox p { line-height: 1.5; margin: 6px 0 10px; }
+.edside textarea { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; font-size: 13px; background: #15110d; color: var(--txt); border: 1px solid var(--iron); border-radius: 4px; padding: 4px; }
+.edside label.sm { display: block; }

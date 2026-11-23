@@ -56,6 +56,8 @@ export interface Meta {
   /** salas creadas por el creador (y las que borró, para que no vuelvan al fusionar dispositivos) */
   rooms?: RoomDef[];
   roomsGone?: string[];
+  /** clave para subir las salas para todos (solo en el progreso privado del creador) */
+  roomsKey?: string;
 }
 
 // ---------- modo creador ----------
@@ -158,6 +160,7 @@ export function mergeMeta(a: Meta, b: Partial<Meta>): Meta {
     cosmetics: mergeCosmetics(a.cosmetics, b.cosmetics),
     // H3: la configuración de este dispositivo manda; de la otra, solo las clases que aquí no se han tocado
     kits: { ...cleanKits(b.kits), ...cleanKits(a.kits) },
+    ...(a.roomsKey || b.roomsKey ? { roomsKey: a.roomsKey ?? b.roomsKey } : {}),
     roomsGone: uniq([...(a.roomsGone ?? []), ...(b.roomsGone ?? [])]).slice(-200),
     rooms: mergeRooms(a.rooms, b.rooms, uniq([...(a.roomsGone ?? []), ...(b.roomsGone ?? [])])),
   };

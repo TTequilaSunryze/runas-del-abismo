@@ -48,6 +48,8 @@ export const STAT_KEYS: Array<{ k: keyof StatMod; name: string; min: number; max
 
 export interface RoomEnemy {
   kind: string;
+  /** nombre propio (minijefes): sustituye al nombre normal */
+  name?: string;
   x: number;
   y: number;
   /** ronda en la que entra (0 o 1 = desde el principio) */
@@ -63,7 +65,18 @@ export interface RoomEnemy {
 }
 
 export type RoomGoal = { kind: 'kill' } | { kind: 'survive'; rounds: number } | { kind: 'targets' };
-export type RoomKind = 'combat' | 'elite' | 'boss';
+export type RoomKind = 'combat' | 'elite' | 'boss' | 'event';
+
+/** Recompensa extra al ganar la sala (para cada héroe). */
+export interface RoomReward {
+  gold?: number;
+  /** objeto de rareza mínima 0 a 3 (sin campo = ninguno) */
+  item?: number;
+  /** reliquia: 1 = normal, 2 = rara */
+  relic?: number;
+  /** Escofinas de Eco */
+  escofinas?: number;
+}
 
 export interface RoomDef {
   id: string;
@@ -83,12 +96,16 @@ export interface RoomDef {
   published: boolean;
   /** probabilidad (%) de salir cuando toca una sala de su zona y tipo */
   chance: number;
+  /** texto al entrar (antes de colocarse) y al ganar */
+  intro?: string;
+  outro?: string;
+  reward?: RoomReward;
   /** última modificación */
   t: number;
 }
 
 export const ROOM_MIN = { w: 5, h: 4 }, ROOM_MAX = { w: 16, h: 10 };
-export const KIND_NAME: Record<RoomKind, string> = { combat: 'Combate', elite: 'Élite', boss: 'Jefe' };
+export const KIND_NAME: Record<RoomKind, string> = { combat: 'Combate', elite: 'Élite', boss: 'Jefe', event: 'Evento' };
 export const ZONE_SHORT = ['Catacumbas', 'Bosque', 'Ceniza', 'Abismo'];
 
 /** Zona de cada enemigo (los aliados, −1). */
@@ -123,14 +140,22 @@ export function cleanRoom(x: unknown): RoomDef | null {
     if (!e || !ENEMIES[e.kind] || !inside(e)) continue;
     const mod: StatMod = {};
     for (const s of STAT_KEYS) { const v = (e.mod as Record<string, unknown> | undefined)?.[s.k]; if (v !== undefined && Number(v)) mod[s.k] = int(v, s.min, s.max, 0); }
-    enemies.push({ kind: e.kind, x: e.x, y: e.y, ...(e.wave && e.wave > 1 ? { wave: int(e.wave, 2, 30, 2) } : {}), ...(e.min && e.min > 1 ? { min: int(e.min, 2, 4, 2) } : {}), ...(e.elite ? { elite: true } : {}), ...(e.goal ? { goal: true } : {}),
+    enemies.push({ kind: e.kind, x: e.x, y: e.y, ...(typeof e.name === 'string' && e.name.trim() ? { name: e.name.trim().slice(0, 32) } : {}), ...(e.wave && e.wave > 1 ? { wave: int(e.wave, 2, 30, 2) } : {}), ...(e.min && e.min > 1 ? { min: int(e.min, 2, 4, 2) } : {}), ...(e.elite ? { elite: true } : {}), ...(e.goal ? { goal: true } : {}),
       ...(Array.isArray(e.affixes) && e.affixes.some((a) => AFFIXES[a]) ? { affixes: [...new Set(e.affixes.filter((a) => AFFIXES[a]))] } : {}), ...(Object.keys(mod).length ? { mod } : {}) });
   }
   const g = r.goal as RoomGoal | undefined;
   const goal: RoomGoal = g?.kind === 'survive' ? { kind: 'survive', rounds: int(g.rounds, 1, 30, 5) } : g?.kind === 'targets' ? { kind: 'targets' } : { kind: 'kill' };
+  const rw = (r.reward ?? {}) as RoomReward, reward: RoomReward = {};
+  if (Number(rw.gold) > 0) reward.gold = int(rw.gold, 1, 500, 0);
+  if (rw.item !== undefined && rw.item !== null && Number(rw.item) >= 0) reward.item = int(rw.item, 0, 3, 0);
+  if (Number(rw.relic) > 0) reward.relic = int(rw.relic, 1, 2, 1);
+  if (Number(rw.escofinas) > 0) reward.escofinas = int(rw.escofinas, 1, 9, 1);
+  const text = (s: unknown): string | undefined => (typeof s === 'string' && s.trim() ? s.trim().slice(0, 600) : undefined);
+  const intro = text(r.intro), outro = text(r.outro);
   return {
+    ...(intro ? { intro } : {}), ...(outro ? { outro } : {}), ...(Object.keys(reward).length ? { reward } : {}),
     id: typeof r.id === 'string' && r.id ? r.id.slice(0, 40) : newRoom().id, name: String(r.name ?? 'Sala').slice(0, 40) || 'Sala', zone: int(r.zone, 0, 3, 0),
-    kind: r.kind === 'elite' || r.kind === 'boss' ? r.kind : 'combat', w, h, cells, starts, enemies: enemies.slice(0, 40), goal, published: !!r.published, chance: int(r.chance, 1, 100, 35), t: Number(r.t) || Date.now(),
+    kind: r.kind === 'elite' || r.kind === 'boss' || r.kind === 'event' ? r.kind : 'combat', w, h, cells, starts, enemies: enemies.slice(0, 40), goal, published: !!r.published, chance: int(r.chance, 1, 100, 35), t: Number(r.t) || Date.now(),
   };
 }
 
@@ -148,8 +173,9 @@ export function resizeRoom(r: RoomDef, w: number, h: number): void {
 }
 
 /** Aplica los ajustes del creador a un enemigo ya escalado. */
-export function applyMod(u: UnitSpec, e: Pick<RoomEnemy, 'mod' | 'elite' | 'goal'>): UnitSpec {
+export function applyMod(u: UnitSpec, e: Pick<RoomEnemy, 'mod' | 'elite' | 'goal' | 'name'>): UnitSpec {
   const m = e.mod ?? {};
+  if (e.name) u.name = e.name;
   if (m.hp) { u.maxHp = Math.max(1, Math.round(u.maxHp * (1 + m.hp / 100))); u.hp = u.maxHp; }
   if (m.power) u.power += m.power;
   if (m.ap) { u.ap = Math.max(0, u.ap + m.ap); u.maxAp = Math.max(0, u.maxAp + m.ap); }
@@ -206,6 +232,8 @@ export function roomSetup(r: RoomDef, heroes: UnitSpec[], sc: RoomScale, seed: n
   return {
     seed, w: r.w, h: r.h, obstacles: of('wall'), voids: of('void'), braziers: of('brazier'), abyss: of('abyss'), roots: of('root'), puddles: of('puddle'), traps: of('trap'),
     biome: r.name, units: [...heroes, ...units], deploy, deployCells: starts, goal, waves: [...waves].map(([round, us]) => ({ round, units: us })),
+    ...(r.intro || r.outro ? { story: { title: r.name, ...(r.intro ? { intro: r.intro } : {}), ...(r.outro ? { outro: r.outro } : {}) } } : {}),
+    ...(r.reward ? { reward: { ...r.reward } } : {}),
   };
 }
 
@@ -243,4 +271,19 @@ export function mergeRooms(a: RoomDef[] = [], b: RoomDef[] = [], gone: string[] 
   const m = new Map<string, RoomDef>();
   for (const r of [...a, ...b]) { const c = cleanRoom(r); if (c && !gone.includes(c.id) && (!m.has(c.id) || m.get(c.id)!.t < c.t)) m.set(c.id, c); }
   return [...m.values()].sort((x, y) => x.t - y.t).slice(-60);
+}
+
+/** Plantilla de sala de jefe (con su escolta según los jugadores) o de élite, para retocarla en el editor. */
+export function templateRoom(zone: number, kind: 'boss' | 'elite', id: string, guard: string[], extra: string[]): RoomDef {
+  const r = newRoom(zone);
+  r.w = 14; r.h = 8; r.kind = kind; r.chance = 100;
+  r.name = `${kind === 'boss' ? 'Guarida' : 'Sala'}: ${ENEMIES[id]?.name ?? id}`;
+  r.starts = [{ x: 1, y: 2 }, { x: 1, y: 5 }, { x: 2, y: 3 }, { x: 2, y: 4 }, { x: 0, y: 1 }, { x: 0, y: 6 }];
+  r.cells = { '6,1': 'wall', '6,6': 'wall', '8,3': 'wall' };
+  if (kind === 'boss') {
+    r.enemies = [{ kind: id, x: 11, y: 4 }, { kind: guard[0] ?? 'esqueleto', x: 10, y: 2 }, { kind: guard[1] ?? guard[0] ?? 'esqueleto', x: 10, y: 6, min: 3 }, { kind: guard[0] ?? 'esqueleto', x: 12, y: 1, min: 4 }];
+  } else {
+    r.enemies = [{ kind: id, x: 11, y: 4, elite: true }, { kind: extra[0] ?? 'esqueleto', x: 10, y: 2, min: 2 }, { kind: extra[1] ?? extra[0] ?? 'esqueleto', x: 10, y: 6, min: 3 }, { kind: extra[2] ?? extra[0] ?? 'esqueleto', x: 12, y: 1, min: 4 }];
+  }
+  return r;
 }

@@ -47,6 +47,9 @@ export interface FightReport {
   items: Array<{ owner: string; item: Item }>;
   /** otro botín: reliquias y consumibles */
   loot: Array<{ owner: string; icon: string; name: string; text: string; rare?: boolean }>;
+  /** salas creadas: texto al ganar */
+  outro?: string;
+  title?: string;
 }
 
 export interface HeroSave {
@@ -586,7 +589,8 @@ function enemyList(run: RunState): string[] {
   return list;
 }
 
-export function buildFight(run: RunState): CombatSetup {
+/** Combate de la sala actual. `forced`: una sala creada concreta (salas de evento). */
+export function buildFight(run: RunState, forced?: RoomDef): CombatSetup {
   const n = run.heroes.length;
   const { w, h } = boardSize(n);
   const ys = [0, 1, -1, 2].map((o) => Math.floor(h / 2) + o);
@@ -617,7 +621,7 @@ export function buildFight(run: RunState): CombatSetup {
     return a;
   });
   // salas creadas y publicadas por el creador (y las del juego)
-  const custom = pickCustomRoom(run);
+  const custom = forced ?? pickCustomRoom(run);
   if (custom) { const setup = customFight(run, custom, heroes, allies); if (setup) return setup; }
   const ids = enemyList(run);
   // los combates normales (no élites ni jefes) salen a veces como pasillo estrecho
@@ -684,10 +688,10 @@ const builtin = (BUILTIN_ROOMS as unknown[]).map(cleanRoom).filter((r): r is Roo
 export const allRooms = (): RoomDef[] => [...builtin, ...roomSource()];
 
 /** ¿Toca una sala creada? Cada sala publicada de esta zona y tipo tiene su probabilidad. */
-function pickCustomRoom(run: RunState): RoomDef | null {
+function pickCustomRoom(run: RunState, kind: string = run.kind): RoomDef | null {
   if (run.arena || run.ambush || run.daily) return null;
-  const boss = run.kind === 'boss' ? bossOf(run).id : null;
-  const list = allRooms().filter((r) => r.published && r.zone === Math.min(run.zone, 3) && r.kind === run.kind && (!boss || r.enemies.some((e) => e.kind === boss)));
+  const boss = kind === 'boss' ? bossOf(run).id : null;
+  const list = allRooms().filter((r) => r.published && r.zone === Math.min(run.zone, 3) && r.kind === kind && (!boss || r.enemies.some((e) => e.kind === boss)));
   if (!list.length) return null;
   for (const r of shuffle(run, list)) if (rand(run) * 100 < r.chance) return r;
   return null;
@@ -907,6 +911,16 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
     run.phase = 'event';
     return [];
   }
+  // salas de evento creadas: un combate con su historia y su recompensa
+  const evRoom = node === 'event' ? pickCustomRoom(run, 'event') : null;
+  if (evRoom) {
+    run.kind = 'combat';
+    run.omen = null;
+    const { state, events } = createCombat({ ...buildFight(run, evRoom), deploy: true });
+    run.combat = state;
+    run.phase = 'combat';
+    return events;
+  }
   if (node === 'event') {
     const all = [...zoneOf(run).events, ...(run.arena ? [] : branchStarters(run))];
     const options = all.filter((e) => !run.eventsSeen.includes(e.id));
@@ -1075,10 +1089,19 @@ export function finishFight(run: RunState): void {
     if (relicHere) { const r = giveRelic(run, h, run.kind === 'boss' ? undefined : false); if (r) { extra.push(`${h.name}: ${RELICS[r]!.icon} ${RELICS[r]!.name}`); loot.push({ owner: h.owner, icon: RELICS[r]!.icon, name: RELICS[r]!.name, text: RELICS[r]!.text, rare: !!RELICS[r]!.rare }); } }
     if (run.kind === 'boss' && flawless && run.flags.includes(`promesa_${run.zone}`)) { const r = giveRelic(run, h, true); if (r) { extra.push(`${h.name} (promesa): ${RELICS[r]!.icon} ${RELICS[r]!.name}`); loot.push({ owner: h.owner, icon: RELICS[r]!.icon, name: RELICS[r]!.name, text: RELICS[r]!.text, rare: !!RELICS[r]!.rare }); } }
   }
+  // recompensa de las salas creadas
+  const rw = c.reward;
+  if (rw) for (const h of run.heroes) {
+    if (rw.gold) { h.gold += rw.gold; h.stats.maxGold = Math.max(h.stats.maxGold, h.gold); }
+    if (rw.item !== undefined) (found[h.owner] ??= []).push(giveItem(run, h, 'elite', Math.max(0, Math.min(3, rw.item)) as Rarity));
+    if (rw.relic) { const r = giveRelic(run, h, rw.relic >= 2 ? true : undefined); if (r) loot.push({ owner: h.owner, icon: RELICS[r]!.icon, name: RELICS[r]!.name, text: RELICS[r]!.text, rare: !!RELICS[r]!.rare }); }
+    if (rw.escofinas) { h.escofinas = (h.escofinas ?? 0) + rw.escofinas; loot.push({ owner: h.owner, icon: '🔔', name: `${rw.escofinas} Escofina${rw.escofinas > 1 ? 's' : ''} de Eco`, text: 'Para templar hechizos en la Forja' }); }
+  }
+  if (rw?.gold) extra.push(`+${rw.gold} de oro de recompensa para cada uno`);
   if (run.cage) { addAlly(run, run.cage); extra.push(`Liberáis al prisionero: ${makeEnemy(run.cage, { x: 0, y: 0 }).name} os acompaña hasta el final de la zona`); run.cage = null; }
   run.stamp++;
   run.note = `Victoria: cada uno gana ${gold} de oro.${extra.length ? ` También: ${extra.join(' · ')}.` : ''}`;
-  run.report = { stamp: run.stamp, kind: run.kind, turns: c.round, gold, loot, items: Object.entries(found).flatMap(([owner, list]) => list.map((item) => ({ owner, item }))), damage: run.heroes.map((h) => ({ owner: h.owner, name: h.name, dmg: Math.max(0, h.stats.dmg - (run.dmg0?.[h.owner] ?? h.stats.dmg)) })) };
+  run.report = { stamp: run.stamp, kind: run.kind, turns: c.round, gold, loot, ...(c.story?.outro ? { outro: c.story.outro, title: c.story.title } : {}), items: Object.entries(found).flatMap(([owner, list]) => list.map((item) => ({ owner, item }))), damage: run.heroes.map((h) => ({ owner: h.owner, name: h.name, dmg: Math.max(0, h.stats.dmg - (run.dmg0?.[h.owner] ?? h.stats.dmg)) })) };
   run.omen = null;
   run.ambush = false;
   run.fight++;
@@ -1382,7 +1405,7 @@ function labScene(run: RunState, scene: LabScene): string | null {
   if (scene.kind === 'room') {
     const r = allRooms().find((x) => x.id === scene.id);
     if (!r) return 'No se encuentra esa sala';
-    run.zone = r.zone; run.kind = r.kind;
+    run.zone = r.zone; run.kind = r.kind === 'event' ? 'combat' : r.kind;
     const boss = r.enemies.find((e) => ENEMIES[e.kind]?.ai === 'boss');
     if (boss) setBossOf(run, boss.kind);
     const setup = roomSetup(r, heroes, { players: heroes.length, depth: st.depth, opts: (id) => labOpts(run, id) }, seed, false);

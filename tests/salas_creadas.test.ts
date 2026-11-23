@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createCombat, endTurn, current } from '../src/core/combat/engine';
-import { cleanRoom, mergeRooms, newRoom, roomSetup, roomWarnings, type RoomDef } from '../src/game/salas';
-import { labAction, labOn, labSceneOf, newTraining, buildFight, newRun, setRoomSource } from '../src/game/run';
+import { cleanRoom, mergeRooms, newRoom, roomSetup, roomWarnings, templateRoom, type RoomDef } from '../src/game/salas';
+import { chooseNode, finishFight, labAction, labOn, labSceneOf, newTraining, buildFight, newRun, setRoomSource } from '../src/game/run';
 import { heroSpec } from '../src/game/run';
 
 const hero = (): ReturnType<typeof heroSpec> => heroSpec(newRun('H', 1, [{ owner: 'me', name: 'Yo', cls: 'carcelero', routes: ['base'] }]).heroes[0]!);
@@ -105,5 +105,46 @@ describe('laboratorio', () => {
     // los trucos se conservan al cambiar de escenario
     expect(labOn(run, 'god')).toBe(true);
     expect(run.combat!.units.filter((u) => u.owner === 'me')).toHaveLength(2);
+  });
+});
+
+describe('salas con historia, recompensa y evento', () => {
+  it('nombre propio, texto y recompensa llegan al combate', () => {
+    const r = { ...room(), intro: 'Huele a azufre.', outro: 'Silencio.', reward: { gold: 50, relic: 1, escofinas: 2 } };
+    r.enemies[0]!.name = 'Mordrak el Roto';
+    const s = createCombat(roomSetup(cleanRoom(r)!, [hero()], { players: 1, depth: 0 }, 5, false)).state;
+    expect(s.units.some((u) => u.name === 'Mordrak el Roto')).toBe(true);
+    expect(s.story).toEqual({ title: r.name, intro: 'Huele a azufre.', outro: 'Silencio.' });
+    expect(s.reward).toEqual({ gold: 50, relic: 1, escofinas: 2 });
+  });
+
+  it('las salas de evento sustituyen a un evento del mapa y pagan su recompensa', () => {
+    const r = cleanRoom({ ...room(), kind: 'event', published: true, chance: 100, outro: 'Fin', reward: { gold: 40, escofinas: 1 } })!;
+    setRoomSource(() => [r]);
+    const run = newRun('E', 4, [{ owner: 'me', name: 'Yo', cls: 'carcelero', routes: ['base'] }]);
+    run.phase = 'map';
+    run.map[run.step] = ['event'];
+    run.at = -1;
+    run.links = [];
+    chooseNode(run, 0);
+    setRoomSource(() => []);
+    expect(run.phase).toBe('combat');
+    expect(run.combat!.reward?.gold).toBe(40);
+    const gold = run.heroes[0]!.gold;
+    for (const u of run.combat!.units) if (u.team === 'enemy') u.hp = 0;
+    run.combat!.over = 'win';
+    finishFight(run);
+    expect(run.heroes[0]!.gold).toBeGreaterThanOrEqual(gold + 40);
+    expect(run.heroes[0]!.escofinas).toBe(1);
+    expect(run.report?.outro).toBe('Fin');
+  });
+
+  it('plantillas de jefe y élite', () => {
+    const b = templateRoom(0, 'boss', 'prior', ['esqueleto', 'arquero'], []);
+    expect(b.kind).toBe('boss');
+    expect(b.enemies[0]!.kind).toBe('prior');
+    expect(roomWarnings(b).filter((w) => !w.includes('casillas de inicio'))).toEqual([]);
+    const e = templateRoom(0, 'elite', 'caballero', [], ['esqueleto']);
+    expect(e.enemies[0]!.elite).toBe(true);
   });
 });

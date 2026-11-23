@@ -78,6 +78,15 @@ const TRAIT_TEXT: Record<string, string> = {
 const lab = { draft: null as LabSetup | null, tool: null as null | 'spawn' | 'remove', kind: 'esqueleto', team: 'enemy' as 'enemy' | 'hero', room: '', html: '' };
 const GEAR = ['Sin objetos', 'Comunes o mejores', 'Poco comunes o mejores', 'Raros o mejores', 'Legendarios'];
 
+/** Texto de la sala creada que ya cerró este jugador. */
+let introSeen = '';
+export function closeIntro(key: string): void { introSeen = key; document.getElementById('intromodal')?.remove(); }
+/** Recompensa extra de una sala creada, en palabras. */
+export function rewardText(r: NonNullable<CombatState['reward']>): string {
+  const RAR = ['común o mejor', 'poco común o mejor', 'raro o mejor', 'legendario'];
+  return [r.gold ? `${r.gold} de oro` : '', r.item !== undefined ? `un objeto ${RAR[r.item] ?? ''}` : '', r.relic ? `una reliquia${r.relic >= 2 ? ' rara' : ''}` : '', r.escofinas ? `${r.escofinas} Escofina${r.escofinas > 1 ? 's' : ''} de Eco` : ''].filter(Boolean).join(', ') + ' para cada uno';
+}
+
 /** Objetivo y refuerzos de las salas creadas. */
 function goalHtml(c: CombatState): string {
   const out: string[] = [];
@@ -227,6 +236,10 @@ export function combatScreen(events: GameEvent[]): void {
         return `<button class="sbtn item ${board.sel === d.id ? 'on' : ''}" data-act="spell" data-id="${d.id}" ${off ? 'disabled' : ''} ${tip(spellTip(d, `<div class="sm">Te quedan ${sp.charges}</div>`))}>${spellIcon(d, false)}<span class="cost free">0</span><span class="cdn qty">x${sp.charges}</span><small>${esc(d.name.replace('Poción de ', 'P. ').replace('Bomba de ', 'B. '))}</small></button>`; }).join('')}` : ''}</div>
       <div class="dend">${!deploying && left && !c.over ? `<span class="dclock ${left <= 10 ? 'bad' : ''}">⏱ ${left}s</span>` : ''}${endBtn}</div>`
     : '<span class="dim">Estás como espectador en este combate.</span>';
+  // salas creadas: texto al entrar (cada jugador lo cierra por su cuenta)
+  const introKey = c.story?.intro ? `${run.code}:${run.step}:${run.zone}:${c.story.title}` : '';
+  document.getElementById('intromodal')?.remove();
+  if (introKey && introSeen !== introKey && c.round <= 1) ui.root.insertAdjacentHTML('beforeend', `<div class="modal" id="intromodal"><div class="panel note storybox"><h3>${esc(c.story!.title)}</h3><p>${esc(c.story!.intro!).replace(/\n/g, '<br>')}</p>${run.combat?.reward ? `<div class="sm good">Recompensa al ganar: ${rewardText(run.combat.reward)}</div>` : ''}<div class="row center"><button class="pri" data-act="introok" data-id="${esc(introKey)}">Adelante</button></div></div></div>`);
   const lg = document.getElementById('log')!;
   const atBottom = lg.scrollHeight - lg.scrollTop - lg.clientHeight < 40;
   lg.innerHTML = ui.log.join('');

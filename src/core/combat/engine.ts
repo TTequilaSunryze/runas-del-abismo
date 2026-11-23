@@ -30,6 +30,8 @@ export interface CombatSetup {
   voids?: Pos[];
   goal?: CombatGoal | null;
   waves?: Array<{ round: number; units: UnitSpec[] }>;
+  story?: CombatState['story'];
+  reward?: CombatState['reward'];
 }
 
 export type ActionResult = { ok: true; events: GameEvent[] } | { ok: false; reason: string };
@@ -171,6 +173,8 @@ export function createCombat(setup: CombatSetup): { state: CombatState; events: 
   };
   if (setup.voids?.length) { state.voids = setup.voids.map(key); state.obstacles.push(...state.voids.filter((k) => !state.obstacles.includes(k))); }
   if (setup.goal) state.goal = { ...setup.goal };
+  if (setup.story) state.story = { ...setup.story };
+  if (setup.reward) state.reward = { ...setup.reward };
   if (setup.waves?.length) state.waves = setup.waves.filter((w) => w.units.length).map((w) => ({ round: Math.max(2, Math.floor(w.round)), units: w.units.map((u) => ({ ...u, pos: { ...u.pos }, statuses: { ...u.statuses }, spells: u.spells.map((sp) => ({ ...sp })) })) })).sort((a, b) => a.round - b.round);
   const events: GameEvent[] = [];
   if (setup.deploy) {

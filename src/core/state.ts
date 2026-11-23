@@ -223,6 +223,9 @@ export interface CombatState extends RngBox {
   goal?: CombatGoal | null;
   /** salas creadas: refuerzos que entran al empezar la ronda indicada (o en cuanto no quede ningún enemigo) */
   waves?: Array<{ round: number; units: Array<Omit<Unit, 'id'>> }>;
+  /** salas creadas: texto al entrar y al ganar, y recompensa extra para cada héroe */
+  story?: { title: string; intro?: string; outro?: string };
+  reward?: { gold?: number; item?: number; relic?: number; escofinas?: number };
 }
 
 /** Objetivo de una sala creada: sobrevivir N rondas o acabar con los enemigos marcados. */
