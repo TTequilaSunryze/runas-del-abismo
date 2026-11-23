@@ -137,6 +137,11 @@ const SHEETS: Record<string, Sheet> = {
   prior2: { ...sheet('prior2', { idle: 4, walk: 3, attack: 4, transform: 5, hurt: 3, death: 4 }, 160, [80, 156], 2, 1), head: 84, actMs: 900, release: 3 / 4 },
   planidera: { ...sheet('planidera', { idle: 5, walk: 5, attack: 5, cast: 4, hurt: 2, death: 4 }, 224, [112, 220], 2, 1), head: 74, actMs: 900, release: 3 / 5 },
   planidera2: { ...sheet('planidera2', { idle: 5, walk: 5, attack: 5, cast: 4, hurt: 2, death: 4, transform: 5 }, 224, [112, 220], 2, 1), head: 74, actMs: 900, release: 3 / 5 },
+  esqueleto: { ...sheet('esqueleto', { idle: 5, walk: 9, attack: 5, cast: 9, hurt: 6, death: 9 }, 128, [64, 124], 2, 1), head: 60, actMs: 800, release: 2 / 5 },
+  acolito: { ...sheet('acolito', { idle: 6, walk: 7, attack: 10, cast: 10, hurt: 4, death: 7 }, 128, [64, 124], 2, 1), head: 66, actMs: 1000, release: 4 / 10 },
+  necrofago: { ...sheet('necrofago', { idle: 8, walk: 4, attack: 7, cast: 9, hurt: 5, death: 9 }, 128, [64, 124], 2, 1), head: 58, actMs: 800, release: 3 / 7 },
+  espectro: { ...sheet('espectro', { idle: 5, walk: 5, attack: 5, cast: 4, hurt: 3, death: 4 }, 128, [64, 124], 2, 1), head: 66, actMs: 800, release: 3 / 5 },
+  gargola: { ...sheet('gargola', { idle: 6, walk: 9, attack: 6, cast: 6, hurt: 4, death: 6 }, 128, [64, 124], 2, 1), head: 63, actMs: 800, release: 3 / 6 },
   tejedora: withHead(sheet('weaver', { idle: 12, walk: 8, attack: 10, hurt: 8, death: 12 }, 159, [80, 84]), 27),
 };
 /** héroes con hoja (por clase). Arquero: «Arcane archer», de perfil. */
@@ -157,6 +162,8 @@ export function sheetDir(dx: number, dy: number): number {
   return [2, 1, 0, 7, 6, 5, 4, 3][k]!;
 }
 
+/** tiempo por casilla al andar */
+const STEP_MS = 380;
 /** duración de la transformación de fase de los jefes */
 const PHASE_MS = 1600;
 
@@ -263,6 +270,10 @@ export class Board {
   private lunge = new Map<number, { t0: number; dx: number; dy: number }>();
   /** animación de hechizo en curso (modelos animados) */
   private acts = new Map<number, { t0: number; anim: Anim; ms?: number }>();
+  /** caminatas en curso: camino casilla a casilla */
+  private walks = new Map<number, { from: Pos; path: Pos[]; t0: number; end: number }>();
+  /** dirección del tramo que va andando (dx, dy) y casillas andadas, para la animación */
+  private walkSeg = new Map<number, { dx: number; dy: number; dist: number }>();
   /** acción que espera a que acabe la transformación de fase */
   private pendingAct = new Map<number, { t0: number; anim: Anim; ms?: number }>();
   /** Pone la animación de una acción; si se está transformando, la deja para cuando acabe. */
@@ -391,6 +402,8 @@ export class Board {
     const now0 = performance.now();
     /** retraso de lo que viene detrás de un disparo con flecha propia: el golpe se ve cuando llega */
     let late = 0;
+    /** retraso por andar: también lo esperan los lanzamientos (atacar al llegar) */
+    let walkLate = 0;
     const float = (id: number, text: string, color: string): void => {
       const u = c.units.find((x) => x.id === id), t0 = now0 + late;
       const p = this.shown.get(id) ?? u?.pos;
@@ -399,7 +412,7 @@ export class Board {
     const heroIdx = teamIdx(c);
     for (const e of events) {
       // lo que no es el propio lanzamiento llega con el retraso de la flecha
-      const now = e.t === 'cast' ? now0 : now0 + late;
+      const now = e.t === 'cast' ? now0 + walkLate : now0 + late;
       const u = 'unit' in e ? c.units.find((x) => x.id === e.unit) : undefined;
       const from = u ? this.shown.get(u.id) ?? u.pos : undefined;
       const shc = this.iso && u ? sheetOf(u) : undefined;
@@ -457,6 +470,13 @@ export class Board {
       } else if (e.t === 'move' && u && e.path.length) {
         const last = e.path[e.path.length - 1]!;
         if (from && last.x !== Math.round(from.x)) this.faceLeft.set(u.id, last.x < from.x);
+        // andar: recorre el camino casilla a casilla; lo que pase después en el turno espera a que llegue
+        if (e.walk && from) {
+          const start = Math.max(now, this.walks.get(u.id)?.end ?? 0);
+          this.walks.set(u.id, { from: { x: Math.round(from.x), y: Math.round(from.y) }, path: e.path.map((p) => ({ ...p })), t0: start, end: start + e.path.length * STEP_MS });
+          walkLate = Math.max(walkLate, start + e.path.length * STEP_MS - now0);
+          late = Math.max(late, walkLate);
+        }
       } else if (e.t === 'death' && u && from) {
         if (u.seed === undefined) this.ghosts.push({ kind: lookKind(u), team: u.team, idx: heroIdx.get(u.id) ?? 0, x: from.x, y: from.y, t0: now, sheet: sheetOf(u) ? u.kind : undefined, dir: this.facing.get(u.id) ?? 0 });
       }
@@ -691,10 +711,11 @@ export class Board {
   private drawSheetUnit(c: CombatState, u: Unit, s: Pos, sh: Sheet, now: number, moving: boolean): void {
     const pend = this.pendingAct.get(u.id);
     if (pend && now >= pend.t0) { this.acts.set(u.id, pend); this.pendingAct.delete(u.id); }
-    const ac = this.acts.get(u.id), ak = ac ? Math.max(0, (now - ac.t0) / (ac.ms ?? ACT_MS)) : 1, lg = this.lunge.get(u.id), hurt = now - (this.hurtAt.get(u.id) ?? -1e9);
+    // una acción que aún no ha empezado (espera a que acabe de andar) no cuenta todavía
+    const ac = this.acts.get(u.id), ak = ac && now >= ac.t0 ? (now - ac.t0) / (ac.ms ?? ACT_MS) : 1, lg = this.lunge.get(u.id), hurt = now - (this.hurtAt.get(u.id) ?? -1e9);
     let dir = this.facing.get(u.id);
     if (ac && ak < 1 && lg) dir = sheetDir(lg.dx, lg.dy);
-    else if (moving) dir = sheetDir(u.pos.x - s.x, u.pos.y - s.y);
+    else if (moving) { const sg = this.walkSeg.get(u.id); dir = sg ? sheetDir(sg.dx, sg.dy) : sheetDir(u.pos.x - s.x, u.pos.y - s.y); }
     else if (dir === undefined || !(ac && ak < 1.5)) {
       // quieto: mira al rival vivo más cercano
       let best: Unit | undefined, bd = 1e9;
@@ -709,7 +730,12 @@ export class Board {
     // hechizos sin daño: animación de lanzar si la hoja la tiene
     if (ac && ak < 1) { anim = (ac.anim as string) === 'phase' && sh.frames.transform ? 'transform' : ac.anim !== 'attack' && sh.frames.cast ? 'cast' : 'attack'; fr = Math.min(n(anim) - 1, Math.floor(ak * n(anim))); }
     else if (hurt < 500) { anim = 'hurt'; fr = Math.min(n('hurt') - 1, Math.floor(hurt / 120)); }
-    else if (moving) { anim = 'walk'; fr = Math.floor(now / Math.max(90, 800 / n('walk'))) % n('walk'); }
+    else if (moving) {
+      // los pasos van con la distancia: un ciclo de andar cada 2 casillas (así los pies no patinan)
+      anim = 'walk';
+      const sg = this.walkSeg.get(u.id);
+      fr = sg ? Math.floor(sg.dist * n('walk') / 2) % n('walk') : Math.floor(now / Math.max(90, 800 / n('walk'))) % n('walk');
+    }
     this.sheetFrame(c, sh, anim, fr, dir, s.x, s.y, u.statuses.invis ? 0.4 : 1, this.flashing(u.id, now));
     this.upright(s.x, s.y);
   }
@@ -1112,9 +1138,19 @@ export class Board {
       flushProps(depth(u.pos));
       // posición mostrada: se acerca suavemente a la real
       const s = this.shown.get(u.id) ?? { ...u.pos };
-      s.x += (u.pos.x - s.x) * 0.25; s.y += (u.pos.y - s.y) * 0.25;
-      if (Math.abs(u.pos.x - s.x) < 0.02) s.x = u.pos.x;
-      if (Math.abs(u.pos.y - s.y) < 0.02) s.y = u.pos.y;
+      const wk = this.walks.get(u.id);
+      if (wk && now < wk.end) {
+        // andando: posición a lo largo del camino, a paso constante
+        const k = Math.max(0, (now - wk.t0) / STEP_MS), i = Math.min(wk.path.length - 1, Math.floor(k)), f = Math.min(1, k - i);
+        const a = i === 0 ? wk.from : wk.path[i - 1]!, b = wk.path[i]!;
+        s.x = a.x + (b.x - a.x) * f; s.y = a.y + (b.y - a.y) * f;
+        this.walkSeg.set(u.id, { dx: b.x - a.x, dy: b.y - a.y, dist: k });
+      } else {
+        if (wk) { this.walks.delete(u.id); this.walkSeg.delete(u.id); }
+        s.x += (u.pos.x - s.x) * 0.25; s.y += (u.pos.y - s.y) * 0.25;
+        if (Math.abs(u.pos.x - s.x) < 0.02) s.x = u.pos.x;
+        if (Math.abs(u.pos.y - s.y) < 0.02) s.y = u.pos.y;
+      }
       this.shown.set(u.id, s);
       this.upright(s.x, s.y);
       const cx = (s.x + 0.5) * TILE, by = (s.y + 1) * TILE - 6;

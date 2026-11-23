@@ -553,7 +553,7 @@ export function move(s: CombatState, unitId: number, to: Pos): ActionResult {
       break;
     }
   }
-  ev.unshift({ t: 'move', unit: u.id, path: walked });
+  ev.unshift({ t: 'move', unit: u.id, path: walked, walk: true });
   if (!alive(u) && !s.over) beginNext(s, ev);
   return { ok: true, events: ev };
 }

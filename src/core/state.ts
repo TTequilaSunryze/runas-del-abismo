@@ -220,7 +220,7 @@ export interface CombatState extends RngBox {
 /** Lo que pasó al ejecutar una acción; el render lo anima y la red lo reenvía. */
 export type GameEvent =
   | { t: 'turn'; unit: number; round: number }
-  | { t: 'move'; unit: number; path: Pos[] }
+  | { t: 'move'; unit: number; path: Pos[]; walk?: boolean }
   | { t: 'cast'; unit: number; spell: string; at: Pos; element?: Element }
   | { t: 'damage'; unit: number; amount: number; absorbed: number; crit: boolean; source: string }
   | { t: 'heal'; unit: number; amount: number }

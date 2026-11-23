@@ -58,3 +58,9 @@ Reposo: ida y vuelta (0 1 2 3 2 1…), unos 1,2 s por vuelta; andar: unos 0,8 s 
 La Plañidera: lámina de dos fases (izquierda pálida = «planidera», derecha oscura = «planidera2»; la última fila izquierda es la transformación). Fase 2: reposo = fila de flotar (la primera fila parpadeaba). Escala 0.72, celdas de 224. Las hojas con fase 2 tienen la animación «transform», que se ve al cambiar de fase.
 
 **Quitados (23-11):** «Skeleton Series» (MEKAI GAMES) y «Tiny Enemies» (Vryell). Esos enemigos vuelven al dibujo antiguo hasta tener su lámina propia.
+
+## Zona 1 (hojas IA del usuario)
+esqueleto, acolito, necrofago, espectro, gargola: recuadros en `recuadros/<nombre>.json`.
+Fotogramas pegados separados por mínimos de columna (bolas de fuego del acólito, estela del espectro,
+última muerte del esqueleto); en la gárgola la fila de lanzar y la de herido se separan por el mínimo de filas.
+El acólito traía títulos de texto: se borran las manchas claras dentro de la franja de cada título.
