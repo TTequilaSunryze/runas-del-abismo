@@ -90,7 +90,6 @@ const ZONE_PROPS: Array<Array<HTMLImageElement | null>> = [
 /**
  * Personajes con hoja de animación en 8 direcciones (vista isométrica). Fotogramas de 96 px con los pies en (48, 80);
  * filas S, SE, E, NE, N, NW, W, SW. Se dibujan a 2×.
- * Guerrero esqueleto: «Skeleton Series» de MEKAI GAMES.
  */
 type SheetAnim = 'idle' | 'walk' | 'attack' | 'hurt' | 'death' | 'cast' | 'transform';
 /**
@@ -111,12 +110,8 @@ const sheet = (name: string, frames: Sheet['frames'], size = 96, foot: [number, 
   frames, size, foot, scale, dirs,
 });
 const withHead = (s: Sheet, head: number): Sheet => ({ ...s, head });
-/** «Tiny Enemies» de Vryell: 16 px, 4 direcciones repartidas en 8 filas, a 5× */
-const tiny = (id: string, f: Sheet['frames']): Sheet => ({ ...sheet(`tiny_${id}`, f, 16, [8, 15], 5), head: 14 });
-const T4 = { idle: 4, walk: 4, attack: 4, hurt: 1, death: 3 };
 /** qué enemigos usan una hoja (por su clase) */
 const SHEETS: Record<string, Sheet> = {
-  esqueleto: withHead(sheet('skeleton', { idle: 8, walk: 8, attack: 8, hurt: 5, death: 10 }), 67),
   // modelos 3D pasados a pixel art (tools/arte/pixelar_hoja.py)
   devorador: withHead(sheet('demon', { idle: 8, walk: 10, attack: 10, hurt: 4, death: 12 }, 160, [80, 104]), 67),
   larva: withHead(sheet('centipede', { idle: 8, walk: 6, attack: 6, hurt: 5, death: 8 }, 160, [80, 80]), 41),
@@ -143,11 +138,6 @@ const SHEETS: Record<string, Sheet> = {
   planidera: { ...sheet('planidera', { idle: 5, walk: 5, attack: 5, cast: 4, hurt: 2, death: 4 }, 224, [112, 220], 2, 1), head: 74, actMs: 900, release: 3 / 5 },
   planidera2: { ...sheet('planidera2', { idle: 5, walk: 5, attack: 5, cast: 4, hurt: 2, death: 4, transform: 5 }, 224, [112, 220], 2, 1), head: 74, actMs: 900, release: 3 / 5 },
   tejedora: withHead(sheet('weaver', { idle: 12, walk: 8, attack: 10, hurt: 8, death: 12 }, 159, [80, 84]), 27),
-  // Tiny Enemies
-  espectro: tiny('espectro', T4), gargola: tiny('gargola', T4), necrofago: tiny('necrofago', T4), acolito: tiny('acolito', T4),
-  arana: tiny('arana', { ...T4, death: 4 }), hongo: tiny('hongo', { ...T4, hurt: 2, death: 4 }), chaman: tiny('chaman', T4), druida: tiny('druida', T4),
-  pantera: tiny('pantera', T4), piromante: tiny('piromante', T4), ascua: tiny('ascua', T4), salamandra: tiny('salamandra', { ...T4, death: 1 }),
-  ceniciento: tiny('ceniciento', T4), ojo: tiny('ojo', { ...T4, hurt: 2, death: 4 }), vacio: tiny('vacio', T4), heraldo: tiny('heraldo', T4),
 };
 /** héroes con hoja (por clase). Arquero: «Arcane archer», de perfil. */
 const HERO_SHEETS: Record<string, Sheet> = {
@@ -166,6 +156,9 @@ export function sheetDir(dx: number, dy: number): number {
   // k: 0 = E, 1 = SE, 2 = S, 3 = SO, 4 = O, 5 = NO, 6 = N, 7 = NE → filas S, SE, E, NE, N, NW, W, SW
   return [2, 1, 0, 7, 6, 5, 4, 3][k]!;
 }
+
+/** duración de la transformación de fase de los jefes */
+const PHASE_MS = 1600;
 
 /** objetos con velas: dan luz */
 const LIT_PROPS = new Set(['d05_05', 'd01_14'].map(prop));
@@ -270,6 +263,14 @@ export class Board {
   private lunge = new Map<number, { t0: number; dx: number; dy: number }>();
   /** animación de hechizo en curso (modelos animados) */
   private acts = new Map<number, { t0: number; anim: Anim; ms?: number }>();
+  /** acción que espera a que acabe la transformación de fase */
+  private pendingAct = new Map<number, { t0: number; anim: Anim; ms?: number }>();
+  /** Pone la animación de una acción; si se está transformando, la deja para cuando acabe. */
+  private setAct(id: number, act: { t0: number; anim: Anim; ms?: number }): void {
+    const cur = this.acts.get(id);
+    if (cur && (cur.anim as string) === 'phase' && act.t0 < cur.t0 + (cur.ms ?? ACT_MS)) this.pendingAct.set(id, { ...act, t0: Math.max(act.t0, cur.t0 + (cur.ms ?? ACT_MS)) });
+    else this.acts.set(id, act);
+  }
   /** flechas propias en vuelo (pantalla isométrica) */
   private arrows: Array<{ img: HTMLImageElement; from: Pos; at: Pos; t0: number; dur: number; lift: number }> = [];
   private faceLeft = new Map<number, boolean>();
@@ -402,7 +403,7 @@ export class Board {
       const u = 'unit' in e ? c.units.find((x) => x.id === e.unit) : undefined;
       const from = u ? this.shown.get(u.id) ?? u.pos : undefined;
       const shc = this.iso && u ? sheetOf(u) : undefined;
-      if (e.t === 'cast' && u) this.acts.set(u.id, { t0: now, anim: animFor(e.spell, !!SPELLS[e.spell]?.dmg), ms: shc?.actMs });
+      if (e.t === 'cast' && u) this.setAct(u.id, { t0: now, anim: animFor(e.spell, !!SPELLS[e.spell]?.dmg), ms: shc?.actMs });
       if (e.t === 'cast' && u && from && SPIN_SPELLS.includes(e.spell)) {
         // giro: el personaje da una vuelta y un tajo circular le rodea (también a su Sombra)
         this.spins.set(u.id, now);
@@ -486,7 +487,11 @@ export class Board {
         float(e.unit, '¡FASE 2!', '#ff3060');
         // hojas con segunda fase: se ve la transformación (su animación de lanzar)
         const pu = c.units.find((x) => x.id === e.unit), ps = pu && SHEETS[`${pu.kind}2`];
-        if (ps?.frames.transform) this.acts.set(e.unit, { t0: now, anim: 'phase' as Anim, ms: 1400 });
+        if (ps?.frames.transform) {
+          this.acts.set(e.unit, { t0: now, anim: 'phase' as Anim, ms: PHASE_MS });
+          // lo que hace después en su turno (atacar, invocar…) se ve cuando termina de transformarse
+          late = Math.max(late, PHASE_MS);
+        }
       }
       else if (e.t === 'detonate') float(e.unit, `¡Marca de la muerte! ${e.amount}`, '#ff3a4a');
       else if (e.t === 'caged') float(e.unit, '¡La caja!', '#7fe0b0');
@@ -684,7 +689,9 @@ export class Board {
 
   /** Personaje con hoja de 8 direcciones: ataque, herido, andar o reposo, mirando a su objetivo o al enemigo más cercano. */
   private drawSheetUnit(c: CombatState, u: Unit, s: Pos, sh: Sheet, now: number, moving: boolean): void {
-    const ac = this.acts.get(u.id), ak = ac ? (now - ac.t0) / (ac.ms ?? ACT_MS) : 1, lg = this.lunge.get(u.id), hurt = now - (this.hurtAt.get(u.id) ?? -1e9);
+    const pend = this.pendingAct.get(u.id);
+    if (pend && now >= pend.t0) { this.acts.set(u.id, pend); this.pendingAct.delete(u.id); }
+    const ac = this.acts.get(u.id), ak = ac ? Math.max(0, (now - ac.t0) / (ac.ms ?? ACT_MS)) : 1, lg = this.lunge.get(u.id), hurt = now - (this.hurtAt.get(u.id) ?? -1e9);
     let dir = this.facing.get(u.id);
     if (ac && ak < 1 && lg) dir = sheetDir(lg.dx, lg.dy);
     else if (moving) dir = sheetDir(u.pos.x - s.x, u.pos.y - s.y);
