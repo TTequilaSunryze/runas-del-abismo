@@ -44,3 +44,17 @@ describe('equilibrio del creador', () => {
     expect(spellPaths('z_impulso')).toContain('followUp.radius');
   });
 });
+
+describe('velocidad de animaciones', () => {
+  it('se limpia, se aplica y se quita', async () => {
+    const { ANIM_SPEED, animMul } = await import('../src/content/animSpeed');
+    const b = cleanBalance({ anim: { reina: { idle: 2, vuela: 3 }, '*': { walk: 1.5 }, nadie: { idle: 2 }, zorro: { attack: 99 } } });
+    expect(b.anim).toEqual({ reina: { idle: 2 }, '*': { walk: 1.5 }, zorro: { attack: 6 } });
+    applyBalance(b);
+    expect(animMul('reina', 'idle')).toBe(2);
+    expect(animMul('lobo', 'walk')).toBe(1.5);
+    expect(animMul('zorro', 'walk', false)).toBe(1);
+    applyBalance(null);
+    expect(Object.keys(ANIM_SPEED)).toHaveLength(0);
+  });
+});

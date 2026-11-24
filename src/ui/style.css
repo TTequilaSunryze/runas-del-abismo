@@ -886,3 +886,4 @@ button.armed { background: #7a1f2c; border-color: var(--red); }
 .batable tr.bach td:first-child { color: var(--gold); }
 .tipcard { font-size: 13px; }
 @media (max-width: 1100px) { .bagrid, .bacols, .bacols2 { grid-template-columns: 1fr; } }
+.baprev { width: 100%; max-width: 320px; image-rendering: pixelated; border-radius: 6px; display: block; margin: 6px auto 0; }

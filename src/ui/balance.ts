@@ -10,6 +10,8 @@ import { discardDraft, draftBalance, draftPending, liveBalance, publishBalance, 
 import type { ClassId } from '../core/state';
 import { esc, tip, ui } from './ctx';
 import { spellIcon, spellTip } from './icons';
+import { ANIM_KEYS, animMul, type AnimKey } from '../content/animSpeed';
+import { sheetPreview } from '../render/board';
 
 const st = {
   tab: 'heroes' as 'heroes' | 'enemies',
@@ -17,6 +19,8 @@ const st = {
   enemy: 'esqueleto',
   spell: '',
   find: '',
+  /** animación de la vista previa */
+  panim: 'idle' as AnimKey,
   msg: '',
   onTest: null as ((cls: ClassId) => void) | null,
   onExit: null as (() => void) | null,
@@ -28,6 +32,7 @@ export function balanceScreen(opts: { onTest: (cls: ClassId) => void; onExit: ()
   if (opts.cls && (PLAYABLE as string[]).includes(opts.cls)) st.cls = opts.cls;
   testDraft(true);
   ui.screen = 'balance';
+  requestAnimationFrame(previewLoop);
   ui.root.classList.add('combatmode');
   ui.root.innerHTML = `<div id="batop" class="bar cinfo edtop"></div><div class="bagrid"><aside id="baleft" class="cside edside"></aside><main id="bamain" class="bamain"></main></div>`;
   paint();
@@ -85,7 +90,7 @@ function heroMain(b: Balance): string {
   return `<div class="bacols"><div class="cbox"><div class="cboxh">${esc(CLASSES[c].name)} · estadísticas <button class="mini" data-ba="resetall" data-id="class|${c}">↺ Todo</button></div>
       <table class="edstats batable"><tr class="dim sm"><td></td><td>Original</td><td>Valor</td><td></td></tr>${CLASS_STATS.map(([k, name]) => row('class', c, k, name, o[k] ?? 0, b.classes[c]?.[k] ?? o[k] ?? 0)).join('')}</table>
       <div class="dim sm">La vida es la del nivel 1 (cada nivel suma un 8%). Daño = daño plano de la clase, que se suma al de cada nivel y al del equipo.</div></div>
-    ${spellBlock(b, spells, 'Habilidades de la clase')}</div>`;
+    ${spellBlock(b, spells, 'Habilidades de la clase')}</div>${animBlock(b, c, true)}`;
 }
 
 function enemyMain(b: Balance): string {
@@ -100,7 +105,48 @@ function enemyMain(b: Balance): string {
     <div class="cbox"><div class="cboxh">Todos los ${GROUP_NAME[g].toLowerCase()} a la vez</div>
       <table class="edstats batable">${row('group', g, 'hp', 'Vida extra %', 0, gv.hp ?? 0, 5)}${row('group', g, 'power', 'Daño extra', 0, gv.power ?? 0)}</table>
       <div class="dim sm">Se suma a lo de cada enemigo. Grupos: ${(['common', 'elite', 'boss'] as Group[]).map((x) => `${GROUP_NAME[x]}${b.groups[x] ? ` (${b.groups[x]!.hp ? `${b.groups[x]!.hp! > 0 ? '+' : ''}${b.groups[x]!.hp}% vida` : ''}${b.groups[x]!.power ? ` ${b.groups[x]!.power! > 0 ? '+' : ''}${b.groups[x]!.power} daño` : ''})` : ''}`).join(' · ')}</div></div></div>
-    ${spellBlock(b, spells, 'Ataques del enemigo')}</div>`;
+    ${spellBlock(b, spells, 'Ataques del enemigo')}</div>${animBlock(b, id, false)}`;
+}
+
+const ANIM_NAME: Record<AnimKey, string> = { idle: 'Quieto (reposo)', walk: 'Caminar', attack: 'Ataque / hechizo', hurt: 'Herido', death: 'Muerte' };
+/** Velocidad de las animaciones de un personaje (y, en enemigos, de todos a la vez), con vista previa. */
+function animBlock(b: Balance, kind: string, hero: boolean): string {
+  const rowA = (k: string, a: AnimKey): string => {
+    const v = b.anim?.[k]?.[a] ?? 1;
+    return `<tr class="${v !== 1 ? 'bach' : ''}"><td>${ANIM_NAME[a]}</td><td class="edadj"><button class="mini" data-ba="anim" data-id="${k}|${a}|-0.25">−</button><b>×${v.toFixed(2)}</b><button class="mini" data-ba="anim" data-id="${k}|${a}|0.25">+</button></td>
+      <td class="sm dim">${v === 1 ? 'normal' : v > 1 ? `${Math.round((v - 1) * 100)}% más lenta` : `${Math.round((1 - v) * 100)}% más rápida`}</td><td>${v !== 1 ? `<button class="mini" data-ba="anim" data-id="${k}|${a}|reset">↺</button>` : ''}</td></tr>`;
+  };
+  const has = !!sheetPreview(kind, hero);
+  return `<div class="bacols" style="margin-top:8px"><div class="cbox"><div class="cboxh">🎞️ Velocidad de animaciones${hero ? '' : ` · ${esc(ENEMIES[kind]?.name ?? kind)}`}</div>
+      ${has ? '' : '<div class="dim sm">Este personaje aún no tiene hoja de animación propia.</div>'}
+      <table class="edstats batable">${ANIM_KEYS.map((a) => rowA(kind, a)).join('')}</table>
+      <div class="dim sm">×2 = dura el doble (más lenta). Afecta a las dos fases de los jefes.</div>
+      ${hero ? '' : `<div class="lbl">Todos los enemigos a la vez</div><table class="edstats batable">${ANIM_KEYS.map((a) => rowA('*', a)).join('')}</table>`}</div>
+    <div class="cbox"><div class="cboxh">Vista previa</div>
+      <div class="labrow">${ANIM_KEYS.map((a) => `<button class="mini ${st.panim === a ? 'on' : ''}" data-ba="panim" data-id="${a}">${ANIM_NAME[a].split(' ')[0]}</button>`).join('')}</div>
+      <canvas id="baprev" width="320" height="320" data-kind="${esc(kind)}" data-hero="${hero ? 1 : 0}" class="baprev"></canvas></div></div>`;
+}
+
+/** Dibuja la vista previa con los mismos tiempos que el tablero. */
+function previewLoop(): void {
+  const cv = document.getElementById('baprev') as HTMLCanvasElement | null;
+  if (ui.screen !== 'balance') return;
+  requestAnimationFrame(previewLoop);
+  if (!cv) return;
+  const kind = cv.dataset.kind ?? '', hero = cv.dataset.hero === '1', s = sheetPreview(kind, hero), g = cv.getContext('2d')!;
+  g.fillStyle = '#1a1620'; g.fillRect(0, 0, cv.width, cv.height);
+  g.strokeStyle = 'rgba(255,255,255,.08)'; g.beginPath(); g.moveTo(0, cv.height - 30); g.lineTo(cv.width, cv.height - 30); g.stroke();
+  if (!s) return;
+  const a = st.panim, en = !hero, mul = animMul(kind, a, en), now = performance.now();
+  const name = a === 'attack' && !s.frames.attack ? 'cast' : a, img = s.img[name] ?? s.img.idle, n = s.frames[name] ?? s.frames.idle ?? 1;
+  if (!img || !img.complete || !img.naturalWidth) return;
+  let fr = 0;
+  if (a === 'idle') { const ms = Math.max(280, 3000 / n) * mul, loop = n > 2 ? n * 2 - 2 : n, k = Math.floor(now / ms) % loop; fr = k < n ? k : loop - k; }
+  else if (a === 'walk') fr = Math.floor(now / ((2 * 380 * mul) / n)) % n;
+  else { const total = (a === 'attack' ? 800 : a === 'hurt' ? 120 * n : 1000) * mul, k = (now % (total + 700)) / total; fr = Math.min(n - 1, Math.floor(k * n)); }
+  const k = Math.min(2, (cv.height - 40) / s.size);
+  g.imageSmoothingEnabled = false;
+  g.drawImage(img, fr * s.size, 0, s.size, s.size, (cv.width - s.size * k) / 2, cv.height - 30 - s.size * k + 4 * k, s.size * k, s.size * k);
 }
 
 function spellBlock(b: Balance, ids: string[], title: string): string {
@@ -168,6 +214,16 @@ document.addEventListener('click', (ev) => {
     case 'cls': st.cls = id as ClassId; st.spell = ''; return paint();
     case 'enemy': st.enemy = id; st.spell = ''; return paint();
     case 'spell': st.spell = id; return paint();
+    case 'panim': st.panim = id as AnimKey; return paint();
+    case 'anim': {
+      const [k, a, d] = id.split('|') as [string, AnimKey, string];
+      const b = draftBalance(), cur = b.anim?.[k]?.[a] ?? 1, v = d === 'reset' ? 1 : Math.max(0.25, Math.min(6, Math.round((cur + Number(d)) * 100) / 100));
+      const rec = ((b.anim ??= {})[k] ??= {});
+      if (v === 1) delete rec[a]; else rec[a] = v;
+      if (!Object.keys(rec).length) delete b.anim[k];
+      st.panim = a;
+      setDraft(b); return paint();
+    }
     case 'add': { const [scope, x, path, d] = id.split('|') as [string, string, string, string]; const v = Math.round((curVal(scope, x, path) + Number(d)) * 100) / 100; return setVal(scope, x, path, v); }
     case 'reset': { const [scope, x, path] = id.split('|') as [string, string, string]; return setVal(scope, x, path, null); }
     case 'resetall': {

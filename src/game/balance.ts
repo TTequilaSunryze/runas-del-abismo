@@ -5,6 +5,7 @@ import { CLASSES } from '../core/classes/classes';
 import { SPELLS } from '../core/classes/spells';
 import { ENEMIES } from '../content/enemies';
 import { ZONES } from '../content/zones';
+import { ANIM_KEYS, ANIM_SPEED } from '../content/animSpeed';
 
 export type Group = 'common' | 'elite' | 'boss';
 export interface Balance {
@@ -18,6 +19,8 @@ export interface Balance {
   enemies: Record<string, Record<string, number>>;
   /** ajuste por grupo de enemigos: vida en % y daño plano */
   groups: Partial<Record<Group, { hp?: number; power?: number }>>;
+  /** duración de las animaciones: personaje (o «*», todos los enemigos) → animación → multiplicador */
+  anim?: Record<string, Record<string, number>>;
 }
 export const emptyBalance = (): Balance => ({ v: 1, t: 0, classes: {}, spells: {}, enemies: {}, groups: {} });
 
@@ -116,6 +119,10 @@ export function cleanBalance(x: unknown): Balance {
     }
   }
   for (const g of ['common', 'elite', 'boss'] as Group[]) { const v = r.groups?.[g]; if (!v) continue; const hp = num(v.hp, -90, 500), power = num(v.power, -20, 50); if (hp || power) b.groups[g] = { ...(hp ? { hp } : {}), ...(power ? { power } : {}) }; }
+  for (const [id, f] of Object.entries(r.anim ?? {})) {
+    if ((id !== '*' && !o.enemies[id] && !o.classes[id]) || !f || typeof f !== 'object') continue;
+    for (const [k, v] of Object.entries(f)) { const n = num(v, 0.25, 6); if (n !== null && n !== 1 && (ANIM_KEYS as readonly string[]).includes(k)) ((b.anim ??= {})[id] ??= {})[k] = n; }
+  }
   return b;
 }
 
@@ -125,7 +132,9 @@ export function applyBalance(x: Balance | null): void {
   restore(CLASSES as unknown as AnyRec, o.classes);
   restore(SPELLS as unknown as AnyRec, o.spells);
   restore(ENEMIES as unknown as AnyRec, o.enemies);
+  for (const k of Object.keys(ANIM_SPEED)) delete ANIM_SPEED[k];
   if (!x) return;
+  for (const [id, f] of Object.entries(x.anim ?? {})) ANIM_SPEED[id] = { ...f };
   for (const [id, f] of Object.entries(x.classes)) for (const [k, v] of Object.entries(f)) setPath((CLASSES as unknown as AnyRec)[id] as AnyRec, k, v);
   for (const [id, f] of Object.entries(x.spells)) {
     const sp = (SPELLS as unknown as AnyRec)[id] as AnyRec;
@@ -152,4 +161,4 @@ export function applyBalance(x: Balance | null): void {
 }
 
 /** Número de valores cambiados en un ajuste. */
-export const balanceSize = (b: Balance): number => [b.classes, b.spells, b.enemies].reduce((n, r) => n + Object.values(r).reduce((m, f) => m + Object.keys(f).length, 0), 0) + Object.keys(b.groups).length;
+export const balanceSize = (b: Balance): number => [b.classes, b.spells, b.enemies, b.anim ?? {}].reduce((n, r) => n + Object.values(r).reduce((m, f) => m + Object.keys(f).length, 0), 0) + Object.keys(b.groups).length;

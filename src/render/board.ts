@@ -2,6 +2,7 @@ import { FEATURES, schoolOf } from '../core/tuning';
 import { SPELLS } from '../core/classes/spells';
 // Tablero de combate: dibuja el estado y convierte clics en acciones.
 import { ZONES } from '../content/zones';
+import { animMul } from '../content/animSpeed';
 import { CRIT_FLAT, castProblem, current, essenceNeed, furyCrit, furyPower, movePreview, spellOf, usableMp } from '../core/combat/engine';
 import { coneCells } from '../core/combat/marks';
 import { alive, dist, hasLineOfSight, reachable } from '../core/combat/grid';
@@ -175,6 +176,8 @@ const HERO_SHEETS: Record<string, Sheet> = {
 };
 const sheetOf = (u: { kind: string; team: string; summoner?: number; phase?: number }): Sheet | undefined =>
   u.team === 'enemy' ? ((u.phase ?? 1) >= 2 && SHEETS[`${u.kind}2`]) || SHEETS[u.kind] : u.summoner === undefined ? HERO_SHEETS[u.kind] : undefined;
+/** Para la vista previa del creador: hoja de un enemigo o héroe (imágenes, nº de fotogramas y tamaño de celda). */
+export const sheetPreview = (kind: string, hero = false): { img: Sheet['img']; frames: Sheet['frames']; size: number } | undefined => { const s = hero ? HERO_SHEETS[kind] : SHEETS[kind]; return s && { img: s.img, frames: s.frames, size: s.size }; };
 const sheetReady = (s: Sheet): boolean => Object.values(s.img).every((i) => ready(i ?? null));
 /** alto del personaje sobre sus pies, en pantalla */
 const sheetHeight = (s: Sheet): number => (s.head ?? s.foot[1]) * s.scale;
@@ -495,7 +498,7 @@ export class Board {
       const u = 'unit' in e ? c.units.find((x) => x.id === e.unit) : undefined;
       const from = u ? this.shown.get(u.id) ?? u.pos : undefined;
       const shc = this.iso && u ? sheetOf(u) : undefined;
-      if (e.t === 'cast' && u) this.setAct(u.id, { t0: now, anim: animFor(e.spell, !!SPELLS[e.spell]?.dmg), ms: shc?.actMs, spell: e.spell });
+      if (e.t === 'cast' && u) this.setAct(u.id, { t0: now, anim: animFor(e.spell, !!SPELLS[e.spell]?.dmg), ms: shc?.actMs ? shc.actMs * animMul(u.kind, 'attack', u.team === 'enemy') : undefined, spell: e.spell });
       if (e.t === 'cast' && u && from && SPIN_SPELLS.includes(e.spell)) {
         // giro: el personaje da una vuelta y un tajo circular le rodea (también a su Sombra)
         this.spins.set(u.id, now);
@@ -538,7 +541,7 @@ export class Board {
         const def = SPELLS[e.spell];
         if (def && !def.bounce && !SPIN_SPELLS.includes(e.spell)) {
           // con hoja propia: el efecto espera a que suelte (p. ej. el arquero tensa el arco) y usa su flecha
-          const r = recipeFor(def, u.kind), rel = shc?.release && shc.actMs ? shc.release * shc.actMs : 0;
+          const r = recipeFor(def, u.kind), rel = shc?.release && shc.actMs ? shc.release * shc.actMs * animMul(u.kind, 'attack', u.team === 'enemy') : 0;
           if (shc?.arrow && ready(shc.arrow) && (r.travel === 'line' || r.travel === 'arc')) {
             const len = Math.hypot(e.at.x - from.x, e.at.y - from.y), dur = Math.min(420, 110 + len * 45);
             this.arrows.push({ img: shc.arrow, from: { ...from }, at: { ...e.at }, t0: now + rel, dur, lift: (shc.arrowY ?? 20) * shc.scale });
@@ -808,19 +811,20 @@ export class Board {
     dir ??= 0; this.facing.set(u.id, dir);
     const n = (a: SheetAnim): number => sh.frames[a] ?? 1;
     // reposo: ciclo de ida y vuelta (0 1 2 3 2 1…) y lento, unos 1,2 s por vuelta sea cual sea el número de dibujos
-    const ni = n('idle'), idleMs = Math.max(170, 1200 / ni), loop = ni > 2 ? ni * 2 - 2 : ni, step = Math.floor((now + u.id * 397) / idleMs) % loop;
+    // (antes 1,2 s por vuelta; ahora unos 3 s, y el creador puede ajustarlo por personaje)
+    const en = u.team === 'enemy', ni = n('idle'), idleMs = Math.max(280, 3000 / ni) * animMul(u.kind, 'idle', en), loop = ni > 2 ? ni * 2 - 2 : ni, step = Math.floor((now + u.id * 397) / idleMs) % loop;
     let anim: SheetAnim = 'idle', fr = step < ni ? step : loop - step;
     // hechizos sin daño: animación de lanzar si la hoja la tiene
     // pilares: un dibujo por estado según la vida que le queda
     if (sh.hpFrames) fr = Math.min(ni - 1, Math.floor((1 - Math.max(0, u.hp) / Math.max(1, u.maxHp)) * ni));
     const own = ac?.spell ? sh.spellAnim?.[ac.spell] : undefined;
     if (ac && ak < 1) { anim = (ac.anim as string) === 'phase' && sh.frames.transform ? 'transform' : own && sh.frames[own] ? own : ac.anim !== 'attack' && sh.frames.cast ? 'cast' : 'attack'; fr = Math.min(n(anim) - 1, Math.floor(ak * n(anim))); }
-    else if (hurt < 500) { anim = 'hurt'; fr = Math.min(n('hurt') - 1, Math.floor(hurt / 120)); }
+    else if (hurt < 500 * animMul(u.kind, 'hurt', en)) { anim = 'hurt'; fr = Math.min(n('hurt') - 1, Math.floor(hurt / (120 * animMul(u.kind, 'hurt', en)))); }
     else if (moving) {
       // los pasos van con la distancia: un ciclo de andar cada 2 casillas (así los pies no patinan)
       anim = 'walk';
       const sg = this.walkSeg.get(u.id);
-      fr = sg ? Math.floor(sg.dist * n('walk') / 2) % n('walk') : Math.floor(now / Math.max(90, 800 / n('walk'))) % n('walk');
+      fr = sg ? Math.floor(sg.dist * n('walk') / (2 * animMul(u.kind, 'walk', en))) % n('walk') : Math.floor(now / Math.max(90, 800 / n('walk'))) % n('walk');
     }
     this.sheetFrame(c, sh, anim, fr, dir, s.x, s.y, u.statuses.invis ? 0.4 : 1, this.flashing(u.id, now));
     this.upright(s.x, s.y);
@@ -1423,12 +1427,12 @@ export class Board {
     }
     flushProps(this.iso ? c.w + c.h : c.h);
     // caídos: se desvanecen hacia arriba
-    this.ghosts = this.ghosts.filter((d) => now - d.t0 < (d.sheet ? 1600 : isModel(d.kind) ? DEATH_MS : 600));
+    this.ghosts = this.ghosts.filter((d) => now - d.t0 < (d.sheet ? 1600 * animMul(d.kind, 'death', d.team === 'enemy') : isModel(d.kind) ? DEATH_MS : 600));
     for (const d of this.ghosts) {
       const gs = d.sheet && this.iso ? (d.team === 'enemy' ? SHEETS[d.sheet] : HERO_SHEETS[d.sheet]) : undefined;
       if (gs && sheetReady(gs)) {
         // hoja de animación: cae (10 fotogramas en 1 s), se queda en el suelo y se desvanece
-        const nd = gs.frames.death ?? 1, t0 = now - d.t0, fr = Math.min(nd - 1, Math.floor((t0 / 1000) * nd));
+        const nd = gs.frames.death ?? 1, dm = animMul(d.kind, 'death', d.team === 'enemy'), t0 = (now - d.t0) / dm, fr = Math.min(nd - 1, Math.floor((t0 / 1000) * nd));
         this.sheetFrame(c, gs, 'death', fr, d.dir ?? 0, d.x, d.y, t0 < 1100 ? 1 : Math.max(0, 1 - (t0 - 1100) / 500));
         continue;
       }
