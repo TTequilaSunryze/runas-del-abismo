@@ -203,9 +203,22 @@ const FOREST = {
   props: ["o_tree33", "o_tree35", "o_tree37", "o_tree51", "o_tree10", "o_tree13", "o_stump4", "o_stump5", "o_stump6", "o_rock3", "o_rock5", "o_rock6", "o_log1", "o_fern3", "o_tallgrass4", "o_mushroom6"].map(fo),
   border: ["b_tree44", "b_tree45", "b_tree47", "b_tree48", "b_tree49", "b_tree50", "b_tree43", "b_tree52", "b_tree22", "b_tree21"].map(fo),
 };
-const forestReady = (): boolean => [FOREST.ground, ...FOREST.patches, ...FOREST.props, ...FOREST.border].every((i) => ready(i));
-/** zonas con escenario propio (de momento, el bosque) */
-const isForest = (zone: number | undefined): boolean => zone === 1;
+/** Ruinas de ceniza (zona 3): imágenes IA del creador (suelo de piedra volcánica, grietas de lava, ciudadelas en ruinas, yunque). */
+const as = (id: string): HTMLImageElement | null => art(`iso/ash/${id}.png`);
+/** Escenario propio de una zona: suelo en perspectiva, manchas, borde del fondo, obstáculos propios y ambiente. */
+interface Biome {
+  ground: HTMLImageElement | null; patches: Array<HTMLImageElement | null>; border: Array<HTMLImageElement | null>;
+  /** obstáculos propios; se mezclan con los de ZONE_PROPS de la zona si `mixProps` */
+  props: Array<HTMLImageElement | null>; mixProps?: boolean;
+  /** manchas por casilla, separación de las piezas del borde, borde de tierra y tono */
+  patchDensity: number; borderStep: [number, number]; rim: [string, string]; tint: string; fx: 'fireflies' | 'embers';
+}
+const BIOMES: Record<number, Biome> = {
+  1: { ground: FOREST.ground, patches: FOREST.patches, border: FOREST.border, props: FOREST.props, patchDensity: 0.32, borderStep: [0.9, 0.7], rim: ['#2b2617', '#1e1b11'], tint: '#e2eadb', fx: 'fireflies' },
+  2: { ground: as('ground'), patches: ['crack0', 'crack1', 'crack2'].map(as), border: ['wall00', 'wall01', 'wall10', 'wall11'].map(as), props: [as('prop_anvil')], mixProps: true,
+    patchDensity: 0.07, borderStep: [1.7, 0.7], rim: ['#2a1a14', '#1c120e'], tint: '#f0e2dc', fx: 'embers' },
+};
+const biomeOf = (zone: number | undefined): Biome | undefined => { const b = BIOMES[zone ?? -1]; return b && [b.ground, ...b.patches, ...b.border, ...b.props].every((i) => ready(i)) ? b : undefined; };
 const LIT_PROPS = new Set(['d05_05', 'd01_14'].map(prop));
 /** tono de cada zona sobre suelo y muros (multiplicar) */
 const ZONE_TINT = ['#e6e2ee', '#bccfa8', '#e8bfa0', '#c8b0ea'];
@@ -220,14 +233,15 @@ interface RoomLook {
   walls: Array<{ side: 'x' | 'y'; i: number; kind: 'wall' | 'closed' | 'open' | 'arch' }>;
   torches: Array<{ side: 'x' | 'y'; i: number }>;
   /** bosque: manchas sobre el suelo y árboles del borde */
-  patches: Array<{ x: number; y: number; img: HTMLImageElement | null }>;
-  trees: Array<{ x: number; y: number; img: HTMLImageElement | null; flip: boolean }>;
+  /** índices: se resuelven con las listas del escenario de la zona al dibujar */
+  patches: Array<{ x: number; y: number; i: number; flip: boolean }>;
+  trees: Array<{ x: number; y: number; i: number; flip: boolean }>;
 }
 function rng(seed: number): () => number {
   let s = seed >>> 0 || 1;
   return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return (s >>> 0) / 4294967296; };
 }
-function buildRoom(seed: number, w: number, h: number): RoomLook {
+function buildRoom(seed: number, w: number, h: number, zone = 0): RoomLook {
   const r = rng(seed);
   // segundo suelo de la sala: musgo, piedra rota o nada
   const kind = r() < 0.45 ? 'moss' : r() < 0.85 ? 'broken' : 'none';
@@ -259,10 +273,12 @@ function buildRoom(seed: number, w: number, h: number): RoomLook {
     for (let i = Math.floor(r() * 2); i < len; i += 2 + Math.floor(r() * 3)) if (walls.find((q) => q.side === side && q.i === i)?.kind === 'wall') torches.push({ side, i });
   }
   // bosque: manchas de hierba, musgo y hojas; árboles grandes detrás de los dos lados del fondo (y alguno en las esquinas)
-  const patches = Array.from({ length: Math.round(w * h * 0.32) }, () => ({ x: r() * w, y: r() * h, img: FOREST.patches[Math.floor(r() * FOREST.patches.length)] ?? null }));
+  const bio = BIOMES[zone], dens = bio?.patchDensity ?? 0.3, [st, sv] = bio?.borderStep ?? [0.9, 0.7], R = (): number => Math.floor(r() * 1e6);
+  const patches = Array.from({ length: Math.max(1, Math.round(w * h * dens)) }, () => ({ x: 0.3 + r() * (w - 0.6), y: 0.3 + r() * (h - 0.6), i: R(), flip: r() < 0.5 }));
   const trees: RoomLook['trees'] = [];
-  for (let i = -1.2; i < w + 0.6; i += 0.9 + r() * 0.7) trees.push({ x: i + r() * 0.3, y: -0.55 - r() * 0.7, img: FOREST.border[Math.floor(r() * FOREST.border.length)] ?? null, flip: r() < 0.5 });
-  for (let i = -0.4; i < h + 0.6; i += 0.9 + r() * 0.7) trees.push({ x: -0.55 - r() * 0.7, y: i + r() * 0.3, img: FOREST.border[Math.floor(r() * FOREST.border.length)] ?? null, flip: r() < 0.5 });
+  const back = st > 1.5 ? 0.9 : 0.55;
+  for (let i = -1.2; i < w + 0.6; i += st + r() * sv) trees.push({ x: i + r() * 0.3, y: -back - r() * 0.6, i: R(), flip: r() < 0.5 });
+  for (let i = -0.4; i < h + 0.6; i += st + r() * sv) trees.push({ x: -back - r() * 0.6, y: i + r() * 0.3, i: R(), flip: r() < 0.5 });
   trees.sort((a, b) => a.x + a.y - (b.x + b.y));
   return { seed, floor, decals, walls, torches, patches, trees };
 }
@@ -368,6 +384,9 @@ export class Board {
   /** esta sala se pinta como bosque */
   private forest = false;
   private groundPattern: CanvasPattern | null = null;
+  private patternOf: HTMLImageElement | null = null;
+  /** escenario propio de la zona de este combate (bosque, ceniza…) */
+  private biome: Biome | undefined;
   /** este fotograma el suelo se ha dibujado con losas isométricas */
   private isoFloor = false;
   /** vista isométrica (se recuerda en el navegador) */
@@ -825,12 +844,13 @@ export class Board {
   /** semilla fija de la decoración (editor de salas: que no cambie al colocar cosas) */
   roomSeed: number | null = null;
   private roomFor(c: CombatState): RoomLook {
-    if (this.roomSeed !== null) { const s = this.roomSeed >>> 0; if (!this.room || this.room.seed !== s || this.room.floor.length !== c.w * c.h) this.room = buildRoom(s, c.w, c.h); return this.room; }
+    const zone = this.session.run?.zone ?? 0;
+    if (this.roomSeed !== null) { const s = (this.roomSeed + zone) >>> 0; if (!this.room || this.room.seed !== s || this.room.floor.length !== c.w * c.h) this.room = buildRoom(s, c.w, c.h, zone); return this.room; }
     const run = this.session.run;
     // semilla estable durante el combate: partida, zona, sala y tamaño del mapa
     let s = 2166136261;
     for (const ch of `${run?.code ?? ''}|${run?.zone ?? 0}|${run?.step ?? 0}|${c.w}x${c.h}|${c.units.length}`) s = Math.imul(s ^ ch.charCodeAt(0), 16777619);
-    if (!this.room || this.room.seed !== s >>> 0 || this.room.floor.length !== c.w * c.h) this.room = buildRoom(s >>> 0, c.w, c.h);
+    if (!this.room || this.room.seed !== s >>> 0 || this.room.floor.length !== c.w * c.h) this.room = buildRoom(s >>> 0, c.w, c.h, zone);
     return this.room;
   }
 
@@ -893,20 +913,23 @@ export class Board {
     const g = this.g, pit = new Set([...(c.abyss ?? []), ...(c.voids ?? [])]);
     const [sx, sy] = this.shake, D = 30, P = (x: number, y: number): [number, number] => { const q = isoPoint(x, y, c.h); return [q.x + sx, q.y + sy]; };
     const [lx, ly] = P(0, c.h), [bx, by] = P(c.w, c.h), [rx, ry] = P(c.w, 0);
-    for (const [ax, ay, cx2, cy2, col] of [[lx, ly, bx, by, '#2b2617'], [bx, by, rx, ry, '#1e1b11']] as const) {
+    const bio = this.biome!;
+    for (const [ax, ay, cx2, cy2, col] of [[lx, ly, bx, by, bio.rim[0]], [bx, by, rx, ry, bio.rim[1]]] as const) {
       const gr = g.createLinearGradient(0, Math.min(ay, cy2), 0, Math.max(ay, cy2) + D); gr.addColorStop(0, col); gr.addColorStop(1, '#050504');
       g.fillStyle = gr; g.beginPath(); g.moveTo(ax, ay); g.lineTo(cx2, cy2); g.lineTo(cx2, cy2 + D); g.lineTo(ax, ay + D); g.closePath(); g.fill();
     }
     // la textura (256 px) cubre 4×4 casillas
-    if (!this.groundPattern && FOREST.ground) { this.groundPattern = g.createPattern(FOREST.ground, 'repeat'); this.groundPattern?.setTransform(new DOMMatrix().scale((TILE * 4) / 256)); }
+    if ((!this.groundPattern || this.patternOf !== bio.ground) && bio.ground) { this.groundPattern = g.createPattern(bio.ground, 'repeat'); this.groundPattern?.setTransform(new DOMMatrix().scale((TILE * 4) / 256)); this.patternOf = bio.ground; }
     this.ground();
     if (this.groundPattern) g.fillStyle = this.groundPattern;
     for (let y = 0; y < c.h; y++) for (let x = 0; x < c.w; x++) if (!pit.has(`${x},${y}`)) g.fillRect(x * TILE - 0.5, y * TILE - 0.5, TILE + 1, TILE + 1);
     this.screen();
     for (const d of room.patches) {
-      if (!d.img || pit.has(`${Math.floor(d.x)},${Math.floor(d.y)}`)) continue;
-      const p = this.top(c, d.x, d.y);
-      g.drawImage(d.img, Math.round(p.x - d.img.naturalWidth / 2), Math.round(p.y - d.img.naturalHeight / 2));
+      const img = bio.patches[d.i % bio.patches.length];
+      if (!img || pit.has(`${Math.floor(d.x)},${Math.floor(d.y)}`)) continue;
+      const p = this.top(c, d.x, d.y), w = img.naturalWidth, h = img.naturalHeight;
+      if (d.flip) { g.save(); g.translate(Math.round(p.x + w / 2), Math.round(p.y - h / 2)); g.scale(-1, 1); g.drawImage(img, 0, 0); g.restore(); }
+      else g.drawImage(img, Math.round(p.x - w / 2), Math.round(p.y - h / 2));
     }
   }
 
@@ -914,14 +937,16 @@ export class Board {
   private drawForestEdge(c: CombatState, room: RoomLook): void {
     this.torches = [];
     const g = this.g, out = new Set(c.voids ?? []);
+    const bio = this.biome!;
     for (const tr of room.trees) {
-      if (!tr.img) continue;
+      const img = bio.border[tr.i % bio.border.length];
+      if (!img) continue;
       // donde la sala no llega (forma de las salas creadas) no hace falta borde
       const ex = Math.max(0, Math.min(c.w - 1, Math.round(tr.x))), ey = Math.max(0, Math.min(c.h - 1, Math.round(tr.y)));
       if (out.has(`${ex},${ey}`)) continue;
-      const p = this.top(c, tr.x, tr.y), w = tr.img.naturalWidth, h = tr.img.naturalHeight;
-      if (tr.flip) { g.save(); g.translate(Math.round(p.x + w / 2), Math.round(p.y - h + 10)); g.scale(-1, 1); g.drawImage(tr.img, 0, 0); g.restore(); }
-      else g.drawImage(tr.img, Math.round(p.x - w / 2), Math.round(p.y - h + 10));
+      const p = this.top(c, tr.x, tr.y), w = img.naturalWidth, h = img.naturalHeight;
+      if (tr.flip) { g.save(); g.translate(Math.round(p.x + w / 2), Math.round(p.y - h + 10)); g.scale(-1, 1); g.drawImage(img, 0, 0); g.restore(); }
+      else g.drawImage(img, Math.round(p.x - w / 2), Math.round(p.y - h + 10));
     }
     // niebla baja entre los troncos
     const [ax, ay] = [this.top(c, 0, 0).x, this.top(c, 0, 0).y];
@@ -931,8 +956,11 @@ export class Board {
 
   /** Bosque: obstáculo de la casilla (árbol, tocón, roca, tronco caído, helecho…), con el tronco en el centro. */
   private drawForestObstacle(c: CombatState, x: number, y: number, seed: number): void {
-    const it = pick(FOREST.props, x * 7 + seed, y * 3 + (seed >>> 4));
+    const bio = this.biome!, zp = bio.mixProps ? ZONE_PROPS[this.session.run?.zone ?? 0] ?? [] : [];
+    const all = [...bio.props, ...zp], it = pick(all, x * 7 + seed, y * 3 + (seed >>> 4));
     if (!it) return;
+    // los del pack de objetos se colocan como siempre
+    if (zp.includes(it) && !bio.props.includes(it)) { this.drawCryptObstacle(c, x, y, seed, it); return; }
     const g = this.g, q = this.top(c, x + 0.5, y + 0.5), w = it.naturalWidth, h = it.naturalHeight;
     g.fillStyle = 'rgba(0,0,0,.4)'; g.beginPath(); g.ellipse(q.x, q.y + 6, Math.min(44, w * 0.32), 15, 0, 0, 6.3); g.fill();
     // si tapa a alguien que está detrás, se ve a través
@@ -940,6 +968,27 @@ export class Board {
     if (behind && h > 90) g.globalAlpha = 0.5;
     g.drawImage(it, Math.round(q.x - w / 2), Math.round(q.y + 14 - h));
     g.globalAlpha = 1;
+  }
+
+  /** Ceniza: chispas que suben desde el suelo y brillo de las grietas. */
+  private drawEmbers(c: CombatState, now: number): void {
+    const g = this.g, n = Math.round(c.w * c.h * 0.14);
+    g.save(); g.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < n; i++) {
+      const s1 = (i * 9301 + 49297) % 233280 / 233280, s2 = (i * 4421 + 1663) % 3571 / 3571, per = 3200 + (i % 7) * 400;
+      const k = ((now + i * 811) % per) / per, p = this.top(c, s1 * c.w + Math.sin(now / 900 + i) * 0.15, s2 * c.h);
+      const lift = 6 + k * 120, a = Math.sin(k * Math.PI) * 0.8, rad = 2.2 + (i % 3);
+      const gr = g.createRadialGradient(p.x, p.y - lift, 0, p.x, p.y - lift, rad * 2.5); gr.addColorStop(0, `rgba(255,170,60,${a.toFixed(2)})`); gr.addColorStop(1, 'rgba(255,80,20,0)');
+      g.fillStyle = gr; g.beginPath(); g.arc(p.x, p.y - lift, rad * 2.5, 0, 6.3); g.fill();
+    }
+    // las grietas de lava laten
+    const room = this.room, bio = this.biome;
+    if (room && bio) for (const d of room.patches) {
+      const p = this.top(c, d.x, d.y), a = 0.1 + 0.07 * Math.sin(now / 420 + d.i);
+      const gr = g.createRadialGradient(p.x, p.y, 4, p.x, p.y, 70); gr.addColorStop(0, `rgba(255,110,30,${a.toFixed(3)})`); gr.addColorStop(1, 'rgba(255,60,10,0)');
+      g.fillStyle = gr; g.beginPath(); g.arc(p.x, p.y, 70, 0, 6.3); g.fill();
+    }
+    g.restore();
   }
 
   /** Bosque: luciérnagas que van y vienen sobre el tablero. */
@@ -958,8 +1007,8 @@ export class Board {
   }
 
   /** Obstáculo: un objeto de la zona (barriles, lápidas, estatuas, jaulas…), distinto en cada sala. */
-  private drawCryptObstacle(c: CombatState, x: number, y: number, seed: number): void {
-    const list = ZONE_PROPS[this.session.run?.zone ?? 0] ?? ZONE_PROPS[0]!, it = pick(list, x * 7 + seed, y * 3 + (seed >>> 4));
+  private drawCryptObstacle(c: CombatState, x: number, y: number, seed: number, img?: HTMLImageElement): void {
+    const list = ZONE_PROPS[this.session.run?.zone ?? 0] ?? ZONE_PROPS[0]!, it = img ?? pick(list, x * 7 + seed, y * 3 + (seed >>> 4));
     if (!it || !ready(it)) return;
     const g = this.g, q = this.top(c, x + 0.5, y + 0.5);
     g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(q.x, q.y + 4, 36, 16, 0, 0, 6.3); g.fill();
@@ -1021,17 +1070,20 @@ export class Board {
     // H6: temblor de pantalla de los golpes fuertes
     this.shake = this.fx.offset(now);
     g.imageSmoothingEnabled = !this.iso;
-    const forest = isForest(this.session.run?.zone) && forestReady();
-    this.forest = forest;
+    const bio = biomeOf(this.session.run?.zone);
+    this.biome = bio;
+    this.forest = !!bio;
+    const forest = !!bio;
     this.isoFloor = this.iso && (forest || cryptReady());
     if (this.isoFloor) {
       const room = this.roomFor(c);
       if (forest) { this.drawForestFloor(c, room); this.drawForestEdge(c, room); } else { this.drawCryptFloor(c, room); this.drawCryptWalls(c, room); }
       // tono de la zona sobre suelo y muros
-      g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'multiply'; g.fillStyle = forest ? '#e2eadb' : ZONE_TINT[this.session.run?.zone ?? 0] ?? ZONE_TINT[0]!;
+      g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'multiply'; g.fillStyle = bio ? bio.tint : ZONE_TINT[this.session.run?.zone ?? 0] ?? ZONE_TINT[0]!;
       g.fillRect(0, 0, this.canvas.width, this.canvas.height); g.restore();
       this.drawTorchLight(now);
-      if (forest) this.drawFireflies(c, now);
+      if (bio?.fx === 'fireflies') this.drawFireflies(c, now);
+      else if (bio?.fx === 'embers') this.drawEmbers(c, now);
     }
     this.ground();
     const zone = ZONES[this.session.run?.zone ?? 0] ?? ZONES[0]!;
