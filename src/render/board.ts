@@ -192,6 +192,20 @@ const STEP_MS = 380;
 const PHASE_MS = 1600;
 
 /** objetos con velas: dan luz */
+/**
+ * Bosque (zona 2): «Forest», de Rafael Sewa (CC BY-NC-SA 4.0), pixelado, oscurecido y pasado a 2:1.
+ * Suelo de tierra (textura que se pinta en perspectiva), manchas de hierba y musgo, árboles alrededor y obstáculos de bosque.
+ */
+const fo = (id: string): HTMLImageElement | null => art(`iso/forest/${id}.png`);
+const FOREST = {
+  ground: fo('ground'),
+  patches: ["g_darkgrass2", "g_darkgrass3", "g_darkgrass4", "g_darkgrass6", "g_darkgrass7", "g_darkgrass8", "g_darkgrass12", "g_moss2", "g_moss3", "g_moss4", "g_groundleaves2", "g_groundleaves4", "g_mushroom4", "g_mushroom3", "g_flowerground3", "g_densegrass2"].map(fo),
+  props: ["o_tree33", "o_tree35", "o_tree37", "o_tree51", "o_tree10", "o_tree13", "o_stump4", "o_stump5", "o_stump6", "o_rock3", "o_rock5", "o_rock6", "o_log1", "o_fern3", "o_tallgrass4", "o_mushroom6"].map(fo),
+  border: ["b_tree44", "b_tree45", "b_tree47", "b_tree48", "b_tree49", "b_tree50", "b_tree43", "b_tree52", "b_tree22", "b_tree21"].map(fo),
+};
+const forestReady = (): boolean => [FOREST.ground, ...FOREST.patches, ...FOREST.props, ...FOREST.border].every((i) => ready(i));
+/** zonas con escenario propio (de momento, el bosque) */
+const isForest = (zone: number | undefined): boolean => zone === 1;
 const LIT_PROPS = new Set(['d05_05', 'd01_14'].map(prop));
 /** tono de cada zona sobre suelo y muros (multiplicar) */
 const ZONE_TINT = ['#e6e2ee', '#bccfa8', '#e8bfa0', '#c8b0ea'];
@@ -205,6 +219,9 @@ interface RoomLook {
   /** tramos de muro: lado, posición y tipo */
   walls: Array<{ side: 'x' | 'y'; i: number; kind: 'wall' | 'closed' | 'open' | 'arch' }>;
   torches: Array<{ side: 'x' | 'y'; i: number }>;
+  /** bosque: manchas sobre el suelo y árboles del borde */
+  patches: Array<{ x: number; y: number; img: HTMLImageElement | null }>;
+  trees: Array<{ x: number; y: number; img: HTMLImageElement | null; flip: boolean }>;
 }
 function rng(seed: number): () => number {
   let s = seed >>> 0 || 1;
@@ -241,7 +258,13 @@ function buildRoom(seed: number, w: number, h: number): RoomLook {
     const len = side === 'x' ? w : h;
     for (let i = Math.floor(r() * 2); i < len; i += 2 + Math.floor(r() * 3)) if (walls.find((q) => q.side === side && q.i === i)?.kind === 'wall') torches.push({ side, i });
   }
-  return { seed, floor, decals, walls, torches };
+  // bosque: manchas de hierba, musgo y hojas; árboles grandes detrás de los dos lados del fondo (y alguno en las esquinas)
+  const patches = Array.from({ length: Math.round(w * h * 0.32) }, () => ({ x: r() * w, y: r() * h, img: FOREST.patches[Math.floor(r() * FOREST.patches.length)] ?? null }));
+  const trees: RoomLook['trees'] = [];
+  for (let i = -1.2; i < w + 0.6; i += 0.9 + r() * 0.7) trees.push({ x: i + r() * 0.3, y: -0.55 - r() * 0.7, img: FOREST.border[Math.floor(r() * FOREST.border.length)] ?? null, flip: r() < 0.5 });
+  for (let i = -0.4; i < h + 0.6; i += 0.9 + r() * 0.7) trees.push({ x: -0.55 - r() * 0.7, y: i + r() * 0.3, img: FOREST.border[Math.floor(r() * FOREST.border.length)] ?? null, flip: r() < 0.5 });
+  trees.sort((a, b) => a.x + a.y - (b.x + b.y));
+  return { seed, floor, decals, walls, torches, patches, trees };
 }
 
 /** variante fija por casilla */
@@ -342,6 +365,9 @@ export class Board {
   private lastRound = 0;
   /** antorchas de los muros del fondo en este fotograma (coordenadas de pantalla) */
   private torches: Array<{ x: number; y: number; side: number; lit: boolean }> = [];
+  /** esta sala se pinta como bosque */
+  private forest = false;
+  private groundPattern: CanvasPattern | null = null;
   /** este fotograma el suelo se ha dibujado con losas isométricas */
   private isoFloor = false;
   /** vista isométrica (se recuerda en el navegador) */
@@ -575,7 +601,9 @@ export class Board {
         const light = (x + y) % 2 === 0;
         if (this.isoFloor) {
           // losas isométricas ya dibujadas: solo el damero suave para leer las casillas y la sombra de los muros
-          g.fillStyle = light ? 'rgba(255,240,210,.035)' : 'rgba(0,0,0,.16)'; g.fillRect(X, Y, TILE, TILE);
+          // en el bosque, una cuadrícula muy suave (sin damero) para no parecer un tablero de ajedrez
+          if (this.forest) { g.strokeStyle = 'rgba(0,0,0,.22)'; g.lineWidth = 1.2; g.strokeRect(X + 0.5, Y + 0.5, TILE - 1, TILE - 1); }
+          else { g.fillStyle = light ? 'rgba(255,240,210,.035)' : 'rgba(0,0,0,.16)'; g.fillRect(X, Y, TILE, TILE); }
           if (wall.has(`${x},${y - 1}`)) { const sg = g.createLinearGradient(0, Y, 0, Y + TILE * 0.45); sg.addColorStop(0, 'rgba(0,0,0,.55)'); sg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = sg; g.fillRect(X, Y, TILE, TILE * 0.45); }
           continue;
         }
@@ -860,6 +888,75 @@ export class Board {
     }
   }
 
+  /** Bosque: suelo de tierra en perspectiva, borde de tierra y manchas de hierba, musgo y hojas. */
+  private drawForestFloor(c: CombatState, room: RoomLook): void {
+    const g = this.g, pit = new Set([...(c.abyss ?? []), ...(c.voids ?? [])]);
+    const [sx, sy] = this.shake, D = 30, P = (x: number, y: number): [number, number] => { const q = isoPoint(x, y, c.h); return [q.x + sx, q.y + sy]; };
+    const [lx, ly] = P(0, c.h), [bx, by] = P(c.w, c.h), [rx, ry] = P(c.w, 0);
+    for (const [ax, ay, cx2, cy2, col] of [[lx, ly, bx, by, '#2b2617'], [bx, by, rx, ry, '#1e1b11']] as const) {
+      const gr = g.createLinearGradient(0, Math.min(ay, cy2), 0, Math.max(ay, cy2) + D); gr.addColorStop(0, col); gr.addColorStop(1, '#050504');
+      g.fillStyle = gr; g.beginPath(); g.moveTo(ax, ay); g.lineTo(cx2, cy2); g.lineTo(cx2, cy2 + D); g.lineTo(ax, ay + D); g.closePath(); g.fill();
+    }
+    // la textura (256 px) cubre 4×4 casillas
+    if (!this.groundPattern && FOREST.ground) { this.groundPattern = g.createPattern(FOREST.ground, 'repeat'); this.groundPattern?.setTransform(new DOMMatrix().scale((TILE * 4) / 256)); }
+    this.ground();
+    if (this.groundPattern) g.fillStyle = this.groundPattern;
+    for (let y = 0; y < c.h; y++) for (let x = 0; x < c.w; x++) if (!pit.has(`${x},${y}`)) g.fillRect(x * TILE - 0.5, y * TILE - 0.5, TILE + 1, TILE + 1);
+    this.screen();
+    for (const d of room.patches) {
+      if (!d.img || pit.has(`${Math.floor(d.x)},${Math.floor(d.y)}`)) continue;
+      const p = this.top(c, d.x, d.y);
+      g.drawImage(d.img, Math.round(p.x - d.img.naturalWidth / 2), Math.round(p.y - d.img.naturalHeight / 2));
+    }
+  }
+
+  /** Bosque: árboles grandes y oscuros detrás de los dos lados del fondo. */
+  private drawForestEdge(c: CombatState, room: RoomLook): void {
+    this.torches = [];
+    const g = this.g, out = new Set(c.voids ?? []);
+    for (const tr of room.trees) {
+      if (!tr.img) continue;
+      // donde la sala no llega (forma de las salas creadas) no hace falta borde
+      const ex = Math.max(0, Math.min(c.w - 1, Math.round(tr.x))), ey = Math.max(0, Math.min(c.h - 1, Math.round(tr.y)));
+      if (out.has(`${ex},${ey}`)) continue;
+      const p = this.top(c, tr.x, tr.y), w = tr.img.naturalWidth, h = tr.img.naturalHeight;
+      if (tr.flip) { g.save(); g.translate(Math.round(p.x + w / 2), Math.round(p.y - h + 10)); g.scale(-1, 1); g.drawImage(tr.img, 0, 0); g.restore(); }
+      else g.drawImage(tr.img, Math.round(p.x - w / 2), Math.round(p.y - h + 10));
+    }
+    // niebla baja entre los troncos
+    const [ax, ay] = [this.top(c, 0, 0).x, this.top(c, 0, 0).y];
+    const gr = g.createRadialGradient(ax, ay, 40, ax, ay, 520); gr.addColorStop(0, 'rgba(10,14,12,.55)'); gr.addColorStop(1, 'rgba(10,14,12,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, this.canvas.width, this.canvas.height);
+  }
+
+  /** Bosque: obstáculo de la casilla (árbol, tocón, roca, tronco caído, helecho…), con el tronco en el centro. */
+  private drawForestObstacle(c: CombatState, x: number, y: number, seed: number): void {
+    const it = pick(FOREST.props, x * 7 + seed, y * 3 + (seed >>> 4));
+    if (!it) return;
+    const g = this.g, q = this.top(c, x + 0.5, y + 0.5), w = it.naturalWidth, h = it.naturalHeight;
+    g.fillStyle = 'rgba(0,0,0,.4)'; g.beginPath(); g.ellipse(q.x, q.y + 6, Math.min(44, w * 0.32), 15, 0, 0, 6.3); g.fill();
+    // si tapa a alguien que está detrás, se ve a través
+    const behind = c.units.some((u) => u.hp > 0 && u.pos.x + u.pos.y < x + y && x + y - (u.pos.x + u.pos.y) <= 3 && Math.abs(u.pos.x - u.pos.y - (x - y)) <= 2);
+    if (behind && h > 90) g.globalAlpha = 0.5;
+    g.drawImage(it, Math.round(q.x - w / 2), Math.round(q.y + 14 - h));
+    g.globalAlpha = 1;
+  }
+
+  /** Bosque: luciérnagas que van y vienen sobre el tablero. */
+  private drawFireflies(c: CombatState, now: number): void {
+    const g = this.g, n = Math.round(c.w * c.h * 0.08);
+    g.save(); g.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < n; i++) {
+      const s1 = (i * 9301 + 49297) % 233280 / 233280, s2 = (i * 4421 + 1663) % 3571 / 3571;
+      const fx = s1 * c.w + Math.sin(now / (2400 + i * 37) + i) * 0.6, fy = s2 * c.h + Math.cos(now / (2900 + i * 53) + i * 2) * 0.6;
+      const p = this.top(c, fx, fy), lift = 30 + 25 * Math.sin(now / 1700 + i * 1.7), a = 0.35 + 0.35 * Math.sin(now / 300 + i * 2.3);
+      if (a <= 0.05) continue;
+      const gr = g.createRadialGradient(p.x, p.y - lift, 0, p.x, p.y - lift, 9); gr.addColorStop(0, `rgba(210,255,120,${a.toFixed(2)})`); gr.addColorStop(1, 'rgba(160,255,90,0)');
+      g.fillStyle = gr; g.beginPath(); g.arc(p.x, p.y - lift, 9, 0, 6.3); g.fill();
+    }
+    g.restore();
+  }
+
   /** Obstáculo: un objeto de la zona (barriles, lápidas, estatuas, jaulas…), distinto en cada sala. */
   private drawCryptObstacle(c: CombatState, x: number, y: number, seed: number): void {
     const list = ZONE_PROPS[this.session.run?.zone ?? 0] ?? ZONE_PROPS[0]!, it = pick(list, x * 7 + seed, y * 3 + (seed >>> 4));
@@ -924,14 +1021,17 @@ export class Board {
     // H6: temblor de pantalla de los golpes fuertes
     this.shake = this.fx.offset(now);
     g.imageSmoothingEnabled = !this.iso;
-    this.isoFloor = this.iso && cryptReady();
+    const forest = isForest(this.session.run?.zone) && forestReady();
+    this.forest = forest;
+    this.isoFloor = this.iso && (forest || cryptReady());
     if (this.isoFloor) {
       const room = this.roomFor(c);
-      this.drawCryptFloor(c, room); this.drawCryptWalls(c, room);
+      if (forest) { this.drawForestFloor(c, room); this.drawForestEdge(c, room); } else { this.drawCryptFloor(c, room); this.drawCryptWalls(c, room); }
       // tono de la zona sobre suelo y muros
-      g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'multiply'; g.fillStyle = ZONE_TINT[this.session.run?.zone ?? 0] ?? ZONE_TINT[0]!;
+      g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'multiply'; g.fillStyle = forest ? '#e2eadb' : ZONE_TINT[this.session.run?.zone ?? 0] ?? ZONE_TINT[0]!;
       g.fillRect(0, 0, this.canvas.width, this.canvas.height); g.restore();
       this.drawTorchLight(now);
+      if (forest) this.drawFireflies(c, now);
     }
     this.ground();
     const zone = ZONES[this.session.run?.zone ?? 0] ?? ZONES[0]!;
@@ -1191,7 +1291,7 @@ export class Board {
           g.fillStyle = gr; g.beginPath(); g.arc(q.x, q.y - 20, 160, 0, 6.3); g.fill(); g.restore();
           g.globalAlpha = 1; continue;
         }
-        if (this.isoFloor && !p.brazier && !p.fence) { this.screen(); this.drawCryptObstacle(c, p.x, p.y, this.room?.seed ?? 0); g.globalAlpha = 1; continue; }
+        if (this.isoFloor && !p.brazier && !p.fence) { this.screen(); if (this.forest) this.drawForestObstacle(c, p.x, p.y, this.room?.seed ?? 0); else this.drawCryptObstacle(c, p.x, p.y, this.room?.seed ?? 0); g.globalAlpha = 1; continue; }
         if (p.brazier) this.drawBrazier(p.x, p.y, now); else if (p.fence) this.drawFence(p.x, p.y, now); else this.drawWall(c, zone, p.x, p.y);
         g.globalAlpha = 1;
       }

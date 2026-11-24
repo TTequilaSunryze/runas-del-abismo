@@ -1,0 +1,4 @@
+«Forest» — An Isometric asset pack, de Rafael Sewa (https://rafaelsewa.itch.io/)
+Licencia: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 (http://creativecommons.org/licenses/by-nc-sa/4.0/)
+Cambios: paleta Vanilla, reducido, pixelado, oscurecido y pasado de isométrico verdadero a 2:1 (tools/arte/bosque/convertir.py).
+Estas versiones modificadas se comparten con la misma licencia.
