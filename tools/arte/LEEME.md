@@ -64,3 +64,11 @@ esqueleto, acolito, necrofago, espectro, gargola: recuadros en `recuadros/<nombr
 Fotogramas pegados separados por mínimos de columna (bolas de fuego del acólito, estela del espectro,
 última muerte del esqueleto); en la gárgola la fila de lanzar y la de herido se separan por el mínimo de filas.
 El acólito traía títulos de texto: se borran las manchas claras dentro de la franja de cada título.
+
+## Zona 2 + Hechicera Zorro (hojas IA del usuario)
+`zona2/`: `regiones.py` (zona de cada animación en cada lámina y nº de fotogramas), `util.py` (quitar rejillas,
+quedarse con el interior de los paneles, separar fotogramas) y `montar.py` (monta todas las hojas).
+Láminas con paneles: se limpia con «paneles» y se deja solo el interior de los recuadros (`inside_panels`);
+el chamán (tabla) con tolerancia mayor y quitando las líneas que cruzan toda la tabla.
+Pilar de huesos: un dibujo por estado de vida (`hpFrames`). Zorro: una animación por familia de hechizos (`spellAnim`).
+Cazador Silvano: la transformación es la última fila de la fase 1. Madre Raíz: la fila «death/transform» es su transformación.

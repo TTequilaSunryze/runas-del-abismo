@@ -91,7 +91,7 @@ const ZONE_PROPS: Array<Array<HTMLImageElement | null>> = [
  * Personajes con hoja de animación en 8 direcciones (vista isométrica). Fotogramas de 96 px con los pies en (48, 80);
  * filas S, SE, E, NE, N, NW, W, SW. Se dibujan a 2×.
  */
-type SheetAnim = 'idle' | 'walk' | 'attack' | 'hurt' | 'death' | 'cast' | 'transform';
+type SheetAnim = 'idle' | 'walk' | 'attack' | 'hurt' | 'death' | 'cast' | 'transform' | (string & {});
 /**
  * img: una imagen por animación (filas = direcciones). dirs 8 = S, SE, E, NE, N, NW, W, SW; dirs 1 = de perfil mirando
  * a la derecha (se voltea para mirar a la izquierda). foot = pies dentro del fotograma; scale = aumento entero.
@@ -104,6 +104,10 @@ interface Sheet {
   head?: number;
   /** proyectil propio (sustituye al genérico en los ataques que viajan), y su altura de salida sobre los pies */
   arrow?: HTMLImageElement | null; arrowY?: number;
+  /** animación propia de algunos hechizos (id del hechizo → animación de la hoja) */
+  spellAnim?: Record<string, string>;
+  /** pilares: el reposo no se anima; cada dibujo es un estado según la vida que le queda (sano, dañado, roto) */
+  hpFrames?: boolean;
 }
 const sheet = (name: string, frames: Sheet['frames'], size = 96, foot: [number, number] = [48, 80], scale = 2, dirs: 8 | 1 = 8): Sheet => ({
   img: Object.fromEntries(Object.keys(frames).map((a) => [a, art(`iso/units/${name}_${a}.png`)])) as Sheet['img'],
@@ -142,16 +146,34 @@ const SHEETS: Record<string, Sheet> = {
   necrofago: { ...sheet('necrofago', { idle: 8, walk: 4, attack: 7, cast: 9, hurt: 5, death: 9 }, 128, [64, 124], 2, 1), head: 58, actMs: 800, release: 3 / 7 },
   espectro: { ...sheet('espectro', { idle: 5, walk: 5, attack: 5, cast: 4, hurt: 3, death: 4 }, 128, [64, 124], 2, 1), head: 66, actMs: 800, release: 3 / 5 },
   gargola: { ...sheet('gargola', { idle: 6, walk: 9, attack: 6, cast: 6, hurt: 4, death: 6 }, 128, [64, 124], 2, 1), head: 63, actMs: 800, release: 3 / 6 },
+  // zona 2 · bosque (hojas del creador)
+  pilar: { ...sheet('pilar', { idle: 3, hurt: 2, death: 2 }, 128, [64, 124], 2, 1), head: 104, hpFrames: true },
+  arana: { ...sheet('arana', { idle: 6, walk: 6, attack: 6, hurt: 4, death: 8 }, 128, [64, 124], 2, 1), head: 44, actMs: 700, release: 3 / 6 },
+  chaman: { ...sheet('chaman', { idle: 8, walk: 8, attack: 8, cast: 8, hurt: 5, death: 8 }, 128, [64, 124], 2, 1), head: 63, actMs: 900, release: 5 / 8 },
+  hongo: { ...sheet('hongo', { idle: 5, walk: 7, attack: 7, hurt: 4, death: 8 }, 128, [64, 124], 2, 1), head: 54, actMs: 800, release: 4 / 7 },
+  pantera: { ...sheet('pantera', { idle: 5, walk: 6, attack: 7, cast: 7, hurt: 4, death: 6 }, 128, [64, 124], 2, 1), head: 53, actMs: 700, release: 3 / 7 },
+  alfa: { ...sheet('alfa', { idle: 6, walk: 6, attack: 6, cast: 6, hurt: 6, death: 6 }, 160, [80, 156], 2, 1), head: 72, actMs: 750, release: 3 / 6 },
+  reina: { ...sheet('reina', { idle: 10, walk: 10, attack: 10, cast: 10, death: 10 }, 160, [80, 156], 2, 1), head: 85, actMs: 900, release: 4 / 10 },
+  madre: { ...sheet('madre', { idle: 4, walk: 3, attack: 4, cast: 4, hurt: 3, death: 5 }, 192, [96, 188], 2, 1), head: 89, actMs: 900, release: 3 / 4, spellAnim: { e_aplastar: 'cast' } },
+  madre2: { ...sheet('madre2', { idle: 4, walk: 4, attack: 4, cast: 4, hurt: 3, transform: 5, death: 4 }, 192, [96, 188], 2, 1), head: 83, actMs: 900, release: 3 / 4, spellAnim: { e_aplastar: 'cast' } },
+  brote: { ...sheet('brote', { idle: 3, hurt: 2, death: 3 }, 128, [64, 124], 2, 1), head: 64 },
+  cazador: { ...sheet('cazador', { idle: 5, walk: 6, attack: 6, bite: 6, cast: 5, hurt: 4, death: 6 }, 160, [80, 156], 2, 1), head: 80, actMs: 800, release: 3 / 6, spellAnim: { e_mordida: 'bite' } },
+  cazador2: { ...sheet('cazador2', { idle: 5, walk: 5, attack: 5, bite: 5, cast: 4, hurt: 4, transform: 6, death: 8 }, 192, [96, 188], 2, 1), head: 86, actMs: 800, release: 4 / 5, spellAnim: { e_mordida: 'bite' } },
   tejedora: withHead(sheet('weaver', { idle: 12, walk: 8, attack: 10, hurt: 8, death: 12 }, 159, [80, 84]), 27),
 };
 /** héroes con hoja (por clase). Arquero: «Arcane archer», de perfil. */
 const HERO_SHEETS: Record<string, Sheet> = {
+  // Hechicera Zorro: una animación por familia de hechizos (orbe, encanto, salto, fuego, ilusión, vórtice, colas, esencia)
+  zorro: {
+    ...sheet('zorro', { idle: 4, walk: 4, attack: 3, charm: 2, dash: 2, foxfire: 3, illusion: 3, vortex: 2, tail: 3, essence: 3, hurt: 3, death: 3 }, 128, [64, 124], 2, 1), head: 54, actMs: 750, release: 2 / 3,
+    spellAnim: { z_orbe: 'attack', z_encanto: 'charm', z_seduccion: 'charm', z_maldicion: 'charm', z_impulso: 'dash', z_fuego: 'foxfire', z_vinculo: 'foxfire', z_espejismo: 'illusion', z_velo: 'illusion', z_vortice: 'vortex', z_estallido: 'tail', z_colas: 'tail', z_drenaje: 'essence', z_resguardo: 'essence' },
+  },
   // a 3×: unos 96 px de alto; tensa el arco y suelta la flecha en el 7.º fotograma (de 7)
   arquero: { ...sheet('archer', { idle: 4, walk: 8, attack: 7, cast: 4, hurt: 2, death: 8 }, 64, [32, 48], 3, 1), actMs: 800, release: 6 / 7, arrow: art('iso/units/archer_arrow.png'), arrowY: 23, head: 32 },
 };
 const sheetOf = (u: { kind: string; team: string; summoner?: number; phase?: number }): Sheet | undefined =>
   u.team === 'enemy' ? ((u.phase ?? 1) >= 2 && SHEETS[`${u.kind}2`]) || SHEETS[u.kind] : u.summoner === undefined ? HERO_SHEETS[u.kind] : undefined;
-const sheetReady = (s: Sheet): boolean => Object.values(s.img).every(ready);
+const sheetReady = (s: Sheet): boolean => Object.values(s.img).every((i) => ready(i ?? null));
 /** alto del personaje sobre sus pies, en pantalla */
 const sheetHeight = (s: Sheet): number => (s.head ?? s.foot[1]) * s.scale;
 /** Dirección (fila de la hoja) para un desplazamiento en casillas, vista en pantalla isométrica. */
@@ -274,15 +296,15 @@ export class Board {
   private ghosts: Ghost[] = [];
   private lunge = new Map<number, { t0: number; dx: number; dy: number }>();
   /** animación de hechizo en curso (modelos animados) */
-  private acts = new Map<number, { t0: number; anim: Anim; ms?: number }>();
+  private acts = new Map<number, { t0: number; anim: Anim; ms?: number; spell?: string }>();
   /** caminatas en curso: camino casilla a casilla */
   private walks = new Map<number, { from: Pos; path: Pos[]; t0: number; end: number }>();
   /** dirección del tramo que va andando (dx, dy) y casillas andadas, para la animación */
   private walkSeg = new Map<number, { dx: number; dy: number; dist: number }>();
   /** acción que espera a que acabe la transformación de fase */
-  private pendingAct = new Map<number, { t0: number; anim: Anim; ms?: number }>();
+  private pendingAct = new Map<number, { t0: number; anim: Anim; ms?: number; spell?: string }>();
   /** Pone la animación de una acción; si se está transformando, la deja para cuando acabe. */
-  private setAct(id: number, act: { t0: number; anim: Anim; ms?: number }): void {
+  private setAct(id: number, act: { t0: number; anim: Anim; ms?: number; spell?: string }): void {
     const cur = this.acts.get(id);
     if (cur && (cur.anim as string) === 'phase' && act.t0 < cur.t0 + (cur.ms ?? ACT_MS)) this.pendingAct.set(id, { ...act, t0: Math.max(act.t0, cur.t0 + (cur.ms ?? ACT_MS)) });
     else this.acts.set(id, act);
@@ -426,7 +448,7 @@ export class Board {
       const u = 'unit' in e ? c.units.find((x) => x.id === e.unit) : undefined;
       const from = u ? this.shown.get(u.id) ?? u.pos : undefined;
       const shc = this.iso && u ? sheetOf(u) : undefined;
-      if (e.t === 'cast' && u) this.setAct(u.id, { t0: now, anim: animFor(e.spell, !!SPELLS[e.spell]?.dmg), ms: shc?.actMs });
+      if (e.t === 'cast' && u) this.setAct(u.id, { t0: now, anim: animFor(e.spell, !!SPELLS[e.spell]?.dmg), ms: shc?.actMs, spell: e.spell });
       if (e.t === 'cast' && u && from && SPIN_SPELLS.includes(e.spell)) {
         // giro: el personaje da una vuelta y un tajo circular le rodea (también a su Sombra)
         this.spins.set(u.id, now);
@@ -740,7 +762,10 @@ export class Board {
     const ni = n('idle'), idleMs = Math.max(170, 1200 / ni), loop = ni > 2 ? ni * 2 - 2 : ni, step = Math.floor((now + u.id * 397) / idleMs) % loop;
     let anim: SheetAnim = 'idle', fr = step < ni ? step : loop - step;
     // hechizos sin daño: animación de lanzar si la hoja la tiene
-    if (ac && ak < 1) { anim = (ac.anim as string) === 'phase' && sh.frames.transform ? 'transform' : ac.anim !== 'attack' && sh.frames.cast ? 'cast' : 'attack'; fr = Math.min(n(anim) - 1, Math.floor(ak * n(anim))); }
+    // pilares: un dibujo por estado según la vida que le queda
+    if (sh.hpFrames) fr = Math.min(ni - 1, Math.floor((1 - Math.max(0, u.hp) / Math.max(1, u.maxHp)) * ni));
+    const own = ac?.spell ? sh.spellAnim?.[ac.spell] : undefined;
+    if (ac && ak < 1) { anim = (ac.anim as string) === 'phase' && sh.frames.transform ? 'transform' : own && sh.frames[own] ? own : ac.anim !== 'attack' && sh.frames.cast ? 'cast' : 'attack'; fr = Math.min(n(anim) - 1, Math.floor(ak * n(anim))); }
     else if (hurt < 500) { anim = 'hurt'; fr = Math.min(n('hurt') - 1, Math.floor(hurt / 120)); }
     else if (moving) {
       // los pasos van con la distancia: un ciclo de andar cada 2 casillas (así los pies no patinan)

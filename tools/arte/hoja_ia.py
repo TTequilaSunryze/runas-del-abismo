@@ -28,7 +28,7 @@ def build(src, out, boxes, k=1 / 3, cell=96, anchor='center', anchor_rows=12):
             keep = []
             for j, sl in enumerate(ndimage.find_objects(lab)):
                 # fuera: manchas sueltas, y trozos del fotograma vecino pegados al borde del recuadro
-                edge = sl[1].start == 0 or sl[1].stop == m.shape[1]
+                edge = sl[1].start == 0 or sl[1].stop == m.shape[1] or sl[0].start == 0 or sl[0].stop == m.shape[0]
                 if sizes[j] >= 60 and not (edge and sizes[j] < big * 0.25): keep.append(j + 1)
             a[..., 3] = np.where(np.isin(lab, keep), a[..., 3], 0)
             f = Image.fromarray(a); f = f.crop(f.getbbox())
