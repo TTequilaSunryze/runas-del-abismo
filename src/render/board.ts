@@ -156,6 +156,8 @@ const SHEETS: Record<string, Sheet> = {
   reina: { ...sheet('reina', { idle: 10, walk: 10, attack: 10, cast: 10, death: 10 }, 160, [80, 156], 2, 1), head: 85, actMs: 900, release: 4 / 10 },
   madre: { ...sheet('madre', { idle: 4, walk: 3, attack: 4, cast: 4, hurt: 3, death: 5 }, 192, [96, 188], 2, 1), head: 89, actMs: 900, release: 3 / 4, spellAnim: { e_aplastar: 'cast' } },
   madre2: { ...sheet('madre2', { idle: 4, walk: 4, attack: 4, cast: 4, hurt: 3, transform: 5, death: 4 }, 192, [96, 188], 2, 1), head: 83, actMs: 900, release: 3 / 4, spellAnim: { e_aplastar: 'cast' } },
+  druida: { ...sheet('druida', { idle: 6, walk: 7, attack: 9, cast: 10, hurt: 4, death: 10 }, 128, [64, 124], 2, 1), head: 61, actMs: 1000, release: 6 / 9 },
+  zarzal: { ...sheet('zarzal', { idle: 8, walk: 8, attack: 4, hurt: 4, death: 8 }, 160, [80, 156], 2, 1), head: 72, actMs: 700, release: 2 / 4 },
   brote: { ...sheet('brote', { idle: 3, hurt: 2, death: 3 }, 128, [64, 124], 2, 1), head: 64 },
   cazador: { ...sheet('cazador', { idle: 5, walk: 6, attack: 6, bite: 6, cast: 5, hurt: 4, death: 6 }, 160, [80, 156], 2, 1), head: 80, actMs: 800, release: 3 / 6, spellAnim: { e_mordida: 'bite' } },
   cazador2: { ...sheet('cazador2', { idle: 5, walk: 5, attack: 5, bite: 5, cast: 4, hurt: 4, transform: 6, death: 8 }, 192, [96, 188], 2, 1), head: 86, actMs: 800, release: 4 / 5, spellAnim: { e_mordida: 'bite' } },
