@@ -124,7 +124,7 @@ describe('Tejedora de Esferas', () => {
     addMark(s, { kind: 'sphere', pos: { x: 5, y: 2 }, team: 'hero', turns: 3, owner: h!.id }, []);
     expect(cast(s, h!.id, 't_implosion', h!.pos).ok).toBe(false);
     expect(cast(s, h!.id, 't_semilla', { x: 4, y: 4 }).ok).toBe(true);
-    const r = cast(s, h!.id, 't_implosion', h!.pos);
+    const r = cast(s, h!.id, 't_implosion', { x: 4, y: 4 });
     expect(r.ok && r.events.some((ev) => ev.t === 'damage' && ev.unit === e!.id)).toBe(true);
     expect(marksOf(s, 'sphere')).toHaveLength(1);
     expect(s.units.filter((x) => x.seed !== undefined && x.hp > 0)).toHaveLength(0);

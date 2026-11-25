@@ -3,7 +3,7 @@ import { SPELLS } from '../core/classes/spells';
 // Tablero de combate: dibuja el estado y convierte clics en acciones.
 import { ZONES } from '../content/zones';
 import { animMul } from '../content/animSpeed';
-import { CRIT_FLAT, castProblem, current, essenceNeed, furyCrit, furyPower, movePreview, spellOf, usableMp } from '../core/combat/engine';
+import { CRIT_FLAT, castProblem, current, essenceNeed, furyCrit, furyPower, implodePreview, movePreview, seedLinks, spellOf, usableMp } from '../core/combat/engine';
 import { coneCells } from '../core/combat/marks';
 import { alive, dist, hasLineOfSight, reachable } from '../core/combat/grid';
 import type { CombatState, GameEvent, Pos, Unit } from '../core/state';
@@ -1250,9 +1250,31 @@ export class Board {
       }
       if (me) { g.strokeStyle = '#5fcf70'; g.lineWidth = 3; g.strokeRect(me.pos.x * TILE + 2, me.pos.y * TILE + 2, TILE - 4, TILE - 4); }
     }
+    // Red de implosión: casillas interiores de cada conexión entre Semillas oscuras (violeta, solo filas y columnas)
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 380);
+    for (const owner of c.units.filter((x) => x.hp > 0 && x.spells.some((sp) => sp.id === 't_implosion'))) {
+      for (const l of seedLinks(c, owner)) {
+        const a = c.units.find((x) => x.id === l.a), b = c.units.find((x) => x.id === l.b);
+        if (!a || !b) continue;
+        for (const p of l.cells) { fill(p, `rgba(170,80,255,${(0.16 + 0.12 * pulse).toFixed(3)})`); g.strokeStyle = 'rgba(200,140,255,.55)'; g.lineWidth = 2; g.strokeRect(p.x * TILE + 6, p.y * TILE + 6, TILE - 12, TILE - 12); }
+        // rayo de semilla a semilla por el centro de las casillas
+        g.save(); g.strokeStyle = `rgba(225,180,255,${(0.55 + 0.35 * pulse).toFixed(3)})`; g.lineWidth = 5; g.shadowColor = '#b060ff'; g.shadowBlur = 12;
+        g.beginPath(); g.moveTo((a.pos.x + 0.5) * TILE, (a.pos.y + 0.5) * TILE); g.lineTo((b.pos.x + 0.5) * TILE, (b.pos.y + 0.5) * TILE); g.stroke(); g.restore();
+      }
+    }
     if (me && cur?.id === me.id && !c.over) {
       const def = this.sel ? spellOf(me, this.sel) : undefined;
-      if (def) {
+      // Implosión: solo se marcan tus semillas; al pasar por encima de una, su red y todo lo que alcanzará
+      if (def?.special === 'implode') {
+        for (const sd of c.units.filter((x) => x.hp > 0 && x.seed !== undefined && x.summoner === me.id)) { g.strokeStyle = '#f2c14e'; g.lineWidth = 3; g.strokeRect(sd.pos.x * TILE + 4, sd.pos.y * TILE + 4, TILE - 8, TILE - 8); }
+        const hv = this.hover ? c.units.find((x) => x.hp > 0 && x.seed !== undefined && x.summoner === me.id && x.pos.x === this.hover!.x && x.pos.y === this.hover!.y) : undefined;
+        if (hv) {
+          const pv = implodePreview(c, me, hv.id);
+          for (const p of pv.blast) fill(p, 'rgba(255,60,60,.24)');
+          for (const p of pv.lines) fill(p, 'rgba(255,90,200,.32)');
+          for (const p of pv.seeds) { g.strokeStyle = '#ff5a5a'; g.lineWidth = 4; g.strokeRect(p.x * TILE + 3, p.y * TILE + 3, TILE - 6, TILE - 6); }
+        }
+      } else if (def) {
         for (let y = 0; y < c.h; y++)
           for (let x = 0; x < c.w; x++) {
             const p = { x, y }, d = dist(me.pos, p);

@@ -91,7 +91,7 @@ describe('Tejedora', () => {
     for (let i = 0; i < 7; i++) { endTurn(s, current(s)!.id); me(s); }
     expect(sd.seed).toBe(10);
     const ap = u.ap, hp = e.hp;
-    ok(s, u, 't_implosion', u.pos);
+    ok(s, u, 't_implosion', { x: 5, y: 3 });
     expect(hp - e.hp).toBeGreaterThanOrEqual(SEED_DMG + 10);
     expect(u.ap).toBe(ap - 1 + 1);
     expect(sd.hp).toBe(0);

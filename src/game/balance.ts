@@ -40,7 +40,7 @@ export const SPELL_LABEL: Record<string, string> = {
   lifesteal: 'Robo de vida (fracción)', healPct: 'Cura (fracción de vida)', revive: 'Resucita con (fracción)', selfMp: 'PM para ti', selfDmg: 'Vida que pagas', selfDmgPct: '% de vida que pagas', retreat: 'Retroceso',
   bounce: 'Rebotes', cone: 'Cono (casillas)', ricochet: 'Rebote a (casillas)', armorIgnore: 'Ignora armadura', critMul: 'Multiplica el crítico', 'followUp.dmg.0': 'Remate: daño mín.', 'followUp.dmg.1': 'Remate: daño máx.', 'followUp.radius': 'Remate: radio',
   'sphere.turns': 'Esfera: turnos', 'sphere.max': 'Esferas máx.', 'consume.per': 'Daño por esfera', 'sphereHit.dmg.0': 'Choque de esfera: daño mín.', 'sphereHit.dmg.1': 'Choque de esfera: daño máx.', 'snare.dmg': 'Cepo: daño', 'bonusVs.dmg': 'Daño extra contra el estado',
-  'summon.hpPct': 'Invocación: vida (fracción)', 'summon.armor': 'Invocación: armadura', 'summon.ap': 'Invocación: PA', 'summon.mp': 'Invocación: PM', 'summon.initiative': 'Invocación: iniciativa',
+  link: 'Red: daño por conexión', 'summon.hpPct': 'Invocación: vida (fracción)', 'summon.armor': 'Invocación: armadura', 'summon.ap': 'Invocación: PA', 'summon.mp': 'Invocación: PM', 'summon.initiative': 'Invocación: iniciativa',
 };
 const FRACTION = new Set(['lifesteal', 'healPct', 'revive', 'summon.hpPct', 'critMul']);
 export const stepOf = (path: string, orig: number): number => (FRACTION.has(path) || !Number.isInteger(orig) ? 0.05 : 1);

@@ -98,6 +98,8 @@ const CHAIN_SHARE = 0.5;
 const PACT_POWER = 3;
 /** Semillas oscuras: vida, daño base de la Implosión, crecimiento por turno, máximo de crecimiento y de semillas */
 export const SEED_HP = 20, SEED_DMG = 14, SEED_GROW = 2, SEED_MAX = 10, SEED_CAP = 6;
+/** Red de implosión: daño de cada conexión si la Implosión no trae el suyo (`link`). PROVISIONAL: ajustable en Equilibrio. */
+export const SEED_LINK_DMG = 8;
 const GUARD_SHARE = 0.4;
 /** G3.3: Sed de batalla cura 2 + 20 por cada 100 de Furia. */
 export const THIRST_PER_FURY = 0.2;
@@ -707,6 +709,8 @@ export function castProblem(s: CombatState, u: Unit, base: SpellDef, at: Pos): s
   if (def.special === 'absorb' && !marksOf(s, 'soul').length) return 'No hay almas en el tablero';
   if (def.special === 'seed' && seedsOf(s, u).length >= SEED_CAP) return `Máximo ${SEED_CAP} semillas`;
   if (def.special === 'implode' && !seedsOf(s, u).length) return 'No tienes Semillas oscuras';
+  // Implosión: se elige qué Semilla oscura detonar (cualquiera de las tuyas, sin alcance ni visión)
+  if (def.special === 'implode') { const sd = unitAt(s, at); return sd && sd.seed !== undefined && sd.summoner === u.id && alive(sd) ? null : 'Elige una de tus Semillas oscuras'; }
   if (def.swapShadow) {
     const sh = marksOf(s, 'shadow', u.id).at(-1);
     if (!sh) return 'No tienes Sombra';
@@ -1388,6 +1392,56 @@ function addSphere(s: CombatState, u: Unit, at: Pos, turns: number, max: number,
 /** Semillas oscuras vivas de `u`. */
 export const seedsOf = (s: CombatState, u: Unit): Unit[] => s.units.filter((x) => x.seed !== undefined && x.summoner === u.id && alive(x));
 
+/** Red de implosión (pasiva): activa si `u` tiene a la vez Semilla oscura e Implosión. */
+export const implosionNet = (u: Unit): boolean => u.spells.some((sp) => sp.id === 't_semilla') && u.spells.some((sp) => sp.id === 't_implosion');
+
+/** Conexión entre dos semillas consecutivas de una fila o columna; `cells` son las casillas de entre medias. */
+export interface SeedLink { a: number; b: number; cells: Pos[] }
+
+/**
+ * Conexiones de la Red de implosión de `u`: cada semilla se une a la siguiente de su fila y de su columna
+ * (nunca en diagonal), si entre las dos no hay obstáculos. Se calcula siempre sobre las posiciones actuales,
+ * así que aparecer, moverse, consumirse o destruirse una semilla cambia las conexiones al momento.
+ */
+export function seedLinks(s: CombatState, u: Unit): SeedLink[] {
+  if (!implosionNet(u)) return [];
+  const seeds = seedsOf(s, u), out: SeedLink[] = [];
+  const blocked = new Set(s.obstacles);
+  for (const sd of seeds) {
+    for (const [dx, dy] of [[1, 0], [0, 1]] as const) {
+      // la semilla más cercana en esa dirección (la de en medio corta la conexión con las de más allá)
+      const next = seeds.filter((o) => o !== sd && (dx ? o.pos.y === sd.pos.y && o.pos.x > sd.pos.x : o.pos.x === sd.pos.x && o.pos.y > sd.pos.y))
+        .sort((p, q) => (dx ? p.pos.x - q.pos.x : p.pos.y - q.pos.y))[0];
+      if (!next) continue;
+      const cells: Pos[] = [];
+      let ok = true;
+      for (let k = 1; ; k++) {
+        const p = { x: sd.pos.x + dx * k, y: sd.pos.y + dy * k };
+        if (p.x === next.pos.x && p.y === next.pos.y) break;
+        if (blocked.has(key(p))) { ok = false; break; }
+        cells.push(p);
+      }
+      if (ok) out.push({ a: sd.id, b: next.id, cells });
+    }
+  }
+  return out;
+}
+
+/** Semillas de la misma red que `seedId` (incluidas las conectadas a través de otras). Sin conexiones: solo ella. */
+export function seedNetwork(s: CombatState, u: Unit, seedId: number): { seeds: number[]; links: SeedLink[] } {
+  const links = seedLinks(s, u), seen = new Set([seedId]), q = [seedId];
+  while (q.length) { const id = q.shift()!; for (const l of links) for (const [x, y] of [[l.a, l.b], [l.b, l.a]] as const) if (x === id && !seen.has(y)) { seen.add(y); q.push(y); } }
+  return { seeds: [...seen], links: links.filter((l) => seen.has(l.a)) };
+}
+
+/** Casillas que alcanzaría una Implosión sobre `seedId`: alrededor de cada semilla de la red y el interior de sus conexiones. */
+export function implodePreview(s: CombatState, u: Unit, seedId: number): { seeds: Pos[]; blast: Pos[]; lines: Pos[] } {
+  const net = seedNetwork(s, u, seedId), seeds = net.seeds.map((id) => getUnit(s, id)).filter((x): x is Unit => !!x).map((x) => ({ ...x.pos }));
+  const blast: Pos[] = [];
+  for (const p of seeds) for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) { const q = { x: p.x + dx, y: p.y + dy }; if (q.x >= 0 && q.y >= 0 && q.x < s.w && q.y < s.h && !blast.some((b) => same(b, q))) blast.push(q); }
+  return { seeds, blast, lines: net.links.flatMap((l) => l.cells) };
+}
+
 /** Semilla oscura: una unidad quieta de 20 de vida que ocupa la casilla (no juega turnos). */
 function plantSeed(s: CombatState, u: Unit, at: Pos, ev: GameEvent[]): void {
   const sd = summon(s, { team: u.team, kind: 'semilla', name: 'Semilla oscura', owner: null, pos: at, hp: SEED_HP, maxHp: SEED_HP, shield: 0, armor: 0, power: 0, crit: 0,
@@ -1508,19 +1562,26 @@ const SELF_SPECIALS: Record<string, SelfSpecial> = {
     u.ap += 2;
     ev.push({ t: 'drain', unit: u.id, ap: 2, mp: 0 });
   },
-  // Implosión: detona las Semillas oscuras; 14 (+ lo que hayan crecido) a los enemigos de las 8 casillas de alrededor
-  implode: (s, u, d, _at, ev) => {
+  // Implosión: detona la Semilla oscura elegida y, con la Red de implosión, toda su red. Cada semilla hace 14 (+ lo que
+  // haya crecido) a los enemigos de las 8 casillas de alrededor y cada conexión hace su daño a los enemigos de su interior.
+  // Todo se decide antes de aplicar nada (resolución simultánea) y las semillas desaparecen al final.
+  implode: (s, u, d, at, ev) => {
     let hitAny = false;
-    for (const sd of seedsOf(s, u)) {
-      const dmg = SEED_DMG + (sd.seed ?? 0);
-      ev.push({ t: 'markAdd', kind: 'pulse', at: { ...sd.pos } }, { t: 'explode', unit: sd.id });
-      sd.hp = 0;
-      ev.push({ t: 'death', unit: sd.id });
-      for (const t of s.units.filter((x) => alive(x) && x.team !== u.team && Math.max(Math.abs(x.pos.x - sd.pos.x), Math.abs(x.pos.y - sd.pos.y)) <= 1)) {
-        if (s.over) break;
-        if (hurt(s, t, dmg + dmgFlat(u, t), ev, d.id, { element: d.element ?? 'shadow' }) > 0) hitAny = true;
-      }
+    const chosen = unitAt(s, at);
+    if (!chosen || chosen.seed === undefined || chosen.summoner !== u.id) return;
+    const net = seedNetwork(s, u, chosen.id), seeds = net.seeds.map((id) => getUnit(s, id)).filter((x): x is Unit => !!x && alive(x));
+    const linkDmg = d.link ?? SEED_LINK_DMG;
+    const enemies = s.units.filter((x) => alive(x) && x.team !== u.team);
+    const hits: Array<{ t: Unit; dmg: number }> = [];
+    for (const sd of seeds) for (const t of enemies) if (Math.max(Math.abs(t.pos.x - sd.pos.x), Math.abs(t.pos.y - sd.pos.y)) <= 1) hits.push({ t, dmg: SEED_DMG + (sd.seed ?? 0) });
+    for (const l of net.links) for (const t of enemies) if (l.cells.some((p) => same(p, t.pos))) hits.push({ t, dmg: linkDmg });
+    for (const sd of seeds) ev.push({ t: 'markAdd', kind: 'pulse', at: { ...sd.pos } }, { t: 'explode', unit: sd.id });
+    for (const l of net.links) for (const p of l.cells) ev.push({ t: 'markAdd', kind: 'pulse', at: { ...p } });
+    for (const h of hits) {
+      if (s.over) break;
+      if (alive(h.t) && hurt(s, h.t, h.dmg + dmgFlat(u, h.t), ev, d.id, { element: d.element ?? 'shadow' }) > 0) hitAny = true;
     }
+    for (const sd of seeds) if (alive(sd)) { sd.hp = 0; ev.push({ t: 'death', unit: sd.id }); }
     if (hitAny && alive(u)) { u.ap += 1; ev.push({ t: 'drain', unit: u.id, ap: 1, mp: 0 }); }
     checkOver(s, ev);
   },
