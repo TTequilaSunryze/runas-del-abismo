@@ -5,7 +5,7 @@ import { SPELLS } from '../core/classes/spells';
 import type { ClassId } from '../core/state';
 import { POTION_HEAL, POTION_PRICE, eventDef, heroMaxHp, type HeroSave, type RunState } from '../game/run';
 import { TURN_SECONDS } from '../game/session';
-import { creatorOn, isCreatorAccount, maxAscOf, HALL_SIZE, achievementCount, listedAchievements, MASTERY_XP, ecosFor, masteryOf, masteryProgress, masteryText, meta, myTeam, saveMeta, routeNeeds, settle } from '../game/meta';
+import { canRooms, canTest, creatorOn, isCreatorAccount, maxAscOf, HALL_SIZE, achievementCount, listedAchievements, MASTERY_XP, ecosFor, masteryOf, masteryProgress, masteryText, meta, myTeam, saveMeta, routeNeeds, settle } from '../game/meta';
 import { currentAccount } from '../net/account';
 import { friendsStatus } from '../net/social';
 import type { Champion } from '../game/run';
@@ -413,17 +413,29 @@ export function lobbyScreen(): void {
 
 /** Panel de creador (solo cuentas de creador): todo desbloqueado con un clic y sala de pruebas. */
 function creatorBox(m: ReturnType<typeof meta>): string {
-  if (!isCreatorAccount()) return '';
-  const on = creatorOn(m);
-  return `<div class="panel orn playbox creatorbox"><h3>🛠️ Creador</h3>
+  if (!canTest()) return '';
+  const on = creatorOn(m), boss = isCreatorAccount();
+  return `<div class="panel orn playbox creatorbox"><h3>${boss ? '🛠️ Creador' : '🧪 Tester'}</h3>
+    ${boss ? '' : '<p class="dim sm">El creador te ha dado acceso de pruebas. Lo que hagas aquí no cuenta para tu progreso.</p>'}
     <label class="row center sm"><input type="checkbox" data-act="creator" ${on ? 'checked' : ''}> Todo desbloqueado</label>
     <p class="dim sm">${on ? 'Activo: tienda, habilidades, ascensiones, El Abismo y maestría 5. Tu progreso real no cambia.' : 'Desactivado: ves tu progreso real.'}</p>
     <div class="lbl">🧪 Laboratorio</div><p class="dim sm">Todas las habilidades de la clase. Invoca enemigos y jefes, carga tus salas, controla a la IA y usa trucos.</p>
     <div class="row center" style="flex-wrap:wrap;gap:4px">${PLAYABLE.map((c) => `<button class="mini" data-act="trainstart" data-id="${c}">${esc(CLASSES[c].name)}</button>`).join('')}</div>
-    <div class="lbl">🛠️ Salas</div><p class="dim sm">Crea salas: forma, calderos y terreno, enemigos con sus ajustes, oleadas, casillas de inicio y objetivo.</p>
-    <div class="row center"><button class="pri" data-act="editor">🛠️ Editor de salas</button></div>
-    <div class="lbl">⚖️ Equilibrio</div><p class="dim sm">Sube o baja cualquier estadística de las clases, cada número de cada habilidad y de cada enemigo, para todos.</p>
-    <div class="row center"><button class="pri" data-act="balance">⚖️ Equilibrio</button></div></div>`;
+    ${canRooms() ? `<div class="lbl">🛠️ Salas</div><p class="dim sm">${boss ? 'Crea salas: forma, calderos y terreno, enemigos con sus ajustes, oleadas, casillas de inicio y objetivo.' : 'Crea y prueba salas. No puedes publicarlas: expórtalas y pásaselas al creador.'}</p>
+    <div class="row center"><button class="pri" data-act="editor">🛠️ Editor de salas</button></div>` : ''}
+    ${boss ? `<div class="lbl">⚖️ Equilibrio</div><p class="dim sm">Sube o baja cualquier estadística de las clases, cada número de cada habilidad y de cada enemigo, para todos.</p>
+    <div class="row center"><button class="pri" data-act="balance">⚖️ Equilibrio</button></div>
+    ${testersBox(m)}` : ''}</div>`;
+}
+
+/** Creador: cuentas de tester (email de su cuenta) y si pueden crear salas. */
+function testersBox(m: ReturnType<typeof meta>): string {
+  const list = m.testers ?? [];
+  return `<div class="lbl">👥 Testers (${list.length})</div>
+    <p class="dim sm">Tienen todo desbloqueado y el laboratorio para probar tus personajes. Con «Salas» también pueden crearlas, pero no publicarlas.</p>
+    <div class="testers">${list.map((x, i) => `<div class="row sm" style="gap:6px"><span class="grow">${esc(x.email)}</span><label><input type="checkbox" data-act="testerrooms" data-id="${i}" ${x.rooms ? 'checked' : ''}> Salas</label><button class="mini danger" data-act="testerdel" data-id="${i}">✕</button></div>`).join('') || '<div class="dim sm">Aún no hay testers.</div>'}</div>
+    <div class="row" style="gap:4px;margin-top:4px"><input id="testermail" type="email" placeholder="email de su cuenta" class="grow"><label class="sm"><input type="checkbox" id="testerroomsnew"> Salas</label><button class="mini" data-act="testeradd">Añadir</button></div>
+    ${ui.testerMsg ? `<div class="sm ${ui.testerMsg.startsWith('✔') ? 'good' : 'bad'}">${esc(ui.testerMsg)}</div>` : ''}`;
 }
 
 /** H3: configurador de las 4 habilidades equipadas (gratis; queda fijo durante la expedición). */

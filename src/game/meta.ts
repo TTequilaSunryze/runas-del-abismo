@@ -58,18 +58,48 @@ export interface Meta {
   roomsGone?: string[];
   /** clave para subir las salas para todos (solo en el progreso privado del creador) */
   roomsKey?: string;
+  /** testers elegidos por el creador (solo en su progreso privado; a todos llega solo una huella de cada email) */
+  testers?: Tester[];
 }
+/** Cuenta de tester: prueba con todo desbloqueado y el laboratorio; `rooms` = también puede crear salas (sin publicarlas). */
+export interface Tester { email: string; rooms: boolean }
 
 // ---------- modo creador ----------
 /** Cuentas de creador (email de la cuenta, en minúsculas). */
 export const CREATOR_EMAILS = ['rodrigoamericarp@gmail.com'];
 let creatorAccount = false;
+let accountEmail = '';
+/** Testers: huella (SHA-256 del email) → puede crear salas. La lista llega de la red (ver net/testers). */
+let testerList: Record<string, boolean> = {};
+let tester: null | { rooms: boolean } = null;
+const roleListeners: Array<() => void> = [];
+/** Avisa cuando cambia el papel de la cuenta (para repintar la portada). */
+export function onRoleChange(fn: () => void): void { roleListeners.push(fn); }
+/** Huella de un email (minúsculas, sin espacios). */
+export async function emailHash(email: string): Promise<string> {
+  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`rda:${email.trim().toLowerCase()}`));
+  return Array.from(new Uint8Array(b), (x) => x.toString(16).padStart(2, '0')).join('');
+}
+async function recheckTester(): Promise<void> {
+  const before = JSON.stringify(tester);
+  tester = null;
+  if (accountEmail && !creatorAccount) { const h = await emailHash(accountEmail); if (h in testerList) tester = { rooms: !!testerList[h] }; }
+  if (JSON.stringify(tester) !== before) for (const fn of roleListeners) fn();
+}
 /** La cuenta avisa de quién ha entrado (o null al salir). */
-export function setCreatorAccount(email: string | null | undefined): void { creatorAccount = !!email && CREATOR_EMAILS.includes(email.trim().toLowerCase()); }
+export function setCreatorAccount(email: string | null | undefined): void { accountEmail = (email ?? '').trim().toLowerCase(); creatorAccount = !!accountEmail && CREATOR_EMAILS.includes(accountEmail); void recheckTester(); }
+/** Llega la lista de testers publicada por el creador. */
+export function setTesterList(list: Record<string, boolean>): void { testerList = { ...list }; void recheckTester(); }
 /** ¿La cuenta conectada es de creador? */
 export const isCreatorAccount = (): boolean => creatorAccount;
-/** ¿Está activo el modo creador? (cuenta de creador y opción marcada) */
-export const creatorOn = (m: Partial<Pick<Meta, 'creator'>> = meta()): boolean => creatorAccount && !!m.creator;
+/** ¿Es una cuenta de tester? */
+export const isTester = (): boolean => !!tester;
+/** Puede usar el modo «todo desbloqueado» y el laboratorio (creador o tester). */
+export const canTest = (): boolean => creatorAccount || !!tester;
+/** Puede crear salas (creador, o tester con permiso; los testers no las publican). */
+export const canRooms = (): boolean => creatorAccount || !!tester?.rooms;
+/** ¿Está activo el modo creador? (cuenta de creador o tester, y opción marcada) */
+export const creatorOn = (m: Partial<Pick<Meta, 'creator'>> = meta()): boolean => canTest() && !!m.creator;
 /** Ascensión máxima disponible (todas con el modo creador). */
 export const maxAscOf = (m: Meta = meta()): number => (creatorOn(m) ? MAX_ASC : m.maxAsc);
 
@@ -161,6 +191,7 @@ export function mergeMeta(a: Meta, b: Partial<Meta>): Meta {
     // H3: la configuración de este dispositivo manda; de la otra, solo las clases que aquí no se han tocado
     kits: { ...cleanKits(b.kits), ...cleanKits(a.kits) },
     ...(a.roomsKey || b.roomsKey ? { roomsKey: a.roomsKey ?? b.roomsKey } : {}),
+    ...(a.testers || b.testers ? { testers: (a.t ?? 0) >= (b.t ?? 0) ? a.testers ?? b.testers : b.testers ?? a.testers } : {}),
     roomsGone: uniq([...(a.roomsGone ?? []), ...(b.roomsGone ?? [])]).slice(-200),
     rooms: mergeRooms(a.rooms, b.rooms, uniq([...(a.roomsGone ?? []), ...(b.roomsGone ?? [])])),
   };

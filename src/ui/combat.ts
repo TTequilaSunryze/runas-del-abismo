@@ -6,6 +6,7 @@ import { ENEMIES } from '../content/enemies';
 import { ZONES } from '../content/zones';
 import { ZONE_SHORT } from '../game/salas';
 import { enemyOptions } from './editor';
+import { canRooms, isCreatorAccount } from '../game/meta';
 import type { ClassId } from '../core/state';
 import { SPELLS } from '../core/classes/spells';
 import { MAG_MAX, SOULS_PER_ARMOR, SOUL_ARMOR, apCost, current, essenceNeed, furyCrit, furyPower, getUnit, scytheBonus, spellOf, usableMp } from '../core/combat/engine';
@@ -119,7 +120,7 @@ function trainingTools(c: CombatState): string {
     <div class="labsec"><div class="lbl">🗺️ Escenario <span class="dim sm">· ${esc(sceneName)}</span></div>
       <div class="labrow"><button class="mini" data-act="labscene" data-id='{"kind":"dummies"}'>🎯 Muñecos</button><button class="mini" data-act="labscene" data-id='{"kind":"fight","fight":"combat"}'>⚔️ Combate</button><button class="mini" data-act="labscene" data-id='{"kind":"fight","fight":"elite"}'>☠️ Élite</button><button class="mini" data-act="train" data-id="replay">↺ Repetir</button></div>
       <div class="labrow">${ZONES.map((z) => z.bosses.map((b, bi) => `<button class="mini" data-act="labboss" data-id="${ZONES.indexOf(z)}:${bi}" title="Zona ${ZONES.indexOf(z) + 1}">👑 ${esc(ENEMIES[b.id]?.name ?? b.id)}</button>`).join('')).join('')}</div>
-      ${rooms.length ? `<div class="labrow"><select data-labset="room">${rooms.map((r) => `<option value="${esc(r.id)}" ${r.id === lab.room ? 'selected' : ''}>${esc(r.name)} · Z${r.zone + 1}</option>`).join('')}</select><button class="mini" data-act="labroom">Cargar sala</button>${sc.kind === 'room' ? `<button class="mini" data-act="editor" data-id="${esc(sc.id)}">🛠️ Editarla</button>` : ''}</div>` : '<div class="dim sm">Aún no has creado salas: ábrelas desde el Editor de salas.</div>'}
+      ${rooms.length ? `<div class="labrow"><select data-labset="room">${rooms.map((r) => `<option value="${esc(r.id)}" ${r.id === lab.room ? 'selected' : ''}>${esc(r.name)} · Z${r.zone + 1}</option>`).join('')}</select><button class="mini" data-act="labroom">Cargar sala</button>${sc.kind === 'room' && canRooms() ? `<button class="mini" data-act="editor" data-id="${esc(sc.id)}">🛠️ Editarla</button>` : ''}</div>` : '<div class="dim sm">Aún no has creado salas: ábrelas desde el Editor de salas.</div>'}
       <div class="dim sm">Combate, élite y jefes salen como en una expedición, con la zona y profundidad del montaje.</div></div>
     <div class="labsec"><div class="lbl">✨ Invocar</div>
       <div class="labrow"><select data-labset="kind">${enemyOptions(lab.kind)}</select>${sel('team', [['enemy', 'Enemigo'], ['hero', 'Aliado']], lab.team)}</div>
@@ -129,7 +130,7 @@ function trainingTools(c: CombatState): string {
       <div class="labrow"><button class="mini ${ai === 'normal' ? 'on' : ''}" data-act="train" data-id="aimode:normal">Normal</button><button class="mini ${ai === 'still' ? 'on' : ''}" data-act="train" data-id="aimode:still">Quieta</button><button class="mini ${ai === 'puppet' ? 'on' : ''}" data-act="train" data-id="aimode:puppet">🎮 La llevas tú</button></div>
       ${ai !== 'normal' ? '<div class="labrow"><button class="mini" data-act="train" data-id="ai">▶ Que juegue la IA este turno</button><button class="mini" data-act="train" data-id="skip">⏭ Pasar turno</button></div>' : ''}
       <div class="dim sm">${ai === 'puppet' ? 'En el turno de cada enemigo mueves y lanzas sus ataques tú, con su barra de hechizos.' : ai === 'still' ? 'Los enemigos esperan: pasa su turno o deja que juegue la IA.' : 'Los enemigos juegan solos.'}</div></div>
-    <div class="labsec"><div class="lbl">⚖️ Equilibrio</div><div class="labrow"><button class="mini" data-act="balance">⚖️ Ajustar héroes, habilidades y enemigos</button></div></div>
+    ${isCreatorAccount() ? '<div class="labsec"><div class="lbl">⚖️ Equilibrio</div><div class="labrow"><button class="mini" data-act="balance">⚖️ Ajustar héroes, habilidades y enemigos</button></div></div>' : ''}
     <div class="labsec"><div class="lbl">🧪 Trucos</div>
       <div class="labrow"><button class="mini ${on('god')}" data-act="train" data-id="flag:god">❤️ Vida infinita</button><button class="mini ${on('ap')}" data-act="train" data-id="flag:ap">⚡ PA y PM infinitos</button><button class="mini ${on('cd')}" data-act="train" data-id="flag:cd">⏱️ Sin esperas</button></div>
       <div class="labrow"><button class="mini" data-act="train" data-id="refill">⚡ Recargar</button><button class="mini" data-act="train" data-id="cd">⏱️ Reiniciar esperas</button><button class="mini" data-act="train" data-id="heal">💚 Curar todo</button></div>

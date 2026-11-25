@@ -4,7 +4,7 @@ import { AFFIXES, ENEMIES, makeEnemy } from '../content/enemies';
 import { ZONES } from '../content/zones';
 import { createCombat, type UnitSpec } from '../core/combat/engine';
 import type { CombatState, Pos } from '../core/state';
-import { dropRoom, myRooms, putRoom } from '../game/meta';
+import { dropRoom, isCreatorAccount, myRooms, putRoom } from '../game/meta';
 import { allRooms, zoneOpts } from '../game/run';
 import { CELL_KINDS, ENEMY_ZONE, templateRoom, KIND_NAME, ROOM_MAX, ROOM_MIN, STAT_KEYS, ZONE_SHORT, applyMod, cleanRoom, enemiesAt, newRoom, resizeRoom, roomWarnings, startAt, type CellKind, type RoomDef, type RoomEnemy, type RoomKind, type StatMod } from '../game/salas';
 import type { Session } from '../game/session';
@@ -145,7 +145,7 @@ function topBar(r: RoomDef): string {
     <label class="sm">Alto <input type="number" data-edc="h" min="${ROOM_MIN.h}" max="${ROOM_MAX.h}" value="${r.h}" class="ednum"></label>
     <button class="mini" data-ed="iso">🔷 Vista</button>
     <span class="grow"></span>${ed.msg ? `<span class="sm good">${esc(ed.msg)}</span>` : ''}
-    <button data-act="balance">⚖️ Equilibrio</button><button class="pri" data-ed="test">▶ Probar sala</button><button data-ed="exit">Volver</button>`;
+    ${isCreatorAccount() ? '<button data-act="balance">⚖️ Equilibrio</button>' : ''}<button class="pri" data-ed="test">▶ Probar sala</button><button data-ed="exit">Volver</button>`;
 }
 
 function leftPanel(r: RoomDef): string {
@@ -156,7 +156,7 @@ function leftPanel(r: RoomDef): string {
       <div class="edlist">${list.map((x) => `<button class="edroom ${x.id === r.id ? 'on' : ''}" data-ed="open" data-id="${esc(x.id)}"><b>${esc(x.name)}</b><small>Zona ${x.zone + 1} · ${KIND_NAME[x.kind]} · ${x.w}×${x.h} · ${x.enemies.length} enem.${x.published ? ` · ${syncBadge(x)}` : ''}</small></button>`).join('')}</div>
       <div class="row" style="flex-wrap:wrap;gap:4px;margin-top:6px"><button class="mini" data-ed="new">＋ Nueva</button><button class="mini" data-ed="dup">⧉ Duplicar</button><button class="mini danger" data-ed="del">🗑 Borrar</button></div>
       <div class="row" style="gap:4px;margin-top:4px"><select id="edtpl" class="edsel">${templateOptions()}</select><button class="mini" data-ed="tpl">Crear</button></div></div>
-    ${globalPanel(list)}
+    ${isCreatorAccount() ? globalPanel(list) : '<div class="cbox sm dim">🧪 Eres tester: tus salas solo las ves tú. Para que salgan en el juego, usa «Exportar» y pásale el archivo al creador.</div>'}
     ${builtin.length ? `<div class="cbox"><div class="cboxh">🎮 Salas del juego</div><div class="dim sm">Salen para todos. Para cambiar una, duplícala.</div><div class="edlist">${builtin.map((x) => `<button class="edroom" data-ed="copy" data-id="${esc(x.id)}"><b>${esc(x.name)}</b><small>Zona ${x.zone + 1} · ${KIND_NAME[x.kind]}</small></button>`).join('')}</div></div>` : ''}
     <div class="cbox"><div class="cboxh">📦 Archivos</div>
       <div class="row" style="flex-wrap:wrap;gap:4px"><button class="mini" data-ed="export">⬇ Exportar esta</button><button class="mini" data-ed="exportall">⬇ Exportar todas</button><label class="mini btnlike">⬆ Importar<input type="file" id="edimport" accept=".json,application/json" hidden></label></div>
@@ -207,10 +207,10 @@ function rightPanel(r: RoomDef): string {
         <label>Escofinas <input type="number" class="ednum" data-edc="resc" min="0" max="9" value="${r.reward?.escofinas ?? 0}"></label></div>
       <div class="labrow sm"><label>Objeto <select data-edc="ritem">${[['-1', 'Ninguno'], ['0', 'Común o mejor'], ['1', 'Poco común o mejor'], ['2', 'Raro o mejor'], ['3', 'Legendario']].map(([v, n]) => `<option value="${v}" ${String(r.reward?.item ?? -1) === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
         <label>Reliquia <select data-edc="rrelic">${[['0', 'Ninguna'], ['1', 'Normal'], ['2', 'Rara']].map(([v, n]) => `<option value="${v}" ${String(r.reward?.relic ?? 0) === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label></div></div>
-    <div class="cbox"><div class="cboxh">🌍 Expediciones</div>
+    ${isCreatorAccount() ? '' : '<!--'}<div class="cbox"><div class="cboxh">🌍 Expediciones</div>
       <label class="row sm"><input type="checkbox" data-edc="published" ${r.published ? 'checked' : ''}> Publicada: puede salir en las expediciones</label>
       <label class="sm">Probabilidad cuando toca un ${KIND_NAME[r.kind].toLowerCase()} de la zona ${r.zone + 1}: <input type="number" class="ednum" data-edc="chance" min="1" max="100" value="${r.chance}">%</label>
-      ${r.kind === 'boss' ? '<div class="dim sm">Las salas de jefe solo salen si el jefe de la partida está colocado en ella. Con 100% sustituyen siempre a la guarida normal (si hay varias del mismo jefe, sale una al azar).</div>' : r.kind === 'event' ? '<div class="dim sm">Las salas de evento salen en las casillas ❓ de evento del mapa: un combate con su historia y su recompensa en vez de un evento normal.</div>' : r.kind === 'elite' ? '<div class="dim sm">Con 100% sustituyen siempre al combate de élite normal de la zona.</div>' : ''}</div>
+      ${r.kind === 'boss' ? '<div class="dim sm">Las salas de jefe solo salen si el jefe de la partida está colocado en ella. Con 100% sustituyen siempre a la guarida normal (si hay varias del mismo jefe, sale una al azar).</div>' : r.kind === 'event' ? '<div class="dim sm">Las salas de evento salen en las casillas ❓ de evento del mapa: un combate con su historia y su recompensa en vez de un evento normal.</div>' : r.kind === 'elite' ? '<div class="dim sm">Con 100% sustituyen siempre al combate de élite normal de la zona.</div>' : ''}</div>${isCreatorAccount() ? '' : '-->'}
     ${warn.length ? `<div class="cbox edwarn">${warn.map((w) => `<div class="sm">⚠ ${esc(w)}</div>`).join('')}</div>` : '<div class="cbox sm good">✔ Sala lista</div>'}`;
 }
 
@@ -382,7 +382,7 @@ function onChange(el: HTMLInputElement | HTMLSelectElement): void {
     case 'wave': ed.wave = num(1, 30); return refresh();
     case 'goal': r.goal = v === 'survive' ? { kind: 'survive', rounds: 5 } : v === 'targets' ? { kind: 'targets' } : { kind: 'kill' }; break;
     case 'rounds': if (r.goal.kind === 'survive') r.goal.rounds = num(1, 30); break;
-    case 'published': r.published = (el as HTMLInputElement).checked; break;
+    case 'published': r.published = isCreatorAccount() && (el as HTMLInputElement).checked; break;
     case 'chance': r.chance = num(1, 100); break;
     case 'setkind': if (e && ENEMIES[v]) e.kind = v; break;
     case 'ename': if (e) { const n = v.trim().slice(0, 32); if (n) e.name = n; else delete e.name; } break;

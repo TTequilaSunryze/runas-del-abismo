@@ -15,6 +15,7 @@ import { balanceScreen, closeBalance } from './balance';
 import { testDraft } from '../net/balance';
 import { fetchGlobalRooms, globalRooms } from '../net/salas';
 import { initBalance } from '../net/balance';
+import { fetchTesters, saveTesters, validEmail } from '../net/testers';
 import { setRoomSource, type LabScene, type LabSetup } from '../game/run';
 import { esc, mine, params, randomText, store, today, ui } from './ctx';
 import { BAG_SIZE, PRICE } from '../core/items/items';
@@ -25,7 +26,7 @@ import { applyLoadout, buyItem, currentLook, emblemOf, deleteLoadout, equipItem,
 import { setLooks } from '../render/looks';
 import { setCombatBg, setMenuScene } from '../render/menubg';
 import { claimSpecialReward, equipCosmetic } from '../game/specials';
-import { creatorOn, isCreatorAccount, maxAscOf, masteryOf, meta, myNemesis, myRooms, myTeam, openRoutes, removeChampion, saveChampion, saveMeta, toggleTeam } from '../game/meta';
+import { canRooms, canTest, onRoleChange, creatorOn, isCreatorAccount, maxAscOf, masteryOf, meta, myNemesis, myRooms, myTeam, openRoutes, removeChampion, saveChampion, saveMeta, toggleTeam } from '../game/meta';
 import { currentAccount, fetchTeam, restoreAccount, signIn, signOut, signUp } from '../net/account';
 import { addFriend, invite, removeFriend, setRoom, socialHandlers } from '../net/social';
 import { championOf } from '../game/run';
@@ -186,15 +187,19 @@ ui.rerender = () => render([]);
 // las salas creadas por el creador pueden salir en las expediciones que aloje
 setRoomSource(() => {
   // las de todos y, para el creador, las suyas (su versión manda)
-  const mine = isCreatorAccount() ? myRooms() : [];
+  // los testers ven sus salas en el laboratorio, pero nunca salen en las expediciones (no pueden publicar)
+  const mine = isCreatorAccount() ? myRooms() : canRooms() ? myRooms().map((r) => ({ ...r, published: false })) : [];
   return [...globalRooms().filter((r) => !mine.some((x) => x.id === r.id)), ...mine];
 });
 void fetchGlobalRooms();
 void initBalance();
+void fetchTesters();
+// al saber que la cuenta es de tester (o deja de serlo), se repinta la portada
+onRoleChange(() => { if (ui.screen === 'home') home(''); });
 
 /** Laboratorio: partida local con todas las habilidades de la clase, muñecos, salas creadas, jefes e invocaciones. */
 async function training(cls: ClassId, setup?: Partial<LabSetup>, scene?: LabScene): Promise<void> {
-  if (!isCreatorAccount()) return;
+  if (!canTest()) return;
   if (ui.screen === 'editor') closeEditor();
   await enter(randomText(4, CODE_CHARS), true, true);
   ui.log.length = 0;
@@ -215,7 +220,7 @@ function openBalance(cls?: ClassId): void {
 
 /** Editor de salas (solo cuentas de creador). Sale de la partida o del laboratorio en el que esté. */
 function openEditor(id?: string): void {
-  if (!isCreatorAccount()) return;
+  if (!canRooms()) return;
   if (ui.session) { ui.session.leave(); ui.session = null; ui.board?.destroy(); ui.board = null; setRoom(null); }
   hideTip();
   setMenuScene(null);
@@ -251,7 +256,19 @@ document.addEventListener('click', (e) => {
   switch (el.dataset.act) {
     case 'create': void enter(randomText(4, CODE_CHARS), true, false); break;
     // modo creador (solo cuentas de creador) y sala de pruebas
-    case 'creator': { if (!isCreatorAccount()) break; const m = meta(); m.creator = !m.creator; saveMeta(); homeScreen(''); break; }
+    case 'testeradd': case 'testerdel': case 'testerrooms': {
+      if (!isCreatorAccount()) break;
+      const m = meta(), list = [...(m.testers ?? [])];
+      if (el.dataset.act === 'testeradd') {
+        const mail = (document.getElementById('testermail') as HTMLInputElement | null)?.value ?? '';
+        if (!validEmail(mail)) { ui.testerMsg = 'Escribe el email de la cuenta del tester'; home(''); break; }
+        list.push({ email: mail, rooms: !!(document.getElementById('testerroomsnew') as HTMLInputElement | null)?.checked });
+      } else if (el.dataset.act === 'testerdel') list.splice(Number(id), 1);
+      else { const x = list[Number(id)]; if (x) list[Number(id)] = { ...x, rooms: !x.rooms }; }
+      void saveTesters(list).then((err) => { ui.testerMsg = err ?? '✔ Lista de testers guardada y publicada'; home(''); });
+      break;
+    }
+    case 'creator': { if (!canTest()) break; const m = meta(); m.creator = !m.creator; saveMeta(); homeScreen(''); break; }
     case 'trainstart': void training(id as ClassId); break;
     case 'editor': openEditor(id || undefined); break;
     case 'balance': openBalance((ui.session?.run?.heroes[0]?.cls ?? undefined) as ClassId | undefined); break;

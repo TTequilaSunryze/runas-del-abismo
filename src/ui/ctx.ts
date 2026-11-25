@@ -16,6 +16,8 @@ const id = params.get('p') ?? store.get('rda_id') ?? randomText(12, 'abcdefghijk
 if (!params.get('p')) store.set('rda_id', id);
 
 export const ui = {
+  /** aviso del panel de testers */
+  testerMsg: '',
   root: document.getElementById('app')!,
   myId: id,
   me: { name: store.get('rda_name') ?? 'Héroe', cls: 'zorro' as ClassId, routes: ['base'] as string[] },
