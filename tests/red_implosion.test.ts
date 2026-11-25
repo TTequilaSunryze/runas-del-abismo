@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { makeEnemy } from '../src/content/enemies';
 import { makeHero } from '../src/core/classes/factory';
-import { SEED_DMG, SEED_LINK_DMG, cast, createCombat, current, endTurn, implodePreview, seedLinks, seedNetwork, type UnitSpec } from '../src/core/combat/engine';
+import { SEED_DMG, SEED_LINK_DMG, SEED_GROW, cast, move, createCombat, current, endTurn, implodePreview, seedLinks, seedNetwork, type UnitSpec } from '../src/core/combat/engine';
 import type { CombatState, Unit } from '../src/core/state';
 
 const tej = (spells = ['t_semilla', 't_implosion']): UnitSpec => { const h = makeHero({ cls: 'esferas', name: 'T', owner: 'p1', routes: [], pos: { x: 0, y: 0 }, level: 1 }); return { ...h, crit: 0, armor: 0, spells: spells.map((id) => ({ id, cd: 0 })) }; };
@@ -98,5 +98,47 @@ describe('Red de implosión', () => {
     plant(s, u, [[4, 4]]);
     expect(cast(s, u.id, 't_implosion', { x: 5, y: 5 }).ok).toBe(false);
     expect(cast(s, u.id, 't_implosion', u.pos).ok).toBe(false);
+  });
+
+  it('al crear la conexión daña a los enemigos que ya están en ella', () => {
+    const { s, u } = board([foe(6, 4)]);
+    const e = s.units.find((q) => q.kind === 'esqueleto')!, hp = e.hp;
+    plant(s, u, [[3, 4]]);
+    expect(e.hp).toBe(hp);
+    plant(s, u, [[9, 4]]);
+    expect(hp - e.hp).toBe(SEED_LINK_DMG);
+  });
+
+  it('entrar andando en casillas de la red: daño en cada casilla nueva', () => {
+    const { s, u } = board([foe(6, 6)]);
+    const e = s.units.find((q) => q.kind === 'esqueleto')!;
+    plant(s, u, [[3, 4], [9, 4]]);
+    const hp = e.hp;
+    // turno del esqueleto: sube a la red y anda por ella
+    endTurn(s, u.id);
+    for (let i = 0; i < 10 && current(s)!.id !== e.id; i++) endTurn(s, current(s)!.id);
+    e.mp = 6; e.ap = 0;
+    const before = e.hp;
+    expect(move(s, e.id, { x: 6, y: 4 }).ok).toBe(true);
+    expect(before - e.hp).toBe(SEED_LINK_DMG);
+    expect(move(s, e.id, { x: 7, y: 4 }).ok).toBe(true);
+    expect(before - e.hp).toBe(2 * SEED_LINK_DMG);
+    expect(hp).toBe(before);
+  });
+
+  it('empezar el turno en la red hace daño, y el daño crece con las semillas', () => {
+    const { s, u } = board([foe(6, 4)]);
+    const e = s.units.find((q) => q.kind === 'esqueleto')!;
+    plant(s, u, [[3, 4], [9, 4]]);
+    const hp = e.hp;
+    // pasa el turno de la tejedora; el esqueleto empieza el suyo en la red
+    endTurn(s, u.id);
+    for (let i = 0; i < 10 && current(s)!.id !== e.id; i++) endTurn(s, current(s)!.id);
+    expect(hp - e.hp).toBe(SEED_LINK_DMG);
+    // vuelve a la tejedora (las semillas crecen +2) y otra vez al esqueleto
+    const hp2 = e.hp;
+    for (let i = 0; i < 20 && current(s)!.id !== u.id; i++) endTurn(s, current(s)!.id);
+    for (let i = 0; i < 20 && current(s)!.id !== e.id; i++) endTurn(s, current(s)!.id);
+    expect(hp2 - e.hp).toBe(SEED_LINK_DMG + SEED_GROW);
   });
 });

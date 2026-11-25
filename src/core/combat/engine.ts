@@ -509,6 +509,8 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     if (dmk && !s.units.some((x) => x.id === dmk.from && alive(x))) delete u.statuses.deathmark;
     // Semillas oscuras: cada turno de su dueña sin detonarlas crecen (+2, máx. +10)
     for (const sd of s.units) if (sd.seed !== undefined && sd.summoner === u.id && alive(sd)) sd.seed = Math.min(SEED_MAX, sd.seed + SEED_GROW);
+    // Red de implosión: empezar el turno dentro de una conexión enemiga hace su daño
+    netHit(s, u, ev);
     if (!alive(u) || s.over) continue;
     u.ap = Math.max(0, u.maxAp + u.apMod);
     u.mp = Math.max(0, u.maxMp + u.mpMod - (u.statuses.slow?.stacks ?? 0));
@@ -646,6 +648,8 @@ function stepOn(s: CombatState, u: Unit, ev: GameEvent[]): boolean {
   let stop = false;
   // terreno: raíces venenosas y casillas en llamas
   const here = key(u.pos);
+  // Red de implosión: entrar en una casilla de una conexión enemiga hace su daño (cada casilla nueva)
+  netHit(s, u, ev);
   if (alive(u) && (s.roots ?? []).includes(here)) addStatus(u, 'poison', 2, 1, ev);
   if (alive(u) && (s.fire?.[here] ?? 0) > 0) addStatus(u, 'burn', 2, 1, ev);
   // glifos del Arquitecto: el fulminante explota (y se gasta); la matriz quita PA y sigue ahí
@@ -1442,14 +1446,40 @@ export function implodePreview(s: CombatState, u: Unit, seedId: number): { seeds
   return { seeds, blast, lines: net.links.flatMap((l) => l.cells) };
 }
 
+/**
+ * Daño de una conexión de la Red de implosión: el de la Implosión (`link`, ajustable en Equilibrio) más lo que haya
+ * crecido la más joven de sus dos semillas (+2 por turno de vida, máx. +10).
+ */
+export function linkDamage(s: CombatState, owner: Unit, l: SeedLink): number {
+  const a = getUnit(s, l.a), b = getUnit(s, l.b);
+  return (spellOf(owner, 't_implosion')?.link ?? SEED_LINK_DMG) + Math.min(a?.seed ?? 0, b?.seed ?? 0);
+}
+
+/** Red de implosión: daña a `t` una vez por cada conexión enemiga que pase por su casilla. */
+function netHit(s: CombatState, t: Unit, ev: GameEvent[], only?: Set<string>): void {
+  if (!alive(t) || t.seed !== undefined) return;
+  for (const owner of s.units.filter((o) => alive(o) && o.team !== t.team && implosionNet(o))) {
+    for (const l of seedLinks(s, owner)) {
+      if (only && !only.has(`${l.a}-${l.b}`)) continue;
+      if (!l.cells.some((p) => same(p, t.pos)) || !alive(t) || s.over) continue;
+      ev.push({ t: 'markAdd', kind: 'pulse', at: { ...t.pos } });
+      hurt(s, t, linkDamage(s, owner, l) + dmgFlat(owner, t), ev, 't_implosion', { element: 'shadow' });
+    }
+  }
+}
+
 /** Semilla oscura: una unidad quieta de 20 de vida que ocupa la casilla (no juega turnos). */
 function plantSeed(s: CombatState, u: Unit, at: Pos, ev: GameEvent[]): void {
+  const before = new Set(seedLinks(s, u).map((l) => `${l.a}-${l.b}`));
   const sd = summon(s, { team: u.team, kind: 'semilla', name: 'Semilla oscura', owner: null, pos: at, hp: SEED_HP, maxHp: SEED_HP, shield: 0, armor: 0, power: 0, crit: 0,
     ap: 0, maxAp: 0, mp: 0, maxMp: 0, initiative: 0, apMod: 0, mpMod: 0, resist: {}, statusBonus: 0, statuses: {}, spells: [], ai: 'pillar', summoner: u.id, traits: ['semilla'] }, at, ev);
   if (!sd) return;
   sd.seed = 0;
   // no juega turnos: fuera del orden
   s.order = s.order.filter((id) => id !== sd.id);
+  // Red de implosión: al crearse una conexión nueva, daña a los enemigos que ya estén en ella
+  const fresh = new Set(seedLinks(s, u).map((l) => `${l.a}-${l.b}`).filter((k) => !before.has(k)));
+  if (fresh.size) for (const t of s.units.filter((x) => alive(x) && x.team !== u.team)) netHit(s, t, ev, fresh);
 }
 
 /** Pone una Sombra del Acechador (Maestro de las sombras: hasta 2; Sombra persistente: 1 turno más). */
@@ -1574,7 +1604,7 @@ const SELF_SPECIALS: Record<string, SelfSpecial> = {
     const enemies = s.units.filter((x) => alive(x) && x.team !== u.team);
     const hits: Array<{ t: Unit; dmg: number }> = [];
     for (const sd of seeds) for (const t of enemies) if (Math.max(Math.abs(t.pos.x - sd.pos.x), Math.abs(t.pos.y - sd.pos.y)) <= 1) hits.push({ t, dmg: SEED_DMG + (sd.seed ?? 0) });
-    for (const l of net.links) for (const t of enemies) if (l.cells.some((p) => same(p, t.pos))) hits.push({ t, dmg: linkDmg });
+    for (const l of net.links) for (const t of enemies) if (l.cells.some((p) => same(p, t.pos))) hits.push({ t, dmg: linkDmg + Math.min(getUnit(s, l.a)?.seed ?? 0, getUnit(s, l.b)?.seed ?? 0) });
     for (const sd of seeds) ev.push({ t: 'markAdd', kind: 'pulse', at: { ...sd.pos } }, { t: 'explode', unit: sd.id });
     for (const l of net.links) for (const p of l.cells) ev.push({ t: 'markAdd', kind: 'pulse', at: { ...p } });
     for (const h of hits) {
