@@ -96,7 +96,7 @@ export function refugeScene(): string {
         <rect class="npc-hit" x="430" y="178" width="96" height="139" fill="transparent"/>
       </g>
       <!-- Darel: capa oscura y hombreras de guardia -->
-      <g class="refuge-npc" data-act="resident" data-id="irena" role="button" tabindex="0" aria-label="Hablar con Darel, vigía; preparar la salida">
+      <g class="refuge-npc" data-act="resident" data-id="darel" role="button" tabindex="0" aria-label="Hablar con Darel, vigía; preparar la salida">
         <ellipse cx="798" cy="288" rx="31" ry="7" fill="#09090d" opacity=".55"/>
         <path d="M780 218H816L826 278H770Z" fill="#353c49"/>
         <path d="M777 229 764 273H781L790 244M819 229 832 273H815L806 244" fill="#4b5360"/>
