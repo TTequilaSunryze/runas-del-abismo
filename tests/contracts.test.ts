@@ -139,12 +139,12 @@ describe('Fase C · conexión con el juego', () => {
     u.ap -= 2; recordArchive(run, 'a', [batch[0]!]);
     expect(c.progress).toBe(3);
   });
-  it('reliquias de la partida, eventos resueltos y jefes avanzan sus contratos', () => {
+  it('runas de la partida (antes reliquias), eventos resueltos y jefes avanzan sus contratos', () => {
     const run = fight();
     const cs = meta().contracts!.daily;
     Object.assign(cs[0]!, { targetType: 'relic', targetId: 'any', requiredCount: 5, progress: 0, completed: false });
     Object.assign(cs[1]!, { targetType: 'atlas', targetId: 'zones', requiredCount: 5, progress: 0, completed: false });
-    run.heroes[0]!.relics = ['colmillo', 'corazon'];
+    run.heroes[0]!.runes = ['fractura', 'espora'];
     run.kind = 'boss';
     recordArchive(run, 'a'); recordArchive(run, 'a');
     expect(cs[0]!.progress).toBe(2);

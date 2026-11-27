@@ -13,6 +13,7 @@ const P = [{ owner: 'a', name: 'A', cls: 'arquero' as const, routes: [] }];
 const enemy = (pos: { x: number; y: number }, hp = 200, extra: Partial<UnitSpec> = {}): UnitSpec => ({ ...makeEnemy('esqueleto', pos), hp, maxHp: hp, armor: 0, traits: [], resist: {}, ...extra });
 const withRunes = (cls: HeroSave['cls'], runes: string[], pos = { x: 1, y: 2 }) => { const run = newRun('R', 3, [{ owner: 'a', name: 'A', cls, routes: [] }]); const h = run.heroes[0]!; h.runes = runes; return heroSpec(h, pos); };
 const board = (units: UnitSpec[]) => createCombat({ seed: 7, w: 12, h: 6, obstacles: [], units }).state;
+const evs = (r: ReturnType<typeof cast>) => (r.ok ? r.events : []);
 const turnOf = (s: ReturnType<typeof board>, id: number) => { for (let i = 0; i < 30 && current(s)!.id !== id; i++) endTurn(s, current(s)!.id); };
 
 describe('runas · espacios e inicio', () => {
@@ -59,7 +60,7 @@ describe('runas · espacios e inicio', () => {
     expect(h.runes!.length).toBeLessThanOrEqual(RUNE_SLOTS);
     // en combate no se gestiona
     run.phase = 'combat';
-    expect(metaAction(run, 'a', { a: 'rune', op: 'swap', a: 0, b: 1 })).toMatch(/combate/);
+    expect(metaAction(run, 'a', { a: 'rune', op: 'swap', from: 0, to: 1 })).toMatch(/combate/);
   });
 });
 
@@ -210,7 +211,7 @@ describe('estados alterados', () => {
     const ev: Parameters<typeof applyStatus>[4] = [];
     h.runes = ['ignicion']; h.ap = 6;
     const r = cast(s, h.id, 'flecha', t.pos);
-    expect(r.events.some((e) => e.t === 'resist' && e.what.includes('térmico'))).toBe(true);
+    expect(evs(r).some((e) => e.t === 'resist' && e.what.includes('térmico'))).toBe(true);
     expect(t.statuses.frozen).toBeUndefined();
     void ev;
   });
@@ -254,9 +255,9 @@ describe('runas · efectos en combate', () => {
     turnOf(s, h.id);
     const r = cast(s, h.id, 'flecha', s.units[1]!.pos);
     expect(r.ok).toBe(true);
-    const hitIds = new Set(r.events.filter((e) => e.t === 'damage').map((e) => (e as { unit: number }).unit));
+    const hitIds = new Set(evs(r).filter((e) => e.t === 'damage').map((e) => (e as { unit: number }).unit));
     expect(hitIds.size).toBe(3);
-    expect(r.events.filter((e) => e.t === 'damage').length).toBe(3);
+    expect(evs(r).filter((e) => e.t === 'damage').length).toBe(3);
   });
   it('Eco diferido golpea al empezar tu siguiente turno, una sola vez', () => {
     const s = board([withRunes('arquero', ['eco_diferido']), enemy({ x: 5, y: 2 }, 500)]);
@@ -281,7 +282,7 @@ describe('runas · efectos en combate', () => {
     turnOf(s, h.id);
     const r = cast(s, h.id, 'flecha', t.pos);
     expect(t.statuses.bleed).toBeUndefined();
-    expect(r.events.some((e) => e.t === 'damage' && (e as { source: string }).source === 'detonacion' && (e as { amount: number }).amount === 6 * DOT.bleed * 2)).toBe(true);
+    expect(evs(r).some((e) => e.t === 'damage' && (e as { source: string }).source === 'detonacion' && (e as { amount: number }).amount === 6 * DOT.bleed * 2)).toBe(true);
   });
   it('Corona del Osario: el rematado estalla y daña a los cercanos', () => {
     const s = board([withRunes('arquero', ['corona_osario']), enemy({ x: 5, y: 2 }, 5), enemy({ x: 6, y: 2 }, 300)]);

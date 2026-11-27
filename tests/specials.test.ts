@@ -64,10 +64,11 @@ describe('Fase D · validación de desafíos', () => {
     expect(meta().contracts!.special!.class_arquero!.completed).toBe(true);
   });
   it('colecciones y crónicas avanzan con el Archivo y solo suben', () => {
-    for (const id of catalogIds('relics').slice(0, 5)) discover('relics', id);
+    // col_relics conserva su id (y lo ya logrado) pero ahora cuenta las runas del Grimorio rúnico
+    for (const id of catalogIds('runes').slice(0, 5)) discover('runes', id);
     evaluateSpecials(meta());
     expect(meta().contracts!.special!.col_relics!.progress).toBe(5);
-    for (const id of catalogIds('relics')) discover('relics', id);
+    for (const id of catalogIds('runes')) discover('runes', id);
     evaluateSpecials(meta());
     expect(meta().contracts!.special!.col_relics!.completed).toBe(true);
     for (const z of ['zona_1', 'zona_2']) registerChronicleProgress(meta(), 'stories', z, 2);
