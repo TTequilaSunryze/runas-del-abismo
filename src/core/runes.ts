@@ -34,8 +34,8 @@ export const RUNES: Record<string, RuneDef> = {
 const SYNERGIES: Record<string, (s: SpellDef) => void> = {
   'muerte+tiempo': s => { if (s.dmg) { scaleDamage(s, 1.5); addStatus(s, 'deathmark'); } },
   'materia+tiempo': s => { if (s.dmg) { s.bounce = Math.max(1, s.bounce ?? 0); scaleDamage(s, 1.35); } },
-  'vida+materia': s => { if (s.dmg) { scaleDamage(s, 1.25); addStatus(s, 'rooted'); } },
-  'vida+muerte': s => { if (s.dmg) { s.lifesteal = Math.min(1, (s.lifesteal ?? 0) + .25); addStatus(s, 'bleed'); } },
+  'materia+vida': s => { if (s.dmg) { scaleDamage(s, 1.25); addStatus(s, 'rooted'); } },
+  'muerte+vida': s => { if (s.dmg) { s.lifesteal = Math.min(1, (s.lifesteal ?? 0) + .25); addStatus(s, 'bleed'); } },
 };
 export function applyRunes(base: SpellDef, ids: string[]): SpellDef {
   const spell: SpellDef = structuredClone(base);
