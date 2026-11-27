@@ -176,13 +176,24 @@ export function labClick(act: string, id: string): boolean {
   return true;
 }
 
+/** El tablero ocupa todo el hueco entre la barra superior y la inferior (que miden según la pantalla). */
+function fitCombat(): void {
+  const info = document.getElementById('info'), hud = document.getElementById('hud');
+  if (!info || !hud) return;
+  ui.root.style.setProperty('--ctop', `${info.offsetHeight}px`);
+  ui.root.style.setProperty('--chud', `${hud.offsetHeight}px`);
+}
+if (typeof window !== 'undefined') window.addEventListener('resize', () => { if (ui.screen === 'combat') fitCombat(); });
+
 export function combatScreen(events: GameEvent[]): void {
   const s = ui.session!, run = s.run!, c = run.combat!;
   if (ui.screen !== 'combat') {
     ui.root.innerHTML = `<div id="info" class="bar cinfo"></div>
       <div class="cgrid"><div class="stage"><canvas id="cv"></canvas><div id="toast" class="casttoast"></div></div>
-      <aside class="cside">${isTraining(run) ? '<div class="cbox trainbox"><div class="cboxh">🧪 Laboratorio</div><div id="train"></div></div>' : ''}<div class="cbox"><div class="cboxh">⏳ Orden de turnos <span id="rnd" class="dim sm"></span></div><div id="init" class="timeline"></div></div>
-      <div class="cbox grow"><div class="cboxh">📜 Registro de combate <span class="dim sm">G: señalar casilla</span></div><div id="log" class="clog"></div></div></aside></div>
+      <aside class="cside"><div class="cbox cturns" ${tip('<b>Orden de turnos</b>')}><div class="cboxh">⏳ <span id="rnd" class="dim sm"></span></div><div id="init" class="timeline"></div></div>
+      ${isTraining(run) ? '<div class="cbox trainbox"><div class="cboxh">🧪 Laboratorio</div><div id="train"></div></div>' : ''}
+      <div class="cbox clogbox"><div class="cboxh">📜 Registro de combate <span class="dim sm">G: señalar casilla</span><button class="sq" data-act="togglelog" ${tip('Cerrar')}>✕</button></div><div id="log" class="clog"></div></div></aside>
+      <nav class="crail"><button class="sq" id="logbtn" data-act="togglelog" ${tip('<b>Registro de combate</b><div class="sm">Lo que ha pasado en el combate</div>')} aria-label="Registro de combate">📜</button></nav></div>
       <div id="hud" class="dhud"></div>`;
     ui.board?.destroy();
     ui.board = new Board(document.getElementById('cv') as HTMLCanvasElement, s);
@@ -195,6 +206,8 @@ export function combatScreen(events: GameEvent[]): void {
     };
   }
   ui.root.classList.add('combatmode');
+  document.querySelector('.cgrid')?.classList.toggle('logopen', ui.logOpen);
+  document.getElementById('logbtn')?.classList.toggle('on', ui.logOpen);
   const board = ui.board!;
   board.showBars = ui.hpBars;
   board.applyEvents(events);
@@ -242,6 +255,7 @@ export function combatScreen(events: GameEvent[]): void {
   const introKey = c.story?.intro ? `${run.code}:${run.step}:${run.zone}:${c.story.title}` : '';
   document.getElementById('intromodal')?.remove();
   if (introKey && introSeen !== introKey && c.round <= 1) ui.root.insertAdjacentHTML('beforeend', `<div class="modal" id="intromodal"><div class="panel note storybox"><h3>${esc(c.story!.title)}</h3><p>${esc(c.story!.intro!).replace(/\n/g, '<br>')}</p>${run.combat?.reward ? `<div class="sm good">Recompensa al ganar: ${rewardText(run.combat.reward)}</div>` : ''}<div class="row center"><button class="pri" data-act="introok" data-id="${esc(introKey)}">Adelante</button></div></div></div>`);
+  fitCombat();
   const lg = document.getElementById('log')!;
   const atBottom = lg.scrollHeight - lg.scrollTop - lg.clientHeight < 40;
   lg.innerHTML = ui.log.join('');

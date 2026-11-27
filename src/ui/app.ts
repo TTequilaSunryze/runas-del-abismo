@@ -8,7 +8,7 @@ import type { RunState } from '../game/run';
 import { Session } from '../game/session';
 import { dailyScore, dailyZone, loadable } from '../game/run';
 import { joinRoom, loadRun, submitDaily, topDaily } from '../net/transport';
-import { readSnapshot } from '../game/snapshot';
+import { clearSnapshot, readSnapshot } from '../game/snapshot';
 import { addLog, closeIntro, combatScreen, labClick } from './combat';
 import { closeEditor, editorScreen } from './editor';
 import { balanceScreen, closeBalance } from './balance';
@@ -53,6 +53,9 @@ function home(msg = ''): void {
   ui.board?.destroy();
   ui.board = null;
   ui.screen = 'home';
+  ui.front = 'menu';
+  ui.daily = false;
+  ui.abandonArmed = false;
   hideTip();
   homeScreen(msg);
   unlockGifts();
@@ -78,6 +81,9 @@ async function enter(code: string, isHost: boolean, local: boolean, resume = fal
   ui.me.name = (nameEl?.value ?? ui.me.name).trim().slice(0, 14) || 'Héroe';
   store.set('rda_name', ui.me.name);
   ui.lobbyReady = false;
+  ui.lobbyStage = 'hero';
+  ui.overlay = '';
+  ui.bldgOpen = false;
   ui.root.innerHTML = `<div class="home"><p>Conectando a la sala ${code}…</p></div>`;
   let secret = '';
   if (isHost) {
@@ -150,7 +156,7 @@ function render(events: GameEvent[]): void {
   const run = s.run;
   const want = !run ? 'lobby' : run.phase === 'combat' && run.combat ? 'combat' : run.phase === 'event' && run.event ? 'event' : run.phase === 'shop' ? 'shop' : run.phase === 'room' && run.room ? 'room' : run.phase === 'map' ? 'map' : 'end';
   // sin cambios reales no se redibuja: así un latido de red no interrumpe un clic
-  const key = want + JSON.stringify([meta().ecos, ui.asc, ui.daily, ui.mods, ui.abyss, run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), s.t.connected(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selItem, ui.tab, ui.logOpen, ui.statsOpen, ui.mapOpen, ui.forgeRef, ui.forgeAffix, ui.forgeSpell, ui.sideOpen, ui.picked, ui.lobbyReady]);
+  const key = want + JSON.stringify([meta().ecos, ui.asc, ui.daily, ui.mods, ui.abyss, run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), s.t.connected(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selItem, ui.tab, ui.logOpen, ui.statsOpen, ui.mapOpen, ui.forgeRef, ui.forgeAffix, ui.forgeSpell, ui.sideOpen, ui.picked, ui.lobbyReady, ui.lobbyStage, ui.overlay, ui.bldgOpen, ui.homeTab]);
   if (key === lastKey && want === ui.screen && !events.length) return;
   lastKey = key;
   if (want !== ui.screen) hideTip();
@@ -165,7 +171,8 @@ function render(events: GameEvent[]): void {
     ({ lobby: lobbyScreen, event: eventScreen, shop: shopScreen, room: roomScreen, map: mapScreen, end: endScreen })[want]();
   }
   ui.screen = want;
-  setMenuScene(want === 'combat' ? null : 'game');
+  setMenuScene(want === 'combat' ? null : want === 'lobby' ? 'home' : 'game');
+  document.body.classList.toggle('menu-dim', want === 'lobby');
   setCombatBg(want === 'combat' ? run?.zone ?? null : null);
   // ficha del personaje por encima de cualquier pantalla
   document.getElementById('statsmodal')?.remove();
@@ -183,6 +190,7 @@ function render(events: GameEvent[]): void {
 }
 let submitted = '';
 ui.rerender = () => render([]);
+ui.refreshLobby = () => { lastKey = ''; render([]); };
 
 // las salas creadas por el creador pueden salir en las expediciones que aloje
 setRoomSource(() => {
@@ -254,6 +262,17 @@ document.addEventListener('click', (e) => {
   const s = ui.session;
   if (el.dataset.act !== 'togglelog') sfx.click();
   switch (el.dataset.act) {
+    // portada y flujo previo a la expedición
+    case 'front': ui.front = (id || 'menu') as typeof ui.front; ui.abandonArmed = false; homeScreen(''); break;
+    case 'abandon':
+      if (!ui.abandonArmed) { ui.abandonArmed = true; homeScreen(''); setTimeout(() => { if (ui.abandonArmed) { ui.abandonArmed = false; if (ui.screen === 'home') homeScreen(''); } }, 4000); break; }
+      ui.abandonArmed = false; clearSnapshot(); try { localStorage.removeItem('rda_host'); } catch { /* sin almacenamiento */ } homeScreen('Partida abandonada.'); break;
+    case 'abyssgo': ui.daily = false; void enter(randomText(4, CODE_CHARS), true, true); break;
+    case 'dailygo': ui.daily = true; ui.mods = []; void enter(randomText(4, CODE_CHARS), true, true); break;
+    case 'herook': ui.lobbyStage = 'settlement'; ui.overlay = ''; ui.refreshLobby(); break;
+    case 'herochange': ui.lobbyStage = 'hero'; ui.bldgOpen = false; ui.refreshLobby(); break;
+    case 'overlay': ui.overlay = (id || '') as typeof ui.overlay; ui.refreshLobby(); break;
+    case 'bldgclose': ui.bldgOpen = false; ui.refreshLobby(); break;
     case 'create': void enter(randomText(4, CODE_CHARS), true, false); break;
     // modo creador (solo cuentas de creador) y sala de pruebas
     case 'testeradd': case 'testerdel': case 'testerrooms': {
@@ -351,15 +370,19 @@ document.addEventListener('click', (e) => {
     case 'resident': ui.root.insertAdjacentHTML('beforeend', residentModal(id)); break;
     case 'residentclose': ui.root.querySelector('.resident-modal')?.remove(); break;
     case 'htab':
+      ui.root.querySelector('.resident-modal')?.remove();
+      if (id === 'jugar' || id === 'refugio') { ui.bldgOpen = false; if (ui.session) ui.refreshLobby(); else { ui.front = 'play'; homeScreen(''); } break; }
+      if (!ui.session) { if (id === 'cuenta') { ui.front = 'account'; homeScreen(''); } break; }
       ui.homeTab = id as typeof ui.homeTab;
-      if (ui.homeTab === 'diario' && ui.board2 !== 'cargando') { ui.board2 = 'cargando'; void topDaily(today()).then((r) => { ui.board2 = r ?? 'error'; if (ui.screen === 'home') homeScreen(''); }); }
+      ui.bldgOpen = true;
+      if (ui.homeTab === 'diario' && ui.board2 !== 'cargando') { ui.board2 = 'cargando'; void topDaily(today()).then((r) => { ui.board2 = r ?? 'error'; if (ui.screen === 'home' || ui.screen === 'lobby') homeScreen(''); }); }
       homeScreen(''); break;
     case 'tuto': ui.tutorial = 0; meta().seenTutorial = false; homeScreen(''); break;
     case 'tutonext': ui.tutorial++; if (ui.tutorial >= 5) { meta().seenTutorial = true; saveMeta(); } homeScreen(''); break;
     case 'tutoskip': meta().seenTutorial = true; saveMeta(); homeScreen(''); break;
     case 'ascup': ui.asc = Math.min(maxAscOf(), ui.asc + 1); publish(); render([]); break;
     case 'ascdown': ui.asc = Math.max(0, ui.asc - 1); publish(); render([]); break;
-    case 'again': ui.log.length = 0; s?.backToLobby(); break;
+    case 'again': ui.log.length = 0; ui.lobbyStage = 'settlement'; ui.bldgOpen = false; s?.backToLobby(); break;
     case 'bossreward': {
       const o = s?.run ? mine(s.run)?.bossOffer?.[Number(id)] : undefined;
       if (o) ui.got = gotFromBoss(o);
@@ -373,7 +396,7 @@ document.addEventListener('click', (e) => {
     case 'addfriend': {
       const name = (document.getElementById('friend') as HTMLInputElement).value;
       ui.friendMsg = 'Buscando…'; homeScreen('');
-      void addFriend(name).then((err) => { ui.friendMsg = err ?? 'Amigo añadido. Pídele que te añada también para recibir sus invitaciones.'; if (ui.screen === 'home') homeScreen(''); });
+      void addFriend(name).then((err) => { ui.friendMsg = err ?? 'Amigo añadido. Pídele que te añada también para recibir sus invitaciones.'; if (ui.screen === 'home' || ui.screen === 'lobby') homeScreen(''); });
       break;
     }
     case 'delfriend': removeFriend(id); homeScreen(''); break;
@@ -397,6 +420,7 @@ document.addEventListener('click', (e) => {
     case 'isoview': if (ui.board) { ui.board.setIso(!ui.board.iso); } lastKey = ''; render([]); break;
     case 'bars': ui.hpBars = !ui.hpBars; if (ui.board) ui.board.showBars = ui.hpBars; lastKey = ''; render([]); break;
     case 'side': ui.sideOpen = !ui.sideOpen; lastKey = ''; render([]); break;
+    case 'sidetab': if (ui.sideOpen && ui.tab === id) ui.sideOpen = false; else { ui.tab = id as typeof ui.tab; ui.sideOpen = true; } lastKey = ''; render([]); break;
     case 'map': ui.mapOpen = !ui.mapOpen; lastKey = ''; render([]); break;
     case 'stats': ui.statsOpen = !ui.statsOpen; lastKey = ''; render([]); break;
     case 'mod': ui.mods = ui.mods.includes(id) ? ui.mods.filter((x) => x !== id) : ui.mods.length < MAX_MODS && !modConflict(id, ui.mods) ? [...ui.mods, id] : ui.mods; publish(); render([]); break;
@@ -411,7 +435,7 @@ document.addEventListener('click', (e) => {
       ui.busy = true; ui.hallMsg = `Buscando el equipo de ${name}…`; homeScreen('');
       void fetchTeam(name).then((t) => {
         ui.busy = false;
-        if (!t) { ui.hallMsg = `No se encontró un equipo guardado para “${name}”. Tiene que tener cuenta, haber entrado y tener héroes en su equipo.`; if (ui.screen === 'home') homeScreen(''); return; }
+        if (!t) { ui.hallMsg = `No se encontró un equipo guardado para “${name}”. Tiene que tener cuenta, haber entrado y tener héroes en su equipo.`; if (ui.screen === 'home' || ui.screen === 'lobby') homeScreen(''); return; }
         ui.hallMsg = '';
         void duel(t);
       });
@@ -429,15 +453,15 @@ document.addEventListener('click', (e) => {
       ui.busy = true; ui.acctMsg = 'Conectando…'; homeScreen('');
       void (signup ? signUp(email, pass, name) : signIn(email, pass)).then((err) => {
         ui.busy = false; ui.acctMsg = err ?? 'Has entrado. Tu progreso ya se guarda en la cuenta.';
-        if (ui.screen === 'home') homeScreen('');
+        if (ui.screen === 'home' || ui.screen === 'lobby') homeScreen('');
       });
       break;
     }
-    case 'logout': ui.busy = true; void signOut().then(() => { ui.busy = false; ui.acctMsg = 'Sesión cerrada. Tu progreso sigue en este navegador.'; if (ui.screen === 'home') homeScreen(''); }); break;
+    case 'logout': ui.busy = true; void signOut().then(() => { ui.busy = false; ui.acctMsg = 'Sesión cerrada. Tu progreso sigue en este navegador.'; if (ui.screen === 'home' || ui.screen === 'lobby') homeScreen(''); }); break;
     case 'end': s?.act({ a: 'end' }); break;
     case 'spell': pickSpell(id); break;
     case 'togglelog': ui.logOpen = !ui.logOpen; render([]); break;
-    case 'mute': toggleMute(); if (ui.screen === 'home') homeScreen(''); else { lastKey = ''; render([]); } break;
+    case 'mute': toggleMute(); if (ui.screen === 'home' || ui.screen === 'lobby') homeScreen(''); else { lastKey = ''; render([]); } break;
     case 'leave':
       if (ui.leaveArmed) { ui.leaveArmed = false; home(); }
       else { ui.leaveArmed = true; render([]); setTimeout(() => { ui.leaveArmed = false; render([]); }, 4000); }
@@ -538,7 +562,7 @@ function drawInvites(): void {
   if (!fresh.length) return;
   document.body.insertAdjacentHTML('beforeend', `<div id="invites" class="toast">${fresh.map((i) => `<div class="panel"><b>✉ ${esc(i.from)}</b> te invita a su sala <b>${i.code}</b><div class="row"><button class="pri mini" data-act="acceptinv" data-id="${i.code}">Unirme</button><button class="mini" data-act="dropinv" data-id="${i.code}">Ahora no</button></div></div>`).join('')}</div>`);
 }
-socialHandlers(() => { if (ui.screen === 'home') homeScreen(''); else if (ui.screen === 'lobby') { lastKey = ''; render([]); } }, (inv) => {
+socialHandlers(() => { if (ui.screen === 'home' || ui.screen === 'lobby') homeScreen(''); else if (ui.screen === 'lobby') { lastKey = ''; render([]); } }, (inv) => {
   ui.invites = [...ui.invites.filter((x) => x.code !== inv.code), inv].slice(-3);
   drawInvites();
   sfx.coin();

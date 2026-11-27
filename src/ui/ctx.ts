@@ -90,6 +90,18 @@ export const ui = {
   mods: [] as string[],
   abyss: false,
   rerender: (): void => {},
+  /** fuerza el redibujado de la sala (selección de héroe / Asentamiento) */
+  refreshLobby: (): void => {},
+  /** portada: menú principal o una de sus pantallas */
+  front: 'menu' as 'menu' | 'play' | 'multi' | 'settings' | 'account',
+  /** «Abandonar partida» pide un segundo clic */
+  abandonArmed: false,
+  /** dentro de la sala: elegir héroe o el Asentamiento */
+  lobbyStage: 'hero' as 'hero' | 'settlement',
+  /** capa abierta sobre la selección de héroe: habilidades o modificadores */
+  overlay: '' as '' | 'kit' | 'mods',
+  /** edificio abierto en el Asentamiento (muestra el panel de ui.homeTab) */
+  bldgOpen: false,
 };
 
 export const mine = (run: RunState): HeroSave | undefined => run.heroes.find((h) => h.owner === ui.myId);

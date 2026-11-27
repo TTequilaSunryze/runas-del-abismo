@@ -27,7 +27,7 @@ export function volumeControl(): string {
 export function sysButtons(): string {
   const s = ui.session;
   const warn = s?.isHost && s.t.kind === 'online' ? '¿Seguro? Termina para todos' : '¿Seguro? Pulsa otra vez';
-  return `${ui.screen !== 'combat' && ui.session?.run && !ui.session.run.arena ? `<button class="sq mobonly ${ui.sideOpen ? 'on' : ''}" data-act="side" ${tip('Equipo, hechizos y grupo')}>🎒</button>` : ''}${ui.screen === 'combat' ? `<button class="sq ${ui.hpBars ? '' : 'off'}" data-act="bars" ${tip('Mostrar u ocultar las barras de vida (V)')}>❤️</button><button class="sq ${ui.board?.iso ? 'on' : ''}" data-act="isoview" ${tip('Vista isométrica o plana (I)')}>🔷</button>` : ''}${ui.session?.run && !ui.session.run.arena ? `<button class="sq" data-act="map" ${tip('Mapa del acto (M)')}>🗺️<span class="deskonly"> Mapa</span></button>` : ''}${ui.session?.run && !ui.session.run.arena ? `<button class="sq" data-act="stats" ${tip('Ficha del personaje: estadísticas totales (S)')}>📊</button>` : ''}${volumeControl()}<button data-act="leave" class="${ui.leaveArmed ? 'danger' : ''}">${ui.leaveArmed ? warn : 'Abandonar'}</button>`;
+  return `${ui.screen === 'combat' ? `<button class="sq ${ui.hpBars ? '' : 'off'}" data-act="bars" ${tip('Mostrar u ocultar las barras de vida (V)')}>❤️</button><button class="sq ${ui.board?.iso ? 'on' : ''}" data-act="isoview" ${tip('Vista isométrica o plana (I)')}>🔷</button>` : ''}${ui.session?.run && !ui.session.run.arena ? `<button class="sq" data-act="map" ${tip('Mapa del acto (M)')}>🗺️</button>` : ''}${ui.session?.run && !ui.session.run.arena ? `<button class="sq" data-act="stats" ${tip('Ficha del personaje: estadísticas totales (S)')}>📊</button>` : ''}${volumeControl()}<button data-act="leave" class="${ui.leaveArmed ? 'danger' : 'sq'}" ${ui.leaveArmed ? '' : tip('Abandonar la expedición')}>${ui.leaveArmed ? warn : '🚪'}</button>`;
 }
 
 export function hpBar(hp: number, max: number, shield = 0): string {
@@ -120,8 +120,15 @@ export function sidePanel(run: RunState, selling = false): string {
   const h = mine(run);
   const tabs: Array<[typeof ui.tab, string]> = [['equipo', '🎒 Equipo'], ['hechizos', '✨ Hechizos'], ['grupo', '👥 Grupo']];
   const tab = h ? ui.tab : 'grupo';
-  return `<aside class="side"><div class="tabs">${tabs.map(([id, name]) => `<button class="${tab === id ? 'on' : ''}" data-act="tab" data-id="${id}" ${h || id === 'grupo' ? '' : 'disabled'}>${name}</button>`).join('')}</div>
+  return `<aside class="side"><div class="tabs">${tabs.map(([id, name]) => `<button class="${tab === id ? 'on' : ''}" data-act="tab" data-id="${id}" ${h || id === 'grupo' ? '' : 'disabled'}>${name}</button>`).join('')}<button class="sq sideclose" data-act="side" ${tip('Cerrar')}>✕</button></div>
   <div class="tabbody">${tab === 'grupo' || !h ? groupTab(run) : tab === 'hechizos' ? spellsTab(h) : gearTab(run, h, selling)}</div></aside>`;
+}
+
+/** Iconos del borde derecho: abren el equipo, los hechizos o el grupo como panel por encima del juego. */
+export function sideRail(run: RunState): string {
+  const h = mine(run);
+  const items: Array<[typeof ui.tab, string, string]> = [['equipo', '🎒', 'Equipo y mochila'], ['hechizos', '✨', 'Hechizos y runas'], ['grupo', '👥', 'Grupo']];
+  return `<nav class="siderail">${items.map(([id, icon, name]) => `<button class="sq ${ui.sideOpen && (h ? ui.tab : 'grupo') === id ? 'on' : ''}" data-act="sidetab" data-id="${id}" ${h || id === 'grupo' ? '' : 'disabled'} ${tip(`<b>${name}</b>`)} aria-label="${name}">${icon}</button>`).join('')}</nav>`;
 }
 
 /** Carta de una opción de la recompensa del jefe. */
