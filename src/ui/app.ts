@@ -33,7 +33,7 @@ import { championOf } from '../game/run';
 import { MAX_ASC, MAX_MODS, modConflict } from '../content/modes';
 import { setMusicVolume, setZoneMusic } from '../audio/sfx';
 import { gotFromBoss, gotModal, itemHtml, mapModal, statsModal, victoryModal } from './panels';
-import { endScreen, eventScreen, homeScreen, lobbyScreen, mapScreen, roomScreen, shopScreen } from './screens';
+import { endScreen, eventScreen, homeScreen, lobbyScreen, mapScreen, residentModal, roomScreen, shopScreen } from './screens';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 
@@ -348,6 +348,8 @@ document.addEventListener('click', (e) => {
     case 'arcf2': ui.arcF2 = id; homeScreen(''); break;
     case 'arcfilter': ui.arcFilter = id as typeof ui.arcFilter; homeScreen(''); break;
     case 'arcopen': ui.arcOpen = ui.arcOpen === id ? '' : id; homeScreen(''); break;
+    case 'resident': ui.root.insertAdjacentHTML('beforeend', residentModal(id)); break;
+    case 'residentclose': ui.root.querySelector('.resident-modal')?.remove(); break;
     case 'htab':
       ui.homeTab = id as typeof ui.homeTab;
       if (ui.homeTab === 'diario' && ui.board2 !== 'cargando') { ui.board2 = 'cargando'; void topDaily(today()).then((r) => { ui.board2 = r ?? 'error'; if (ui.screen === 'home') homeScreen(''); }); }
