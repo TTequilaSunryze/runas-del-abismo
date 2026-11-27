@@ -932,7 +932,7 @@ button.armed { background: #7a1f2c; border-color: var(--red); }
 /* Selector cinematográfico de héroes. */
 .hero-select { display: grid; grid-template-columns: minmax(0,1.35fr) minmax(270px,.8fr); gap: 12px; }
 .hero-stage { position: relative; min-height: 290px; overflow: hidden; display: flex; align-items: flex-end; border: 2px solid #70553b; background: radial-gradient(ellipse at 48% 35%, #57304c, #17111e 70%); box-shadow: inset 0 0 60px #08050c, 0 10px 28px #0009; }
-.hero-stage::before { content:''; position:absolute; inset:0; background: linear-gradient(90deg,rgba(8,5,12,.08),rgba(8,5,12,.78)), url('/assets/heroes/zorro.webp') center 38%/cover; opacity:.42; }
+.hero-stage::before { content:''; position:absolute; inset:0; background: radial-gradient(ellipse at 50% 35%,rgba(172,90,170,.28),transparent 42%), linear-gradient(90deg,rgba(8,5,12,.05),rgba(8,5,12,.72)); opacity:.8; }
 .hero-stage-art { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
 .hero-stage-sprite { position:relative; z-index:1; width:min(48%,300px); height:90%; background-size:contain; background-repeat:no-repeat; background-position:center bottom; image-rendering:pixelated; filter:drop-shadow(0 8px 18px #000); }
 .hero-stage-glow { position:absolute; width:45%; aspect-ratio:1; border-radius:50%; background:radial-gradient(circle,#a15ee855,transparent 70%); }
@@ -963,3 +963,37 @@ button.armed { background: #7a1f2c; border-color: var(--red); }
 .hero-tile i { color:#83d6a0; font-size:9px; font-style:normal; text-align:center; }
 @media (max-width:1000px) { .hero-roster { grid-template-columns:repeat(4,minmax(0,1fr)); } }
 @media (max-width:760px) { .hero-select { grid-template-columns:1fr; } .hero-stage { min-height:260px; } .hero-detail { grid-row:2; } .hero-roster-wrap { grid-column:1; } .hero-roster { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+
+
+/* La interfaz ocupa el viewport como una aplicación de juego; el documento nunca desplaza. */
+html, body { width:100%; height:100%; overflow:hidden; }
+body { overscroll-behavior:none; }
+#app { width:100%; max-width:none; height:100dvh; min-height:0; margin:0; padding:0; overflow:hidden; }
+#app > * { min-height:0; }
+.home2 { width:100%; max-width:none; height:100%; min-height:0; overflow:hidden; padding:clamp(10px,2vh,22px) clamp(12px,2vw,30px); background:
+  linear-gradient(90deg,rgba(7,6,12,.84),rgba(7,6,12,.42) 48%,rgba(7,6,12,.78)),
+  radial-gradient(ellipse at 75% 15%,rgba(139,61,89,.3),transparent 45%),
+  #100b14; }
+.hbody { flex:1; min-height:0; overflow:hidden; }
+.hnav { min-height:0; overflow-y:auto; padding:2px 6px 8px 0; }
+.hmain { min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:2px 8px 12px 2px; scrollbar-width:thin; scrollbar-color:#80613e #130e18; }
+.hmain::-webkit-scrollbar, .hnav::-webkit-scrollbar { width:8px; }
+.hmain::-webkit-scrollbar-thumb, .hnav::-webkit-scrollbar-thumb { background:#80613e; border-radius:8px; }
+.hmain::-webkit-scrollbar-track, .hnav::-webkit-scrollbar-track { background:#130e18; }
+.home2 .howto { flex:none; margin:0; }
+@media (max-width:860px) {
+  .home2 { overflow-y:auto; }
+  .hbody { display:flex; flex-direction:column; overflow:visible; }
+  .hnav { width:100%; overflow:visible; }
+  .hprimary { grid-template-columns:repeat(5,minmax(0,1fr)); }
+  .hbtn { height:40px; }
+  .hbtn > span { font-size:clamp(9px,1.8vw,15px); letter-spacing:0; }
+  .hsecondary { flex-direction:row; flex-wrap:wrap; }
+  .hsub { width:auto; flex:1 1 auto; }
+  .hmain { overflow:visible; }
+}
+@media (max-width:560px) {
+  .hprimary { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .hero-roster { grid-template-columns:repeat(4,minmax(0,1fr)); }
+  .hero-stage-stats span { font-size:9px; }
+}
