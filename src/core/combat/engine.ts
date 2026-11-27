@@ -825,7 +825,7 @@ export function apCost(u: Unit, id: string, s?: CombatState): number {
   // Sinfonía mística: el próximo hechizo de 3 PA o más cuesta 1 menos
   const sym = u.symphony && base >= 3 ? 1 : 0;
   // Dominio esférico: hechizos de esferas a 2 casillas o menos de una esfera tuya
-  const dom = s && d && hasTrait(u, 'dominio') && isSphereSpell(d) && marksOf(s, 'sphere', u.id).some((m) => dist(m.pos, u.pos) <= 2) ? 1 : 0;
+  const dom = s && d && hasTrait(u, 'dominio') && isSphereSpell(d) && orbsOf(s, u).some((p) => dist(p, u.pos) <= 2) ? 1 : 0;
   // Marca de la muerte: 1 PA menos si ya tienes una Sombra en el tablero
   const shade = s && d?.special === 'deathmark' && marksOf(s, 'shadow', u.id).length ? 1 : 0;
   // Primera Runa: el primer hechizo del turno cuesta 1 PA menos
@@ -836,7 +836,7 @@ export function apCost(u: Unit, id: string, s?: CombatState): number {
 }
 
 /** Hechizos que crean, mueven, consumen o usan esferas. */
-const isSphereSpell = (d: SpellDef): boolean => !!(d.sphere || d.consume || d.detonate || d.needSphere || d.atSphere || d.sphereHit || d.sphereShield) || ['throwsphere', 'gravity', 'orbit', 'transfuse', 'singularity'].includes(d.special ?? '');
+const isSphereSpell = (d: SpellDef): boolean => !!(d.sphere || d.consume || d.detonate || d.needSphere || d.atSphere || d.sphereHit || d.sphereShield) || ['throwsphere', 'gravity', 'orbit', 'transfuse', 'singularity', 'seed', 'implode'].includes(d.special ?? '');
 
 /** Casilla a la espalda de `t` vista desde `u` (libre), o null. */
 function behindCell(s: CombatState, u: Unit, t: Unit): Pos | null {
@@ -1343,12 +1343,14 @@ function coneBlast(s: CombatState, u: Unit, def: SpellDef, at: Pos, targets: Uni
       m.pos = n;
       strike(m, hitBy);
     }
-    if (!same(from, m.pos)) { ev.push({ t: 'markMove', kind: m.kind, from, to: { ...m.pos } }); if (hasTrait(u, 'resonante') && marksOf(s, 'sphere', u.id).some((o) => o !== m && dist(o.pos, m.pos) <= 1)) resonate(s, u, m.pos, ev); }
+    if (!same(from, m.pos)) { ev.push({ t: 'markMove', kind: m.kind, from, to: { ...m.pos } }); if (hasTrait(u, 'resonante') && orbsOf(s, u).some((o) => o !== m.pos && !same(o, m.pos) && dist(o, m.pos) <= 1)) resonate(s, u, m.pos, ev); }
   }
-  // 2) la onda empuja a los enemigos alcanzados, primero los más lejanos para que no se bloqueen
-  for (const t of [...targets].sort((a, b) => far(a.pos) - far(b.pos))) {
+  // 2) la onda empuja a los enemigos alcanzados y también a los aliados del cono (para recolocarlos), primero los más lejanos
+  //    para que no se bloqueen. Los aliados no resisten ni reciben daño.
+  const allies = s.units.filter((x) => alive(x) && x !== u && x.team === u.team && x.ai !== 'pillar' && cone.some((p) => same(p, x.pos)));
+  for (const t of [...targets, ...allies].sort((a, b) => far(a.pos) - far(b.pos))) {
     if (!alive(t) || s.over) continue;
-    const n = landed(s, t, def.push!);
+    const n = t.team === u.team ? def.push! : landed(s, t, def.push!);
     if (n < def.push!) ev.push({ t: 'resist', unit: t.id, what: n ? 'Resiste parte del empujón' : 'Resiste el empujón' });
     if (n) pushDir(s, t, dx, dy, n, ev);
   }
@@ -1462,13 +1464,18 @@ function addSphere(s: CombatState, u: Unit, at: Pos, turns: number, max: number,
   // el máximo sale de la mejor versión que tengas de un hechizo de esferas (las bendiciones lo suben)
   let cap = Math.max(max, ...u.spells.map((sp) => spellOf(u, sp.id)?.sphere?.max ?? 0));
   if (hasTrait(u, 'poder')) { cap = Math.max(cap, 5); turns++; }
-  const touching = hasTrait(u, 'resonante') && marksOf(s, 'sphere', u.id).some((m) => dist(m.pos, at) <= 1);
+  const touching = hasTrait(u, 'resonante') && orbsOf(s, u).some((p) => !same(p, at) && dist(p, at) <= 1);
   addMark(s, { kind: 'sphere', pos: at, team: u.team, turns, owner: u.id, max: cap }, ev);
   if (touching) resonate(s, u, at, ev);
 }
 
 /** Semillas oscuras vivas de `u`. */
 export const seedsOf = (s: CombatState, u: Unit): Unit[] => s.units.filter((x) => x.seed !== undefined && x.summoner === u.id && alive(x));
+/**
+ * Esferas y Semillas oscuras son lo mismo para las bendiciones de la Tejedora (Vórtice resonante, Órbita protectora,
+ * Gravedad alterada, Núcleo inestable, Dominio esférico): casillas de todos los «orbes» de `u`.
+ */
+export const orbsOf = (s: CombatState, u: Unit): Pos[] => [...marksOf(s, 'sphere', u.id).map((m) => m.pos), ...seedsOf(s, u).map((x) => x.pos)];
 
 /** Red de implosión (pasiva): activa si `u` tiene a la vez Semilla oscura e Implosión. */
 export const implosionNet = (u: Unit): boolean => u.spells.some((sp) => sp.id === 't_semilla') && u.spells.some((sp) => sp.id === 't_implosion');
@@ -1549,6 +1556,8 @@ function plantSeed(s: CombatState, u: Unit, at: Pos, ev: GameEvent[]): void {
     ap: 0, maxAp: 0, mp: 0, maxMp: 0, initiative: 0, apMod: 0, mpMod: 0, resist: {}, statusBonus: 0, statuses: {}, spells: [], ai: 'pillar', summoner: u.id, traits: ['semilla'] }, at, ev);
   if (!sd) return;
   sd.seed = 0;
+  // Vórtice resonante: una semilla que nace pegada a otra semilla o a una esfera estalla como ellas
+  if (hasTrait(u, 'resonante') && orbsOf(s, u).some((p) => !same(p, at) && dist(p, at) <= 1)) resonate(s, u, at, ev);
   // no juega turnos: fuera del orden
   s.order = s.order.filter((id) => id !== sd.id);
   // Red de implosión: al crearse una conexión nueva, daña a los enemigos que ya estén en ella
@@ -1686,6 +1695,8 @@ const SELF_SPECIALS: Record<string, SelfSpecial> = {
       if (alive(h.t) && hurt(s, h.t, h.dmg + dmgFlat(u, h.t), ev, d.id, { element: d.element ?? 'shadow' }) > 0) hitAny = true;
     }
     for (const sd of seeds) if (alive(sd)) { sd.hp = 0; ev.push({ t: 'death', unit: sd.id }); }
+    // Núcleo inestable: detonar semillas cuenta como consumir esferas
+    for (const sd of seeds) if (!s.over) sphereBurst(s, u, sd.pos, ev);
     if (hitAny && alive(u)) { u.ap += 1; ev.push({ t: 'drain', unit: u.id, ap: 1, mp: 0 }); }
     checkOver(s, ev);
   },
@@ -1856,7 +1867,7 @@ function turnStartBlessings(s: CombatState, u: Unit, ev: GameEvent[]): void {
   // Voluntad indómita: por debajo del 25%, +1 carga de Esencia
   if (hasTrait(u, 'indomita') && u.hp < u.maxHp * 0.25) gainEssence(u, 1, ev);
   // Órbita protectora: con 2+ esferas, escudo del 10% de la vida máxima
-  if (hasTrait(u, 'orbitaprot') && marksOf(s, 'sphere', u.id).length >= 2) { const sh = Math.round(u.maxHp * 0.1); u.shield += sh; ev.push({ t: 'shield', unit: u.id, amount: sh }); }
+  if (hasTrait(u, 'orbitaprot') && orbsOf(s, u).length >= 2) { const sh = Math.round(u.maxHp * 0.1); u.shield += sh; ev.push({ t: 'shield', unit: u.id, amount: sh }); }
   // Pasos del Que No Descansa: pegado a un enemigo → +1 PM
   if (hasTrait(u, 'incansable') && s.units.some((t) => alive(t) && t.team !== u.team && t.ai !== 'pillar' && dist(t.pos, u.pos) === 1)) { u.mp++; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: 1 }); }
   // Huellas de Pavesa: los enemigos pegados se queman
@@ -1867,7 +1878,7 @@ function turnStartBlessings(s: CombatState, u: Unit, ev: GameEvent[]): void {
 
 /** Efectos al dar un paso: Gravedad alterada (enemigos junto a una esfera) e Imparable (Bárbaro en Frenesí). */
 function stepBlessings(s: CombatState, u: Unit, ev: GameEvent[]): void {
-  if (!u.gravHit && u.mp > 0 && s.units.some((w) => alive(w) && w.team !== u.team && hasTrait(w, 'gravedad') && marksOf(s, 'sphere', w.id).some((m) => dist(m.pos, u.pos) <= 1))) {
+  if (!u.gravHit && u.mp > 0 && s.units.some((w) => alive(w) && w.team !== u.team && hasTrait(w, 'gravedad') && orbsOf(s, w).some((p) => dist(p, u.pos) <= 1))) {
     u.gravHit = true;
     u.mp--;
     ev.push({ t: 'drain', unit: u.id, ap: 0, mp: -1 });
