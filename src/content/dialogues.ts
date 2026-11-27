@@ -16,6 +16,15 @@ export interface TalkCtx {
   researchTotal: number;
   researchReady: string[];
   researchNext: string;
+  /** Darel: lo ocurrido desde la última vez que hablasteis (null = primera vez) y lo que sabe por la puerta */
+  since: null | { runs: number; wins: number; losses: number; bosses: number; deeper: boolean };
+  losses: number;
+  bestZone: number;
+  /** nombre de la zona más honda alcanzada ('' si ninguna) */
+  deepest: string;
+  /** regiones que se distinguen desde la Puerta (zonas del Atlas descubiertas) */
+  regionsSeen: number;
+  regionNames: string[];
 }
 
 export interface TalkOption {
@@ -98,6 +107,25 @@ const ROMI_MENU = (c: TalkCtx): TalkOption[] => [
   { label: 'Háblame de ti.', to: 'ella' },
   c.researched ? { label: '¿Tienes alguna teoría?', to: 'teorias' } : { label: '¿Tienes alguna teoría?', to: 'teorias', locked: 'Investiga al menos un expediente.' },
   { label: 'Te dejo trabajar. Hasta luego, Romi.', to: '' },
+];
+
+const DAREL_HERO: Record<string, string> = {
+  zorro: 'Una zorra con nueve colas. Las he contado al pasar. Comprueba que vuelves con las mismas.',
+  esferas: 'Tus esferas brillan de noche. Desde la torre se ven a una legua. Tenlo en cuenta ahí fuera.',
+  acechador: 'A ti casi no te cuento. Pasas la puerta y es como si no hubiera pasado nadie.',
+  carcelero: 'Esa linterna no ilumina el camino. Lo sé porque la sigo con el catalejo.',
+  barbaro: 'Sales gritando y vuelves gritando. Así al menos sé que eres tú.',
+  arquitecto: 'Si vas a arreglar la muralla, avísame antes. La última vez la campana sonó sola.',
+  pistolero: 'El ruido de tus disparos llega hasta aquí arriba. Me sirve para saber que sigues en pie.',
+  arquero: 'Buen ojo. Algún día te dejo el catalejo, a ver si ves lo mismo que yo.',
+};
+
+const DAREL_MENU = (c: TalkCtx): TalkOption[] => [
+  { label: '¿Cuántas salidas llevo?', to: 'salidas' },
+  { label: '¿Qué se ve desde aquí fuera?', to: 'exterior' },
+  { label: '¿Para qué es la campana?', to: 'campana' },
+  { label: 'Háblame de ti.', to: 'el' },
+  { label: c.since === null ? 'Gracias, Darel.' : 'Vuelvo luego. Vigila bien.', to: '' },
 ];
 
 export const NPCS: Record<string, Npc> = {
@@ -198,5 +226,67 @@ export const NPCS: Record<string, Npc> = {
       },
     },
   },
+  darel: {
+    id: 'darel',
+    name: 'Darel',
+    role: 'Vigía de la Puerta',
+    portrait: 'npc/darel_retrato.jpg',
+    figure: 'npc/darel.png',
+    start: 'saludo',
+    nodes: {
+      saludo: {
+        lines: (c) => {
+          if (c.since === null) return ['Puedo contar los que salen. Los que vuelven… a veces tengo que aprender a reconocerlos.', 'Soy Darel. Vigilo la Puerta y apunto quién la cruza. Nada más, nada menos.', DAREL_HERO[c.cls] ?? 'No te había visto antes. Ya te veré.'];
+          const d = c.since, out: string[] = [];
+          if (!d.runs) out.push('Sigues aquí. Bien. La Puerta no se mueve sola, pero tampoco hay prisa.');
+          else {
+            out.push(d.runs === 1 ? 'Te conté al salir.' : `Te he contado salir ${d.runs} veces desde la última vez que hablamos.`);
+            if (d.wins) out.push(d.wins === 1 ? 'Y volviste por la Puerta grande. Las cuentas cuadran.' : `${d.wins} de esas veces volviste por la Puerta grande. Las cuentas cuadran.`);
+            if (d.losses) out.push(d.losses === 1 ? 'La otra vez… no volviste por la Puerta. Nunca por la Puerta, cuando pasa eso. Tardé en reconocerte.' : `${d.losses} veces no volviste por la Puerta. Tardé en reconocerte, cada vez un poco más.`);
+          }
+          if (d.bosses) out.push(d.bosses === 1 ? 'Dicen que cayó un guardián ahí abajo. La niebla bajó un palmo esa noche; lo vi desde la torre.' : `Han caído ${d.bosses} guardianes desde que hablamos. La niebla está más baja. No sé si me gusta.`);
+          if (d.deeper && c.deepest) out.push(`Llegaste más hondo que nunca: hasta ${c.deepest}. Lo he apuntado en el registro.`);
+          out.push(DAREL_HERO[c.cls] ?? 'Ese aspecto es nuevo. Lo apunto.');
+          return out;
+        },
+        options: DAREL_MENU,
+      },
+      salidas: {
+        lines: (c) => c.runs === 0
+          ? ['Ninguna. Tu nombre aún no está en el registro.', 'Cuando cruces la Puerta, lo escribiré yo mismo.']
+          : [
+            `${c.runs} salida${c.runs === 1 ? '' : 's'}. ${c.wins} regreso${c.wins === 1 ? '' : 's'} por la Puerta. ${c.losses ? `${c.losses} que no anoto como regreso, aunque luego te vea por aquí.` : 'Ninguna que no cuadre.'}`,
+            c.deepest ? `Lo más hondo que te he visto llegar: ${c.deepest}.` : 'Todavía no sé hasta dónde llegas.',
+            'El registro está en el puesto, encima de la mesa. Puedes mirarlo. No lo toques.',
+          ],
+        options: DAREL_MENU,
+      },
+      exterior: {
+        lines: (c) => c.regionsSeen === 0
+          ? ['Niebla. Ruinas. Algo que se mueve cuando no lo miras.', 'Cuando hayas pisado algún sitio ahí abajo, te diré lo que se ve de él desde aquí.']
+          : [
+            `Desde la torre distingo ${c.regionsSeen === 1 ? 'una región' : `${c.regionsSeen} regiones`} que ya conoces. ${c.regionNames.join(', ')}.`,
+            'Lo demás es niebla. No voy a contarte lo que no he visto.',
+            'El catalejo está junto a la ventana del puesto. Úsalo con cuidado; la lente es lo único que no se puede reponer.',
+          ],
+        options: DAREL_MENU,
+      },
+      campana: {
+        lines: (c) => [
+          'La campana avisa de tres cosas: que algo sube, que alguien no vuelve, o que alguien vuelve distinto.',
+          c.losses ? `Ha sonado por ti ${c.losses === 1 ? 'una vez' : `${c.losses} veces`}. Las anoto todas.` : 'Todavía no ha sonado por ti. Que siga así.',
+          'Si alguna vez la oyes tocar sin que nadie tire de la cuerda, corre hacia dentro. No preguntes.',
+        ],
+        options: DAREL_MENU,
+      },
+      el: {
+        lines: () => [
+          'No hay mucho que contar. Vigilo. Es lo que hago y lo que sé hacer.',
+          'Antes bajaba. Un día volví y nadie me reconoció. Desde entonces prefiero ser yo el que mira.',
+          'Puedo contar los que salen. Los que vuelven… a veces tengo que aprender a reconocerlos.',
+        ],
+        options: DAREL_MENU,
+      },
+    },
+  },
 };
-

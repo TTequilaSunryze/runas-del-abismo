@@ -6,6 +6,8 @@ import { archiveTotal } from '../game/archive';
 import { meta } from '../game/meta';
 import { DOSSIER_KINDS, allDossiers, dossiers, investigated, ready, type Dossier, type DossierKind } from '../game/research';
 import { CHRONICLES, CHRONICLE_NAME, chronicleState } from '../game/atlas';
+import { deepestName, inspectView, seenZones } from './watch';
+import { ZONES } from '../content/zones';
 import type { MenuScene } from '../render/menubg';
 import { esc, tip, ui } from './ctx';
 import { volumeControl } from './panels';
@@ -26,7 +28,7 @@ const SPOTS: Spot[] = [
   { id: 'atalaya', name: 'Atalaya', poly: '905,40 960,5 1000,40 1000,180 990,270 905,270', at: [952, 112], act: 'htab', arg: 'logros', hint: 'Logros y estadísticas' },
   { id: 'palomar', name: 'Palomar', poly: '430,0 625,0 625,150 600,205 470,205 430,120', at: [528, 110], act: 'htab', arg: 'amigos', hint: 'Amigos e invitaciones' },
   { id: 'tablon', name: 'Tablón del reto', poly: '725,285 820,262 905,300 905,470 760,480 720,420', at: [815, 266], act: 'htab', arg: 'diario', hint: 'Clasificación del reto del día' },
-  { id: 'puerta', name: 'La Puerta del Abismo', poly: '1008,200 1100,140 1165,250 1140,500 1172,700 1000,745 1030,450', at: [1088, 150], act: 'gate', hint: 'Comenzar la expedición' },
+  { id: 'puerta', name: 'La Puerta del Abismo', poly: '1008,200 1100,140 1165,250 1140,500 1172,700 1000,745 1030,450', at: [1088, 150], act: 'place', arg: 'puerta', hint: 'Darel, el puesto de vigilancia y la salida al Abismo' },
   { id: 'forja', name: 'La Forja', poly: '395,600 500,530 560,535 605,598 670,598 705,640 705,768 395,768', at: [550, 534], locked: true },
   { id: 'santuario', name: 'El Santuario', poly: '80,250 100,165 170,138 262,168 300,228 300,372 90,382', at: [190, 142], locked: true },
   { id: 'guardia', name: 'Puesto de guardia', poly: '1255,320 1376,290 1376,560 1265,560', at: [1316, 330], locked: true },
@@ -65,7 +67,7 @@ function panorama(): string {
   const g = gateAct();
   const lbl = (p: Spot): string => `<div class="slbl ${p.locked ? 'locked' : ''}" data-lbl="${p.id}" style="left:${(p.at[0] / 1376) * 100}%;top:${(p.at[1] / 768) * 100}%;--tx:${p.at[0] < 170 ? '-12%' : p.at[0] > 1200 ? '-88%' : '-50%'}"><b>${p.locked ? '🔒 ' : ''}${esc(p.name)}</b><small>${p.locked ? 'Próximamente' : esc(p.hint ?? '')}</small></div>`;
   const spot = (p: Spot): string => {
-    const act = p.locked ? '' : p.act === 'gate' ? (g.disabled ? '' : `data-act="${g.act}"`) : `data-act="${p.act}" data-id="${p.arg}"`;
+    const act = p.locked ? '' : `data-act="${p.act}" data-id="${p.arg}"`;
     return `<polygon class="spot ${p.locked ? 'locked' : ''} ${p.id === 'puerta' ? 'abyss' : ''}" data-spot="${p.id}" points="${p.poly}" ${act}><title>${esc(p.name)}</title></polygon>`;
   };
   const hover = SPOTS.map((p) => `.stscene:has([data-spot="${p.id}"]:hover) [data-lbl="${p.id}"]`).join(',');
@@ -81,11 +83,13 @@ function panorama(): string {
 }
 
 /** Habitante dentro de un lugar: caja en % de la imagen y tiras de 4 fotogramas (reposo y saludo). */
-interface PlaceNpc { id: string; box: [number, number, number, number]; inner: number; idle: string; wave: string; lbl: [number, number] }
+interface PlaceNpc { id: string; box: [number, number, number, number]; inner: number; idle: string; wave: string; lbl: [number, number]; /** saluda al hacer clic (no al pasar el ratón) */ waveOnClick?: boolean }
 /** Objeto clicable dentro de un lugar (coordenadas en píxeles de la imagen de referencia). */
 interface PlaceSpot { id: string; name: string; hint: string; poly: string; at: [number, number]; act: string; arg: string }
-interface PlaceDef { title: string; scene: MenuScene; bg: string; w: number; h: number; npcs: PlaceNpc[]; spots: PlaceSpot[] }
-const PLACES: Record<'taberna' | 'archivo', PlaceDef> = {
+interface PlaceDef { title: string; scene: MenuScene; bg: string; w: number; h: number; npcs: PlaceNpc[]; spots: PlaceSpot[]; /** lugar al que se vuelve (por defecto, el panorama) */ parent?: Place }
+type Place = 'taberna' | 'archivo' | 'puerta' | 'puesto';
+export const placeParent = (p: Place): Place | '' => PLACES[p].parent ?? '';
+const PLACES: Record<Place, PlaceDef> = {
   // Irena tras la barra, entre las jarras y el mortero: solo se ve por encima del mostrador
   taberna: { title: 'La Taberna', scene: 'tavern', bg: 'bg/taberna.jpg', w: 2576, h: 1438, spots: [],
     npcs: [{ id: 'irena', box: [43.48, 46.70, 12.42, 12.55], inner: 212.7, idle: 'npc/irena_wipe.png', wave: 'npc/irena_wave.png', lbl: [49.7, 38.5] }] },
@@ -99,23 +103,41 @@ const PLACES: Record<'taberna' | 'archivo', PlaceDef> = {
       { id: 'objetos', name: 'Vitrinas de objetos', hint: 'Reliquias recuperadas y su origen', poly: '1845,880 2100,860 2160,790 2310,800 2345,920 2345,1100 1850,1080', at: [2220, 780], act: 'dossier', arg: 'objetos' },
       { id: 'estantes', name: 'Estanterías', hint: 'Bestiario, Grimorio y el Archivo completo', poly: '80,380 300,300 560,360 830,420 830,1020 560,1090 300,1070 80,1080', at: [450, 300], act: 'htab', arg: 'archivo' },
     ] },
+  // la Puerta del Refugio: Darel junto al brasero, al pie del puesto de vigilancia
+  puerta: { title: 'La Puerta del Refugio', scene: 'gate', bg: 'bg/puerta.jpg', w: 2576, h: 1438,
+    npcs: [{ id: 'darel', box: [56.17, 42.42, 14.95, 29.90], inner: 100, idle: 'npc/darel_look.png', wave: 'npc/darel_wave.png', lbl: [63.66, 40.5], waveOnClick: true }],
+    spots: [
+      { id: 'porton', name: 'El portón', hint: 'Descender al Abismo', poly: '470,1010 470,560 520,470 650,435 780,470 835,560 835,990', at: [652, 420], act: 'gate', arg: '' },
+      { id: 'puesto', name: 'Puesto de vigilancia', hint: 'El registro, el catalejo y el tablero de Darel', poly: '1100,420 1290,255 1455,330 1440,560 1425,600 1300,600 1290,880 1180,890 1150,560', at: [1280, 245], act: 'place', arg: 'puesto' },
+      { id: 'campana', name: 'Campana de alarma', hint: 'La cuerda baja de la torre: alertas y advertencias', poly: '1350,600 1425,600 1425,800 1350,800', at: [1388, 805], act: 'inspect', arg: 'campana' },
+    ] },
+  // dentro del puesto de vigilancia
+  puesto: { title: 'Puesto de vigilancia', scene: 'post', bg: 'bg/puesto.jpg', w: 2576, h: 1438, parent: 'puerta', npcs: [],
+    spots: [
+      { id: 'registro', name: 'Registro de salidas', hint: 'Quién cruza la Puerta y quién vuelve', poly: '1300,960 1320,880 1700,890 1700,1050 1320,1050', at: [1500, 870], act: 'inspect', arg: 'registro' },
+      { id: 'tablero', name: 'Tablero de avisos', hint: 'Avisos y noticias del Refugio', poly: '1320,480 1775,480 1775,830 1320,830', at: [1548, 470], act: 'inspect', arg: 'tablero' },
+      { id: 'catalejo', name: 'Catalejo', hint: 'El territorio exterior', poly: '2030,820 2050,740 2240,690 2310,720 2300,780 2230,820 2200,1000 2290,1290 2080,1290 2160,1000 2140,850', at: [2170, 680], act: 'inspect', arg: 'catalejo' },
+    ] },
 };
 
 /** Interior de un lugar: fondo animado, habitantes y objetos clicables. */
-function placeView(id: 'taberna' | 'archivo'): string {
+function placeView(id: Place): string {
   const p = PLACES[id];
   const npcs = p.npcs.map((n) => { const d = NPCS[n.id]!;
-    return `<button class="raw npc" data-act="talk" data-id="${n.id}" style="left:${n.box[0]}%;top:${n.box[1]}%;width:${n.box[2]}%;height:${n.box[3]}%;--wipe:url(${abs(n.idle)});--wave:url(${abs(n.wave)});--inner:${n.inner}%" aria-label="Hablar con ${d.name}"><span class="npc-spr"></span></button>
+    return `<button class="raw npc ${n.waveOnClick ? 'clickwave' : ''}" data-act="talk" data-id="${n.id}" style="left:${n.box[0]}%;top:${n.box[1]}%;width:${n.box[2]}%;height:${n.box[3]}%;--wipe:url(${abs(n.idle)});--wave:url(${abs(n.wave)});--inner:${n.inner}%" aria-label="Hablar con ${d.name}"><span class="npc-spr"></span></button>
     <div class="slbl npclbl" data-lbl="${n.id}" style="left:${n.lbl[0]}%;top:${n.lbl[1]}%"><b>${d.name}</b><small>${d.role} · haz clic para hablar</small></div>`; }).join('');
   const pct = (x: number, y: number): string => `${((x / p.w) * 100).toFixed(2)}% ${((y / p.h) * 100).toFixed(2)}%`;
   const lit = p.spots.map((sp) => `<div class="spotlit" data-lit="${sp.id}" style="background-image:url(${abs(p.bg)});clip-path:polygon(${sp.poly.split(' ').map((xy) => { const [x, y] = xy.split(',').map(Number); return pct(x!, y!); }).join(',')})"></div>`).join('');
-  const svg = p.spots.length ? `<svg class="spots" viewBox="0 0 ${p.w} ${p.h}" preserveAspectRatio="none">${p.spots.map((sp) => `<polygon class="spot" data-spot="${sp.id}" points="${sp.poly}" data-act="${sp.act}" data-id="${sp.arg}"><title>${esc(sp.name)}</title></polygon>`).join('')}</svg>` : '';
+  const g = gateAct();
+  const spotAct = (sp: PlaceSpot): string => sp.act === 'gate' ? (g.disabled ? '' : `data-act="${g.act}"`) : `data-act="${sp.act}" data-id="${sp.arg}"`;
+  const svg = p.spots.length ? `<svg class="spots" viewBox="0 0 ${p.w} ${p.h}" preserveAspectRatio="none">${p.spots.map((sp) => `<polygon class="spot" data-spot="${sp.id}" points="${sp.poly}" ${spotAct(sp)}><title>${esc(sp.name)}</title></polygon>`).join('')}</svg>` : '';
   const lbls = p.spots.map((sp) => `<div class="slbl" data-lbl="${sp.id}" style="left:${(sp.at[0] / p.w) * 100}%;top:${(sp.at[1] / p.h) * 100}%"><b>${esc(sp.name)}</b><small>${esc(sp.hint)}</small></div>`).join('');
   const hover = [...p.spots.map((sp) => `.stscene:has([data-spot="${sp.id}"]:hover) [data-lbl="${sp.id}"]`), ...p.npcs.map((n) => `.stscene:has(.npc[data-id="${n.id}"]:hover) [data-lbl="${n.id}"]`)].join(',');
   const hoverLit = p.spots.map((sp) => `.stscene:has([data-spot="${sp.id}"]:hover) [data-lit="${sp.id}"]`).join(',');
   return `${coverBox(p.w / p.h, `${lit}${svg}${npcs}${lbls}`, `${id}-scene`)}
     <style>${hover}{opacity:1;transform:translate(var(--tx,-50%),-4px)}${hoverLit ? `${hoverLit}{opacity:1}` : ''}</style>
-    ${hud(p.title, 'EL ASENTAMIENTO', 'placeexit', 'Volver al Asentamiento')}`;
+    ${hud(p.title, p.parent ? PLACES[p.parent].title.toUpperCase() : 'EL ASENTAMIENTO', 'placeexit', p.parent ? `Volver a ${PLACES[p.parent].title}` : 'Volver al Asentamiento')}
+    ${id === 'puerta' ? (() => { const g = gateAct(); return `<div class="sgate"><button class="pri sgate-btn" data-act="${g.act}" ${g.disabled ? 'disabled' : ''}>${g.label}${g.sub ? `<small>${g.sub}</small>` : ''}</button></div>`; })() : ''}`;
 }
 
 function talkCtx(): TalkCtx {
@@ -126,6 +148,9 @@ function talkCtx(): TalkCtx {
   // la pista más cercana: el expediente con pista al que le falten menos evidencias
   const next = open.filter((d) => d.known && !ready(d)).map((d) => ({ d, miss: d.evidence.find((e) => e.have < e.need)!, left: d.evidence.reduce((n, e) => n + Math.max(0, e.need - e.have), 0) })).sort((a, b) => a.left - b.left)[0];
   return { cls: ui.me.cls, clsName: CLASSES[ui.me.cls].name, runs: m.stats.runs, wins: m.stats.wins, bosses: m.stats.bosses, kills: m.stats.kills, archivePct: archiveTotal().pct, maxAsc: m.maxAsc,
+    since: ui.talk?.npc === 'darel' && ui.talkBase !== undefined ? (ui.talkBase === null ? null : { runs: m.stats.runs - ui.talkBase.runs, wins: m.stats.wins - ui.talkBase.wins, losses: (m.stats.runs - m.stats.wins) - (ui.talkBase.runs - ui.talkBase.wins), bosses: m.stats.bosses - ui.talkBase.bosses, deeper: m.stats.bestZone > ui.talkBase.bestZone }) : null,
+    losses: Math.max(0, m.stats.runs - m.stats.wins), bestZone: m.stats.bestZone, deepest: deepestName(m.stats.bestZone),
+    regionsSeen: seenZones().length, regionNames: seenZones().map((i) => ZONES[i]!.name),
     researched: all.length - open.length, researchTotal: all.length, researchReady: rd.map((d) => d.name), researchNext: next ? `${next.d.name}: ${next.miss.text.toLowerCase()} (${next.miss.have}/${next.miss.need})` : '' };
 }
 
@@ -194,6 +219,7 @@ export function settlementScreen(): void {
   ui.root.innerHTML = `<div class="settle2">${ui.place ? placeView(ui.place) : panorama()}
     ${ui.talk ? talkOverlay() : ''}
     ${ui.dossier ? dossierView() : ''}
+    ${ui.inspect ? inspectView() : ''}
     ${ui.bldgOpen ? `<div class="fover"><div class="fover-box wide"><div class="row"><span class="grow"></span><button data-act="bldgclose">Volver al Asentamiento</button></div>${metaPanel()}</div></div>` : ''}
   </div>`;
   if (ui.talk) startTyping();

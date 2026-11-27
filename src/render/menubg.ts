@@ -1,7 +1,7 @@
 // Fondo de los menús: una ilustración (public/bg) con una capa animada encima en pixel art
 // (luz de antorchas que parpadea, ascuas, chispas rúnicas y niebla). Solo decoración.
 
-export type MenuScene = 'home' | 'game' | 'settle' | 'tavern' | 'archive';
+export type MenuScene = 'home' | 'game' | 'settle' | 'tavern' | 'archive' | 'gate' | 'post';
 /** La capa animada mide 1/4 de la ilustración (1376×768): sus coordenadas son las de la imagen / 4. */
 const W = 344, H = 192, FPS = 20;
 
@@ -71,6 +71,29 @@ const SCENES: Record<MenuScene, SceneDef> = {
     sparks: { x: 190, y: 98, w: 22, h: 14, col: '150,215,255' },
     fog: '120,110,100',
     fogA: 0.04,
+    fit: 'contain',
+  },
+  // la Puerta del Refugio: faroles, el brasero de Darel y la niebla del exterior
+  gate: {
+    img: 'bg/puerta.jpg',
+    fires: [
+      { x: 160.2, y: 24.0, r: 13, col: FIRE, ember: false }, { x: 31.4, y: 46.1, r: 11, col: FIRE, ember: false }, { x: 35.0, y: 69.4, r: 11, col: FIRE, ember: false },
+      { x: 70.1, y: 73.4, r: 13, col: FIRE, ember: false }, { x: 125.5, y: 74.1, r: 13, col: FIRE, ember: false }, { x: 195.9, y: 83.5, r: 13, col: FIRE, ember: false },
+      { x: 201.6, y: 110.8, r: 14, col: FIRE },
+    ],
+    glows: [{ x: 293.8, y: 93.5, r: 34, col: '150,190,230' }],
+    smoke: [{ x: 201.6, y: 106 }],
+    fog: '120,130,150',
+    fogA: 0.13,
+    fit: 'contain',
+  },
+  // dentro del puesto de vigilancia
+  post: {
+    img: 'bg/puesto.jpg',
+    fires: [{ x: 234.8, y: 112.2, r: 32, col: FIRE, ember: false }],
+    glows: [{ x: 300.5, y: 64.1, r: 42, col: '120,150,200' }],
+    fog: '90,90,100',
+    fogA: 0.03,
     fit: 'contain',
   },
   game: {

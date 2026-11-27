@@ -103,7 +103,11 @@ export const ui = {
   /** edificio abierto en el Asentamiento (muestra el panel de ui.homeTab) */
   bldgOpen: false,
   /** lugar del Asentamiento en el que se ha entrado ('' = panorama) */
-  place: '' as '' | 'taberna' | 'archivo',
+  place: '' as '' | 'taberna' | 'archivo' | 'puerta' | 'puesto',
+  /** ventana de inspección abierta en la Puerta (registro, catalejo, campana, tablero) */
+  inspect: '' as '' | 'registro' | 'catalejo' | 'campana' | 'tablero',
+  /** recuerdo del habitante al empezar la conversación (undefined = sin recuerdo cargado; null = primera vez) */
+  talkBase: undefined as undefined | null | { runs: number; wins: number; bosses: number; bestZone: number },
   /** ficha de investigación abierta en el Archivo y expediente elegido */
   dossier: '' as '' | 'registro' | 'runas' | 'regiones' | 'objetos',
   dossierSel: '',

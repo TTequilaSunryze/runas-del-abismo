@@ -9,7 +9,7 @@ import { Session } from '../game/session';
 import { dailyScore, dailyZone, loadable } from '../game/run';
 import { joinRoom, loadRun, submitDaily, topDaily } from '../net/transport';
 import { clearSnapshot, readSnapshot } from '../game/snapshot';
-import { fadeTo, finishTyping, lobbyScene, talkLines } from './settlement';
+import { fadeTo, finishTyping, lobbyScene, placeParent, talkLines } from './settlement';
 import { NPCS } from '../content/dialogues';
 import { investigate } from '../game/research';
 import { addLog, closeIntro, combatScreen, labClick } from './combat';
@@ -89,6 +89,7 @@ async function enter(code: string, isHost: boolean, local: boolean, resume = fal
   ui.bldgOpen = false;
   ui.place = '';
   ui.talk = null;
+  ui.inspect = '';
   ui.root.innerHTML = `<div class="home"><p>Conectando a la sala ${code}…</p></div>`;
   let secret = '';
   if (isHost) {
@@ -161,12 +162,12 @@ function render(events: GameEvent[]): void {
   const run = s.run;
   const want = !run ? 'lobby' : run.phase === 'combat' && run.combat ? 'combat' : run.phase === 'event' && run.event ? 'event' : run.phase === 'shop' ? 'shop' : run.phase === 'room' && run.room ? 'room' : run.phase === 'map' ? 'map' : 'end';
   // sin cambios reales no se redibuja: así un latido de red no interrumpe un clic
-  const key = want + JSON.stringify([meta().ecos, ui.asc, ui.daily, ui.mods, ui.abyss, run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), s.t.connected(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selItem, ui.tab, ui.logOpen, ui.statsOpen, ui.mapOpen, ui.forgeRef, ui.forgeAffix, ui.forgeSpell, ui.sideOpen, ui.picked, ui.lobbyReady, ui.lobbyStage, ui.overlay, ui.bldgOpen, ui.homeTab, ui.place, ui.talk, ui.dossier, ui.dossierSel, (meta().research ?? []).length]);
+  const key = want + JSON.stringify([meta().ecos, ui.asc, ui.daily, ui.mods, ui.abyss, run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), s.t.connected(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selItem, ui.tab, ui.logOpen, ui.statsOpen, ui.mapOpen, ui.forgeRef, ui.forgeAffix, ui.forgeSpell, ui.sideOpen, ui.picked, ui.lobbyReady, ui.lobbyStage, ui.overlay, ui.bldgOpen, ui.homeTab, ui.place, ui.talk, ui.dossier, ui.dossierSel, (meta().research ?? []).length, ui.inspect]);
   if (key === lastKey && want === ui.screen && !events.length) return;
   lastKey = key;
   if (want !== ui.screen) hideTip();
   const meH = run?.heroes.find((h) => h.owner === ui.myId);
-  setZoneMusic(!run ? (ui.lobbyStage === 'settlement' && ui.place ? ({ taberna: 'tavern', archivo: 'archive' } as const)[ui.place] : 'lobby') : want === 'combat' ? (run.kind === 'boss' ? 'boss' : 'combat') : want === 'end' ? 'end' : want === 'shop' ? 'calm'
+  setZoneMusic(!run ? (ui.lobbyStage === 'settlement' && ui.place ? ({ taberna: 'tavern', archivo: 'archive', puerta: 'gate', puesto: 'gate' } as const)[ui.place] : 'lobby') : want === 'combat' ? (run.kind === 'boss' ? 'boss' : 'combat') : want === 'end' ? 'end' : want === 'shop' ? 'calm'
     : want === 'event' || want === 'room' || meH?.boonOffer || meH?.bossOffer ? 'choice' : `map${Math.min(3, run.zone)}`);
   if (want === 'combat') combatScreen(events);
   else {
@@ -275,16 +276,29 @@ document.addEventListener('click', (e) => {
     case 'abyssgo': ui.daily = false; void enter(randomText(4, CODE_CHARS), true, true); break;
     case 'dailygo': ui.daily = true; ui.mods = []; void enter(randomText(4, CODE_CHARS), true, true); break;
     case 'herook': ui.lobbyStage = 'settlement'; ui.overlay = ''; ui.refreshLobby(); break;
-    case 'herochange': ui.lobbyStage = 'hero'; ui.bldgOpen = false; ui.place = ''; ui.talk = null; ui.dossier = ''; ui.refreshLobby(); break;
+    case 'herochange': ui.lobbyStage = 'hero'; ui.bldgOpen = false; ui.place = ''; ui.talk = null; ui.dossier = ''; ui.inspect = ''; ui.refreshLobby(); break;
     // El Asentamiento: entrar y salir de un lugar (con fundido) y conversaciones
     case 'place': fadeTo(() => { ui.place = id as typeof ui.place; ui.talk = null; ui.bldgOpen = false; ui.dossier = ''; ui.refreshLobby(); }); break;
-    case 'placeexit': fadeTo(() => { ui.place = ''; ui.talk = null; ui.dossier = ''; ui.refreshLobby(); }); break;
+    case 'placeexit': fadeTo(() => { ui.place = ui.place ? placeParent(ui.place) : ''; ui.talk = null; ui.dossier = ''; ui.inspect = ''; ui.refreshLobby(); }); break;
+    // la Puerta: ventanas de inspección del puesto de vigilancia
+    case 'inspect': ui.inspect = id as typeof ui.inspect; ui.refreshLobby(); break;
+    case 'inspectclose': ui.inspect = ''; ui.refreshLobby(); break;
     // Archivo: fichas de investigación (examinar / investigar)
     case 'dossier': ui.dossier = id as typeof ui.dossier; ui.dossierSel = ''; ui.refreshLobby(); break;
     case 'dossel': ui.dossierSel = id; ui.refreshLobby(); break;
     case 'dossierclose': ui.dossier = ''; ui.refreshLobby(); break;
     case 'investigate': if (investigate(id)) { sfx.myTurn(); ui.dossierSel = id; } ui.refreshLobby(); break;
-    case 'talk': ui.talk = { npc: id, node: NPCS[id]?.start ?? '', line: 0 }; ui.refreshLobby(); break;
+    case 'talk': {
+      // el habitante recuerda lo que vio la última vez; la conversación reacciona a lo ocurrido desde entonces
+      const m = meta(), seen = (m.npcSeen ??= {});
+      ui.talkBase = seen[id] ? { ...seen[id]! } : null;
+      seen[id] = { runs: m.stats.runs, wins: m.stats.wins, bosses: m.stats.bosses, bestZone: m.stats.bestZone };
+      saveMeta();
+      const open = (): void => { ui.talk = { npc: id, node: NPCS[id]?.start ?? '', line: 0 }; ui.refreshLobby(); };
+      // los que saludan al seleccionarlos: primero el saludo, luego la conversación
+      if (el.classList.contains('clickwave')) { el.classList.add('waving'); setTimeout(open, 1150); } else open();
+      break;
+    }
     case 'dlgnext': if (finishTyping() || !ui.talk) break; if (ui.talk.line < talkLines().length - 1) { ui.talk = { ...ui.talk, line: ui.talk.line + 1 }; ui.refreshLobby(); } break;
     case 'dlgopt': ui.talk = id && ui.talk ? { npc: ui.talk.npc, node: id, line: 0 } : null; ui.refreshLobby(); break;
     case 'overlay': ui.overlay = (id || '') as typeof ui.overlay; ui.refreshLobby(); break;
@@ -392,6 +406,7 @@ document.addEventListener('click', (e) => {
       ui.homeTab = id as typeof ui.homeTab;
       ui.bldgOpen = true;
       ui.dossier = '';
+      ui.inspect = '';
       if (ui.homeTab === 'diario' && ui.board2 !== 'cargando') { ui.board2 = 'cargando'; void topDaily(today()).then((r) => { ui.board2 = r ?? 'error'; if (ui.screen === 'home' || ui.screen === 'lobby') homeScreen(''); }); }
       homeScreen(''); break;
     case 'tuto': ui.tutorial = 0; meta().seenTutorial = false; homeScreen(''); break;

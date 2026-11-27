@@ -1304,3 +1304,9 @@ body.has-menubg .dinv { align-self: flex-start; font-size: 17px; padding: 9px 22
 .dline { display: flex; flex-direction: column; padding: 4px 0; border-bottom: 1px dashed #c4a97a; font-size: 13px; }
 .dline b { color: #5a2e0e; }
 @media (max-width: 760px) { .dgrid { grid-template-columns: 1fr; grid-template-rows: auto 1fr; } .dlist { flex-direction: row; overflow-x: auto; } .ditem { flex: none; width: 200px; } }
+
+/* habitantes que saludan al seleccionarlos (Darel): al pasar el ratón solo se iluminan */
+.npc.clickwave:hover .npc-spr { background-image: var(--wipe); animation: npcFrames 1.2s steps(4) infinite; }
+.npc.clickwave.waving .npc-spr { background-image: var(--wave); animation: npcOnce 1.1s steps(4, jump-none) 1 forwards; filter: brightness(1.18) drop-shadow(0 0 6px rgba(255, 210, 140, .8)); }
+.dossier.inspect { width: min(860px, 100%); }
+.dstats span.txt b { font-size: 15px; line-height: 1.2; text-align: center; padding: 6px 0; }

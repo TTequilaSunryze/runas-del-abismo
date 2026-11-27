@@ -47,6 +47,8 @@ export interface Meta {
   archive?: Archive;
   /** expedientes del Archivo ya investigados (Romi) */
   research?: string[];
+  /** lo que cada habitante vio la última vez que hablasteis (para reaccionar a lo ocurrido desde entonces) */
+  npcSeen?: Record<string, NpcSeen>;
   /** Contratos del Abismo (diarios y semanales). Opcional: las Meta anteriores no lo tienen. */
   contracts?: ContractBook;
   /** títulos y marcos desbloqueados y equipados (solo visuales). Opcional. */
@@ -63,6 +65,8 @@ export interface Meta {
   /** testers elegidos por el creador (solo en su progreso privado; a todos llega solo una huella de cada email) */
   testers?: Tester[];
 }
+/** Recuerdo de un habitante: cifras del jugador la última vez que habló con él. */
+export interface NpcSeen { runs: number; wins: number; bosses: number; bestZone: number }
 /** Cuenta de tester: prueba con todo desbloqueado y el laboratorio; `rooms` = también puede crear salas (sin publicarlas). */
 export interface Tester { email: string; rooms: boolean }
 
@@ -175,6 +179,11 @@ export function mergedEcos(a: Pick<Meta, 'ecos' | 'cosmetics'>, b: Partial<Pick<
   return Math.max(0, gross - spentTotal(mergeCosmetics(a.cosmetics, b.cosmetics)));
 }
 /** Une dos progresos sin perder nada: lo mayor de cada cosa. Se usa la primera vez que un navegador entra en una cuenta. */
+function mergeSeen(a: Record<string, NpcSeen> = {}, b: Record<string, NpcSeen> = {}): Record<string, NpcSeen> {
+  const out: Record<string, NpcSeen> = { ...a };
+  for (const [k, v] of Object.entries(b)) { const o = out[k]; out[k] = o ? { runs: Math.max(o.runs, v.runs), wins: Math.max(o.wins, v.wins), bosses: Math.max(o.bosses, v.bosses), bestZone: Math.max(o.bestZone, v.bestZone) } : v; }
+  return out;
+}
 export function mergeMeta(a: Meta, b: Partial<Meta>): Meta {
   const f = fresh();
   const maxRec = (x: Record<string, number | undefined> = {}, y: Record<string, number | undefined> = {}): Record<string, number> =>
@@ -189,6 +198,7 @@ export function mergeMeta(a: Meta, b: Partial<Meta>): Meta {
     team: (a.team?.length ? a.team : b.team) ?? [], t: Date.now(), acct: a.acct, friends: uniq([...(a.friends ?? []), ...(b.friends ?? [])]).slice(0, 30),
     archive: mergeArchive(a.archive, b.archive),
     research: uniq([...(a.research ?? []), ...(b.research ?? [])]),
+    npcSeen: mergeSeen(a.npcSeen, b.npcSeen),
     contracts: mergeContracts(a.contracts, b.contracts),
     cosmetics: mergeCosmetics(a.cosmetics, b.cosmetics),
     // H3: la configuración de este dispositivo manda; de la otra, solo las clases que aquí no se han tocado
