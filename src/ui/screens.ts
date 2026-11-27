@@ -15,7 +15,7 @@ import { championOf, dailyOf, dailyScore, lastZone } from '../game/run';
 import { CLASS_STORY, ENDING_LOST, ENDING_WON, TUTORIAL, ZONE_STORY } from '../content/story';
 import { esc, mine, store, tip, today, ui } from './ctx';
 import { NODE_ICON, itemIcon, spellIcon, spellTip } from './icons';
-import { advanceBar, blessingBar, boonRow, bossRow, diffHtml, itemHtml, mapSvg, pendingRows, sidePanel, sideRail, topBar, volumeControl } from './panels';
+import { advanceBar, blessingBar, boonRow, diffHtml, itemHtml, mapSvg, pendingRows, shrineOptions, sidePanel, sideRail, topBar, volumeControl } from './panels';
 import { CONSUMABLES, MAX_CONSUMABLE } from '../content/boons';
 import { CHEST_CURSE_CHANCE, HEAT, HEAT_HOT, HEAT_MAX, HEAT_OVERLOAD, HONE_COST, SCRAP_YIELD, curseOf, heatTier, pactOf, recalibratePrice } from '../content/pacts';
 import { REST_OPTIONS, itemByRef, recalStats, restHeal, restText } from '../game/rooms';
@@ -674,7 +674,7 @@ export function eventScreen(): void {
   ${who && !ev.result ? npcSay(who.id, who.name, who.lines) : ''}
   ${ev.result ? `<div class="evresult"><b>${esc(ev.result)}</b></div>${advanceBar(run, 'Continuar →')}` : `
   <div class="dim sm evhint">Evento de grupo: decide la mayoría y afecta a todos. En empate decide el anfitrión.</div>
-  <div class="evopts">${def.options.map((o, i) => { const open = optionOpen(run, o), need = (o as BranchOption).need; return `<button class="raw evcard ${ev.votes[ui.myId] === i ? 'on' : ''} ${open ? '' : 'locked'}" data-act="vote" data-id="${i}" ${canVote && open ? '' : 'disabled'}><b>${open ? '' : '🔒 '}${esc(o.label)}</b>${outcomeList(o.hint)}${need ? `<span class="sm ${open ? 'good' : 'dim'}">${open ? '⑂ Disponible por una decisión anterior' : esc(need)}</span>` : ''}<span class="votes">${voters(i) ? `🗳️ ${voters(i)}` : 'Sin votos'}</span></button>`; }).join('')}</div>
+  <div class="evopts">${def.options.map((o, i) => { const open = optionOpen(run, o), need = (o as BranchOption).need; return `<button class="raw evcard ${ev.votes[ui.myId] === i ? 'on' : ''} ${open ? '' : 'locked'}" data-act="vote" data-id="${i}" ${canVote && open ? '' : 'disabled'}><b>${open ? '' : '🔒 '}${esc(o.label)}</b>${outcomeList(o.hint)}${need ? `<span class="sm ${open ? 'good' : 'dim'}">${open ? '⑂ Disponible por una decisión anterior' : esc(need)}</span>` : ''}${run.heroes.length > 1 ? `<span class="votes">${voters(i) ? `🗳️ ${voters(i)}` : 'Sin votos'}</span>` : ''}</button>`; }).join('')}</div>
   <div class="row">${s.isHost ? `<button data-act="resolve" ${Object.keys(ev.votes).length ? '' : 'disabled'}>Cerrar la votación ya</button>` : '<span class="dim sm">Votad todos para continuar.</span>'}</div>`}
   </div>${who ? stageNpc(who.id, ev.result ? 'work' : 'talk') : ''}${pendingRows(run)}`);
 }
@@ -741,7 +741,7 @@ export function roomScreen(): void {
     const inner = r.result
       ? `<div class="evresult">${chosen ? `<div class="pactseal">${chosen.icon}</div>` : ''}<b>${esc(r.result)}</b></div>${chosen ? `<div class="evopts one"><div class="raw evcard on"><b>${chosen.icon} ${esc(chosen.name)}</b><ul><li class="up">${esc(chosen.boon)}</li><li class="down">${esc(chosen.bane)}</li></ul><span class="votes">Dura toda la partida</span></div></div>` : ''}${advanceBar(run, 'Descender a la mazmorra →')}`
       : `<div class="dim sm evhint">Pacto Mayor: decide la mayoría y cambia las reglas de toda la partida. En empate decide el anfitrión.</div>
-      <div class="evopts">${pacts.map((p, i) => `<button class="raw evcard pactcard ${r.votes[ui.myId] === i ? 'on' : ''}" data-act="pact" data-id="${i}" ${h ? '' : 'disabled'}><b>${p.icon} ${esc(p.name)}</b><ul><li class="up">${esc(p.boon)}</li><li class="down">${esc(p.bane)}</li></ul><span class="votes">${voters(i) ? `🗳️ ${voters(i)}` : 'Sin votos'}</span></button>`).join('')}</div>
+      <div class="evopts">${pacts.map((p, i) => `<button class="raw evcard pactcard ${r.votes[ui.myId] === i ? 'on' : ''}" data-act="pact" data-id="${i}" ${h ? '' : 'disabled'}><b>${p.icon} ${esc(p.name)}</b><ul><li class="up">${esc(p.boon)}</li><li class="down">${esc(p.bane)}</li></ul>${run.heroes.length > 1 ? `<span class="votes">${voters(i) ? `🗳️ ${voters(i)}` : 'Sin votos'}</span>` : ''}</button>`).join('')}</div>
       <div class="row">${s.isHost ? `<button data-act="seal" ${Object.keys(r.votes).length ? '' : 'disabled'}>Sellar el pacto ya</button>` : '<span class="dim sm">Votad todos para sellarlo.</span>'}</div>`;
     frame(run, roomWin('', 'El Altar de los Pactos',
       pacts.length ? 'Antes de bajar, la piedra exige un precio. Dos pactos arden sobre el altar: elegid uno y la mazmorra entera obedecerá sus reglas.' : '', inner, 'altarwin') + pendingRows(run));
@@ -763,20 +763,20 @@ export function roomScreen(): void {
     // H4: el Santuario ofrece una mejora de hechizo (bossOffer); se mantiene la bendición por si quedara alguna pendiente
     const waiting = (x: HeroSave): boolean => !!(x.boonOffer || x.bossOffer);
     const status = run.heroes.map((x) => `<span class="pill sm ${waiting(x) ? 'dim' : 'good'}">${waiting(x) ? '⏳' : '✔'} ${esc(x.name)}</span>`).join(' ');
-    const inner = `${h && waiting(h) ? `${boonRow(run)}${bossRow(run)}` : `<div class="panel note"><b class="good">${h ? 'Ya has recibido la mejora del santuario.' : 'Estás mirando el santuario.'}</b></div>`}
-      <div class="row">${status}</div>${advanceBar(run, 'Continuar →')}`;
-    frame(run, roomWin(shrineScene(r.zone), 'El Santuario', 'Una estatua sin rostro vela entre cirios que nunca se consumen. Ante ella, tu poder se afila: elige una mejora para uno de tus hechizos.', inner, 'shrinewin'));
+    const inner = `${h && waiting(h) ? `${boonRow(run)}${h.bossOffer ? `<div class="dim sm evhint">Elige una mejora: dura toda la expedición.</div>${shrineOptions(h)}` : ''}` : `<div class="evresult"><b>${h ? 'Las runas del arco se apagan: tu hechizo ya lleva su marca.' : 'Estás mirando el santuario.'}</b></div>`}
+      ${run.heroes.length > 1 ? `<div class="row">${status}</div>` : ''}${advanceBar(run, 'Continuar →')}`;
+    frame(run, roomWin('', 'El Santuario', 'Las runas del arco despiertan a vuestro paso y la reja se entreabre. Lo que aguarda al otro lado afila tu poder: elige una mejora para uno de tus hechizos.', inner, 'shrinewin'));
     return;
   }
   if (r.kind === 'rest') {
     const mine2 = h ? r.picks[h.owner] : undefined;
     const who = (i: number): string => run.heroes.filter((x) => r.picks[x.owner] === i).map((x) => esc(x.name)).join(', ');
     const heal = h ? Math.ceil(heroMaxHp(h) * restHeal(run, h)) : 0;
-    const inner = `<div class="evopts">${REST_OPTIONS.map((o, i) => `<button class="raw evcard ${mine2 === i ? 'on' : ''}" data-act="restpick" data-id="${i}" ${h && mine2 === undefined ? '' : 'disabled'}><b>${o.icon} ${esc(o.name)}</b><ul><li class="${o.id === 'rest' && !heal ? 'down' : 'up'}">${o.id === 'rest' ? (heal ? `Recuperas ${heal} de vida (${h ? `${h.hp}/${heroMaxHp(h)}` : ''})` : 'El pacto no te deja curarte') : esc(o.text)}</li></ul><span class="votes">${who(i) ? `✔ ${who(i)}` : '—'}</span></button>`).join('')}</div>
+    const inner = `<div class="evopts">${REST_OPTIONS.map((o, i) => `<button class="raw evcard ${mine2 === i ? 'on' : ''}" data-act="restpick" data-id="${i}" ${h && mine2 === undefined ? '' : 'disabled'}><b>${o.icon} ${esc(o.name)}</b><ul><li class="${o.id === 'rest' && !heal ? 'down' : 'up'}">${o.id === 'rest' ? (heal ? `Recuperas ${heal} de vida (${h ? `${h.hp}/${heroMaxHp(h)}` : ''})` : 'El pacto no te deja curarte') : esc(o.text)}</li></ul>${run.heroes.length > 1 && who(i) ? `<span class="votes">✔ ${who(i)}</span>` : ''}</button>`).join('')}</div>
       ${r.lines.length ? `<div class="panel note">${r.lines.map((l) => `<div class="sm good">${esc(l)}</div>`).join('')}</div>` : ''}
-      <div class="row"><button data-act="side" class="mobonly">🎒 Revisar inventario</button><button data-act="stats">📊 Ver ficha</button><span class="dim sm deskonly">Tu equipo y mochila están en el panel de la derecha.</span></div>
+      <div class="row roomtools"><button data-act="side" class="mobonly">🎒 Revisar inventario</button><button data-act="stats">📊 Ver ficha</button></div>
       ${advanceBar(run, 'Continuar →')}`;
-    frame(run, roomWin(restScene(r.zone), 'Descanso', esc(restText(r.zone)), inner, 'restwin') + pendingRows(run));
+    frame(run, roomWin('', 'Descanso', esc(restText(r.zone)), inner, 'restwin') + pendingRows(run));
     return;
   }
   // forja

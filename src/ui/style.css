@@ -1441,3 +1441,97 @@ img.gi { display: inline-block; height: 1.2em; width: auto; vertical-align: -0.2
 h1 img.gi, h2 img.gi, .stage-title img.gi { height: 1em; vertical-align: -0.12em; }
 .pactseal img.gi, .curseicon img.gi { height: 1.6em; }
 .evart span img.gi { height: 72px; }
+
+/* ==========================================================================
+   Opciones de sala (estilo común): Altar, Santuario, Descanso, eventos «?»…
+   Barra horizontal con los extremos en punta, panel oscuro con borde dorado; una opción encima de otra.
+   Borde y relleno van en ::before/::after (con la misma forma) para que el brillo (drop-shadow) siga la silueta.
+   ========================================================================== */
+.stage .evopts, .evopts { display: flex; flex-direction: column; align-items: stretch; gap: 10px; width: min(600px, 100%); margin: 4px auto 0; grid-template-columns: none; }
+.evcard { --cc: 227, 190, 80; --tip: 22px; position: relative; isolation: isolate; min-height: 0; display: flex; flex-direction: column; gap: 5px;
+  padding: 11px calc(var(--tip) + 18px) 10px; text-align: left; color: #e9e2cf; font: inherit; cursor: pointer;
+  background: none !important; border: 0 !important; border-radius: 0; box-shadow: none !important;
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .55)); transition: transform .16s ease, filter .16s ease; }
+.evcard::before, .evcard::after { content: ''; position: absolute; pointer-events: none; transform: none; border: 0; box-shadow: none; font: inherit; color: transparent;
+  clip-path: polygon(var(--tip) 0, calc(100% - var(--tip)) 0, 100% 50%, calc(100% - var(--tip)) 100%, var(--tip) 100%, 0 50%); }
+/* borde: dorado apagado; se enciende al pasar por encima y al elegirla */
+.evcard::before { inset: 0; z-index: -2; top: 0; left: 0; width: auto; height: auto; background: linear-gradient(180deg, rgba(var(--cc), .55), rgba(var(--cc), .28) 50%, rgba(var(--cc), .5)); }
+.evcard::after { inset: 1.5px; z-index: -1; width: auto; height: auto;
+  background: radial-gradient(90% 140% at 50% 0%, rgba(var(--cc), .07), transparent 60%), linear-gradient(180deg, rgba(34, 32, 42, .93), rgba(16, 15, 21, .95)); }
+.evcard:nth-child(n)::after { content: ''; }
+.evcard:hover:not(:disabled) { transform: translateX(4px); filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .55)) drop-shadow(0 0 8px rgba(var(--cc), .35)); }
+.evcard:hover:not(:disabled)::before { background: linear-gradient(180deg, rgba(var(--cc), .95), rgba(var(--cc), .6) 50%, rgba(var(--cc), .9)); }
+.evcard.on { filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .55)) drop-shadow(0 0 10px rgba(var(--cc), .5)); }
+.evcard.on::before { background: rgb(var(--cc)); }
+.evcard.on::after { background: radial-gradient(90% 140% at 50% 0%, rgba(var(--cc), .14), transparent 60%), linear-gradient(180deg, rgba(40, 37, 46, .95), rgba(20, 18, 24, .96)); }
+.evcard:disabled { cursor: default; }
+.evcard:disabled:not(.on):not(.locked) { opacity: .92; }
+.evcard > b:first-child { display: flex; align-items: center; gap: 8px; font-family: var(--head); font-weight: 500; font-size: 16px; line-height: 1.25; color: #f3d24b;
+  padding: 0 0 6px; border-bottom: 1px solid rgba(var(--cc), .25); text-shadow: 0 2px 0 #000; }
+.evcard > b:first-child small { font-size: 13px; color: #d9c79a; }
+.evcard .evico { flex: none; display: inline-flex; width: 26px; height: 26px; align-items: center; justify-content: center; font-size: 18px; }
+.evcard .evico .sicon { width: 26px; height: 26px; }
+.evcard .evico img { width: 100%; height: 100%; image-rendering: pixelated; }
+.evcard ul { gap: 2px; font-size: 13.5px; line-height: 1.38; }
+.evcard li { padding-left: 15px; }
+.evcard li.up { color: #d6ecc6; } .evcard li.up::before { color: #63c96a; top: 4px; }
+.evcard li.down { color: #f1b3aa; } .evcard li.down::before { color: #d6574d; top: 4px; }
+.evcard li.dim { color: #a69d8a; } .evcard li.dim::before { content: '◇'; position: absolute; left: 0; font-size: 9px; top: 4px; color: #7d7564; }
+.evcard .votes { margin-top: 2px; padding-top: 5px; border-top: 1px solid rgba(var(--cc), .16); font-size: 12px; color: #cfc6b0; }
+.evcard.locked { opacity: .55; filter: grayscale(.6); }
+/* todas las salas usan el mismo dorado */
+.pactcard, .restwin .evcard, .forgewin .evcard, .npc-kael .evcard { --cc: 227, 190, 80; }
+.evopts.one { width: min(600px, 100%); }
+@media (max-width: 640px) { .evcard { --tip: 14px; padding: 10px calc(var(--tip) + 10px) 9px; } .evcard > b:first-child { font-size: 15px; } .evcard ul { font-size: 13px; } }
+
+/* botones de las salas (Descender, Continuar, Sellar…): misma silueta que las opciones, más compactos */
+.stage .advance { justify-content: center; border: 0; background: none; box-shadow: none; animation: none; padding: 2px 0; margin: 4px 0 0; }
+.stage .advance .grow { display: none; }
+.stage .advance > .sm, .stage .advance > .dim { text-shadow: 0 1px 2px #000, 0 0 8px #000; }
+.stage .advance button, .stage > .row:not(.roomtools) button, .stage .row.center button {
+  --tip: 14px; position: relative; isolation: isolate; min-width: 220px; padding: 9px calc(var(--tip) + 22px); font-family: var(--head); font-weight: 500; font-size: 16px; letter-spacing: .5px;
+  color: #f3d24b; text-shadow: 0 2px 0 #000; background: none !important; border: 0 !important; border-radius: 0; box-shadow: none !important;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .55)); transition: transform .16s ease, filter .16s ease; }
+.stage .advance button::before, .stage > .row:not(.roomtools) button::before, .stage .row.center button::before,
+.stage .advance button::after, .stage > .row:not(.roomtools) button::after, .stage .row.center button::after {
+  content: ''; position: absolute; pointer-events: none; clip-path: polygon(var(--tip) 0, calc(100% - var(--tip)) 0, 100% 50%, calc(100% - var(--tip)) 100%, var(--tip) 100%, 0 50%); }
+.stage .advance button::before, .stage > .row:not(.roomtools) button::before, .stage .row.center button::before { inset: 0; z-index: -2; background: linear-gradient(180deg, #e9c45a, #a07a2c 50%, #d8b04a); }
+.stage .advance button::after, .stage > .row:not(.roomtools) button::after, .stage .row.center button::after { inset: 1.5px; z-index: -1; background: linear-gradient(180deg, rgba(44, 40, 50, .96), rgba(20, 18, 24, .97)); }
+/* el principal (Descender, Continuar, Estoy listo): relleno ámbar */
+.stage .advance button.pri::after, .stage .row.center button.pri::after { background: linear-gradient(180deg, #8a5a1e, #4f2f0e); }
+.stage .advance button.pri, .stage .row.center button.pri { color: #fff1c8; }
+.stage .advance button:hover:not(:disabled), .stage > .row:not(.roomtools) button:hover:not(:disabled), .stage .row.center button:hover:not(:disabled) { transform: translateY(-1px); filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .55)) drop-shadow(0 0 9px rgba(243, 210, 75, .45)); }
+.stage .advance button:disabled, .stage > .row:not(.roomtools) button:disabled { opacity: .45; }
+.stage .advance.callout button.pri { animation: roompulse 1.8s ease-in-out infinite; }
+@keyframes roompulse { 50% { filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .55)) drop-shadow(0 0 12px rgba(243, 210, 75, .6)); } }
+.stage .roomtools { justify-content: center; gap: 8px; }
+.stage .roomtools button { font-size: 13px; padding: 5px 12px; background: rgba(16, 15, 21, .8); border: 1px solid rgba(227, 190, 80, .45); }
+
+/* el pacto elegido: sello que late encima de su carta */
+.altarwin .pactseal { animation: sealpulse 2.4s ease-in-out infinite; }
+@keyframes sealpulse { 50% { filter: drop-shadow(0 0 18px #c77dff); transform: scale(1.06); } }
+
+/* Santuario y Descanso: viñeta para que el texto se lea sobre la ilustración */
+body[data-scene="shrine"]::before { background: radial-gradient(ellipse at 50% 42%, rgba(3, 6, 10, .08), rgba(3, 6, 10, .55) 80%), linear-gradient(0deg, rgba(3, 6, 10, .6), transparent 40%); }
+body[data-scene="rest"]::before { background: radial-gradient(ellipse at 50% 55%, rgba(6, 4, 3, .05), rgba(6, 4, 3, .55) 80%), linear-gradient(0deg, rgba(6, 4, 3, .55), transparent 40%); }
+.shrinewin .stage-title { color: #bff3ff; text-shadow: 0 3px 0 #000, 0 0 16px rgba(80, 210, 240, .45), 0 0 34px rgba(0, 0, 0, .8); }
+.restwin .stage-title { color: #ffd59a; text-shadow: 0 3px 0 #000, 0 0 16px rgba(255, 150, 60, .4), 0 0 34px rgba(0, 0, 0, .8); }
+/* en el Santuario las opciones aparecen de la reja hacia fuera, una tras otra */
+.shrinewin .evcard, .altarwin .evcard, .restwin .evcard, .evwin .evcard { animation: optin .45s ease both; }
+.evopts .evcard:nth-child(2) { animation-delay: .08s; } .evopts .evcard:nth-child(3) { animation-delay: .16s; } .evopts .evcard:nth-child(4) { animation-delay: .24s; }
+@keyframes optin { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) { .evcard, .altarwin .pactseal, .stage .advance.callout button.pri { animation: none !important; } }
+
+/* arrastrar objetos entre mochila y equipo */
+[data-drag] { touch-action: none; cursor: grab; user-select: none; }
+[data-drag] img { -webkit-user-drag: none; user-select: none; pointer-events: none; }
+.dragghost { position: fixed; left: 0; top: 0; z-index: 9999; pointer-events: none; opacity: .92; box-shadow: 0 10px 24px rgba(0, 0, 0, .6), 0 0 0 2px var(--gold); cursor: grabbing; }
+body.dragging, body.dragging * { cursor: grabbing !important; }
+.cell.dragsrc { opacity: .35; }
+.dropzone { border-radius: 8px; transition: background .15s, box-shadow .15s; }
+body.dragging .dropzone[data-drop] { box-shadow: 0 0 0 1px rgba(227, 190, 80, .25) inset; }
+.dropzone.dropok { background: rgba(227, 190, 80, .1); box-shadow: 0 0 0 2px rgba(243, 210, 75, .8) inset !important; }
+.slotbox.slotfit .cell, .cell.slotfit { box-shadow: 0 0 0 2px #63c96a, 0 0 12px rgba(99, 201, 106, .6); }
+.gatelbl b { color: #f3d24b; }
+.dzhint { font-family: var(--body); text-transform: none; letter-spacing: 0; font-size: 11px; }
+@media (max-width: 640px) { .evcard > b:first-child { flex-wrap: wrap; row-gap: 0; } .evcard > b:first-child small { flex-basis: 100%; padding-left: 34px; } }

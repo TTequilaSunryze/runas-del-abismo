@@ -62,15 +62,15 @@ export function allPaths(m: ActMap): number[][] {
 }
 
 /**
- * Guía de cada ruta (las 14 salas antes del jefe), orientativa y con margen: unos 3 combates normales, 2 élites, 2 descansos
- * (uno es siempre la sala justo antes del jefe), 2 tesoros o bendiciones, unos 4 eventos «?» y un comerciante. Nunca 3 salas
- * de combate seguidas.
+ * Guía de cada ruta (las 14 salas antes del jefe): entre 4 y 9 combates normales, 1 o 2 élites (siempre al menos una antes
+ * del jefe), 2 descansos (uno es siempre la sala justo antes del jefe), tesoros o bendiciones, algunos «?» y un comerciante.
+ * Nunca 3 salas de combate seguidas.
  */
 export const MIN_FORKS = 6, MIN_PATHS = 6;
 export const PATH_RULES = {
-  fights: [2, 6], elites: [1, 2], rests: [2, 2], treasures: [1, 4], events: [2, 7], shops: [0, 2], maxStreak: 2,
+  fights: [4, 9], elites: [1, 2], rests: [2, 2], treasures: [1, 4], events: [1, 6], shops: [0, 2], maxStreak: 2,
   // compatibilidad con la guía anterior
-  minFights: 2, maxFights: 6, maxElites: 2,
+  minFights: 4, maxFights: 9, maxElites: 2,
 } as const;
 export interface PathStats { fights: number; elites: number; rests: number; treasures: number; events: number; shops: number; streak: number }
 const isFight = (k: MapKind): boolean => k === 'combat' || k === 'cage' || k === 'elite' || k === 'sangre';
@@ -132,7 +132,7 @@ export function pathCount(m: ActMap): number {
 /** La fila justo antes del jefe es siempre de descanso. */
 const restRow = (): number => ACT_ROOMS - 1;
 /** Sala «principal» de cada fila (0..12): marca el ritmo; los demás nodos de la fila son alternativas cercanas. */
-const PLAN: MapKind[] = ['elite', 'elite', 'rest', 'treasure', 'treasure', 'event', 'event', 'event', 'event', 'combat', 'combat', 'combat', 'shop'];
+const PLAN: MapKind[] = ['elite', 'elite', 'rest', 'treasure', 'treasure', 'event', 'event', 'event', 'combat', 'combat', 'combat', 'combat', 'combat'];
 function allowed(k: MapKind, l: number): boolean {
   if (l === 0) return k === 'combat' || k === 'event';
   if (k === 'elite') return l >= 3;
@@ -158,7 +158,7 @@ function shuffleBox<T>(box: RngBox, xs: readonly T[]): T[] {
 }
 /** Alternativa a la sala principal de una fila mixta: un solo tipo cercano, para que las rutas varíen sin romper el ritmo. */
 function alternative(box: RngBox, k: MapKind, l: number): MapKind | null {
-  const opts: MapKind[] = k === 'elite' ? ['combat'] : k === 'combat' ? ['event'] : k === 'event' ? ['combat', 'treasure'] : k === 'treasure' ? ['event', 'shop'] : k === 'shop' ? ['treasure', 'event'] : [];
+  const opts: MapKind[] = k === 'elite' ? ['combat'] : k === 'combat' ? ['event', 'shop', 'combat'] : k === 'event' ? ['combat', 'treasure', 'shop'] : k === 'treasure' ? ['event', 'shop', 'combat'] : k === 'shop' ? ['treasure', 'event'] : [];
   const ok = opts.filter((x) => allowed(x, l));
   return ok.length ? ok[Math.floor(rand(box) * ok.length)]! : null;
 }
@@ -192,10 +192,10 @@ export function mapOk(m: ActMap): boolean {
 /** Mapa de reserva (por si la generación no encontrara uno válido): ramificado y válido sea cual sea el camino. */
 function fallback(): ActMap {
   const rows: MapKind[][] = [
-    ['combat', 'event', 'combat'], ['event', 'treasure', 'event'], ['combat', 'event', 'combat'], ['elite', 'elite', 'elite'],
-    ['event', 'shop', 'event'], ['treasure', 'treasure', 'treasure'], ['rest', 'rest', 'rest'], ['combat', 'event', 'combat'],
-    ['event', 'event', 'event'], ['elite', 'elite', 'elite'], ['event', 'treasure', 'event'], ['combat', 'combat', 'combat'],
-    ['shop', 'shop', 'shop'], ['rest', 'rest', 'rest'], ['boss'],
+    ['combat', 'event', 'combat'], ['event', 'treasure', 'event'], ['combat', 'combat', 'combat'], ['elite', 'elite', 'elite'],
+    ['event', 'shop', 'event'], ['combat', 'combat', 'combat'], ['rest', 'rest', 'rest'], ['combat', 'event', 'combat'],
+    ['event', 'event', 'event'], ['combat', 'combat', 'combat'], ['elite', 'elite', 'elite'], ['treasure', 'treasure', 'treasure'],
+    ['combat', 'combat', 'combat'], ['rest', 'rest', 'rest'], ['boss'],
   ];
   const links = rows.slice(0, -1).map((r, l) => r.map((_, i) => (rows[l + 1]!.length === 1 ? [0] : [...new Set([i, Math.min(r.length - 1, i + 1)])])));
   return { layers: rows, links };
@@ -208,7 +208,7 @@ function fallback(): ActMap {
  * ya no son nodos del mapa: salen al entrar en un «?» o en un Tesoro.
  */
 export function makeActMap(box: RngBox): ActMap {
-  for (let t = 0; t < 600; t++) { const m = build(box); if (mapOk(m)) return m; }
+  for (let t = 0; t < 3000; t++) { const m = build(box); if (mapOk(m)) return m; }
   return fallback();
 }
 

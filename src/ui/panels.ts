@@ -85,15 +85,15 @@ function gearTab(run: RunState, h: HeroSave, selling: boolean): string {
   if (!selIt) ui.selItem = '';
   return `${statsLine(h)}
   ${h.relics.length ? `<div class="lbl">Reliquias <span class="dim">${h.relics.length}</span></div><div class="chips">${h.relics.map((r) => RELICS[r]).filter(Boolean).map((r) => `<span class="chip ${r!.rare ? 'r3' : 'r2'}" ${tip(`<b>${r!.icon} ${esc(r!.name)}</b><div class="sm">${esc(r!.text)}</div>`)}>${r!.icon} ${esc(r!.name)}</span>`).join('')}</div>` : ''}
-  <div class="lbl">Equipado</div>
-  <div class="cells">${SLOTS.map((sl) => `<div class="slotbox">${cell(h.equip[sl], `data-act="selitem" data-id="slot:${sl}"`, undefined, sl, ui.selItem === `slot:${sl}`)}<small>${SLOT_NAME[sl]}</small></div>`).join('')}</div>
-  <div class="lbl">Mochila <span class="dim">${h.bag.length}/${BAG_SIZE}</span></div>
-  <div class="cells">${Array.from({ length: BAG_SIZE }, (_, i) => cell(h.bag[i], h.bag[i] ? `data-act="selitem" data-id="bag:${i}"` : 'disabled', h, undefined, bagIdx === i)).join('')}</div>
+  <div class="dropzone" data-drop="equip"><div class="lbl">Equipado <span class="dim sm dzhint">· suelta aquí para equipar</span></div>
+  <div class="cells">${SLOTS.map((sl) => `<div class="slotbox" data-eslot="${sl}">${cell(h.equip[sl], `data-act="selitem" data-id="slot:${sl}"${h.equip[sl] ? ` data-drag="slot:${sl}"` : ''}`, undefined, sl, ui.selItem === `slot:${sl}`)}<small>${SLOT_NAME[sl]}</small></div>`).join('')}</div></div>
+  <div class="dropzone" data-drop="bag"><div class="lbl">Mochila <span class="dim">${h.bag.length}/${BAG_SIZE}</span> <span class="dim sm dzhint">· suelta aquí para quitar</span></div>
+  <div class="cells">${Array.from({ length: BAG_SIZE }, (_, i) => cell(h.bag[i], h.bag[i] ? `data-act="selitem" data-id="bag:${i}" data-drag="bag:${i}" data-dslot="${h.bag[i]!.slot}"` : 'disabled', h, undefined, bagIdx === i)).join('')}</div></div>
   ${selIt ? `<div class="detail"><div class="row"><div class="cell ${RAR[selIt.rarity]} big">${itemIcon(selIt)}</div><div>${itemHtml(selIt)}</div></div>${kind === 'bag' ? diffHtml(selIt, h) : ''}
     <div class="acts">${kind === 'bag'
       ? `<button class="pri" data-act="equip" data-id="${bagIdx}">Equipar</button>${others.map((o) => `<button data-act="give" data-id="${bagIdx}" data-to="${esc(o.owner)}">Dar a ${esc(o.name)}</button>`).join('')}${selling ? `<button data-act="sell" data-id="${bagIdx}">Vender +${Math.floor(PRICE[selIt.rarity] / 2)} 💰</button>` : ''}<button data-act="drop" data-id="${bagIdx}">Tirar</button>`
       : `<button data-act="unequip" data-id="${key}">Quitar (a la mochila)</button>`}</div></div>`
-    : '<div class="dim sm hint">Pasa el ratón por un objeto para ver sus datos. Haz clic para equiparlo, quitarlo, dárselo a un compañero o venderlo (en la tienda).</div>'}`;
+    : '<div class="dim sm hint">Pasa el ratón por un objeto para ver sus datos. Arrástralo entre la mochila y el equipo para ponértelo o quitártelo, o haz clic para ver más opciones (dárselo a un compañero, venderlo en la tienda…).</div>'}`;
 }
 
 function spellsTab(h: HeroSave): string {
@@ -146,6 +146,30 @@ function bossCard(h: HeroSave, o: BossOption, i: number): string {
   const now = tuned(d, { ups: have }), next = tuned(d, { ups: [...have, o.up] });
   const lvl = upCount(h, o.spell);
   return `<div class="lootcard r2"><div class="row">${spellIcon(next)}<div><b>${esc(d.name)}</b><div class="pill sm">Opción ${n} · Mejora: ${g?.icon ?? '✨'} ${esc((g ?? m)?.name ?? o.up)}</div></div></div><div class="sm">${esc((g ?? m)?.text ?? '')}</div><div class="dim sm">Ahora: ${now.ap} PA · ${esc(spellSummary(now))}</div><div class="good sm">Después: ${next.ap} PA · ${esc(spellSummary(next))}</div><div class="dim sm">Nivel del hechizo: ${lvl + 1} → ${lvl + 2} de ${MAX_SPELL_UPS + 1}</div><button class="pri" data-act="bossreward" data-id="${i}">Elegir</button></div>`;
+}
+
+/**
+ * Opciones del Santuario con el estilo común de las salas (barra con extremos en punta, una encima de otra):
+ * icono del hechizo, nombre de la mejora y lo que cambia (verde) frente a lo que tienes ahora.
+ */
+export function shrineOptions(h: HeroSave): string {
+  const opt = (i: number, icon: string, title: string, lines: string, foot: string, tipHtml = ''): string =>
+    `<button class="raw evcard" data-act="bossreward" data-id="${i}" ${tipHtml ? tip(tipHtml) : ''}><b><span class="evico">${icon}</span>${title}</b><ul>${lines}</ul>${foot ? `<span class="votes">${foot}</span>` : ''}</button>`;
+  return `<div class="evopts">${(h.bossOffer ?? []).map((o, i) => {
+    if (o.kind === 'gold') return opt(i, '💰', 'Oro', `<li class="up">Recibes ${o.amount} de oro</li>`, '');
+    if (o.kind === 'heal') return opt(i, '❤️', 'Curación', '<li class="up">Recuperas el 50% de tu vida máxima</li>', '');
+    if (o.kind === 'spell') {
+      const d = SPELLS[o.id]!;
+      return opt(i, spellIcon(d, false), `${esc(d.name)} <small>· hechizo nuevo</small>`, `<li class="up">${esc(d.text)}</li><li class="dim">${d.ap} PA · ${rangeText(d)}${d.cd ? ` · espera ${d.cd + 1}` : ''}</li>`, '', spellTip(d));
+    }
+    const d = SPELLS[o.spell]!, g = UPGRADES[o.up], m = BOON_MODS[o.up];
+    const have = [...h.boons.filter((b) => BOON_MODS[b]?.target === o.spell), ...(h.ups[o.spell] ?? [])];
+    const now = tuned(d, { ups: have }), next = tuned(d, { ups: [...have, o.up] });
+    const lvl = upCount(h, o.spell);
+    return opt(i, spellIcon(next, false), `${esc(d.name)} <small>· ${g?.icon ?? '✨'} ${esc((g ?? m)?.name ?? o.up)}</small>`,
+      `<li class="up">${esc((g ?? m)?.text ?? '')}</li><li class="up">Después: ${next.ap} PA · ${esc(spellSummary(next))}</li><li class="dim">Ahora: ${now.ap} PA · ${esc(spellSummary(now))}</li>`,
+      `Nivel del hechizo ${lvl + 1} → ${lvl + 2} de ${MAX_SPELL_UPS + 1}`);
+  }).join('')}</div>`;
 }
 
 /** Recompensa del jefe pendiente: mejora, mejora y hechizo nuevo. */

@@ -121,12 +121,15 @@ describe('salas con historia, recompensa y evento', () => {
   it('las salas de evento sustituyen a un evento del mapa y pagan su recompensa', () => {
     const r = cleanRoom({ ...room(), kind: 'event', published: true, chance: 100, outro: 'Fin', reward: { gold: 40, escofinas: 1 } })!;
     setRoomSource(() => [r]);
-    const run = newRun('E', 4, [{ owner: 'me', name: 'Yo', cls: 'carcelero', routes: ['base'] }]);
-    run.phase = 'map';
-    run.map[run.step] = ['event'];
-    run.at = -1;
-    run.links = [];
-    chooseNode(run, 0);
+    // como mucho un 30% y una por zona: se buscan semillas hasta que toque
+    const fresh = (seed: number) => { const x = newRun('E', seed, [{ owner: 'me', name: 'Yo', cls: 'carcelero', routes: ['base'] }]); x.phase = 'map'; x.map[x.step] = ['event']; x.at = -1; x.links = []; return x; };
+    let run = fresh(1), hits = 0;
+    for (let seed = 1; seed <= 60; seed++) { const x = fresh(seed); chooseNode(x, 0); if (x.phase === 'combat' && x.combat?.reward) { hits++; if (run.phase !== 'combat') run = x; } }
+    expect(hits).toBeGreaterThan(0);
+    expect(hits).toBeLessThan(40);
+    // una vez usada en la zona, el siguiente «?» ya no la repite
+    const again = fresh(2); again.flags.push('evroom_z0'); chooseNode(again, 0);
+    expect(again.combat?.reward).toBeUndefined();
     setRoomSource(() => []);
     expect(run.phase).toBe('combat');
     expect(run.combat!.reward?.gold).toBe(40);

@@ -145,14 +145,14 @@ function placeView(id: Place): string {
   const g = gateAct();
   const spotAct = (sp: PlaceSpot): string => sp.act === 'gate' ? (g.disabled ? '' : `data-act="${g.act}"`) : `data-act="${sp.act}" data-id="${sp.arg}"`;
   const svg = p.spots.length ? `<svg class="spots" viewBox="0 0 ${p.w} ${p.h}" preserveAspectRatio="none">${p.spots.map((sp) => `<polygon class="spot" data-spot="${sp.id}" points="${sp.poly}" ${spotAct(sp)}><title>${esc(sp.name)}</title></polygon>`).join('')}</svg>` : '';
-  const lbls = p.spots.map((sp) => `<div class="slbl" data-lbl="${sp.id}" style="left:${(sp.at[0] / p.w) * 100}%;top:${(sp.at[1] / p.h) * 100}%"><b>${esc(sp.name)}</b><small>${esc(sp.hint)}</small></div>`).join('');
+  const lbls = p.spots.map((sp) => { const gate = sp.act === 'gate'; return `<div class="slbl ${gate ? 'gatelbl' : ''}" data-lbl="${sp.id}" style="left:${(sp.at[0] / p.w) * 100}%;top:${(sp.at[1] / p.h) * 100}%"><b>${esc(gate ? g.label : sp.name)}</b><small>${esc(gate ? (g.sub || (g.disabled ? 'Aún no se puede abrir' : 'Haz clic para abrir el portón')) : sp.hint)}</small></div>`; }).join('');
   const hover = [...p.spots.map((sp) => `.stscene:has([data-spot="${sp.id}"]:hover) [data-lbl="${sp.id}"]`), ...p.npcs.map((n) => `.stscene:has(.npc[data-id="${n.id}"]:hover) [data-lbl="${n.id}"]`)].join(',');
   const hoverLit = p.spots.map((sp) => `.stscene:has([data-spot="${sp.id}"]:hover) [data-lit="${sp.id}"]`).join(',');
   return `${coverBox(p.w / p.h, `${lit}${svg}${npcs}${lbls}`, `${id}-scene`)}
     <style>${hover}{opacity:1;transform:translate(var(--tx,-50%),-4px)}${hoverLit ? `${hoverLit}{opacity:1}` : ''}</style>
     ${hud(p.title, p.parent ? PLACES[p.parent].title.toUpperCase() : 'EL ASENTAMIENTO', 'placeexit', p.parent ? `Volver a ${PLACES[p.parent].title}` : 'Volver al Asentamiento')}
     ${id === 'puerta' ? (warmIntro(), '') : ''}
-    ${id === 'puerta' ? (() => { const g = gateAct(); return `<div class="sgate"><button class="pri sgate-btn" data-act="${g.act}" ${g.disabled ? 'disabled' : ''}>${g.label}${g.sub ? `<small>${g.sub}</small>` : ''}</button></div>`; })() : ''}`;
+    ${id === 'puerta' ? '<div class="sgate"><span class="dim sm shint">Para descender al Abismo, haz clic en el portón</span></div>' : ''}`;
 }
 
 function talkCtx(): TalkCtx {

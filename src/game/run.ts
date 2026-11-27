@@ -6,6 +6,7 @@ import { DAILY_ASC, DAILY_POOL, OMENS, cleanMods } from '../content/modes';
 import { BASE_ZONES, ZONES, type BossDef, type ZoneDef } from '../content/zones';
 import { runAiTurn, type BossInfo } from '../core/combat/ai';
 import { RELIC_EVENTS, RELICS } from '../content/relics';
+import { COMMON_EVENTS } from '../content/commonEvents';
 import { CONSUMABLES, MAX_CONSUMABLE, patronBonus, patronOf, patronsOf } from '../content/boons';
 import { BLESSINGS, BOON_MODS } from '../core/boonmods';
 import { CLASSES, MAX_LEVEL, PLAYABLE, canPickRoute } from '../core/classes/classes';
@@ -688,12 +689,12 @@ const builtin = (BUILTIN_ROOMS as unknown[]).map(cleanRoom).filter((r): r is Roo
 export const allRooms = (): RoomDef[] => [...builtin, ...roomSource()];
 
 /** ¿Toca una sala creada? Cada sala publicada de esta zona y tipo tiene su probabilidad. */
-function pickCustomRoom(run: RunState, kind: string = run.kind): RoomDef | null {
+function pickCustomRoom(run: RunState, kind: string = run.kind, cap = 100): RoomDef | null {
   if (run.arena || run.ambush || run.daily) return null;
   const boss = kind === 'boss' ? bossOf(run).id : null;
   const list = allRooms().filter((r) => r.published && r.zone === Math.min(run.zone, 3) && r.kind === kind && (!boss || r.enemies.some((e) => e.kind === boss)));
   if (!list.length) return null;
-  for (const r of shuffle(run, list)) if (rand(run) * 100 < r.chance) return r;
+  for (const r of shuffle(run, list)) if (rand(run) * 100 < Math.min(cap, r.chance)) return r;
   return null;
 }
 
@@ -872,7 +873,9 @@ function dropLoot(run: RunState, h: HeroSave, kind: DropKind, report: Item[]): v
  * - Tesoro: el cofre del grupo o un Santuario de bendiciones, a partes iguales.
  * Usa el dado de la partida, así que es igual en todos los clientes. Las partidas guardadas con salas antiguas siguen igual.
  */
-export const UNKNOWN_ODDS = { combat: 0.2, cage: 0.07, sangre: 0.07, forge: 0.12 };
+export const UNKNOWN_ODDS = { combat: 0.1, cage: 0.05, sangre: 0.06, forge: 0.12 };
+/** Probabilidad máxima de que un «?» sea una sala de evento creada (un combate con historia), y como mucho una por zona. */
+export const CUSTOM_EVENT_ROOM_CAP = 30;
 export function resolveNode(run: RunState, node: NodeKind): NodeKind {
   if (run.arena) return node;
   if (node === 'treasure') return rand(run) < 0.5 ? 'treasure' : 'shrine';
@@ -935,8 +938,10 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
     return [];
   }
   // salas de evento creadas: un combate con su historia y su recompensa
-  const evRoom = node === 'event' ? pickCustomRoom(run, 'event') : null;
+  // como mucho una por zona y nunca con más del 30%: el «?» debe ser casi siempre un evento
+  const evRoom = node === 'event' && !run.flags.includes(`evroom_z${run.zone}`) ? pickCustomRoom(run, 'event', CUSTOM_EVENT_ROOM_CAP) : null;
   if (evRoom) {
+    run.flags.push(`evroom_z${run.zone}`);
     run.kind = 'combat';
     run.omen = null;
     const { state, events } = createCombat({ ...buildFight(run, evRoom), deploy: true });
@@ -945,7 +950,7 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
     return events;
   }
   if (node === 'event') {
-    const all = [...zoneOf(run).events, ...(run.arena ? [] : branchStarters(run))];
+    const all = [...zoneOf(run).events, ...(run.arena ? [] : [...COMMON_EVENTS, ...branchStarters(run)])];
     const options = all.filter((e) => !run.eventsSeen.includes(e.id));
     // Fase G2: a veces la sala esconde un evento especial (como mucho uno por zona y sin repetir en la expedición)
     const sp = run.arena || run.flags.includes(`g2z${run.zone}`) ? [] : specialCandidates(run);
@@ -1020,7 +1025,7 @@ export function leaveNode(run: RunState): void {
   }
 }
 
-export const eventDef = (run: RunState) => [...RELIC_EVENTS, ...ZONES.flatMap((z) => z.events), ...SPECIAL_EVENTS, ...BRANCH_EVENTS].find((e) => e.id === run.event?.id);
+export const eventDef = (run: RunState) => [...RELIC_EVENTS, ...ZONES.flatMap((z) => z.events), ...COMMON_EVENTS, ...SPECIAL_EVENTS, ...BRANCH_EVENTS].find((e) => e.id === run.event?.id);
 
 export function vote(run: RunState, owner: string, idx: number): void {
   const def = eventDef(run);

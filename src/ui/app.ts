@@ -39,6 +39,7 @@ import { MAX_ASC, MAX_MODS, modConflict } from '../content/modes';
 import { setMusicVolume, setZoneMusic } from '../audio/sfx';
 import { gotFromBoss, gotModal, itemHtml, mapModal, statsModal, victoryModal } from './panels';
 import { installIcons } from './gameicons';
+import { installDragDrop } from './dragdrop';
 import { endScreen, eventScreen, homeScreen, lobbyScreen, mapScreen, residentModal, roomScreen, shopScreen } from './screens';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -157,10 +158,12 @@ function showArchiveNotices(list: ArchiveNotice[]): void {
 /** Clase para la que se equipan aspectos en la tienda: la del filtro o la elegida para jugar. */
 const shopClass = (): ClassId => ((PLAYABLE as string[]).includes(ui.shopCls) ? ui.shopCls : ui.me.cls) as ClassId;
 
-/** Fondo de las pantallas de la partida: el Altar y la Forja del Abismo tienen ilustración propia; el resto, la sala. */
+/** Fondo de las pantallas de la partida: el Altar, la Forja del Abismo, el Santuario y el Descanso tienen ilustración propia; el resto, la sala. */
 function runScene(run: RunS, want: string): MenuScene {
   if (want === 'room' && run.room?.kind === 'altar') return 'altar';
   if (want === 'room' && run.room?.kind === 'forge') return 'abyssforge';
+  if (want === 'room' && run.room?.kind === 'shrine') return 'shrine';
+  if (want === 'room' && run.room?.kind === 'rest') return 'rest';
   if (want === 'event' && eventDef(run)?.scene) return eventDef(run)!.scene!;
   return 'game';
 }
@@ -286,6 +289,19 @@ function pickSpell(id: string): void {
   // todas se lanzan con clic, también las que son sobre ti (se ilumina tu casilla y el área que alcanzan)
   ui.board.select(ui.board.sel === id ? null : id);
 }
+
+// arrastrar objetos entre la mochila y el equipo
+installDragDrop((from, to) => {
+  const s = ui.session;
+  if (!s) return;
+  const [kind, key] = from.split(':');
+  if (kind === 'bag' && to === 'equip') s.act({ a: 'equip', idx: Number(key) });
+  else if (kind === 'slot' && to === 'bag') s.act({ a: 'unequip', slot: key as Slot });
+  else return;
+  sfx.click();
+  ui.selItem = '';
+});
+document.addEventListener('rda:hidetip', () => hideTip());
 
 document.addEventListener('click', (e) => {
   // clic en el fondo de un cartel: lo cierra
