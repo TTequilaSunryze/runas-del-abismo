@@ -76,7 +76,9 @@ export interface HeroSave {
   bossOffer: BossOption[] | null;
   /** nivel de maestría de la clase al empezar */
   mastery: number;
-  /** reliquias personales */
+  /** Runas universales activas durante la expedición. */
+  runes?: string[];
+  /** reliquias personales (en retirada progresiva por el sistema rúnico). */
   relics: string[];
   /** habilidades extra de bendición (ids de SPELLS) y la oferta pendiente */
   boons: string[];
@@ -466,7 +468,7 @@ export const healOf = (run: RunState, _h: HeroSave, base: number): number => bas
 
 export const priceOf = (run: RunState, base: number): number => Math.round(base * (run.asc >= 4 ? 1.25 : 1) * (run.mods.includes('codicia') ? 2 : 1));
 
-type Build = Pick<HeroSave, 'cls' | 'name' | 'owner' | 'routes' | 'level' | 'equip'> & { kit?: string[]; boon?: Stats; ups?: Record<string, string[]>; relics?: string[]; boons?: string[]; bag2?: Record<string, number>; souls?: number; soulBank?: number };
+type Build = Pick<HeroSave, 'cls' | 'name' | 'owner' | 'routes' | 'level' | 'equip'> & { kit?: string[]; boon?: Stats; ups?: Record<string, string[]>; runes?: string[]; relics?: string[]; boons?: string[]; bag2?: Record<string, number>; souls?: number; soulBank?: number };
 
 /** El héroe listo para combatir: clase, nivel, equipo y mejoras. */
 export function heroSpec(h: Build, pos: Pos = { x: 0, y: 0 }): UnitSpec {
@@ -474,6 +476,7 @@ export function heroSpec(h: Build, pos: Pos = { x: 0, y: 0 }): UnitSpec {
   const relics = (h.relics ?? []).map((r) => RELICS[r]).filter((r) => !!r);
   const pat = patronBonus(h.boons ?? []);
   const u = makeHero({ cls: h.cls, name: h.name, owner: h.owner, routes: h.routes, kit: h.kit, pos, level: h.level, bonus: [...Object.values(h.equip).map((i) => i.stats), h.boon, ...relics.map((r) => r!.stats), ...pat.stats] });
+  u.runes = [...(h.runes ?? ['fractura'])];
   for (const t of pat.traits) if (!traits.includes(t)) traits.push(t);
   // Carcelero: las almas de toda la partida dan armadura (+1 cada 5)
   if (u.souls !== undefined) { u.souls = Math.max(0, Math.floor(h.souls ?? 0)); u.soulBank = Math.max(0, Math.floor(h.soulBank ?? 0)); u.armor += Math.floor(u.souls / SOULS_PER_ARMOR) * SOUL_ARMOR; }
