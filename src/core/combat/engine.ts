@@ -4,6 +4,7 @@ import { FEATURES, schoolOf } from '../tuning';
 import { SPELLS, type SpellDef } from '../classes/spells';
 import { rand, randInt } from '../rng';
 import { tuned } from '../upgrades';
+import { applyRunes } from '../runes';
 import { key, type BoardMark, type CombatGoal, type CombatState, type Element, type GameEvent, type Pos, type StatusKind, type Unit } from '../state';
 import { alive, dist, hasLineOfSight, isFree, lineCells, pathTo, reachable, same, unitAt } from './grid';
 import { addMark, clearMarksOf, coneCells, dirOf, marksAt, marksOf, removeMark, tickMarks } from './marks';
@@ -693,14 +694,14 @@ function springSnare(s: CombatState, u: Unit, ev: GameEvent[]): boolean {
 /** El hechizo tal como lo lanza `u`: con sus mejoras y su runa aplicadas. */
 export function spellOf(u: Unit, id: string): SpellDef | undefined {
   const def = SPELLS[id];
-  return def && tuned(def, u.spells.find((x) => x.id === id));
+  return def && applyRunes(tuned(def, u.spells.find((x) => x.id === id)), u.runes ?? []);
 }
 
 /** Motivo por el que `u` no puede lanzar el hechizo sobre `at`, o null si puede. */
 export function castProblem(s: CombatState, u: Unit, base: SpellDef, at: Pos): string | null {
   const slot = u.spells.find((x) => x.id === base.id);
   if (!slot) return 'No conoces ese hechizo';
-  const def = tuned(SPELLS[base.id] ?? base, slot);
+  const def = spellOf(u, base.id) ?? tuned(SPELLS[base.id] ?? base, slot);
   if (slot.cd > 0) return 'Hechizo en enfriamiento';
   if (slot.charges !== undefined && slot.charges <= 0) return 'No te quedan';
   if (def.perTurn && (slot.uses ?? 0) >= def.perTurn) return def.perTurn === 1 ? 'Ya lo usaste este turno' : `Máximo ${def.perTurn} veces por turno`;
