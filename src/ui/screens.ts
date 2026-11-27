@@ -237,8 +237,52 @@ function archivePanel(): string {
   <div class="cards c3">${rows.map(card).join('') || '<div class="dim sm">Nada con este filtro.</div>'}</div></div>`;
 }
 
+/** Centro narrativo del asentamiento. Reutiliza las pantallas funcionales existentes; no crea sistemas paralelos. */
+function settlementPanel(): string {
+  const m = meta();
+  const total = archiveTotal();
+  return `
+    <div class="panel note storybox">
+      <div class="dim sm">EL ÚLTIMO REFUGIO</div>
+      <h2>Un lugar al borde de lo imposible</h2>
+      <p>El asentamiento no fue fundado. Se fue levantando alrededor de la entrada, con lo que trajeron quienes bajaron y con lo que pudieron recuperar quienes regresaron.</p>
+      <p>Las defensas se refuerzan cada vez que alguien vuelve. Nadie llama seguro a este lugar. Simplemente, todavía sigue en pie.</p>
+      <div class="row"><span class="pill">Expediciones: ${m.stats.runs}</span><span class="pill">Victorias: ${m.stats.wins}</span><span class="pill">Archivo: ${total.pct}%</span></div>
+    </div>
+    <div class="cards c2">
+      <div class="lootcard">
+        <div class="row"><b>🍺 La Taberna</b><span class="grow"></span><span class="dim sm">Punto de encuentro</span></div>
+        <p class="sm">Aquí se cruzan exploradores, comerciantes y supervivientes. Los relatos cambian de boca en boca; las cicatrices, no.</p>
+        <button class="pri" data-act="htab" data-id="jugar">Preparar una expedición</button>
+      </div>
+      <div class="lootcard">
+        <div class="row"><b>📚 Archivo del Abismo</b><span class="grow"></span><span class="dim sm">Registros y hallazgos</span></div>
+        <p class="sm">Bestiario, Grimorio, reliquias, Atlas y Crónicas. No todo lo escrito aquí es una certeza; algunas páginas conservan testimonios incompatibles.</p>
+        <button data-act="htab" data-id="archivo">Consultar el Archivo</button>
+      </div>
+      <div class="lootcard">
+        <div class="row"><b>🛡️ El Vigía</b><span class="grow"></span><span class="dim sm">Guardia de la Puerta</span></div>
+        <p class="sm">Alguien vigila la entrada y cuenta a quienes salen. No siempre puede contar a quienes vuelven.</p>
+        <button data-act="htab" data-id="jugar">Acercarse a la Puerta</button>
+      </div>
+      <div class="lootcard">
+        <div class="row"><b>🏛️ Salón de héroes</b><span class="grow"></span><span class="dim sm">Memoria de expediciones</span></div>
+        <p class="sm">Los nombres y equipos de quienes llegaron lejos quedan registrados. Algunos héroes terminan enfrentándose a otros grupos como Némesis.</p>
+        <button data-act="htab" data-id="salon">Entrar al Salón</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Entre una expedición y la siguiente</h3>
+      <div class="cards c2">
+        <div><b>⚒️ La Forja</b><p class="sm dim">Los herreros trabajan con materiales recuperados. Por ahora, sus servicios se encuentran en las salas de expedición.</p></div>
+        <div><b>🕯️ El Santuario</b><p class="sm dim">Un lugar de recogimiento levantado junto a la entrada. Sus altares y bendiciones aparecen durante las expediciones.</p></div>
+      </div>
+    </div>`;
+}
+
 function metaPanel(): string {
   const m = meta();
+  if (ui.homeTab === 'refugio') return settlementPanel();
   if (ui.homeTab === 'logros') {
     return `<div class="panel"><div class="row"><h3>Logros</h3><span class="grow"></span><span class="dim sm">${achievementCount(m)}</span></div>
     <div class="dim sm">Partidas: ${m.stats.runs} · Victorias: ${m.stats.wins} · Bajas: ${m.stats.kills} · Jefes: ${m.stats.bosses} · Ascensión máxima: ${m.maxAsc}</div>
@@ -322,7 +366,7 @@ export function homeScreen(msg: string): void {
   const m = meta();
   const pend = contractsReady(m) + specialReady(m), shopNew = unseenOwned(m).length || (m.perksRefundEcos && !m.refundSeen);
   const tabs: Array<[typeof ui.homeTab, string, string]> = [
-    ['jugar', 'Jugar', ''], ['tienda', 'Tienda', `${m.ecos} ✨${shopNew ? ' !' : ''}`], ['clases', 'Maestría', ''], ['logros', 'Logros', achievementCount(m)],
+    ['refugio', 'Refugio', ''], ['jugar', 'Jugar', ''], ['tienda', 'Tienda', `${m.ecos} ✨${shopNew ? ' !' : ''}`], ['clases', 'Maestría', ''], ['logros', 'Logros', achievementCount(m)],
     ['archivo', 'Archivo', `${archiveTotal().pct}%${pend ? ` · ${pend}!` : ''}`], ['salon', 'Salón y duelos', ''], ['diario', 'Reto diario', ''], ['amigos', 'Amigos', ''], ['cuenta', 'Cuenta', ''],
   ];
   const acct = currentAccount(), em = emblemOf(m), title = m.cosmetics?.title ? titleName(m.cosmetics.title) : '';

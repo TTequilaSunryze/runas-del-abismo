@@ -37,7 +37,7 @@ export const ui = {
   asc: 0,
   daily: false,
   /** pestaña de la pantalla de inicio */
-  homeTab: 'jugar' as 'jugar' | 'tienda' | 'clases' | 'logros' | 'archivo' | 'salon' | 'diario' | 'cuenta' | 'amigos',
+  homeTab: 'refugio' as 'refugio' | 'jugar' | 'tienda' | 'clases' | 'logros' | 'archivo' | 'salon' | 'diario' | 'cuenta' | 'amigos',
   /** Archivo del Abismo: categoría, filtro de estado y entrada abierta */
   arcCat: 'bestiary' as 'bestiary' | 'grimoire' | 'relics' | 'atlas' | 'chronicles' | 'contracts',
   /** filtro secundario: zona (z1…z4) en el Bestiario, clase en el Grimorio, rareza en las Reliquias */
