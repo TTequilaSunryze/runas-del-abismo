@@ -1043,12 +1043,19 @@ button.raw { cursor: pointer; }
 .fpanel { width: min(560px, 100%); display: flex; flex-direction: column; gap: 12px; padding: 16px 0 40px; }
 
 /* selección de héroe */
-.hsel { position: relative; height: 100%; overflow: hidden; }
+.hsel { position: relative; height: 100%; overflow: hidden; --tile-w: clamp(56px, min(max(6vw, 7vh), 9.5vh), 92px); }
 .hsel-bg { position: absolute; inset: 0; background: radial-gradient(ellipse at 66% 45%, color-mix(in srgb, var(--tint) 55%, transparent), transparent 62%), linear-gradient(90deg, rgba(5, 4, 8, .55), transparent 55%); transition: background .3s; }
-.hsel-bg.fresh { animation: hselIn .45s ease-out; }
+.hsel-bg.fresh:not(.has-art) { animation: hselIn .45s ease-out; }
 @keyframes hselIn { from { opacity: .2; transform: scale(1.04); } to { opacity: 1; transform: none; } }
+/* ilustración 16:9: el héroe ocupa la derecha; velos oscuros para leer la ficha, el roster y la sala */
+.hsel-bg.has-art::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, rgba(5, 4, 8, .62) 0%, rgba(5, 4, 8, .28) 38%, transparent 58%), linear-gradient(0deg, rgba(5, 4, 8, .78) 0%, transparent 26%), linear-gradient(180deg, rgba(5, 4, 8, .45) 0%, transparent 16%); }
+.hsel-bg.fresh .hsel-art.cur { animation: hselArtIn .35s ease-out both; }
+.hsel-bg.fresh .hsel-art.prev { animation: hselArtOut .35s ease-out both; }
+@keyframes hselArtIn { from { opacity: 0; transform: scale(1.015); } to { opacity: 1; transform: none; } }
+@keyframes hselArtOut { from { opacity: 1; } to { opacity: 0; } }
 .hsel-sprite { position: absolute; right: 9%; bottom: 22%; width: min(38vw, 60vh); aspect-ratio: 1; background: center bottom / contain no-repeat; image-rendering: pixelated; filter: drop-shadow(0 16px 26px #000); }
-.hsel-art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 70% center; }
+.hsel-art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 72% center; user-select: none; }
 .lplayers { position: absolute; top: 14px; left: 16px; z-index: 2; display: flex; flex-direction: column; gap: 6px; max-width: 320px; }
 .lroom { font-family: var(--head); font-size: 16px; color: #f1e7d2; text-shadow: 0 2px 0 #000; }
 .lroom .code { font-size: 22px; }
@@ -1059,7 +1066,7 @@ button.raw { cursor: pointer; }
 .lp.off { opacity: .5; }
 .hsel-card { position: absolute; z-index: 2; left: clamp(16px, 9vw, 160px); top: clamp(90px, 22vh, 210px); width: min(500px, 86vw); padding: 20px 26px; display: flex; flex-direction: column; gap: 10px;
   background: rgba(34, 18, 14, .72); border-radius: 12px; box-shadow: 0 12px 30px rgba(0, 0, 0, .45); backdrop-filter: blur(2px); }
-.hsel-card h1 { font-family: var(--head); font-size: clamp(36px, 4.4vw, 62px); line-height: 1; margin: 0; letter-spacing: 1px;
+.hsel-card h1 { font-family: var(--head); font-size: clamp(32px, min(4.4vw, 6.6vh), 62px); line-height: 1; margin: 0; letter-spacing: 1px;
   color: #f7e48a; text-shadow: 0 3px 0 #2b1405, 0 0 18px rgba(0, 0, 0, .6); }
 .hsel-stats { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 14px; color: #f1dfbf; }
 .hsel-stats .hp { color: #ff9aa8; font-weight: 700; font-size: 18px; }
@@ -1067,18 +1074,51 @@ button.raw { cursor: pointer; }
 .hsel-passive b { display: block; color: #f7e48a; font-family: var(--head); font-size: 17px; }
 .hsel-passive span { font-size: 13px; color: #e8dccb; }
 .hsel-kit { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.hsel-diff { position: absolute; z-index: 2; left: 50%; bottom: calc(clamp(64px, 11vh, 96px) + 26px); transform: translateX(-50%); width: min(560px, 92vw);
+.hsel-diff { position: absolute; z-index: 2; left: 50%; bottom: calc(var(--tile-w) * 4 / 3 + 34px); transform: translateX(-50%); width: min(560px, 92vw);
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 14px; background: rgba(14, 12, 18, .78); border-radius: 8px; color: #f1e7d2; }
 .hsel-diff b { font-family: var(--head); font-size: 17px; color: #f6e4c2; }
 .hsel-asc { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: radial-gradient(circle, #8ff0ff, #1d7a9a); color: #001; font-weight: 800; }
-.hsel-roster { position: absolute; z-index: 2; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: 92vw; }
-.hsel-tile { position: relative; width: clamp(52px, 5.4vw, 76px); aspect-ratio: .82; padding: 0; border-radius: 6px; border: 3px solid #3a3440; overflow: hidden;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tint) 45%, #1a1620), #120f16); box-shadow: 0 4px 10px rgba(0, 0, 0, .6); transition: transform .12s, border-color .12s; }
+.hsel-roster { position: absolute; z-index: 2; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; width: max-content; max-width: 94vw; }
+/* marco común de los retratos 3:4: un solo marco hecho con CSS y sus estados (normal, hover, elegido, bloqueado, nuevo).
+   Para usar un PNG de marco transparente: .hsel { --hframe-img: url(...); } */
+.hsel-tile { position: relative; width: var(--tile-w); aspect-ratio: 3 / 4; padding: 0; border-radius: 4px; border: 0; overflow: hidden;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tint) 40%, #1a1620), #120f16); box-shadow: 0 4px 10px rgba(0, 0, 0, .6);
+  transition: transform .15s ease-out, box-shadow .15s ease-out; --fr: #5d4d38; --fr-in: rgba(0, 0, 0, .55); }
+.hsel-tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 22%; filter: saturate(.7) brightness(.82); transition: filter .15s; user-select: none; }
 .hsel-tile span { position: absolute; inset: 4px; background: center / contain no-repeat; image-rendering: pixelated; filter: grayscale(.35); }
-.hsel-tile:hover { transform: translateY(-4px); border-color: #c9b48a; }
-.hsel-tile:hover span, .hsel-tile.on span { filter: none; }
-.hsel-tile.on { border-color: #f7d64a; transform: translateY(-6px); box-shadow: 0 0 18px rgba(247, 214, 74, .55), 0 6px 12px #000; }
-.hsel-tile i { position: absolute; right: 2px; bottom: 2px; font-style: normal; font-size: 11px; background: #1d7a9a; color: #fff; border-radius: 8px; padding: 0 5px; }
+.hsel-tile::before { content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none; border-radius: inherit;
+  border: 2px solid var(--fr); box-shadow: inset 0 0 0 1px var(--fr-in), inset 0 0 0 3px rgba(255, 236, 190, .08), inset 0 -26px 22px -12px rgba(0, 0, 0, .7);
+  background: var(--hframe-img, none) center / 100% 100% no-repeat; transition: border-color .15s; }
+.hframe-name { position: absolute; z-index: 3; left: 0; right: 0; bottom: 3px; text-align: center; font-family: var(--head); font-weight: 400; font-size: max(9px, calc(var(--tile-w) * .13)); letter-spacing: -.5px; line-height: 1.1;
+  color: #e8dccb; text-shadow: 0 1px 0 #000, 0 0 4px #000; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 3px; }
+.hsel-tile i { position: absolute; z-index: 3; right: 3px; top: 3px; font-style: normal; font-size: 11px; background: #1d7a9a; color: #fff; border-radius: 8px; padding: 0 5px; }
+@media (hover: hover) {
+  .hsel-tile:hover:not(:disabled) { transform: translateY(-3px); --fr: #c9b48a; }
+  .hsel-tile:hover:not(:disabled) img, .hsel-tile:hover span { filter: none; }
+}
+.hsel-tile.on img, .hsel-tile.on span { filter: none; }
+.hsel-tile:focus-visible { outline: 2px solid #8ff0ff; outline-offset: 2px; }
+.hsel-tile.on { --fr: #f2cf55; transform: translateY(-6px); box-shadow: 0 0 12px rgba(242, 207, 85, .35), 0 6px 12px #000; }
+.hsel-tile.on .hframe-name { color: #f7e48a; }
+.hsel-tile.locked { cursor: not-allowed; --fr: #4a4452; }
+.hsel-tile.locked img, .hsel-tile.locked span { filter: grayscale(1) brightness(.5); }
+.hsel-tile.locked::after { content: '🔒'; position: absolute; z-index: 3; inset: 0; display: grid; place-items: center; font-size: calc(var(--tile-w) * .3); opacity: .85; }
+.hsel-tile.locked .hframe-name { color: #8d8594; }
+.hsel-tile.new { --fr: #7fd6e6; animation: hframeNew 1.6s ease-in-out 2; }
+@keyframes hframeNew { 50% { box-shadow: 0 0 12px rgba(127, 214, 230, .45), 0 4px 10px #000; } }
+.hframe-new { position: absolute; z-index: 3; left: 50%; top: 3px; transform: translateX(-50%); font-style: normal; font-size: 9px; font-weight: 800; letter-spacing: 1px; padding: 0 4px; border-radius: 3px; background: #1d7a9a; color: #fff; }
+/* pantallas bajas (portátiles 720–820 px de alto): ficha y barra de dificultad más compactas para que no se pisen */
+@media (min-width: 761px) and (max-height: 820px) {
+  .hsel-card { top: clamp(84px, 17vh, 210px); padding: 14px 20px; gap: 7px; }
+  .hsel-card p { font-size: 14px; }
+  .hsel-diff { padding: 6px 12px; }
+  .hsel-diff .sm { display: block; max-width: 32ch; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hsel-bg.fresh .hsel-art.cur, .hsel-bg.fresh .hsel-art.prev, .hsel-bg.fresh, .hsel-tile.new { animation: none; }
+  .hsel-bg.fresh .hsel-art.prev { display: none; }
+  .hsel-tile { transition: none; }
+}
 .hsel-back, .hsel-ok { position: absolute; z-index: 2; bottom: clamp(90px, 18vh, 170px); width: clamp(76px, 7vw, 110px); height: 64px; font-size: 32px; color: #fff; border: 0; box-shadow: 0 4px 0 #000; }
 .hsel-back { left: 0; background: linear-gradient(180deg, #c24a3a, #7a2620); clip-path: polygon(0 0, 100% 0, 84% 50%, 100% 100%, 0 100%); }
 .hsel-ok { right: 0; background: linear-gradient(180deg, #5fb8d0, #24708a); clip-path: polygon(16% 0, 100% 0, 100% 100%, 16% 100%, 0 50%); }
@@ -1113,7 +1153,14 @@ button.raw { cursor: pointer; }
   .hsel { overflow-y: auto; }
   .hsel-card { position: relative; left: auto; top: auto; margin: 110px auto 0; }
   .hsel-sprite { opacity: .45; right: -10%; }
+  /* móvil: la ilustración queda arriba como cabecera, centrada en el héroe, y la ficha entra por debajo */
+  .hsel-bg.has-art { bottom: auto; height: min(62vh, 520px); }
+  .hsel-bg.has-art .hsel-art { object-position: 76% 30%; }
+  .hsel-bg.has-art::after { background: linear-gradient(0deg, #0e0c12 0%, rgba(14, 12, 18, .4) 30%, transparent 55%), linear-gradient(180deg, rgba(5, 4, 8, .5) 0%, transparent 22%); }
+  .hsel-bg.has-art ~ .hsel-card { margin-top: min(40vh, 330px); }
   .hsel-diff, .hsel-roster { position: relative; left: auto; bottom: auto; transform: none; margin: 12px auto; }
+  .hsel { --tile-w: clamp(64px, 21vw, 92px); }
+  .hsel-roster { display: grid; grid-template-columns: repeat(4, var(--tile-w)); justify-content: center; padding-top: 8px; }
   .hsel-back, .hsel-ok { position: fixed; bottom: 12px; height: 52px; }
   .bldg.gate { grid-column: span 1; }
   .fover .kslots { grid-template-columns: repeat(2, minmax(0, 1fr)); }

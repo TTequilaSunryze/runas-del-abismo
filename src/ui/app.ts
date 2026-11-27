@@ -344,7 +344,7 @@ document.addEventListener('click', (e) => {
     case 'home': home(); break;
     case 'statsof': ui.statsOf = String(id); lastKey = ''; render([]); break;
     case 'lready': ui.lobbyReady = !ui.lobbyReady; publish(); render([]); break;
-    case 'cls': ui.me.cls = id as ClassId; ui.me.routes = ['base']; ui.picked = { cls: String(id), at: Date.now() }; publish(); render([]); setTimeout(() => { ui.picked = null; lastKey = ''; render([]); }, 1500); break;
+    case 'cls': ui.picked = { cls: String(id), from: ui.me.cls, at: Date.now() }; ui.me.cls = id as ClassId; ui.me.routes = ['base']; publish(); render([]); setTimeout(() => { ui.picked = null; lastKey = ''; render([]); }, 1500); break;
     case 'route':
       // un solo kit: elegir otro lo sustituye
       if (canPickRoute(ui.me.cls, [], id) && openRoutes(ui.me.cls).includes(id)) ui.me.routes = [id];

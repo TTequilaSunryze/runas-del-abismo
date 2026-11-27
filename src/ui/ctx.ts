@@ -74,7 +74,7 @@ export const ui = {
   forgeAffix: -1,
   forgeSpell: '',
   /** clase recién elegida (animación de selección) */
-  picked: null as null | { cls: string; at: number },
+  picked: null as null | { cls: string; from?: string; at: number },
   /** último hechizo lanzado (cartel flotante sobre el tablero) */
   toast: null as null | { text: string; team: string; at: number },
   /** barras de vida visibles en el tablero */
