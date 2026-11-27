@@ -60,7 +60,7 @@ export function refugeScene(): string {
         <circle cx="630" cy="171" r="24" fill="#f0a94e" opacity=".12"/><circle cx="940" cy="181" r="24" fill="#f0a94e" opacity=".12"/>
       </g>
       <!-- Irena: delantal rojizo, cabello cobrizo -->
-      <g class="refuge-npc" data-act="htab" data-id="jugar" role="button" tabindex="0" aria-label="Hablar con Irena, tabernera; abrir expediciones">
+      <g class="refuge-npc" data-act="resident" data-id="irena" role="button" tabindex="0" aria-label="Hablar con Irena, tabernera; abrir expediciones">
         <ellipse cx="160" cy="288" rx="31" ry="7" fill="#09090d" opacity=".55"/>
         <rect x="145" y="222" width="30" height="45" fill="#9d4937"/>
         <rect x="138" y="232" width="44" height="34" fill="#d1b18a"/>
@@ -79,7 +79,7 @@ export function refugeScene(): string {
         <rect class="npc-hit" x="112" y="180" width="96" height="137" fill="transparent"/>
       </g>
       <!-- Sava: túnica azul grisácea, libros -->
-      <g class="refuge-npc" data-act="htab" data-id="archivo" role="button" tabindex="0" aria-label="Hablar con Sava, archivera; abrir Archivo">
+      <g class="refuge-npc" data-act="resident" data-id="sava" role="button" tabindex="0" aria-label="Hablar con Sava, archivera; abrir Archivo">
         <ellipse cx="478" cy="288" rx="31" ry="7" fill="#09090d" opacity=".55"/>
         <rect x="463" y="222" width="30" height="46" fill="#536477"/>
         <path d="M456 231H500L496 268H460Z" fill="#77879a"/>
@@ -96,7 +96,7 @@ export function refugeScene(): string {
         <rect class="npc-hit" x="430" y="178" width="96" height="139" fill="transparent"/>
       </g>
       <!-- Darel: capa oscura y hombreras de guardia -->
-      <g class="refuge-npc" data-act="htab" data-id="jugar" role="button" tabindex="0" aria-label="Hablar con Darel, vigía; preparar la salida">
+      <g class="refuge-npc" data-act="resident" data-id="irena" role="button" tabindex="0" aria-label="Hablar con Darel, vigía; preparar la salida">
         <ellipse cx="798" cy="288" rx="31" ry="7" fill="#09090d" opacity=".55"/>
         <path d="M780 218H816L826 278H770Z" fill="#353c49"/>
         <path d="M777 229 764 273H781L790 244M819 229 832 273H815L806 244" fill="#4b5360"/>
