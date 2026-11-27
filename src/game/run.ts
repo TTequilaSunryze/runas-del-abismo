@@ -304,7 +304,7 @@ export function newRun(code: string, seed: number, players: NewHero[], opts: Run
     heroes: players.map((p) => ({
       owner: p.owner, name: p.name, cls: p.cls, routes: kitOf(p.cls, p.routes), ...(cleanKit(p.cls, p.kit) ? { kit: cleanKit(p.cls, p.kit) } : {}), hp: 0, level: 1, gold: 0, equip: {}, bag: [], boon: {},
       stats: { dmg: 0, kills: 0, falls: 0, heal: 0, maxGold: 0 },
-      relics: [], boons: [], boonOffer: null, bag2: { c_vida: 1 }, ups: {}, bossOffer: null, mastery: Math.max(0, Math.min(5, Math.floor(Number(p.mastery) || 0))),
+      relics: [], runes: ['fractura'], boons: [], boonOffer: null, bag2: { c_vida: 1 }, ups: {}, bossOffer: null, mastery: Math.max(0, Math.min(5, Math.floor(Number(p.mastery) || 0))),
     })),
   };
   setMap(run, !run.arena);
