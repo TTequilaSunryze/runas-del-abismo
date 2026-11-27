@@ -1,5 +1,5 @@
 // Pantallas fuera del combate: inicio, sala, mapa, tienda, evento y final.
-import { CLASSES, PLAYABLE, findRoute } from '../core/classes/classes';
+import { CLASSES, PLAYABLE, findRoute, CLASS_PASSIVE } from '../core/classes/classes';
 import { classStripUrl } from '../render/sprites';
 import { SPELLS } from '../core/classes/spells';
 import type { ClassId } from '../core/state';
@@ -362,10 +362,14 @@ export function homeScreen(msg: string): void {
   const host = JSON.parse(store.get('rda_host') ?? 'null') as { code: string } | null;
   const m = meta();
   const pend = contractsReady(m) + specialReady(m), shopNew = unseenOwned(m).length || (m.perksRefundEcos && !m.refundSeen);
-  const tabs: Array<[typeof ui.homeTab, string, string]> = [
-    ['refugio', 'Refugio', ''], ['jugar', 'Jugar', ''], ['tienda', 'Tienda', `${m.ecos} ✨${shopNew ? ' !' : ''}`], ['clases', 'Maestría', ''], ['logros', 'Logros', achievementCount(m)],
-    ['archivo', 'Archivo', `${archiveTotal().pct}%${pend ? ` · ${pend}!` : ''}`], ['salon', 'Salón y duelos', ''], ['diario', 'Reto diario', ''], ['amigos', 'Amigos', ''], ['cuenta', 'Cuenta', ''],
+  const groups: Array<{ id: string; label: string; home: typeof ui.homeTab; tabs: Array<[typeof ui.homeTab, string, string]> }> = [
+    { id: 'jugar', label: 'Jugar', home: 'jugar', tabs: [['jugar', 'Expedición', ''], ['salon', 'Salón de héroes', '']] },
+    { id: 'refugio', label: 'Refugio', home: 'refugio', tabs: [['refugio', 'Asentamiento', '']] },
+    { id: 'progreso', label: 'Progreso', home: 'archivo', tabs: [['archivo', 'Archivo', `${archiveTotal().pct}%`], ['clases', 'Maestría', ''], ['logros', 'Logros', achievementCount(m)], ['diario', 'Reto diario', '']] },
+    { id: 'comunidad', label: 'Comunidad', home: 'amigos', tabs: [['amigos', 'Amigos', ''], ['cuenta', 'Cuenta', '']] },
+    { id: 'tienda', label: 'Tienda', home: 'tienda', tabs: [['tienda', 'Tienda de ecos', `${m.ecos} ✨${shopNew ? ' !' : ''}`]] },
   ];
+  const activeGroup = groups.find((g) => g.tabs.some(([id]) => id === ui.homeTab)) ?? groups[0]!;
   const acct = currentAccount(), em = emblemOf(m), title = m.cosmetics?.title ? titleName(m.cosmetics.title) : '';
   const badge = `<div class="acctbadge" data-act="htab" data-id="cuenta" ${tip(acct ? 'Tu cuenta' : 'Sin cuenta: tu progreso se guarda en este navegador')}><div class="acctname">${em ? `${em} ` : ''}<b>${esc(acct?.name ?? ui.me.name)}</b>${title ? `<i>${esc(title)}</i>` : ''}</div><img class="acctport" src="${unitPortraitUrl(ui.me.cls, 'hero', 0, currentLook(m, ui.me.cls).skin)}" alt=""></div>`;
   const play = `<div class="panel orn namebox"><label>Tu nombre <input id="name" maxlength="14" value="${esc(ui.me.name)}"></label></div>
@@ -379,8 +383,11 @@ export function homeScreen(msg: string): void {
   ${msg ? `<p class="bad">${esc(msg)}</p>` : ''}
   ${reconnectBanner()}
   <div class="hbody">
-    <nav class="hnav">${tabs.map(([id, n, b]) => `<button class="hbtn ${ui.homeTab === id ? 'on' : ''}" data-act="htab" data-id="${id}"><span>${n}${b ? `<i>${esc(b)}</i>` : ''}</span></button>`).join('')}
-      <button class="hbtn tuto" data-act="tuto"><span>Ver tutorial</span></button></nav>
+    <nav class="hnav">
+      <div class="hprimary">${groups.map((g) => `<button class="hbtn ${activeGroup.id === g.id ? 'on' : ''}" data-act="htab" data-id="${g.home}"><span>${g.label}</span></button>`).join('')}</div>
+      <div class="hsecondary">${activeGroup.tabs.map(([id, n, b]) => `<button class="hsub ${ui.homeTab === id ? 'on' : ''}" data-act="htab" data-id="${id}">${n}${b ? ` <i>${esc(b)}</i>` : ''}</button>`).join('')}
+        <button class="hsub tuto" data-act="tuto">Ver tutorial</button></div>
+    </nav>
     <section class="hmain ${ui.homeTab === 'jugar' ? 'narrow' : ''}">${ui.homeTab === 'jugar' ? play : metaPanel()}</section>
   </div>
   ${ui.homeTab === 'jugar' ? `<div class="panel howto sm"><b>Cómo se juega:</b> cada unidad juega en su turno, por iniciativa. Clic en una casilla azul para moverte (PM). Elige un hechizo y haz clic en un objetivo con borde dorado (PA). Los obstáculos tapan la línea de visión. Cada turno dura como máximo ${TURN_SECONDS} segundos.</div>` : ''}
@@ -433,17 +440,24 @@ export function lobbyScreen(): void {
         return `<button class="chip modchip t${m.tier ?? 2} ${on ? 'r2 sel' : ''}" data-act="mod" data-id="${m.id}" ${why ? 'disabled' : ''} ${tip(modTip(m.id, why))}>${on ? '✔ ' : ''}${esc(m.name)} <span class="risk">${'●'.repeat(m.tier ?? 2)}</span></button>`; }).join('')}</div>
       ${modsSummary(ui.mods, true)}`}</div>` : players.find((p) => p.host) ? (() => { const hp = players.find((p) => p.host)!; return `<div class="panel dim sm">Dificultad del anfitrión: ${hp.daily ? 'Reto diario' : `Ascensión ${hp.asc}${hp.abyss ? ' · con El Abismo' : ''}`}${hp.daily ? '' : modsSummary(hp.mods, false)}</div>`; })() : ''}
     ${currentAccount() && s.t.kind === 'online' ? (() => { const fr = friendsStatus().filter((f) => f.online && f.room !== s.code); return fr.length ? `<div class="panel sm"><b>👥 Invitar:</b> ${fr.map((f) => `<button class="mini" data-act="invite" data-id="${esc(f.name)}">✉ ${esc(f.name)}</button>`).join(' ')}</div>` : ''; })() : ''}
-    <div class="lbl">Tu clase <span class="dim">· maestría ${mlv}/5 con ${cls.name}</span></div>
-    <div class="cards c5">${PLAYABLE.map((id) => { const c = CLASSES[id];
-      // compañeros que han elegido esta clase (con su color)
-      const mates = players.slice(0, 4).map((p, i) => ({ p, i })).filter(({ p }) => p.id !== ui.myId && p.cls === id);
-      const mateCls = mates.length ? `mate m${mates[0]!.i % 4}` : '';
-      const myIdx = players.findIndex((p) => p.id === ui.myId);
-      const burst = id === me.cls && ui.picked?.cls === id && Date.now() - ui.picked.at < 1500;
-      const st = classStripUrl(id, burst ? 'special' : 'idle');
-      return `<button class="pick ${id === me.cls ? `on p${Math.max(0, myIdx) % 4}c` : ''} ${mateCls} ${burst ? 'burst' : ''}" data-act="cls" data-id="${id}"><b>${c.name}</b>
-        <span class="portrait anim ${st.n > 1 ? '' : 'bob'}" style="--n:${st.n};background-image:url(${st.url})"></span>${burst ? '<span class="pickfx"></span>' : ''}
-        ${mates.length || id === me.cls ? `<span class="mates">${id === me.cls ? `<span class="mtag p${Math.max(0, myIdx) % 4}b">Tú</span>` : ''}${mates.map(({ p, i }) => `<span class="mtag p${i % 4}b">${esc(p.name)}</span>`).join('')}</span>` : ''}<span class="dim sm">❤️ ${c.hp} · PA ${c.ap} · PM ${c.mp} · ⏱️ ${c.initiative}</span><span class="dim sm"><i>${esc(CLASS_STORY[id] ?? '')}</i></span>${masteryBar(id)}</button>`; }).join('')}</div>
+    <div class="hero-select">
+      <div class="hero-stage">
+        <div class="hero-stage-art"><span class="hero-stage-sprite" style="background-image:url(${classStripUrl(me.cls, 'idle').url})"></span><span class="hero-stage-glow"></span></div>
+        <div class="hero-stage-copy"><span class="hero-kicker">HÉROE SELECCIONADO · MAESTRÍA ${mlv}/5</span><h2>${esc(cls.name)}</h2><p>${esc(CLASS_STORY[me.cls] ?? 'Un superviviente que ha aprendido a desafiar al Abismo.')}</p>
+          <div class="hero-stage-stats"><span>❤ ${cls.hp} VIDA</span><span>🛡 ${cls.armor} ARM.</span><span>⚔ ${cls.power} DAÑO</span><span>✦ ${cls.crit}% CRÍT.</span><span>PA ${cls.ap}</span><span>PM ${cls.mp}</span><span>INI ${cls.initiative}</span><span>PLAC. ${cls.tackle}</span><span>HUIDA ${cls.dodge}</span></div>
+        </div>
+      </div>
+      <div class="hero-detail">
+        <div class="hero-detail-head"><span class="hero-kicker">ESTILO DE COMBATE</span><span class="pill">Selecciona tu héroe</span></div>
+        ${CLASS_PASSIVE[me.cls] ? `<div class="hero-passive"><b>${CLASS_PASSIVE[me.cls]!.icon} ${esc(CLASS_PASSIVE[me.cls]!.name)}</b><p>${esc(CLASS_PASSIVE[me.cls]!.text)}</p></div>` : ''}
+        <div class="hero-spells"><b>Habilidades iniciales</b><div class="hero-spell-list">${cls.base.map((id) => { const d = SPELLS[id]; return d ? `<div class="hero-spell" ${tip(spellTip(d))}>${spellIcon(d, false)}<span><b>${esc(d.name)}</b><small>${d.ap} PA</small></span></div>` : ''; }).join('')}</div></div>
+        ${masteryBar(me.cls)}
+      </div>
+      <div class="hero-roster-wrap"><div class="hero-roster-title">ELIGE TU PERSONAJE <span class="dim sm">· ${PLAYABLE.length} HÉROES DISPONIBLES</span></div>
+        <div class="hero-roster">${PLAYABLE.map((id) => { const c = CLASSES[id], st = classStripUrl(id, 'idle'); const mates = players.filter((p) => p.id !== ui.myId && p.cls === id);
+          return `<button class="hero-tile ${id === me.cls ? 'on' : ''}" data-act="cls" data-id="${id}" aria-label="Seleccionar ${esc(c.name)}"><span class="hero-tile-portrait" style="background-image:url(${unitPortraitUrl(id, 'hero', 0)})"></span><b>${esc(c.name)}</b><small>${c.hp} VIDA · ${c.crit}% CRÍT.</small>${mates.length ? `<i>${mates.map((p) => esc(p.name)).join(', ')}</i>` : ''}</button>`; }).join('')}</div>
+      </div>
+    </div>
     ${kitPanel(me.cls)}
   </section>
   <aside class="side"><div class="tabs"><button class="on">👥 Jugadores (${players.length}/4)</button></div><div class="tabbody">
