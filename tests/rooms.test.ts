@@ -134,6 +134,8 @@ import { availableNodes, mapChoice } from '../src/game/run';
 describe('votación del camino', () => {
   it('gana la más votada; en empate, la del anfitrión', () => {
     const run = roomStep(newRun('T', 4, [...P, { owner: 'c', name: 'C', cls: 'esferas' as const, routes: [] }]));
+    // primero cada uno elige su runa inicial
+    for (const h of run.heroes) expect(metaAction(run, h.owner, { a: 'rune', op: 'take', idx: 0 })).toBeNull();
     const av = availableNodes(run);
     expect(mapChoice(run, 'a')).toBe(-1);
     expect(metaAction(run, 'b', { a: 'mapvote', idx: av[1]! })).toBeNull();

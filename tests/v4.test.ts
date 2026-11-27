@@ -85,13 +85,15 @@ describe('contenido', () => {
 
 const P = [{ owner: 'a', name: 'A', cls: 'guerrero' as const, routes: ['baluarte'] }];
 describe('salas, reliquias y presagios', () => {
-  it('reliquias: cambian estadísticas y rasgos', () => {
+  it('runas (antes reliquias): cambian estadísticas y rasgos', () => {
     const run = roomStep(newRun('T', 3, P));
     const h = run.heroes[0]!;
-    h.relics = ['caparazon', 'raiz'];
+    h.runes = ['caparazon', 'raiz_viva'];
     const u = heroSpec(h);
-    expect(u.armor).toBe(heroSpec({ ...h, relics: [] }).armor + 2);
+    expect(u.armor).toBe(heroSpec({ ...h, runes: [] }).armor + 2);
     expect(u.traits).toContain('regen');
+    // las reliquias antiguas ya no cuentan en combate (se migran a runas al cargar)
+    expect(heroSpec({ ...h, runes: [], relics: ['caparazon'] }).armor).toBe(heroSpec({ ...h, runes: [] }).armor);
     expect(Object.keys(RELICS).length).toBeGreaterThanOrEqual(20);
   });
   it('jaula: el aliado lucha con el grupo y no cuenta para perder', () => {

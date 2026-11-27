@@ -50,7 +50,8 @@ describe('mejoras permanentes retiradas', () => {
       return r.report!.items.length;
     };
     expect(loot(false)).toBe(1);
-    expect(loot(true)).toBe(2);
+    // la Lupa del tasador era una reliquia: el sistema se retiró y ya no da una opción más
+    expect(loot(true)).toBe(1);
     void heroMaxHp;
   });
 });

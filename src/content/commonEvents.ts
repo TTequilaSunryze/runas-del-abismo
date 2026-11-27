@@ -2,8 +2,7 @@
 // Desconocido tengan variedad suficiente. Se vota y el resultado afecta a todos por igual, como el resto de eventos.
 import { MAX_CONSUMABLE } from './boons';
 import { OMENS } from './modes';
-import { RELICS } from './relics';
-import { giveItem, giveRelic, type HeroSave, type RunState } from '../game/run';
+import { giveItem, giveRuneOffer, type HeroSave, type RuneOffer, type RunState } from '../game/run';
 import { rand, pick } from '../core/rng';
 import { boon, healPct, losePct, type EventDef } from './zona1/events';
 
@@ -13,7 +12,7 @@ const addConsumable = (h: HeroSave, id: string): boolean => {
   h.bag2[id] = n + 1;
   return true;
 };
-const relicNames = (run: RunState, ids: Array<string | null>): string => ids.map((id, i) => (id ? `${run.heroes[i]!.name}: ${RELICS[id]!.icon} ${RELICS[id]!.name}` : '')).filter(Boolean).join(' · ');
+const relicNames = (run: RunState, ids: Array<RuneOffer | null>): string => ids.some(Boolean) ? `Cada uno elegirá una runa: ${ids.map((o, i) => (o ? `${run.heroes[i]!.name} (${o.runes.length} opciones)` : '')).filter(Boolean).join(' · ')}.` : '';
 const itemNames = (run: RunState, f: (h: HeroSave) => { name: string }): string => run.heroes.map((h) => `${h.name}: ${f(h).name}`).join(' · ');
 
 export const COMMON_EVENTS: EventDef[] = [
@@ -21,7 +20,7 @@ export const COMMON_EVENTS: EventDef[] = [
     id: 'c_despojos', title: 'El Montón de Despojos',
     text: 'Una montaña de armas rotas, abalorios y huesos que otros dejaron atrás. La pila se mueve y emite un ruido sordo, como si algo creciera dentro. Si rebuscas en la superficie, puede que encuentres algo decente. Si te zambulles, quizá algo antiguo.',
     options: [
-      { label: 'Zambullirse', hint: 'Cada uno: pierde el 15% de su vida actual. Gana una reliquia aleatoria', apply: (run) => { const got = run.heroes.map((h) => { losePct(h, 0.15); return giveRelic(run, h); }); return `Salís arañados, con algo olvidado entre las manos. ${relicNames(run, got)}`; } },
+      { label: 'Zambullirse', hint: 'Cada uno: pierde el 15% de su vida actual. Gana una runa a elegir', apply: (run) => { const got = run.heroes.map((h) => { losePct(h, 0.15); return giveRuneOffer(run, h, 'event'); }); return `Salís arañados, con algo olvidado entre las manos. ${relicNames(run, got)}`; } },
       { label: 'Rebuscar en la superficie', hint: 'Cada uno: gana 60 de oro y un objeto aleatorio', apply: (run) => { const t = itemNames(run, (h) => { h.gold += 60; return giveItem(run, h, 'combat'); }); return `Entre la chatarra aparece algo útil. ${t}`; } },
     ],
   },
