@@ -2,7 +2,7 @@
 // (votación, resolución por el anfitrión con el generador de la partida); solo cambian sus condiciones de aparición.
 import { rand } from '../core/rng';
 import type { RunState } from '../game/run';
-import { giveItem, giveRelic, heroMaxHp } from '../game/run';
+import { giveItem, giveRuneOffer, heroMaxHp } from '../game/run';
 import { boon, healPct, losePct, type EventDef } from './zona1/events';
 
 export interface SpecialEventDef extends EventDef {
@@ -16,7 +16,7 @@ export interface SpecialEventDef extends EventDef {
 
 const hex = (run: RunState, id: string, fights: number): void => { (run.hexes ??= []).push({ id, fights }); };
 const each = (run: RunState, f: (h: RunState['heroes'][number]) => void): void => { for (const h of run.heroes) f(h); };
-const relicNames = (run: RunState, rare: boolean): string => run.heroes.map((h) => giveRelic(run, h, rare)).filter(Boolean).length ? 'Cada uno se lleva una reliquia.' : 'No queda ninguna reliquia por encontrar.';
+const relicNames = (run: RunState, rare: boolean): string => run.heroes.map((h) => giveRuneOffer(run, h, 'event', rare)).filter(Boolean).length ? 'Cada uno se lleva una runa.' : 'No queda ninguna runa por encontrar.';
 
 export const SPECIAL_EVENTS: SpecialEventDef[] = [
   {
@@ -24,7 +24,7 @@ export const SPECIAL_EVENTS: SpecialEventDef[] = [
     text: 'Un viajero encorvado arrastra un carro cubierto de campanillas. No vende objetos: vende cambios.',
     weight: (run) => (run.mods.includes('pobreza') ? 1 : 3),
     options: [
-      { label: 'Comprar una reliquia rara', hint: 'Quien tenga 120 de oro paga 120 y recibe una reliquia rara. Quien no, no recibe nada.', apply: (run) => { let n = 0; each(run, (h) => { if (h.gold >= 120) { h.gold -= 120; if (giveRelic(run, h, true)) n++; } }); return n ? `${n} de vosotros cerráis el trato.` : 'Nadie lleva oro suficiente. El mercader se encoge de hombros.'; } },
+      { label: 'Comprar una runa rara', hint: 'Quien tenga 120 de oro paga 120 y recibe una runa rara. Quien no, no recibe nada.', apply: (run) => { let n = 0; each(run, (h) => { if (h.gold >= 120) { h.gold -= 120; if (giveRuneOffer(run, h, 'event', true)) n++; } }); return n ? `${n} de vosotros cerráis el trato.` : 'Nadie lleva oro suficiente. El mercader se encoge de hombros.'; } },
       { label: 'Venderle vida', hint: 'Todos: −10 de vida máxima hasta el final y +150 de oro.', apply: (run) => { each(run, (h) => { boon(h, 'hp', -10); h.gold += 150; }); return 'Os pesa el pecho, pero las bolsas suenan.'; } },
       { label: 'Seguir el camino', hint: 'No ocurre nada.', apply: () => 'Las campanillas se pierden a lo lejos.' },
     ],
@@ -51,7 +51,7 @@ export const SPECIAL_EVENTS: SpecialEventDef[] = [
     id: 'sp_viajero', special: 'raro', title: 'El Viajero del Abismo', zones: [1, 2, 3],
     text: 'Alguien camina en sentido contrario, hacia la superficie. Lleva un fardo que late y os pide que lo guardéis.',
     options: [
-      { label: 'Aceptar el fardo', hint: 'Cada uno recibe una reliquia rara, pero el jefe de esta zona tendrá +25% de vida.', apply: (run) => { const t = relicNames(run, true); run.flags.push(`g2_carga_${run.zone}`); return `${t} A lo lejos, algo despierta y os huele.`; } },
+      { label: 'Aceptar el fardo', hint: 'Cada uno recibe una runa rara, pero el jefe de esta zona tendrá +25% de vida.', apply: (run) => { const t = relicNames(run, true); run.flags.push(`g2_carga_${run.zone}`); return `${t} A lo lejos, algo despierta y os huele.`; } },
       { label: 'Guiarle hacia la salida', hint: 'Todos recuperan un 25% de vida y ganan 40 de oro.', apply: (run) => { each(run, (h) => { healPct(h, 0.25); h.gold += 40; }); return 'Os da las gracias con una voz que no es humana.'; } },
       { label: 'Apartarse', hint: 'No ocurre nada.', apply: () => 'El viajero sigue subiendo sin mirar atrás.' },
     ],
@@ -87,7 +87,7 @@ export const SPECIAL_EVENTS: SpecialEventDef[] = [
     weight: (run) => (run.mods.includes('elites') || run.mods.includes('reforzados') ? 3 : 1),
     text: 'Un estandarte clavado en el suelo: quien lo arranque se enfrentará al campeón de esta zona y a su escolta.',
     options: [
-      { label: 'Arrancar el estandarte', hint: 'El próximo combate es una emboscada (+2 enemigos). Si lo ganáis, cada uno recibe una reliquia rara.', apply: (run) => { run.ambush = true; if (!run.flags.includes('g2_desafio')) run.flags.push('g2_desafio'); return 'Un cuerno resuena en la oscuridad. Vienen a por vosotros.'; } },
+      { label: 'Arrancar el estandarte', hint: 'El próximo combate es una emboscada (+2 enemigos). Si lo ganáis, cada uno recibe una runa rara.', apply: (run) => { run.ambush = true; if (!run.flags.includes('g2_desafio')) run.flags.push('g2_desafio'); return 'Un cuerno resuena en la oscuridad. Vienen a por vosotros.'; } },
       { label: 'Dejarlo en pie', hint: 'No ocurre nada.', apply: () => 'El estandarte ondea sin viento.' },
     ],
   },

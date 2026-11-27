@@ -1,7 +1,7 @@
 // Zona 3: Las Ruinas de Ceniza. Equipo y eventos de grupo.
 import type { ItemTheme } from '../../core/items/items';
 import { boon, healPct, losePct, type EventDef } from '../zona1/events';
-import { addAlly, offerBossReward, giveItem, giveRelic } from '../../game/run';
+import { addAlly, offerBossReward, giveItem, giveRuneOffer } from '../../game/run';
 
 export const ZONA3_ITEMS: ItemTheme = {
   names: {
@@ -50,7 +50,7 @@ export const ZONA3_EVENTS: EventDef[] = [
     id: 'cofre', title: 'El Cofre Maldito',
     text: 'Un cofre al rojo vivo. Dentro brilla algo legendario. Encima, una inscripción: «El próximo campeón te lo reclamará».',
     options: [
-      { label: 'Abrirlo', hint: 'Cada uno gana una reliquia rara; el próximo élite tendrá 2 modificadores más.', apply: (run) => { for (const h of run.heroes) giveRelic(run, h, true); run.flags.push('cursed_elite'); return 'El cofre se abre con un chasquido. A lo lejos, algo despierta.'; } },
+      { label: 'Abrirlo', hint: 'Cada uno gana una runa rara; el próximo élite tendrá 2 modificadores más.', apply: (run) => { for (const h of run.heroes) giveRuneOffer(run, h, 'event', true); run.flags.push('cursed_elite'); return 'El cofre se abre con un chasquido. A lo lejos, algo despierta.'; } },
       { label: 'Dejarlo', hint: 'No ocurre nada.', apply: () => 'Algunas cosas es mejor que sigan ardiendo.' },
     ],
   },

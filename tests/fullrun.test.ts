@@ -31,6 +31,8 @@ function playRun(run: RunState, step: (ev: GameEvent[]) => void): number {
       if (r.kind === 'chest') metaAction(run, run.heroes[0]!.owner, { a: 'room', op: 'open' });
       if (r.kind === 'rest') for (const h of run.heroes) metaAction(run, h.owner, { a: 'room', op: 'rest', idx: 0 });
       step([]); leaveNode(run); step([]);
+    } else if (run.phase === 'map' && run.zoneClear) {
+      step([]); leaveNode(run); step([]);
     } else if (run.phase === 'map') {
       step(chooseNode(run, availableNodes(run)[0]!));
     } else if (run.phase === 'combat') {

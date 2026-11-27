@@ -14,7 +14,8 @@ function play(classes: ClassId[], seed: number): { run: RunState; stalls: number
       if (h.bossOffer) metaAction(run, h.owner, { a: 'bossreward', idx: 0 });
       for (let k = 0; k < 6 && h.boonOffer; k++) metaAction(run, h.owner, { a: 'boon', idx: k % 3 } as never);
     }
-    if (run.phase === 'map') {
+    if (run.phase === 'map' && run.zoneClear) leaveNode(run);
+    else if (run.phase === 'map') {
       // alijo: cada objeto al primero que tenga libre esa ranura; si no, se reparte
       while (run.stash?.length) { const it = run.stash[0]!; metaAction(run, it.owner ?? run.heroes[0]!.owner, { a: 'stash', idx: 0, op: 'split' }); }
       for (const h of run.heroes) { if (run.offers[h.owner]) metaAction(run, h.owner, { a: 'pick', idx: 0 }); if (h.bag.length) metaAction(run, h.owner, { a: 'equip', idx: 0 }); }

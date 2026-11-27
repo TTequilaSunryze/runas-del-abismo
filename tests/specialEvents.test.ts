@@ -1,3 +1,4 @@
+import { RUNES } from '../src/core/runes';
 import { describe, expect, it } from 'vitest';
 import { SPECIAL_EVENTS, specialCandidates } from '../src/content/specialEvents';
 import { ATLAS } from '../src/game/atlas';
@@ -49,13 +50,14 @@ describe('Fase G2 · eventos especiales', () => {
     }
     expect(seen).toBeGreaterThan(0);
   });
-  it('Desafío del Campeón: reliquia rara para cada uno al ganar la emboscada', () => {
+  it('Desafío del Campeón: runa rara para cada uno al ganar la emboscada', () => {
     const r = mk(); r.phase = 'event'; r.event = { id: 'sp_campeon', votes: {} };
     for (const h of r.heroes) vote(r, h.owner, 0);
     resolveEvent(r, 'a');
     expect(r.ambush).toBe(true);
-    const before = r.heroes.map((h) => h.relics.length);
+    for (const h of r.heroes) h.runeOffers = [];
     r.phase = 'map'; chooseNode(r, availableNodes(r)[0]!);
-    if (r.combat) { r.combat.over = 'win'; finishFight(r); expect(r.heroes.map((h) => h.relics.length)).toEqual(before.map((n) => n + 1)); }
+    // emboscada: oferta del estandarte (rara o mejor) + la garantizada de élite
+    if (r.combat) { r.combat.over = 'win'; finishFight(r); for (const h of r.heroes) { expect(h.runeOffers!.length).toBeGreaterThanOrEqual(2); expect(h.runeOffers![0]!.runes.every((id) => RUNES[id]!.rarity >= 3)).toBe(true); } }
   });
 });

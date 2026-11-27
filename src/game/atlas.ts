@@ -35,8 +35,8 @@ export const ATLAS_DONE_TEXT: Record<AtlasCat, string> = {
 
 export type ChronicleRef = { id: string; cat: ChronicleCat; name: string; text: string; goal: number; hint?: string };
 export const MILESTONE_PCTS = [25, 50, 75, 100];
-export const MILESTONE_CATS = ['bestiary', 'grimoire', 'relics'] as const;
-const CAT_LABEL = { bestiary: 'el Bestiario', grimoire: 'el Grimorio', relics: 'las Reliquias' };
+export const MILESTONE_CATS = ['bestiary', 'grimoire', 'runes'] as const;
+const CAT_LABEL = { bestiary: 'el Bestiario', grimoire: 'el Grimorio', runes: 'el Grimorio rúnico' };
 
 /** Secretos de combate: su condición no se muestra hasta que se cumplen. */
 export const SECRETS: ChronicleRef[] = [

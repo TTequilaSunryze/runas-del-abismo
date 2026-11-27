@@ -48,7 +48,10 @@ describe('Archivo · modelo', () => {
     expect(completion('relics')).toEqual({ found: 0, total: Object.keys(RELICS).length, pct: 0 });
     for (const id of catalogIds('relics')) discover('relics', id);
     expect(completion('relics').pct).toBe(100);
-    expect(completionAll().found).toBe(Object.keys(RELICS).length);
+    // las Reliquias ya no se muestran en la colección (se conservan como histórico); cuentan las Runas
+    expect(completionAll().found).toBe(0);
+    for (const id of catalogIds('runes')) discover('runes', id);
+    expect(completionAll().found).toBe(catalogIds('runes').length);
     expect(entriesOf('bestiary')).toHaveLength(BESTIARY.length);
     expect(entriesOf('grimoire').every((e) => e.lv === 0)).toBe(true);
   });

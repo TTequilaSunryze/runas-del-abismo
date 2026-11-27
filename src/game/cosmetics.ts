@@ -34,7 +34,7 @@ export const FRAMES: FrameDef[] = [
   { id: 'raiz', name: 'Marco de raíz', color: '#5fa04e' },
   { id: 'ceniza', name: 'Marco de ceniza', color: '#e0723a' },
   { id: 'abisal', name: 'Marco abisal', color: '#9b5cff' },
-  { id: 'reliquia', name: 'Marco de reliquias', color: '#f2c14e' },
+  { id: 'reliquia', name: 'Marco rúnico', color: '#f2c14e' },
   { id: 'grimorio', name: 'Marco del grimorio', color: '#5cc8ff' },
   // Fase F: marcos de la tienda
   { id: 'cobre', name: 'Marco de cobre', color: '#c07a4a' },

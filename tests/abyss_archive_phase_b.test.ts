@@ -80,14 +80,15 @@ describe('Fase B · Crónicas', () => {
     expect(chronicleState(m, 'secrets', 'relampago')).toBe('completed');
   });
   it('los hitos se completan al alcanzar su porcentaje de colección', () => {
-    for (const id of catalogIds('relics').slice(0, 6)) discover('relics', id);
+    // las Reliquias se retiraron: los hitos de colección cuentan ahora el Grimorio rúnico
+    for (const id of catalogIds('runes').slice(0, 15)) discover('runes', id);
     const run = fight(); // cualquier registro evalúa los hitos
     recordArchive(run, 'a');
-    const pct = completion('relics').pct;
+    const pct = completion('runes').pct;
     expect(pct).toBeGreaterThanOrEqual(25);
-    expect(chronicleState(meta(), 'milestones', 'relics_25')).toBe('completed');
-    expect(chronicleState(meta(), 'milestones', 'relics_50')).toBe(pct >= 50 ? 'completed' : 'discovered');
-    expect(chronicleState(meta(), 'milestones', 'relics_100')).not.toBe('completed');
+    expect(chronicleState(meta(), 'milestones', 'runes_25')).toBe('completed');
+    expect(chronicleState(meta(), 'milestones', 'runes_50')).toBe(pct >= 50 ? 'completed' : 'discovered');
+    expect(chronicleState(meta(), 'milestones', 'runes_100')).not.toBe('completed');
   });
   it('catálogo de historias con los textos del juego y sin duplicados', () => {
     expect(CHRONICLES.stories.length).toBe(4 + 8 + 2 + 1);

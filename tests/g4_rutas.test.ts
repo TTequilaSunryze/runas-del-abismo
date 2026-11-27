@@ -49,10 +49,11 @@ describe('G4 · rutas', () => {
     expect(hard[0]!.power).toBeGreaterThan(plain[0]!.power);
     r.combat = createCombat({ ...buildFight(r) }).state;
     r.combat.over = 'win';
-    const relics = r.heroes.map((h) => h.relics.length);
+    const before = r.heroes.map((h) => h.runeOffers?.length ?? 0);
     finishFight(r);
     expect(r.flags).not.toContain('g4_sangre');
-    r.heroes.forEach((h, i) => expect(h.relics.length).toBe(relics[i]! + 1));
+    // la Senda de sangre paga una runa a elegir (las reliquias se retiraron)
+    r.heroes.forEach((h, i) => expect(h.runeOffers!.length).toBeGreaterThanOrEqual(before[i]! + 1));
   });
 });
 

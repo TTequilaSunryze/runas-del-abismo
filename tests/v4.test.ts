@@ -7,7 +7,7 @@ import { makeHero } from '../src/core/classes/factory';
 import { SPELLS } from '../src/core/classes/spells';
 import { runAiTurn } from '../src/core/combat/ai';
 import { cast, createCombat, current, endTurn, type UnitSpec } from '../src/core/combat/engine';
-import { bossOf, buildFight, chooseNode, finishFight, heroSpec, lastZone, newRun } from '../src/game/run';
+import { bossOf, buildFight, chooseNode, finishFight, heroSpec, lastZone, leaveNode, newRun } from '../src/game/run';
 import { spellGlyphErrors, spellSummary } from '../src/ui/spellicons';
 
 const hero = (pos = { x: 1, y: 3 }): UnitSpec => makeHero({ cls: 'guerrero', name: 'H', owner: 'p0', routes: ['baluarte'], pos, level: 3 });
@@ -85,13 +85,15 @@ describe('contenido', () => {
 
 const P = [{ owner: 'a', name: 'A', cls: 'guerrero' as const, routes: ['baluarte'] }];
 describe('salas, reliquias y presagios', () => {
-  it('reliquias: cambian estadísticas y rasgos', () => {
+  it('runas (antes reliquias): cambian estadísticas y rasgos', () => {
     const run = roomStep(newRun('T', 3, P));
     const h = run.heroes[0]!;
-    h.relics = ['caparazon', 'raiz'];
+    h.runes = ['caparazon', 'raiz_viva'];
     const u = heroSpec(h);
-    expect(u.armor).toBe(heroSpec({ ...h, relics: [] }).armor + 2);
+    expect(u.armor).toBe(heroSpec({ ...h, runes: [] }).armor + 2);
     expect(u.traits).toContain('regen');
+    // las reliquias antiguas ya no cuentan en combate (se migran a runas al cargar)
+    expect(heroSpec({ ...h, runes: [], relics: ['caparazon'] }).armor).toBe(heroSpec({ ...h, runes: [] }).armor);
     expect(Object.keys(RELICS).length).toBeGreaterThanOrEqual(20);
   });
   it('jaula: el aliado lucha con el grupo y no cuenta para perder', () => {
@@ -132,6 +134,10 @@ describe('zona 4', () => {
     run.combat = createCombat({ seed: 1, w: 8, h: 5, obstacles: [], units: [heroSpec(run.heroes[0]!, { x: 1, y: 1 })] }).state;
     run.combat.over = 'win';
     finishFight(run);
+    // primero las recompensas del jefe en la zona vencida; luego el descenso
+    expect(run.zone).toBe(2);
+    expect(run.zoneClear).toBe(true);
+    leaveNode(run);
     expect(run.zone).toBe(3);
     expect(run.phase).toBe('event');
     expect(run.event!.id).toBe('reliquia_2');

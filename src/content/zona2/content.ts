@@ -1,7 +1,7 @@
 // Zona 2: El Bosque Corrompido. Equipo y eventos de grupo.
 import type { ItemTheme } from '../../core/items/items';
 import { boon, healPct, losePct, type EventDef } from '../zona1/events';
-import { addAlly, giveItem, giveRelic } from '../../game/run';
+import { addAlly, giveItem, giveRuneOffer } from '../../game/run';
 
 export const ZONA2_ITEMS: ItemTheme = {
   names: {
@@ -48,7 +48,7 @@ export const ZONA2_EVENTS: EventDef[] = [
     id: 'nido', title: 'El Nido de las Arañas',
     text: 'Un nido enorme cuelga entre dos árboles. Dentro brilla el ajuar de alguien que no tuvo suerte.',
     options: [
-      { label: 'Saquearlo', hint: 'Cada uno gana una reliquia común; el próximo combate tiene presagio de Ciénaga.', apply: (run) => { for (const h of run.heroes) giveRelic(run, h, false); run.nextOmen = 'pantano'; return 'Salís pegajosos y con los bolsillos llenos.'; } },
+      { label: 'Saquearlo', hint: 'Cada uno gana una runa común; el próximo combate tiene presagio de Ciénaga.', apply: (run) => { for (const h of run.heroes) giveRuneOffer(run, h, 'event', false); run.nextOmen = 'pantano'; return 'Salís pegajosos y con los bolsillos llenos.'; } },
       { label: 'Quemarlo', hint: 'Todos: +1 de daño.', apply: (run) => { for (const h of run.heroes) { boon(h, 'resPoison', 15); boon(h, 'power', 1); } return 'Arde rápido. Las arañas, también.'; } },
     ],
   },

@@ -1,6 +1,6 @@
 // Zona 4: El Abismo. Equipo y eventos de grupo.
 import type { ItemTheme } from '../../core/items/items';
-import { addAlly, giveItem, giveRelic } from '../../game/run';
+import { addAlly, giveItem, giveRuneOffer } from '../../game/run';
 import { boon, healPct, losePct, type EventDef } from '../zona1/events';
 
 export const ZONA4_ITEMS: ItemTheme = {
@@ -32,7 +32,7 @@ export const ZONA4_EVENTS: EventDef[] = [
     id: 'espejo', title: 'El Espejo Oscuro',
     text: 'Un espejo que no refleja lo que sois, sino lo que podríais ser. Vuestro reflejo os tiende la mano.',
     options: [
-      { label: 'Aceptar el trato', hint: 'Cada uno: una reliquia rara. El próximo combate tiene un presagio de Luna de sangre.', apply: (run) => { for (const h of run.heroes) giveRelic(run, h, true); run.nextOmen = 'sangre'; return 'Vuestro reflejo sonríe. Algo rojo se asoma en el cielo.'; } },
+      { label: 'Aceptar el trato', hint: 'Cada uno: una runa rara. El próximo combate tiene un presagio de Luna de sangre.', apply: (run) => { for (const h of run.heroes) giveRuneOffer(run, h, 'event', true); run.nextOmen = 'sangre'; return 'Vuestro reflejo sonríe. Algo rojo se asoma en el cielo.'; } },
       { label: 'Romper el espejo', hint: 'Todos: +10% de crítico.', apply: (run) => { for (const h of run.heroes) boon(h, 'crit', 10); return 'Los pedazos os enseñan dónde golpear.'; } },
     ],
   },
@@ -65,7 +65,7 @@ export const ZONA4_EVENTS: EventDef[] = [
     text: 'Un trono hecho de runas apagadas. Quien se siente en él verá el final del camino.',
     options: [
       { label: 'Sentarse por turnos', hint: 'Todos: +2 de daño y -15 de vida máxima.', apply: (run) => { for (const h of run.heroes) { boon(h, 'power', 2); boon(h, 'hp', -15); } return 'Habéis visto el final. No os gusta, pero sabéis cómo llegar.'; } },
-      { label: 'Destruirlo', hint: 'Cada uno gana una reliquia común.', apply: (run) => { for (const h of run.heroes) giveRelic(run, h, false); return 'Entre los restos brillan objetos olvidados.'; } },
+      { label: 'Destruirlo', hint: 'Cada uno gana una runa común.', apply: (run) => { for (const h of run.heroes) giveRuneOffer(run, h, 'event', false); return 'Entre los restos brillan objetos olvidados.'; } },
     ],
   },
 ];

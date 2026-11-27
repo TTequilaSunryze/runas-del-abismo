@@ -1,3 +1,4 @@
+import { STATUSES } from '../core/statuses';
 import { FEATURES, schoolOf } from '../core/tuning';
 import { SPELLS } from '../core/classes/spells';
 // Tablero de combate: dibuja el estado y convierte clics en acciones.
@@ -202,6 +203,9 @@ export function sheetDir(dx: number, dy: number): number {
 
 /** tiempo por casilla al andar */
 const STEP_MS = 380;
+/** los enemigos andan más deprisa que los héroes: su turno no se hace eterno */
+const ENEMY_STEP_MS = 240;
+const stepMs = (u: { team: string } | undefined): number => (u?.team === 'enemy' ? ENEMY_STEP_MS : STEP_MS);
 /** duración de la transformación de fase de los jefes */
 const PHASE_MS = 1600;
 
@@ -299,8 +303,9 @@ function buildRoom(seed: number, w: number, h: number, zone = 0): RoomLook {
 
 /** variante fija por casilla */
 const pick = <T,>(list: T[], x: number, y: number): T => list[(((x * 73856093) ^ (y * 19349663)) >>> 0) % list.length]!;
-const STATUS_COLOR: Record<string, string> = { burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0', charm: '#ff9ad8', vuln: '#c9a0ff', bleed: '#e03040', hobble: '#9ad0e8', guarded: '#7fe0b0', deathmark: '#ff3a4a', verdugo: '#ff8a30', frenzy: '#ff5030', orbita: '#b07cff', chained: '#a0a8c0', rooted: '#c89a5a', anchor: '#5ac8ff', silver: '#e0e8ff', smoke: '#9a8ab8', immune: '#7ae8ff', kinetic: '#58a6ff', prism: '#c8a0ff', fading: '#b0b8d0' };
-export const STATUS_NAME: Record<string, string> = { burn: 'Quemadura', poison: 'Veneno', slow: 'Ralentizado', stun: 'Aturdido', mark: 'Marcado', empower: 'Potenciado', reach: 'Alcance+', invis: 'Invisible', exposed: 'Expuesto', charm: 'Encantado', vuln: 'Vulnerable', bleed: 'Sangrado', hobble: 'Atrapado', guarded: 'Protegido', deathmark: 'Marca de la muerte', verdugo: 'Presa', frenzy: 'Frenesí', orbita: 'Órbita', chained: 'Encadenado', rooted: 'Inmovilizado', anchor: 'Sello de anclaje', silver: 'Balas de plata', smoke: 'En el humo', immune: 'Inmune', kinetic: 'Barrera cinética', prism: 'Baluarte prismático', fading: 'Desvaneciéndose' };
+/** Colores y nombres de los estados: salen del catálogo único (core/statuses.ts); se conservan los colores de siempre. */
+const STATUS_COLOR: Record<string, string> = { ...Object.fromEntries(Object.values(STATUSES).map((x) => [x.kind, x.color])), burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0', charm: '#ff9ad8', vuln: '#c9a0ff', bleed: '#e03040', hobble: '#9ad0e8', guarded: '#7fe0b0', deathmark: '#ff3a4a', verdugo: '#ff8a30', frenzy: '#ff5030', orbita: '#b07cff', chained: '#a0a8c0', rooted: '#c89a5a', anchor: '#5ac8ff', silver: '#e0e8ff', smoke: '#9a8ab8', immune: '#7ae8ff', kinetic: '#58a6ff', prism: '#c8a0ff', fading: '#b0b8d0' };
+export const STATUS_NAME: Record<string, string> = Object.fromEntries(Object.values(STATUSES).map((x) => [x.kind, x.name]));
 
 interface Float { x: number; y: number; text: string; color: string; t0: number }
 interface Shot { x0: number; y0: number; x1: number; y1: number; color: string; t0: number; dur: number; orb?: boolean }
@@ -342,6 +347,8 @@ export class Board {
   /** Casilla bajo el ratón (para la tecla G). */
   hoverCell(): Pos | null { return this.hover; }
   private shown = new Map<number, Pos>();
+  /** vida y escudo que aún no se han «visto» caer: la barra baja cuando la animación golpea, no antes */
+  private hpPend: Array<{ id: number; t: number; d: number; sh: number }> = [];
   private flash = new Map<number, number>();
   private floats: Float[] = [];
   private shots: Shot[] = [];
@@ -353,7 +360,7 @@ export class Board {
   /** animación de hechizo en curso (modelos animados) */
   private acts = new Map<number, { t0: number; anim: Anim; ms?: number; spell?: string }>();
   /** caminatas en curso: camino casilla a casilla */
-  private walks = new Map<number, { from: Pos; path: Pos[]; t0: number; end: number }>();
+  private walks = new Map<number, { from: Pos; path: Pos[]; t0: number; end: number; ms?: number }>();
   /** dirección del tramo que va andando (dx, dy) y casillas andadas, para la animación */
   private walkSeg = new Map<number, { dx: number; dy: number; dist: number }>();
   /** acción que espera a que acabe la transformación de fase */
@@ -557,8 +564,13 @@ export class Board {
             const len = Math.hypot(e.at.x - from.x, e.at.y - from.y), dur = Math.min(420, 110 + len * 45);
             this.arrows.push({ img: shc.arrow, from: { ...from }, at: { ...e.at }, t0: now + rel, dur, lift: (shc.arrowY ?? 20) * shc.scale });
             this.fx.cast({ ...r, travel: 'instant', onSelf: 'none' }, from, e.at, fxCells(def, from, e.at, c.w, c.h), now + rel + dur);
-            late = rel + dur;
-          } else { this.fx.cast(r, from, e.at, fxCells(def, from, e.at, c.w, c.h), now + rel); late = rel; }
+            // el golpe llega cuando termina de andar, suelta y vuela la flecha (antes se perdía el tiempo de andar: el daño salía antes que la animación)
+            late = Math.max(late, now - now0 + rel + dur);
+          } else {
+            // sin flecha: el daño se ve en el momento del golpe de la animación (a mitad del ataque si la hoja no dice otra cosa)
+            const hit = rel || (shc?.actMs ? shc.actMs * animMul(u.kind, 'attack', u.team === 'enemy') * 0.5 : def.dmg ? ACT_MS * 0.4 : 0);
+            this.fx.cast(r, from, e.at, fxCells(def, from, e.at, c.w, c.h), now + hit); late = Math.max(late, now - now0 + hit);
+          }
         }
       } else if (e.t === 'move' && u && e.path.length) {
         const last = e.path[e.path.length - 1]!;
@@ -566,14 +578,16 @@ export class Board {
         // andar: recorre el camino casilla a casilla; lo que pase después en el turno espera a que llegue
         if (e.walk && from) {
           const start = Math.max(now, this.walks.get(u.id)?.end ?? 0);
-          this.walks.set(u.id, { from: { x: Math.round(from.x), y: Math.round(from.y) }, path: e.path.map((p) => ({ ...p })), t0: start, end: start + e.path.length * STEP_MS });
-          walkLate = Math.max(walkLate, start + e.path.length * STEP_MS - now0);
+          this.walks.set(u.id, { from: { x: Math.round(from.x), y: Math.round(from.y) }, path: e.path.map((p) => ({ ...p })), t0: start, end: start + e.path.length * stepMs(u), ms: stepMs(u) });
+          walkLate = Math.max(walkLate, start + e.path.length * stepMs(u) - now0);
           late = Math.max(late, walkLate);
         }
       } else if (e.t === 'death' && u && from) {
         if (u.seed === undefined) this.ghosts.push({ kind: lookKind(u), team: u.team, idx: heroIdx.get(u.id) ?? 0, x: from.x, y: from.y, t0: now, sheet: sheetOf(u) ? u.kind : undefined, dir: this.facing.get(u.id) ?? 0 });
       }
-      if (e.t === 'damage' && e.amount > 0) this.hurtAt.set(e.unit, now);
+      if (e.t === 'damage' && e.amount > 0) { this.hurtAt.set(e.unit, now); this.hpPend.push({ id: e.unit, t: now, d: e.amount, sh: e.absorbed }); }
+      else if (e.t === 'damage' && e.absorbed) this.hpPend.push({ id: e.unit, t: now, d: 0, sh: e.absorbed });
+      if (e.t === 'heal') this.hpPend.push({ id: e.unit, t: now, d: -e.amount, sh: 0 });
       if (e.t === 'damage') {
         this.flash.set(e.unit, now + 180);
         if (from && e.amount > 0) this.fx.hit(from, e.crit, now);
@@ -792,7 +806,13 @@ export class Board {
 
   /** Un fotograma de una hoja de 8 direcciones, con los pies en el centro de la casilla (x, y) (con decimales). */
   private sheetFrame(c: CombatState, s: Sheet, anim: SheetAnim, frame: number, dir: number, x: number, y: number, alpha = 1, flash = false): void {
-    const g = this.g, img = s.img[anim] ?? s.img.idle!, p = this.top(c, x + 0.5, y + 0.5), k = s.scale, sz = s.size;
+    // si la animación pedida aún no ha cargado, se dibuja el reposo (antes no se dibujaba nada y el personaje desaparecía)
+    const want = s.img[anim];
+    const fallback = !ready(want ?? null);
+    const img = fallback ? s.img.idle! : want!;
+    if (!ready(img)) return;
+    if (fallback) frame = frame % Math.max(1, s.frames.idle ?? 1);
+    const g = this.g, p = this.top(c, x + 0.5, y + 0.5), k = s.scale, sz = s.size;
     // de perfil: una sola fila; mira a la izquierda (W, SW, NW, N) volteando la imagen
     const row = s.dirs === 1 ? 0 : dir, flip = s.dirs === 1 && [4, 5, 6, 7].includes(dir);
     const px = Math.round(p.x), py = Math.round(p.y + ISO_FOOT);
@@ -864,7 +884,8 @@ export class Board {
     const run = this.session.run;
     // semilla estable durante el combate: partida, zona, sala y tamaño del mapa
     let s = 2166136261;
-    for (const ch of `${run?.code ?? ''}|${run?.zone ?? 0}|${run?.step ?? 0}|${c.w}x${c.h}|${c.units.length}`) s = Math.imul(s ^ ch.charCodeAt(0), 16777619);
+    // (antes contaba las unidades: invocar, sembrar o dividirse cambiaba la decoración de la sala a mitad del combate)
+    for (const ch of `${run?.code ?? ''}|${run?.zone ?? 0}|${run?.step ?? 0}|${run?.fight ?? 0}|${c.w}x${c.h}`) s = Math.imul(s ^ ch.charCodeAt(0), 16777619);
     if (!this.room || this.room.seed !== s >>> 0 || this.room.floor.length !== c.w * c.h) this.room = buildRoom(s >>> 0, c.w, c.h, zone);
     return this.room;
   }
@@ -1392,7 +1413,7 @@ export class Board {
       const wk = this.walks.get(u.id);
       if (wk && now < wk.end) {
         // andando: posición a lo largo del camino, a paso constante
-        const k = Math.max(0, (now - wk.t0) / STEP_MS), i = Math.min(wk.path.length - 1, Math.floor(k)), f = Math.min(1, k - i);
+        const k = Math.max(0, (now - wk.t0) / (wk.ms ?? STEP_MS)), i = Math.min(wk.path.length - 1, Math.floor(k)), f = Math.min(1, k - i);
         const a = i === 0 ? wk.from : wk.path[i - 1]!, b = wk.path[i]!;
         s.x = a.x + (b.x - a.x) * f; s.y = a.y + (b.y - a.y) * f;
         this.walkSeg.set(u.id, { dx: b.x - a.x, dy: b.y - a.y, dist: k });
@@ -1585,10 +1606,16 @@ export class Board {
   showBars = true;
 
   private bars(u: Unit, cx: number, top: number, heroIdx: number | undefined): void {
-    const g = this.g, w = TILE - 14, x = cx - w / 2;
+    const g = this.g, w = TILE - 10, x = cx - w / 2;
     if (this.showBars) {
-    // barra con borde de hierro, vida actual/total centrada y la vida que falta en rojo oscuro
-    const bh = 10;
+    // lo que aún no ha llegado a verse (golpe en el aire) se sigue mostrando
+    const now = performance.now();
+    if (this.hpPend.length && this.hpPend[0]!.t < now - 4000) this.hpPend = this.hpPend.filter((p) => p.t >= now - 4000);
+    let hpLag = 0, shLag = 0;
+    for (const p of this.hpPend) if (p.id === u.id && p.t > now) { hpLag += p.d; shLag += p.sh; }
+    u = hpLag || shLag ? { ...u, hp: Math.max(0, Math.min(u.maxHp, u.hp + hpLag)), shield: u.shield + shLag } : u;
+    // barra con borde de hierro, vida actual/total centrada y la vida que falta en rojo oscuro (más grande y legible)
+    const bh = 12;
     g.fillStyle = '#0a0806'; g.fillRect(x - 2, top - 2, w + 4, bh + 4);
     g.fillStyle = '#5d544b'; g.fillRect(x - 1, top - 1, w + 2, bh + 2);
     g.fillStyle = '#2a0f0c'; g.fillRect(x, top, w, bh);
@@ -1598,8 +1625,10 @@ export class Board {
     g.fillStyle = u.team === 'hero' ? '#3f9a4a' : '#c23b3b'; g.fillRect(x, top, hw, bh);
     g.fillStyle = u.team === 'hero' ? '#6fd07a' : '#ef6a5e'; g.fillRect(x, top, hw, 3);
     if (u.shield > 0) { const sw = Math.max(2, (w * u.shield) / total); g.fillStyle = '#2f7fe0'; g.fillRect(x + hw, top, sw, bh); g.fillStyle = '#8cc8ff'; g.fillRect(x + hw, top, sw, 3); g.fillStyle = '#d8ecff'; g.fillRect(x + hw, top, 1, bh); }
-    g.font = 'bold 9px "Pixelify Sans", ui-monospace, monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = 'bold 11px "Pixelify Sans", ui-monospace, monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';
     const label = `${u.hp}/${u.maxHp}`;
+    // enemigos: armadura a la vista junto a la barra
+    if (u.team === 'enemy' && u.armor > 0) { const a = `🛡${Math.max(0, Math.floor(u.armor) - (u.statuses.exposed?.stacks ?? 0))}`; g.lineWidth = 3; g.strokeStyle = '#000'; g.strokeText(a, x - 12, top + bh / 2 + 0.5); g.fillStyle = '#d8d0c0'; g.fillText(a, x - 12, top + bh / 2 + 0.5); }
     const lx = u.shield > 0 ? cx - 8 : cx;
     g.lineWidth = 3; g.strokeStyle = '#000'; g.strokeText(label, lx, top + bh / 2 + 0.5);
     g.fillStyle = '#fff'; g.fillText(label, lx, top + bh / 2 + 0.5);
@@ -1611,7 +1640,13 @@ export class Board {
     // objetivo de la sala creada
     if (u.goal) { g.font = 'bold 16px ui-monospace, monospace'; g.textAlign = 'center'; g.lineWidth = 3; g.strokeStyle = '#000'; g.strokeText('★', x - 9, top + 9); g.fillStyle = '#ffd24a'; g.fillText('★', x - 9, top + 9); }
     let ix = x;
-    for (const k of Object.keys(u.statuses)) { const im = statusIcon(k); if (im) { g.drawImage(im, ix - 1, top + 11, 12, 12); ix += 12; } else { g.fillStyle = STATUS_COLOR[k] ?? '#fff'; g.fillRect(ix, top + 14, 6, 6); ix += 8; } }
+    for (const [k, v] of Object.entries(u.statuses)) {
+      const im = statusIcon(k);
+      if (im) { g.drawImage(im, ix - 1, top + 13, 14, 14); } else { g.fillStyle = STATUS_COLOR[k] ?? '#fff'; g.fillRect(ix, top + 16, 8, 8); }
+      // cargas de los estados que se acumulan
+      if (v && v.stacks > 1 && STATUSES[k as keyof typeof STATUSES]?.stack === 'add') { g.font = 'bold 9px ui-monospace, monospace'; g.textAlign = 'right'; g.lineWidth = 2; g.strokeStyle = '#000'; g.strokeText(String(v.stacks), ix + 13, top + 27); g.fillStyle = '#fff'; g.fillText(String(v.stacks), ix + 13, top + 27); }
+      ix += 14;
+    }
     if (heroIdx !== undefined) {
       g.font = '12px ui-monospace, monospace'; g.textAlign = 'center';
       g.lineWidth = 3; g.strokeStyle = '#000'; g.strokeText(u.name, cx, top + TILE - 2);
@@ -1624,7 +1659,7 @@ export class Board {
     const u = c.units.find((x) => alive(x) && x.pos.x === h.x && x.pos.y === h.y);
     if (!u) return;
     const g = this.g;
-    const st = [...Object.entries(u.statuses).map(([k, v]) => `${STATUS_NAME[k]} ${v!.turns}${k === 'deathmark' ? ` (guarda ${v!.stacks})` : ''}`), ...(u.essence !== undefined ? [`Esencia ${u.essence}/${essenceNeed(u)}${u.essence >= essenceNeed(u) ? ' ¡cura!' : ''}`] : []), ...(u.souls !== undefined ? [`Almas ${u.souls} (${u.soulBank ?? 0} para gastar)`] : []), ...(u.fury !== undefined ? [`Furia ${u.fury}: +${furyPower(u)}% daño, +${furyCrit(u)}% crít.`] : [])].join(', ');
+    const st = [...Object.entries(u.statuses).map(([k, v]) => `${STATUS_NAME[k]}${STATUSES[k as keyof typeof STATUSES]?.stack === 'add' && v!.stacks > 1 ? ` ×${v!.stacks}` : ''} ${v!.turns}${k === 'deathmark' || k === 'doom' ? ` (guarda ${v!.stacks})` : ''}`), ...(u.essence !== undefined ? [`Esencia ${u.essence}/${essenceNeed(u)}${u.essence >= essenceNeed(u) ? ' ¡cura!' : ''}`] : []), ...(u.souls !== undefined ? [`Almas ${u.souls} (${u.soulBank ?? 0} para gastar)`] : []), ...(u.fury !== undefined ? [`Furia ${u.fury}: +${furyPower(u)}% daño, +${furyCrit(u)}% crít.`] : [])].join(', ');
     const res = !FEATURES.resistances ? '' : Object.entries(u.resist ?? {}).filter(([, v]) => v).map(([k, v]) => (v! > 0 ? `Resiste ${ELEMENT_NAME[k]} ${v}%` : `Débil a ${ELEMENT_NAME[k]} ${-v!}%`)).join(' · ');
     // daño estimado del hechizo elegido sobre esta unidad
     let est = '';

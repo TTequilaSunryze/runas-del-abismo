@@ -29,10 +29,10 @@ describe('Fase G1 · modificadores de expedición', () => {
     const base = ecosFor(a);
     a.mods = ['oscuridad']; expect(Math.abs(ecosFor(a) - base * 1.1)).toBeLessThanOrEqual(1);
   });
-  it('maldición persistente: menos vida máxima y una reliquia por héroe', () => {
+  it('maldición persistente: menos vida máxima y una runa más por héroe', () => {
     const n = newRun('MAL', 3, P), m = newRun('MAL', 3, P, { mods: ['maldicion'] });
     expect(heroMaxHp(m.heroes[0]!)).toBeLessThan(heroMaxHp(n.heroes[0]!));
-    expect(m.heroes[0]!.relics.length).toBe(n.heroes[0]!.relics.length + 1);
+    expect(m.heroes[0]!.runeOffers!.length).toBe(n.heroes[0]!.runeOffers!.length + 1);
   });
   it('enemigos reforzados empiezan con escudo; riesgo creciente sube con la zona', () => {
     const r = roomStep(newRun('REF', 3, P, { mods: ['reforzados'] })); chooseNode(r, 0);

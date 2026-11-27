@@ -6,11 +6,11 @@ import { isMuted, musicVolume } from '../audio/sfx';
 import { CLASS_PASSIVE, CLASSES, findRoute } from '../core/classes/classes';
 import { SPELLS } from '../core/classes/spells';
 import { BAG_SIZE, PRICE, RARITY_NAME, SLOTS, SLOT_NAME, STAT_NAME, statDiff, statShown, statsText, type Item, type Slot, type StatKey } from '../core/items/items';
-import { RELICS } from '../content/relics';
 import { PATRONS, patronBonus, patronOf } from '../content/boons';
 import { BLESSINGS, BOON_MODS } from '../core/boonmods';
 import { MAX_SPELL_UPS, UPGRADES, tuned } from '../core/upgrades';
-import { SOULS_PER_ARMOR, SOUL_ARMOR } from '../core/combat/engine';
+import { SOULS_PER_ARMOR, SOUL_ARMOR, spellOf } from '../core/combat/engine';
+import { runeOfferRow, runeStone, runesTab } from './runes';
 import { consequences, secretOpen } from '../content/branching';
 import { NODE_HINT, NODE_NAME, availableNodes, heroMaxHp, heroSpec, pendingOf, statBreakdown, upCount, zoneOf, type BossOption, type HeroSave, type RunState } from '../game/run';
 import { esc, mine, tip, ui } from './ctx';
@@ -84,7 +84,6 @@ function gearTab(run: RunState, h: HeroSave, selling: boolean): string {
   const selIt = kind === 'bag' ? h.bag[bagIdx] : kind === 'slot' ? h.equip[key as Slot] : undefined;
   if (!selIt) ui.selItem = '';
   return `${statsLine(h)}
-  ${h.relics.length ? `<div class="lbl">Reliquias <span class="dim">${h.relics.length}</span></div><div class="chips">${h.relics.map((r) => RELICS[r]).filter(Boolean).map((r) => `<span class="chip ${r!.rare ? 'r3' : 'r2'}" ${tip(`<b>${r!.icon} ${esc(r!.name)}</b><div class="sm">${esc(r!.text)}</div>`)}>${r!.icon} ${esc(r!.name)}</span>`).join('')}</div>` : ''}
   <div class="dropzone" data-drop="equip"><div class="lbl">Equipado <span class="dim sm dzhint">· suelta aquí para equipar</span></div>
   <div class="cells">${SLOTS.map((sl) => `<div class="slotbox" data-eslot="${sl}">${cell(h.equip[sl], `data-act="selitem" data-id="slot:${sl}"${h.equip[sl] ? ` data-drag="slot:${sl}"` : ''}`, undefined, sl, ui.selItem === `slot:${sl}`)}<small>${SLOT_NAME[sl]}</small></div>`).join('')}</div></div>
   <div class="dropzone" data-drop="bag"><div class="lbl">Mochila <span class="dim">${h.bag.length}/${BAG_SIZE}</span> <span class="dim sm dzhint">· suelta aquí para quitar</span></div>
@@ -97,9 +96,13 @@ function gearTab(run: RunState, h: HeroSave, selling: boolean): string {
 }
 
 function spellsTab(h: HeroSave): string {
-  const all = heroSpec(h).spells.filter((sp) => sp.charges === undefined);
-  return `<div class="lbl">Tus hechizos</div>
-  <div class="spells">${all.map((sp) => { const d = tuned(SPELLS[sp.id]!, { ups: h.ups[sp.id] }); const ups = (h.ups[sp.id] ?? []).map((u) => UPGRADES[u]?.icon ?? '').join('');
+  const unit = heroSpec(h);
+  const all = unit.spells.filter((sp) => sp.charges === undefined);
+  const runes = h.runes ?? [];
+  return `<div class="lbl">Runas <span class="dim">${runes.length}/4</span> <button class="mini" data-act="tab" data-id="runas">Gestionar ✧</button></div>
+  <div class="runeslots small">${runes.map((id) => runeStone(id, 'data-act="tab" data-id="runas"')).join('') || '<span class="dim sm">Sin runas</span>'}</div>
+  <div class="lbl">Tus hechizos <span class="dim sm">(con runas aplicadas)</span></div>
+  <div class="spells">${all.map((sp) => { const d = spellOf(unit, sp.id) ?? tuned(SPELLS[sp.id]!, { ups: h.ups[sp.id] }); const ups = (h.ups[sp.id] ?? []).map((u) => UPGRADES[u]?.icon ?? '').join('');
     return `<div class="srow" ${tip(spellTip(d))}>${spellIcon(d)}<span class="grow">${esc(d.name)} ${ups}</span></div>`; }).join('')}</div>`;
 }
 
@@ -112,23 +115,24 @@ export function soulsHtml(h: HeroSave): string {
 
 function groupTab(run: RunState): string {
   return run.heroes.map((h, i) => `<div class="member"><div class="row"><b class="p${i % 4}">${esc(h.name)}</b><span class="dim sm">${CLASSES[h.cls].name}</span><span class="grow"></span><span class="pill sm">💰 ${h.gold}</span>${escofinas(h)}</div>${soulsHtml(h)}
-    <div class="dim sm">${h.routes.map((r) => findRoute(h.cls, r)?.name).join(' + ')}${h.relics.length ? ` · ${h.relics.map((r) => RELICS[r]?.icon ?? '').join('')}` : ''}</div>${hpBar(h.hp, heroMaxHp(h))}
+    <div class="dim sm">${h.routes.map((r) => findRoute(h.cls, r)?.name).join(' + ')}</div>${hpBar(h.hp, heroMaxHp(h))}
+    <div class="runeslots tiny">${(h.runes ?? []).map((id) => runeStone(id, 'tabindex="-1"')).join('')}</div>
     <div class="cells tiny">${SLOTS.map((sl) => cell(h.equip[sl], 'disabled', undefined, sl)).join('')}</div></div>`).join('');
 }
 
 /** Ficha lateral con pestañas. */
 export function sidePanel(run: RunState, selling = false): string {
   const h = mine(run);
-  const tabs: Array<[typeof ui.tab, string]> = [['equipo', '🎒 Equipo'], ['hechizos', '✨ Hechizos'], ['grupo', '👥 Grupo']];
+  const tabs: Array<[typeof ui.tab, string]> = [['equipo', '🎒 Equipo'], ['hechizos', '✨ Hechizos'], ['runas', '✧ Runas'], ['grupo', '👥 Grupo']];
   const tab = h ? ui.tab : 'grupo';
   return `<aside class="side"><div class="tabs">${tabs.map(([id, name]) => `<button class="${tab === id ? 'on' : ''}" data-act="tab" data-id="${id}" ${h || id === 'grupo' ? '' : 'disabled'}>${name}</button>`).join('')}<button class="sq sideclose" data-act="side" ${tip('Cerrar')}>✕</button></div>
-  <div class="tabbody">${tab === 'grupo' || !h ? groupTab(run) : tab === 'hechizos' ? spellsTab(h) : gearTab(run, h, selling)}</div></aside>`;
+  <div class="tabbody">${tab === 'grupo' || !h ? groupTab(run) : tab === 'hechizos' ? spellsTab(h) : tab === 'runas' ? runesTab(h, run.phase !== 'combat') : gearTab(run, h, selling)}</div></aside>`;
 }
 
 /** Iconos del borde derecho: abren el equipo, los hechizos o el grupo como panel por encima del juego. */
 export function sideRail(run: RunState): string {
   const h = mine(run);
-  const items: Array<[typeof ui.tab, string, string]> = [['equipo', '🎒', 'Equipo y mochila'], ['hechizos', '✨', 'Hechizos y runas'], ['grupo', '👥', 'Grupo']];
+  const items: Array<[typeof ui.tab, string, string]> = [['equipo', '🎒', 'Equipo y mochila'], ['hechizos', '✨', 'Hechizos'], ['runas', '✧', 'Runas: espacios, sinergias y habilidades modificadas'], ['grupo', '👥', 'Grupo']];
   return `<nav class="siderail">${items.map(([id, icon, name]) => `<button class="sq ${ui.sideOpen && (h ? ui.tab : 'grupo') === id ? 'on' : ''}" data-act="sidetab" data-id="${id}" ${h || id === 'grupo' ? '' : 'disabled'} ${tip(`<b>${name}</b>`)} aria-label="${name}">${icon}</button>`).join('')}</nav>`;
 }
 
@@ -200,6 +204,7 @@ export function victoryModal(run: RunState): string {
   ${stashRow(run)}
   ${boonRow(run)}
   ${bossRow(run)}
+  ${runeOfferRow(run)}
   <div class="lbl">Resumen</div>
   <div class="vsum sm"><span>⏱️ ${r.turns} ronda${r.turns === 1 ? '' : 's'}</span><span>⚔️ ${r.damage.reduce((a, x) => a + x.dmg, 0)} de daño</span></div>
   ${r.damage.map((x) => `<div class="vbar sm"><span>${esc(x.name)}</span><i style="width:${Math.round((x.dmg / total) * 100)}%"></i><b>${x.dmg}</b></div>`).join('')}
@@ -233,7 +238,7 @@ export function boonRow(run: RunState): string {
 }
 
 /** Todo lo que el jugador tiene pendiente de elegir. */
-export const pendingRows = (run: RunState): string => `${boonRow(run)}${bossRow(run)}${stashRow(run)}${lootRow(run)}`;
+export const pendingRows = (run: RunState): string => `${run.phase === 'map' && run.report && !run.arena && ui.reportClosed !== run.report.stamp ? '' : runeOfferRow(run, true)}${boonRow(run)}${bossRow(run)}${stashRow(run)}${lootRow(run)}`;
 
 /** Control para cambiar de sala: el anfitrión espera a que todos estén listos; los demás pulsan «Listo». */
 export function advanceBar(run: RunState, label: string, act = 'leavenode'): string {
@@ -304,7 +309,7 @@ export function statsModal(run: RunState): string {
   <div class="cards c2">
     <div><div class="lbl">Habilidades</div><div class="chips">${spec.spells.filter((x) => x.charges === undefined).map((sp) => { const d = tuned(SPELLS[sp.id]!, sp); return `<span class="chip" ${tip(spellTip(d))}>${spellIcon(d)} ${esc(d.name)}</span>`; }).join('')}</div>
     ${Object.values(h.bag2).some((n) => n > 0) ? `<div class="lbl">Consumibles</div><div class="chips">${Object.entries(h.bag2).filter(([, n]) => n > 0).map(([id, n]) => `<span class="chip" ${tip(spellTip(SPELLS[id]!))}>${spellIcon(SPELLS[id]!, false)} ${esc(SPELLS[id]!.name)} x${n}</span>`).join('')}</div>` : ''}</div>
-    <div>${h.relics.length ? `<div class="lbl">Reliquias</div><div class="chips">${h.relics.map((r) => RELICS[r]).filter(Boolean).map((r) => `<span class="chip" ${tip(esc(r!.text))}>${r!.icon} ${esc(r!.name)}</span>`).join('')}</div>` : ''}
+    <div>${h.runes?.length ? `<div class="lbl">Runas</div><div class="runeslots small">${h.runes.map((id) => runeStone(id, 'tabindex="-1"')).join('')}</div>` : ''}
     ${h.boons.some((b) => BLESSINGS[b]) ? `<div class="lbl">Bendiciones de clase</div>${h.boons.filter((b) => BLESSINGS[b]).map((b) => `<div class="sm good" ${tip(esc(BLESSINGS[b]!.text))}>${BLESSINGS[b]!.icon} ${esc(BLESSINGS[b]!.name)}</div>`).join('')}` : ''}
     ${Object.keys(pat.counts).some((id) => !PATRONS[id]!.noSet) ? `<div class="lbl">Bendiciones</div>${Object.entries(pat.counts).filter(([id]) => !PATRONS[id]!.noSet).map(([id, n]) => { const p = PATRONS[id]!; return `<div class="sm ${n >= 2 ? 'good' : 'dim'}">${p.icon} ${esc(p.name)} ${n}/3 · ${n >= 3 ? esc(p.threeText) : n >= 2 ? esc(p.twoText) : `con 2: ${esc(p.twoText)}`}</div>`; }).join('')}` : ''}
     ${h.boons.some((b) => BOON_MODS[b]) ? `<div class="lbl">Hechizos mejorados</div>${h.boons.filter((b) => BOON_MODS[b]).map((b) => `<div class="sm" ${tip(esc(BOON_MODS[b]!.text))}>✨ ${esc(BOON_MODS[b]!.name)} <span class="dim">(${esc(SPELLS[BOON_MODS[b]!.target]!.name)})</span></div>`).join('')}` : ''}

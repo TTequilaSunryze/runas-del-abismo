@@ -2,8 +2,7 @@
 // Desconocido tengan variedad suficiente. Se vota y el resultado afecta a todos por igual, como el resto de eventos.
 import { MAX_CONSUMABLE } from './boons';
 import { OMENS } from './modes';
-import { RELICS } from './relics';
-import { giveItem, giveRelic, type HeroSave, type RunState } from '../game/run';
+import { giveItem, giveRuneOffer, sacrificeRune, transformRune, type HeroSave, type RuneOffer, type RunState } from '../game/run';
 import { rand, pick } from '../core/rng';
 import { boon, healPct, losePct, type EventDef } from './zona1/events';
 
@@ -13,7 +12,7 @@ const addConsumable = (h: HeroSave, id: string): boolean => {
   h.bag2[id] = n + 1;
   return true;
 };
-const relicNames = (run: RunState, ids: Array<string | null>): string => ids.map((id, i) => (id ? `${run.heroes[i]!.name}: ${RELICS[id]!.icon} ${RELICS[id]!.name}` : '')).filter(Boolean).join(' · ');
+const relicNames = (run: RunState, ids: Array<RuneOffer | null>): string => ids.some(Boolean) ? `Cada uno elegirá una runa: ${ids.map((o, i) => (o ? `${run.heroes[i]!.name} (${o.runes.length} opciones)` : '')).filter(Boolean).join(' · ')}.` : '';
 const itemNames = (run: RunState, f: (h: HeroSave) => { name: string }): string => run.heroes.map((h) => `${h.name}: ${f(h).name}`).join(' · ');
 
 export const COMMON_EVENTS: EventDef[] = [
@@ -21,7 +20,7 @@ export const COMMON_EVENTS: EventDef[] = [
     id: 'c_despojos', title: 'El Montón de Despojos',
     text: 'Una montaña de armas rotas, abalorios y huesos que otros dejaron atrás. La pila se mueve y emite un ruido sordo, como si algo creciera dentro. Si rebuscas en la superficie, puede que encuentres algo decente. Si te zambulles, quizá algo antiguo.',
     options: [
-      { label: 'Zambullirse', hint: 'Cada uno: pierde el 15% de su vida actual. Gana una reliquia aleatoria', apply: (run) => { const got = run.heroes.map((h) => { losePct(h, 0.15); return giveRelic(run, h); }); return `Salís arañados, con algo olvidado entre las manos. ${relicNames(run, got)}`; } },
+      { label: 'Zambullirse', hint: 'Cada uno: pierde el 15% de su vida actual. Gana una runa a elegir', apply: (run) => { const got = run.heroes.map((h) => { losePct(h, 0.15); return giveRuneOffer(run, h, 'event'); }); return `Salís arañados, con algo olvidado entre las manos. ${relicNames(run, got)}`; } },
       { label: 'Rebuscar en la superficie', hint: 'Cada uno: gana 60 de oro y un objeto aleatorio', apply: (run) => { const t = itemNames(run, (h) => { h.gold += 60; return giveItem(run, h, 'combat'); }); return `Entre la chatarra aparece algo útil. ${t}`; } },
     ],
   },
@@ -95,6 +94,25 @@ export const COMMON_EVENTS: EventDef[] = [
     options: [
       { label: 'Descansar un rato', hint: 'Todos recuperan un 25% de vida', apply: (run) => { for (const h of run.heroes) healPct(h, 0.25); return 'Nadie vuelve a por sus cosas. Dormís a turnos.'; } },
       { label: 'Saquear el campamento', hint: 'Cada uno: +70 de oro', apply: (run) => { for (const h of run.heroes) h.gold += 70; return 'Bolsas de monedas escondidas bajo los petates. Quien fuera, ya no las necesita.'; } },
+    ],
+  },
+  // ---------- eventos rúnicos ----------
+  {
+    id: 'c_forja_runas', title: 'La Forja de Runas Rotas',
+    text: 'Un yunque cubierto de esquirlas rúnicas aún tibias. Quien trabajó aquí sabía rehacer una runa en otra más poderosa… o fundirla para siempre.',
+    options: [
+      { label: 'Reforjar la runa', hint: 'Cada uno: su primera runa equipada se transforma en otra de la misma familia y una rareza más (hasta épica).', apply: (run) => { const t = run.heroes.map((h) => transformRune(run, h)).filter(Boolean); return t.length ? `El yunque canta. ${t.join(' · ')}.` : 'Nadie lleva runas que reforjar.'; } },
+      { label: 'Fundir la runa', hint: 'Cada uno: pierde su última runa equipada; a cambio, 90 de oro y recupera el 30% de la vida.', apply: (run) => { const t = run.heroes.map((h) => { const n = sacrificeRune(h); if (!n) return ''; h.gold += 90; healPct(h, 0.3); return `${h.name} funde ${n}`; }).filter(Boolean); return t.length ? `${t.join(' · ')}. El metal rúnico se vende bien.` : 'Nadie lleva runas que fundir.'; } },
+      { label: 'Llevarse las esquirlas', hint: 'Cada uno: una runa a elegir.', apply: (run) => `Entre las esquirlas, alguna aún brilla. ${relicNames(run, run.heroes.map((h) => giveRuneOffer(run, h, 'event')))}` },
+    ],
+  },
+  {
+    id: 'c_altar_familias', title: 'El Altar de las Cuatro Familias',
+    text: 'Cuatro cuencos de piedra: uno con savia, otro con ceniza de huesos, otro con arena que cae hacia arriba y el último con limaduras de hierro.',
+    options: [
+      { label: 'Ofrecer sangre', hint: 'Cada uno: pierde el 20% de su vida actual y elige entre runas raras o mejores.', apply: (run) => { const o = run.heroes.map((h) => { losePct(h, 0.2); return giveRuneOffer(run, h, 'shrine', true); }); return `Los cuencos se llenan de luz. ${relicNames(run, o)}`; } },
+      { label: 'Dejar una runa', hint: 'Cada uno: pierde su última runa equipada y elige entre 3 runas nuevas.', apply: (run) => { const t = run.heroes.map((h) => (sacrificeRune(h) ? giveRuneOffer(run, h, 'shrine') : null)); return t.some(Boolean) ? `El altar acepta el trueque. ${relicNames(run, t)}` : 'Nadie lleva runas que dejar.'; } },
+      { label: 'Marcharse', hint: 'Nada cambia.', apply: () => 'Las familias pueden esperar.' },
     ],
   },
 ];

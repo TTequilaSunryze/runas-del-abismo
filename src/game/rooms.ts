@@ -5,7 +5,7 @@ import { AFFIX_NAMES, SLOT_POOL, rollAffix, type Item, type StatKey } from '../c
 import { pick, rand, shuffle } from '../core/rng';
 import { schoolOf } from '../core/tuning';
 import { UPGRADES } from '../core/upgrades';
-import { giveItem, healOf, heroMaxHp, heroSpec, upgradeChoices, zoneOf, type HeroSave, type RunState } from './run';
+import { giveItem, giveRuneOffer, healOf, heroMaxHp, heroSpec, runeBox, upgradeChoices, zoneOf, type HeroSave, type RunState } from './run';
 
 export type RoomState =
   | { kind: 'altar'; pacts: string[]; votes: Record<string, number>; result?: string }
@@ -228,6 +228,8 @@ function openChest(run: RunState): void {
   const gold = 15 + 10 * run.zone;
   for (const h of run.heroes) h.gold += gold;
   r.lines.push(`Y ${gold} de oro para cada uno.`);
+  // runas: los cofres a veces guardan una (más a menudo en zonas hondas); azar propio de las runas
+  if (rand(runeBox(run)) < 0.4 + 0.15 * run.zone) for (const h of run.heroes) { const o = giveRuneOffer(run, h, 'chest'); if (o) r.lines.push(`${h.name}: una runa a elegir (${o.runes.length} opciones).`); }
 }
 
 /** Texto de la hoguera según la zona. */

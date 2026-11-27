@@ -13,7 +13,9 @@ export type StatusKind = 'burn' | 'poison' | 'slow' | 'stun' | 'mark' | 'empower
   // v15: Arquitecto Rúnico y Pistolero Arcano
   | 'rooted' | 'anchor' | 'silver' | 'smoke' | 'immune' | 'kinetic' | 'prism'
   // G3.2: manifestaciones que se desvanecen solas al acabarse
-  | 'fading';
+  | 'fading'
+  // Runas: estados nuevos (ver core/statuses.ts)
+  | 'chill' | 'frozen' | 'weak' | 'corrupt' | 'doom' | 'resonance' | 'regen' | 'haste' | 'ward';
 export type ClassId = 'guerrero' | 'mago' | 'clerigo' | 'picaro' | 'arquero' | 'zorro' | 'esferas' | 'carcelero' | 'acechador' | 'barbaro' | 'arquitecto' | 'pistolero';
 
 export interface StatusState {
@@ -78,6 +80,12 @@ export interface Unit {
   statusBonus: number;
   statuses: Partial<Record<StatusKind, StatusState>>;
   spells: SpellSlot[];
+  /** Runas universales que transforman las habilidades de esta unidad (máx. 4, ver core/runes). */
+  runes?: string[];
+  /** Runas: golpes diferidos (Eco diferido, Bucle) que se repiten al empezar su próximo turno */
+  runeEchoes?: Array<{ spell: string; at: Pos; pct: number }>;
+  /** Runas: ya ganó el PA de Impulso temporal este turno */
+  runeKillAp?: boolean;
   ai: 'melee' | 'ranged' | 'boss' | 'pillar' | 'champ' | 'decoy' | null;
   /**
    * Rasgos especiales: puddle (al morir deja una casilla pegajosa), guard (empieza su turno con escudo),

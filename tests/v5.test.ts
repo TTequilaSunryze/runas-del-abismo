@@ -186,6 +186,8 @@ describe('consumibles, bendiciones y botín', () => {
     const run = newRun('T', 3, [{ owner: 'a', name: 'A', cls: 'guerrero', routes: ['baluarte'] }, { owner: 'b', name: 'B', cls: 'mago', routes: ['fuego'] }]);
     run.stamp = 1;
     for (const h of run.heroes) h.boonOffer = null;
+    // la runa inicial también se espera; aquí ya está elegida
+    for (const h of run.heroes) h.runeOffers = [];
     run.offers.b = [];
     expect(waitingFor(run, ['a', 'b'], 'a').map((h) => h.owner)).toEqual(['b']);
     expect(metaAction(run, 'b', { a: 'ready' })).toMatch(/Antes elige/);

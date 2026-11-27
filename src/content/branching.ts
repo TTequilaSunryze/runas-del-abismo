@@ -5,7 +5,7 @@
 // - la llave rúnica que abre el pasaje secreto de la zona y la Cámara a la que lleva.
 import { CAGE_ALLY } from './enemies';
 import type { RunState } from '../game/run';
-import { addAlly, giveRelic, offerBossReward } from '../game/run';
+import { addAlly, giveRuneOffer, offerBossReward } from '../game/run';
 import { MAX_CONSUMABLE } from './boons';
 import { boon, healPct, losePct, type EventDef, type EventOption } from './zona1/events';
 
@@ -74,7 +74,7 @@ export const BRANCH_EVENTS: BranchEventDef[] = [
     requires: (run) => pendingFrom(run, 'g4_carto_robado'),
     options: [
       { label: 'Pagar la recompensa', hint: 'Cuesta 50 de oro a cada uno. Si alguien no puede, os emboscan igualmente en el próximo combate.', apply: (run) => { clear(run, 'g4_carto_robado'); if (allPay(run, 50)) return 'Cuentan las monedas y se apartan.'; run.ambush = true; return 'No basta. Se retiran… para esperaros más adelante.'; } },
-      { label: 'Plantarles cara', hint: 'El próximo combate es una emboscada (más enemigos), pero al ganarla cada uno recibe una reliquia rara.', apply: (run) => { clear(run, 'g4_carto_robado'); run.ambush = true; if (!run.flags.includes('g2_desafio')) run.flags.push('g2_desafio'); return 'Desenfundan. Será en el próximo claro.'; } },
+      { label: 'Plantarles cara', hint: 'El próximo combate es una emboscada (más enemigos), pero al ganarla cada uno recibe una runa rara.', apply: (run) => { clear(run, 'g4_carto_robado'); run.ambush = true; if (!run.flags.includes('g2_desafio')) run.flags.push('g2_desafio'); return 'Desenfundan. Será en el próximo claro.'; } },
       { label: 'Devolverles la llave', hint: 'Perdéis la llave rúnica de esta zona y todos recuperan un 10% de vida.', need: 'Requiere tener la llave rúnica de esta zona.', when: (run) => run.flags.includes(keyFlag(run.zone)),
         apply: (run) => { clear(run, 'g4_carto_robado'); run.flags = run.flags.filter((f) => f !== keyFlag(run.zone)); each(run, (h) => healPct(h, 0.1)); return 'La llave cambia de manos y el asunto queda zanjado.'; } },
     ],
@@ -95,7 +95,7 @@ export const BRANCH_EVENTS: BranchEventDef[] = [
     requires: (run) => pendingFrom(run, 'g4_preso_libre'),
     options: [
       { label: 'Que vuelva a luchar con vosotros', hint: 'Se une al grupo hasta el final de esta zona.', apply: (run) => { addAlly(run, CAGE_ALLY[run.zone] ?? 'mercenario'); clear(run, 'g4_preso_libre'); run.flags.push('g4_preso_libre_ok'); return 'Choca su arma con la vuestra: deuda pagada.'; } },
-      { label: 'Aceptar su botín', hint: 'Cada uno recibe una reliquia.', apply: (run) => { const n = run.heroes.map((h) => giveRelic(run, h)).filter(Boolean).length; clear(run, 'g4_preso_libre'); run.flags.push('g4_preso_libre_ok'); return n ? 'Reparte lo que saqueó a sus carceleros.' : 'No queda nada que no tengáis ya.'; } },
+      { label: 'Aceptar su botín', hint: 'Cada uno recibe una runa.', apply: (run) => { const n = run.heroes.map((h) => giveRuneOffer(run, h, 'event')).filter(Boolean).length; clear(run, 'g4_preso_libre'); run.flags.push('g4_preso_libre_ok'); return n ? 'Reparte lo que saqueó a sus carceleros.' : 'No queda nada que no tengáis ya.'; } },
     ],
   },
   {
@@ -133,7 +133,7 @@ export const BRANCH_EVENTS: BranchEventDef[] = [
     text: 'Un emisario del guardián de la zona os ofrece un trato: conocimiento a cambio de que su señor os reciba en plena forma.',
     options: [
       { label: 'Aceptar el trato', hint: 'Cada uno elige ahora una bendición de su clase (como la recompensa de un jefe), pero el jefe de esta zona tendrá +25% de vida.', apply: (run) => { each(run, (h) => offerBossReward(run, h)); if (!run.flags.includes(`g2_carga_${run.zone}`)) run.flags.push(`g2_carga_${run.zone}`); return 'El heraldo sonríe y desaparece. Su señor os estará esperando.'; } },
-      { label: 'Ofrecer sangre en su lugar', hint: 'Todos: −8 de vida máxima hasta el final; cada uno recibe una reliquia.', apply: (run) => { each(run, (h) => { boon(h, 'hp', -8); giveRelic(run, h); }); return 'Acepta el pago con una reverencia burlona.'; } },
+      { label: 'Ofrecer sangre en su lugar', hint: 'Todos: −8 de vida máxima hasta el final; cada uno recibe una runa.', apply: (run) => { each(run, (h) => { boon(h, 'hp', -8); giveRuneOffer(run, h, 'event'); }); return 'Acepta el pago con una reverencia burlona.'; } },
       { label: 'Romperle el cuerno', hint: '+50 de oro cada uno, pero el próximo élite sale con dos modificadores más.', apply: (run) => { each(run, (h) => { h.gold += 50; }); if (!run.flags.includes('cursed_elite')) run.flags.push('cursed_elite'); return 'El cuerno se parte. A lo lejos, algo responde con un rugido.'; } },
     ],
   },
@@ -142,7 +142,7 @@ export const BRANCH_EVENTS: BranchEventDef[] = [
     id: 'g4_camara', title: 'La Cámara Rúnica',
     text: 'Tras el pasaje sellado, una sala que nadie ha pisado en siglos. Tres cosas brillan; solo hay tiempo para una.',
     options: [
-      { label: 'Llevarse el ajuar', hint: 'Cada uno recibe una reliquia rara.', apply: (run) => { const n = run.heroes.map((h) => giveRelic(run, h, true)).filter(Boolean).length; return n ? 'Cada uno sale con algo que no debería existir.' : 'Las vitrinas están vacías para vosotros.'; } },
+      { label: 'Llevarse el ajuar', hint: 'Cada uno recibe una runa rara.', apply: (run) => { const n = run.heroes.map((h) => giveRuneOffer(run, h, 'event', true)).filter(Boolean).length; return n ? 'Cada uno sale con algo que no debería existir.' : 'Las vitrinas están vacías para vosotros.'; } },
       { label: 'Leer los grabados', hint: 'Cada uno elige una bendición de su clase (como la recompensa de un jefe).', apply: (run) => { each(run, (h) => offerBossReward(run, h)); return 'Las runas se graban también en vuestra memoria.'; } },
       { label: 'Ofrecerle la sed de la fuente', hint: 'La fuente ya no os cobrará: conserváis el daño y todos recuperan un 25% de vida.', need: 'Requiere haber bebido de la Fuente de las Ánimas.', when: (run) => hasMark(run, 'g4_fuente_bebida'),
         apply: (run) => { clear(run, 'g4_fuente_bebida'); each(run, (h) => healPct(h, 0.25)); return 'La cámara bebe por vosotros. La deuda se borra.'; } },
@@ -180,6 +180,6 @@ export function consequences(run: RunState): Consequence[] {
   if (run.flags.includes(`g2_carga_${run.zone}`)) out.push({ icon: '☠️', name: 'Guardián reforzado', text: 'El jefe de esta zona tendrá +25% de vida.', tone: 'bad' });
   if (run.flags.includes('cursed_elite')) out.push({ icon: '👹', name: 'Élite maldito', text: 'El próximo élite sale con dos modificadores más.', tone: 'bad' });
   if (run.ambush) out.push({ icon: '⚠️', name: 'Emboscada', text: 'El próximo combate tendrá más enemigos (y mejor botín).', tone: 'mixed' });
-  if (run.flags.includes('g2_desafio')) out.push({ icon: '🏆', name: 'Desafío', text: 'Ganad el próximo combate y cada uno recibirá una reliquia rara.', tone: 'good' });
+  if (run.flags.includes('g2_desafio')) out.push({ icon: '🏆', name: 'Desafío', text: 'Ganad el próximo combate y cada uno recibirá una runa rara.', tone: 'good' });
   return out;
 }

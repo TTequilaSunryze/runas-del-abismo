@@ -20,16 +20,20 @@ import { ATLAS_CATS, CHRONICLE_CATS } from './archiveData';
 import { LIMITE_PCT, MILESTONE_CATS, MILESTONE_PCTS, RELAMPAGO_ROUNDS, registerAtlasDiscovery, registerChronicleProgress } from './atlas';
 import { meta, saveMeta } from './meta';
 import { heroSpec, type RunState } from './run';
+import { RUNE_LIST, SYNERGY_LIST, activeSynergies } from '../core/runes';
 
 export { DOCUMENTED_KILLS, LV, isDiscovered, levelOf, type Archive, type ArchiveCat } from './archiveData';
 
-export const CATEGORIES: ArchiveCat[] = ['bestiary', 'grimoire', 'relics'];
-export const CAT_NAME: Record<ArchiveCat, string> = { bestiary: 'Bestiario', grimoire: 'Grimorio', relics: 'Reliquias' };
+/** Categorías que se muestran (las Reliquias se retiraron: sus registros se conservan, pero ya no se coleccionan). */
+export const CATEGORIES: ArchiveCat[] = ['bestiary', 'grimoire', 'runes'];
+export const CAT_NAME: Record<ArchiveCat, string> = { bestiary: 'Bestiario', grimoire: 'Grimorio', relics: 'Reliquias', runes: 'Runas', synergies: 'Sinergias' };
 /** Nombre de cada nivel según la categoría (el 0 es siempre «sin descubrir»). */
 export const LEVEL_NAME: Record<ArchiveCat, string[]> = {
   bestiary: ['Desconocido', 'Descubierto', 'Estudiado', 'Documentado'],
   grimoire: ['Desconocido', 'Descubierto', 'Utilizado'],
   relics: ['No descubierta', 'Descubierta'],
+  runes: ['Desconocida', 'Descubierta', 'Utilizada'],
+  synergies: ['Desconocida', 'Activada'],
 };
 
 // ---------- catálogos ----------
@@ -60,7 +64,7 @@ function patronSpells(c: ClassId): Set<string> { return new Set(patronsOf(c).fla
 
 export const RELIC_IDS = Object.keys(RELICS);
 
-export const catalogIds = (cat: ArchiveCat): string[] => (cat === 'bestiary' ? BESTIARY.map((b) => b.id) : cat === 'grimoire' ? GRIMOIRE.map((g) => g.id) : RELIC_IDS);
+export const catalogIds = (cat: ArchiveCat): string[] => (cat === 'bestiary' ? BESTIARY.map((b) => b.id) : cat === 'grimoire' ? GRIMOIRE.map((g) => g.id) : cat === 'runes' ? RUNE_LIST.map((r) => r.id) : cat === 'synergies' ? SYNERGY_LIST.map((x) => x.id) : RELIC_IDS);
 
 // ---------- acceso al Archivo guardado ----------
 /** Archivo del jugador, ya sembrado con los datos antiguos del Salón la primera vez. */
@@ -149,7 +153,16 @@ export function recordArchive(run: RunState | null, myId: string, events: readon
     const chron = (...args: Parameters<typeof registerChronicleProgress> extends [unknown, ...infer R] ? R : never): void => { changed = registerChronicleProgress(m, ...args) || changed; };
     for (const r of me.relics) {
       if (RELICS[r] && !isDiscovered(a, 'relics', r)) changed = raise(a, 'relics', r, LV.found, { seen: 1 }) || changed;
-      if (RELICS[r]) contract({ t: 'relic', key: `${id}:relic:${r}` });
+    }
+    // Grimorio rúnico: las runas que llevas o te ofrecen quedan descubiertas; las que llevas en combate, utilizadas.
+    // Los contratos de «reliquia» cuentan ahora cada runa obtenida (una vez por runa y expedición).
+    const RUNE_IDS = new Set(RUNE_LIST.map((x) => x.id));
+    for (const r of [...(me.runes ?? []), ...(me.runeBag ?? [])]) if (RUNE_IDS.has(r)) { if (!isDiscovered(a, 'runes', r)) changed = raise(a, 'runes', r, LV.found, { seen: 1 }) || changed; contract({ t: 'relic', key: `${id}:rune:${r}` }); }
+    for (const o of me.runeOffers ?? []) for (const r of o.runes) if (RUNE_IDS.has(r) && !isDiscovered(a, 'runes', r)) changed = raise(a, 'runes', r, LV.found, { seen: 1 }) || changed;
+    if (run.combat) {
+      const unit = run.combat.units.find((u) => u.owner === myId && u.summoner === undefined);
+      for (const r of unit?.runes ?? []) if (RUNE_IDS.has(r) && levelOf(a, 'runes', r) < LV.studied) changed = raise(a, 'runes', r, LV.studied) || changed;
+      for (const syn of activeSynergies(unit?.runes ?? [])) if (!isDiscovered(a, 'synergies', syn.id)) changed = raise(a, 'synergies', syn.id, LV.found, { seen: 1 }) || changed;
     }
     const owned = [...heroSpec(me).spells.map((sp) => sp.id), ...me.boons];
     for (const g of owned) if (GRIM_IDS.has(g) && !isDiscovered(a, 'grimoire', g)) changed = raise(a, 'grimoire', g, LV.found, { seen: 1 }) || changed;
@@ -250,7 +263,7 @@ export function recordArchive(run: RunState | null, myId: string, events: readon
 /** Todo lo conseguido, como claves `tipo:id`, para saber qué es nuevo tras un registro. */
 function progressKeys(): Set<string> {
   const m = meta(), a = archive(), out = new Set<string>();
-  for (const c of ['bestiary', 'grimoire', 'relics'] as const) for (const id of Object.keys(a[c])) out.add(`${c}:${id}`);
+  for (const c of ['bestiary', 'grimoire', 'relics', 'runes', 'synergies'] as const) for (const id of Object.keys(a[c])) out.add(`${c}:${id}`);
   for (const [c, rec] of Object.entries(a.atlas)) for (const id of Object.keys(rec)) out.add(`atlas:${c}:${id}`);
   for (const [c, rec] of Object.entries(a.chronicles)) for (const [id, e] of Object.entries(rec)) if (e.state === 'completed') out.add(`chron:${c}:${id}`);
   for (const c of [...(m.contracts?.daily ?? []), ...(m.contracts?.weekly ?? [])]) if (c.completed) out.add(`contract:${c.id}`);
@@ -267,6 +280,8 @@ function pushNotices(before: Set<string>, after: Set<string>): void {
     const [t, x, y] = k.split(':');
     if (t === 'bestiary') notices.push({ icon: '📖', kind: 'archive', text: `Bestiario: ${beastDef(x!)?.name ?? x}` });
     else if (t === 'relics') notices.push({ icon: '🏺', kind: 'archive', text: `Reliquia: ${RELICS[x!]?.name ?? x}` });
+    else if (t === 'runes') notices.push({ icon: '✧', kind: 'archive', text: `Runa descubierta: ${RUNE_LIST.find((r) => r.id === x)?.name ?? x}` });
+    else if (t === 'synergies') notices.push({ icon: '🔗', kind: 'archive', text: `Sinergia descubierta: ${SYNERGY_LIST.find((r) => r.id === x)?.name ?? x}` });
     else if (t === 'atlas') { const r = ATLAS[x as keyof typeof ATLAS]?.find((e) => e.id === y); if (r) notices.push({ icon: '🗺️', kind: 'archive', text: `Atlas: ${r.name}` }); }
     else if (t === 'chron') { const r = CHRONICLES[x as keyof typeof CHRONICLES]?.find((e) => e.id === y); if (r) notices.push({ icon: x === 'secrets' ? '🔓' : x === 'milestones' ? '🏆' : '📜', kind: 'chronicle', text: `${x === 'secrets' ? 'Secreto' : x === 'milestones' ? 'Hito' : 'Crónica'}: ${r.name}` }); }
     else if (t === 'contract') { const c = [...(m.contracts?.daily ?? []), ...(m.contracts?.weekly ?? [])].find((e) => e.id === k.slice(9)); if (c) notices.push({ icon: '📋', kind: 'contract', text: `Contrato cumplido: ${c.title} (cóbralo en el Archivo)` }); }
