@@ -1,7 +1,7 @@
 // Fondo de los menús: una ilustración (public/bg) con una capa animada encima en pixel art
 // (luz de antorchas que parpadea, ascuas, chispas rúnicas y niebla). Solo decoración.
 
-export type MenuScene = 'home' | 'game' | 'settle' | 'tavern' | 'archive' | 'gate' | 'post' | 'hall' | 'altar' | 'abyssforge' | 'forge';
+export type MenuScene = 'home' | 'game' | 'settle' | 'tavern' | 'archive' | 'gate' | 'post' | 'hall' | 'altar' | 'abyssforge' | 'forge' | 'shrine' | 'rest';
 /** La capa animada mide 1/4 de la ilustración (1376×768): sus coordenadas son las de la imagen / 4. */
 const W = 344, H = 192, FPS = 20;
 
@@ -139,6 +139,27 @@ const SCENES: Record<MenuScene, SceneDef> = {
     smoke: [{ x: 224, y: 26 }],
     fog: '130,90,60',
     fogA: 0.04,
+  },
+  // el Santuario: arco rúnico con la reja entreabierta, antorchas y braseros, y niebla que se arrastra por el suelo
+  shrine: {
+    img: 'bg/santuario.jpg',
+    fires: [{ x: 30, y: 104, r: 24, col: FIRE }, { x: 314, y: 104, r: 24, col: FIRE }, { x: 88, y: 132, r: 26, col: FIRE }, { x: 258, y: 132, r: 26, col: FIRE }],
+    glows: [{ x: 172, y: 28, r: 22, col: '90,220,240' }, { x: 128, y: 58, r: 26, col: '90,220,240' }, { x: 218, y: 58, r: 26, col: '90,220,240' },
+      { x: 122, y: 106, r: 18, col: '90,220,240' }, { x: 222, y: 106, r: 18, col: '90,220,240' }, { x: 172, y: 48, r: 12, col: '255,200,110' }, { x: 172, y: 100, r: 40, col: '80,170,200' }],
+    flashes: [{ x: 128, y: 58, r: 34, col: '140,240,255' }, { x: 218, y: 58, r: 34, col: '140,240,255' }, { x: 172, y: 30, r: 30, col: '170,250,255' }],
+    sparks: { x: 118, y: 22, w: 108, h: 100, col: '130,235,255' },
+    smoke: [{ x: 88, y: 126 }, { x: 258, y: 126 }],
+    fog: '120,160,190',
+    fogA: 0.17,
+  },
+  // el Descanso: hoguera en el centro de una cripta con columnas rúnicas, petates y la mesa del mapa
+  rest: {
+    img: 'bg/descanso.jpg',
+    fires: [{ x: 172, y: 130, r: 52, col: FIRE }, { x: 172, y: 134, r: 24, col: '255,190,90' }, { x: 100, y: 143, r: 12, col: '255,190,90', ember: false }],
+    glows: [{ x: 25, y: 90, r: 22, col: '150,210,255' }, { x: 110, y: 82, r: 18, col: '150,210,255' }, { x: 240, y: 82, r: 18, col: '150,210,255' }, { x: 318, y: 90, r: 22, col: '150,210,255' }, { x: 130, y: 80, r: 32, col: '90,120,210' }],
+    smoke: [{ x: 172, y: 118 }],
+    fog: '110,100,120',
+    fogA: 0.05,
   },
   game: {
     img: 'bg/sala.jpg',
