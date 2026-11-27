@@ -261,6 +261,22 @@ function settlementPanel(): string {
     </div>`;
 }
 
+
+/** Diálogo breve de cada habitante; la acción final reutiliza las pantallas ya existentes. */
+export function residentModal(id: string): string {
+  const residents: Record<string, { name: string; role: string; line: string; detail: string; action: string; label: string }> = {
+    irena: { name: 'Irena', role: 'Tabernera', line: '«La primera ronda es para los que vuelven. La segunda, para los que todavía no saben si se van a quedar.»', detail: 'Irena deja un vaso limpio sobre la barra. No pregunta qué viste ahí abajo. Espera a que decidas si querés contarlo.', action: 'jugar', label: 'Preparar una expedición' },
+    sava: { name: 'Sava', role: 'Archivera', line: '«No escribas “ocurrió”. Escribe “alguien asegura que ocurrió”.»', detail: 'Sava mantiene una mano sobre el registro abierto. Antes de aceptar un hallazgo, quiere saber quién lo encontró y qué parte vio con sus propios ojos.', action: 'archivo', label: 'Consultar el Archivo' },
+    darel: { name: 'Darel', role: 'Vigía', line: '«Puedo contar los que salen. Los que vuelven… a veces tengo que aprender a reconocerlos.»', detail: 'Darel revisa las correas de tu equipo. Al terminar, vuelve a mirar la entrada. No te desea suerte; parece considerarlo una promesa demasiado grande.', action: 'jugar', label: 'Preparar la salida' },
+  };
+  const r = residents[id];
+  if (!r) return '';
+  return `<div class="modal resident-modal" data-act="residentclose"><div class="panel resident-dialog" role="dialog" aria-modal="true" aria-labelledby="resident-title" data-stop-close="true">
+    <div class="dim sm">${r.role.toUpperCase()}</div><h2 id="resident-title">${r.name}</h2><p>${r.detail}</p><blockquote>${r.line}</blockquote>
+    <div class="row"><button data-act="residentclose">Volver</button><span class="grow"></span><button class="pri" data-act="htab" data-id="${r.action}">${r.label}</button></div>
+  </div></div>`;
+}
+
 function metaPanel(): string {
   const m = meta();
   if (ui.homeTab === 'refugio') return settlementPanel();
