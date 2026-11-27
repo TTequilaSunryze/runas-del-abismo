@@ -11,7 +11,7 @@ import { PATRONS, patronBonus, patronOf } from '../content/boons';
 import { BLESSINGS, BOON_MODS } from '../core/boonmods';
 import { MAX_SPELL_UPS, UPGRADES, tuned } from '../core/upgrades';
 import { SOULS_PER_ARMOR, SOUL_ARMOR, spellOf } from '../core/combat/engine';
-import { runeNames, RUNES } from '../core/runes';
+import { RUNES } from '../core/runes';
 import { consequences, secretOpen } from '../content/branching';
 import { NODE_HINT, NODE_NAME, availableNodes, heroMaxHp, heroSpec, pendingOf, statBreakdown, upCount, zoneOf, type BossOption, type HeroSave, type RunState } from '../game/run';
 import { esc, mine, tip, ui } from './ctx';
