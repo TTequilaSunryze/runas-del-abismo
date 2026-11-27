@@ -58,7 +58,7 @@ export function reqText(r: Req): string {
   if (r.k === 'achievement') return `Logro «${ACH_NAME[r.id] ?? r.id}»`;
   if (r.k === 'mastery') return `Maestría ${r.lv} con ${CLASSES[r.cls].name}`;
   if (r.k === 'special') return `Contrato especial «${SPECIALS().find((s) => s.id === r.id)?.title ?? r.id}»`;
-  if (r.cat === 'milestones') return `Hito «${r.id.replace('bestiary_', '').replace('relics_', '').replace('grimoire_', '')}% del ${r.id.startsWith('bestiary') ? 'Bestiario' : r.id.startsWith('relics') ? 'catálogo de reliquias' : 'Grimorio'}»`;
+  if (r.cat === 'milestones') return `Hito «${r.id.replace('bestiary_', '').replace('relics_', '').replace('runes_', '').replace('grimoire_', '')}% del ${r.id.startsWith('bestiary') ? 'Bestiario' : r.id.startsWith('relics') ? 'catálogo de reliquias' : r.id.startsWith('runes') ? 'Grimorio rúnico' : 'Grimorio'}»`;
   return r.id === 'zona_4' ? 'Llegar al Abismo (zona 4)' : `Crónica «${r.id}» ${r.state === 'completed' ? 'completada' : 'descubierta'}`;
 }
 

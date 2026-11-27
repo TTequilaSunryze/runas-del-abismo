@@ -111,7 +111,7 @@ export type RuneOp =
   | { op: 'skip' }
   | { op: 'equip'; idx: number; slot?: number }
   | { op: 'unequip'; slot: number }
-  | { op: 'swap'; a: number; b: number }
+  | { op: 'swap'; from: number; to: number }
   | { op: 'drop'; idx: number };
 
 /** Mete una runa: al espacio indicado (lo que había va a la reserva), al primer espacio libre o a la reserva. */
@@ -170,8 +170,8 @@ export function runeAction(h: RuneHolder, a: RuneOp): string | null {
     }
     case 'swap': {
       const eq = h.runes ?? [];
-      if (!eq[a.a] || !eq[a.b]) return 'Espacio vacío';
-      [eq[a.a], eq[a.b]] = [eq[a.b]!, eq[a.a]!];
+      if (!eq[a.from] || !eq[a.to]) return 'Espacio vacío';
+      [eq[a.from], eq[a.to]] = [eq[a.to]!, eq[a.from]!];
       return null;
     }
     case 'drop': {

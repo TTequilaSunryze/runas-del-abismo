@@ -478,7 +478,7 @@ export function statBreakdown(h: HeroSave): Array<{ key: string; name: string; b
   ];
   return rows.map(([key, name, b, total]) => {
     const k = key as StatKey;
-    const parts: Array<[string, number]> = ([['Equipo', equip[k]], ['Reliquias', rel[k]], ['Bendiciones', pat[k]], ['Eventos y pacto', boon[k]], ['Almas', k === 'armor' && spec.souls !== undefined ? Math.floor(spec.souls / SOULS_PER_ARMOR) * SOUL_ARMOR : 0]] as Array<[string, number]>).filter(([, v]) => v);
+    const parts: Array<[string, number]> = ([['Equipo', equip[k]], ['Runas', rel[k]], ['Bendiciones', pat[k]], ['Eventos y pacto', boon[k]], ['Almas', k === 'armor' && spec.souls !== undefined ? Math.floor(spec.souls / SOULS_PER_ARMOR) * SOUL_ARMOR : 0]] as Array<[string, number]>).filter(([, v]) => v);
     return { key, name, base: b, parts, total };
   });
 }

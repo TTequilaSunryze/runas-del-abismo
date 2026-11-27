@@ -44,7 +44,8 @@ const classTrials: SpecialDef[] = PLAYABLE.filter((c) => TITLES.some((t) => t.id
 }));
 const collections = (): SpecialDef[] => [
   { id: 'col_bestiary', type: 'collection_milestone', title: 'Bestiario completo', description: 'Descubre todas las criaturas del Bestiario.', requiredCount: completion('bestiary').total, reward: { kind: 'title', id: 'bestiario' } },
-  { id: 'col_relics', type: 'collection_milestone', title: 'Todas las reliquias', description: 'Encuentra todas las reliquias.', requiredCount: completion('relics').total, reward: { kind: 'frame', id: 'reliquia' } },
+  // (id heredado de las reliquias: quien ya lo completó lo conserva; ahora cuenta las runas)
+  { id: 'col_relics', type: 'collection_milestone', title: 'Todas las runas', description: 'Descubre todas las runas del Grimorio rúnico.', requiredCount: completion('runes').total, reward: { kind: 'frame', id: 'reliquia' } },
   { id: 'col_grimoire', type: 'collection_milestone', title: 'Grimorio completo', description: 'Descubre todos los hechizos y bendiciones del Grimorio.', requiredCount: completion('grimoire').total, reward: { kind: 'frame', id: 'grimorio' } },
 ];
 const DESCENT = ['zona_1', 'zona_2', 'zona_3'];
@@ -98,7 +99,7 @@ export function evaluateSpecials(meta: Pick<Meta, 'contracts' | 'archive'>): boo
   for (const d of SPECIALS()) {
     let v = -1;
     if (d.id === 'col_bestiary') v = completion('bestiary').found;
-    else if (d.id === 'col_relics') v = completion('relics').found;
+    else if (d.id === 'col_relics') v = completion('runes').found;
     else if (d.id === 'col_grimoire') v = completion('grimoire').found;
     else if (d.id === 'lore_descent') v = DESCENT.filter((s) => chronicleState(meta, 'stories', s) === 'completed').length;
     else if (d.id === 'lore_secrets') v = SECRETS.filter((s) => chronicleState(meta, 'secrets', s.id) === 'completed').length;

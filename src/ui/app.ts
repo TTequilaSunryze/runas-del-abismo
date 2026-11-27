@@ -411,7 +411,21 @@ document.addEventListener('click', (e) => {
     case 'fscrap': s?.act({ a: 'room', op: 'scrap', idx: Number(id) }); ui.forgeRef = ''; break;
     case 'fspell': ui.forgeSpell = ui.forgeSpell === id ? '' : String(id); render([]); break;
     case 'fhone': s?.act({ a: 'room', op: 'hone', spell: ui.forgeSpell, up: String(id) }); break;
-    case 'tab': ui.tab = id as typeof ui.tab; render([]); break;
+    case 'tab': ui.tab = id as typeof ui.tab; if (id === 'runas') ui.sideOpen = true; lastKey = ''; render([]); break;
+    case 'selrune': ui.selRune = ui.selRune === id ? '' : id; lastKey = ''; render([]); break;
+    case 'runef': { const [k, v] = id.split(':') as ['fam' | 'rar' | 'kind', string]; ui.runeF = { ...ui.runeF, [k]: ui.runeF[k] === v ? '' : v }; homeScreen(''); break; }
+    case 'rune': {
+      // gestión de runas: elegir de una oferta, equipar, sustituir, quitar, intercambiar o soltar
+      const op = el.dataset.op ?? '', n = Number(id), slot = el.dataset.slot !== undefined ? Number(el.dataset.slot) : undefined;
+      if (op === 'take') s?.act({ a: 'rune', op: 'take', idx: n, ...(slot !== undefined ? { slot } : {}), ...(el.dataset.bag ? { bag: true } : {}) });
+      else if (op === 'skip') s?.act({ a: 'rune', op: 'skip' });
+      else if (op === 'equip') s?.act({ a: 'rune', op: 'equip', idx: n, ...(slot !== undefined ? { slot } : {}) });
+      else if (op === 'unequip' && slot !== undefined) s?.act({ a: 'rune', op: 'unequip', slot });
+      else if (op === 'swap' && slot !== undefined) s?.act({ a: 'rune', op: 'swap', from: slot, to: Number(el.dataset.to) });
+      else if (op === 'drop') s?.act({ a: 'rune', op: 'drop', idx: n });
+      ui.selRune = '';
+      break;
+    }
     case 'selitem': ui.selItem = ui.selItem === id ? '' : id; render([]); break;
     case 'equip': s?.act({ a: 'equip', idx: Number(id) }); ui.selItem = ''; break;
     case 'unequip': s?.act({ a: 'unequip', slot: id as Slot }); ui.selItem = ''; break;

@@ -5,6 +5,7 @@
 import type { ClassId } from '../core/state';
 import { CLASSES, PLAYABLE } from '../core/classes/classes';
 import { RELICS } from '../content/relics';
+import { RELIC_TO_RUNE } from '../core/runeCatalog';
 import { ZONES } from '../content/zones';
 import { CLASS_STORY, ZONE_STORY } from '../content/story';
 import { BESTIARY, GRIMOIRE, LV, levelFor } from './archive';
@@ -130,7 +131,10 @@ const RELIC_ORIGIN: Record<string, string> = {
 };
 function relicDossier(id: string): Dossier {
   const r = RELICS[id]!;
-  const e = meta().archive?.relics[id];
+  // las reliquias se retiraron: las que pasaron a runa siguen investigándose con su runa equivalente
+  const rune = RELIC_TO_RUNE[id];
+  const old = meta().archive?.relics[id], now = rune ? meta().archive?.runes?.[rune] : undefined;
+  const e = old || now ? { lv: Math.max(old?.lv ?? 0, now?.lv ?? 0), seen: (old?.seen ?? 0) + (now?.seen ?? 0) } : undefined;
   return {
     id: `objeto_${id}`, kind: 'objetos', icon: r.icon, name: r.name, known: !!e && e.lv > 0,
     examine: [

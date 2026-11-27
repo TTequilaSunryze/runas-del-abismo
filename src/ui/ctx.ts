@@ -28,7 +28,11 @@ export const ui = {
   notice: '',
   log: [] as string[],
   /** pestaña del panel lateral */
-  tab: 'equipo' as 'equipo' | 'hechizos' | 'grupo',
+  tab: 'equipo' as 'equipo' | 'hechizos' | 'runas' | 'grupo',
+  /** runa seleccionada en la pestaña de runas: "eq:0" o "bag:1" */
+  selRune: '',
+  /** filtros del Grimorio rúnico */
+  runeF: { fam: '', rar: '', kind: '' } as { fam: string; rar: string; kind: string },
   /** objeto seleccionado: "bag:3" o "slot:arma" */
   selItem: '',
   leaveArmed: false,
@@ -39,7 +43,7 @@ export const ui = {
   /** pestaña de la pantalla de inicio */
   homeTab: 'refugio' as 'refugio' | 'jugar' | 'tienda' | 'clases' | 'logros' | 'archivo' | 'salon' | 'diario' | 'cuenta' | 'amigos',
   /** Archivo del Abismo: categoría, filtro de estado y entrada abierta */
-  arcCat: 'bestiary' as 'bestiary' | 'grimoire' | 'relics' | 'atlas' | 'chronicles' | 'contracts',
+  arcCat: 'bestiary' as 'bestiary' | 'grimoire' | 'relics' | 'runes' | 'synergies' | 'atlas' | 'chronicles' | 'contracts',
   /** filtro secundario: zona (z1…z4) en el Bestiario, clase en el Grimorio, rareza en las Reliquias */
   arcF2: '',
   /** subcategoría del Atlas (zones/events/pacts/omens) o de las Crónicas (stories/secrets/milestones) */

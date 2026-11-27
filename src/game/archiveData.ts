@@ -1,7 +1,9 @@
 // Archivo del Abismo · modelo de datos persistente (sin dependencias del contenido, para que Meta pueda importarlo).
 // Vive en Meta.archive (campo opcional: las Meta antiguas simplemente no lo tienen y se completan al cargar).
 
-export type ArchiveCat = 'bestiary' | 'grimoire' | 'relics';
+export type ArchiveCat = 'bestiary' | 'grimoire' | 'relics' | 'runes' | 'synergies';
+/** Categorías con entradas (las que se guardan y fusionan igual). `relics` se conserva como histórico: el sistema se retiró. */
+export const ENTRY_CATS = ['bestiary', 'grimoire', 'relics', 'runes', 'synergies'] as const;
 
 /** Niveles de descubrimiento. 0 = desconocido en todas las categorías. */
 export const LV = {
@@ -13,7 +15,8 @@ export const LV = {
   documented: 3,
 } as const;
 /** Nivel máximo de cada categoría (el Grimorio llega a «Utilizado»; las Reliquias, a «Descubierta»). */
-export const MAX_LV: Record<ArchiveCat, number> = { bestiary: 3, grimoire: 2, relics: 1 };
+/** Runas: 1 = descubierta (la has visto u obtenido), 2 = utilizada (la llevabas equipada en un combate). Sinergias: 1 = activada. */
+export const MAX_LV: Record<ArchiveCat, number> = { bestiary: 3, grimoire: 2, relics: 1, runes: 2, synergies: 1 };
 export const DOCUMENTED_KILLS = 5;
 export const PAST_MAX = 80;
 
@@ -61,6 +64,9 @@ export interface Archive {
   bestiary: Record<string, ArchiveEntry>;
   grimoire: Record<string, ArchiveEntry>;
   relics: Record<string, ArchiveEntry>;
+  /** Grimorio rúnico: runas y sinergias descubiertas (se conservan entre expediciones) */
+  runes: Record<string, ArchiveEntry>;
+  synergies: Record<string, ArchiveEntry>;
   atlas: Record<AtlasCat, Record<string, AtlasEntryRecord>>;
   chronicles: Record<ChronicleCat, Record<string, ChronicleEntryRecord>>;
   /** combate en curso: evita contar dos veces lo mismo si el estado se repite o se recarga la página */
@@ -72,7 +78,7 @@ export interface Archive {
 }
 
 export const emptyArchive = (): Archive => ({
-  v: 1, bestiary: {}, grimoire: {}, relics: {},
+  v: 1, bestiary: {}, grimoire: {}, relics: {}, runes: {}, synergies: {},
   atlas: { zones: {}, events: {}, pacts: {}, omens: {}, mods: {} }, chronicles: { stories: {}, secrets: {}, milestones: {} },
   cur: null, seeded: false,
 });
@@ -84,7 +90,7 @@ const entry = (e: Partial<ArchiveEntry> | undefined, max: number): ArchiveEntry 
 export function normalizeArchive(a: unknown): Archive {
   const src = (a && typeof a === 'object' ? a : {}) as Partial<Archive>;
   const out = emptyArchive();
-  for (const cat of ['bestiary', 'grimoire', 'relics'] as const) {
+  for (const cat of ENTRY_CATS) {
     const rec = (src[cat] && typeof src[cat] === 'object' ? src[cat] : {}) as Record<string, Partial<ArchiveEntry>>;
     for (const [id, e] of Object.entries(rec)) { const x = entry(e, MAX_LV[cat]); if (x.lv > 0) out[cat][id] = x; }
   }
@@ -112,7 +118,7 @@ export function normalizeArchive(a: unknown): Archive {
 /** Une dos archivos sin perder nada: el mayor nivel y el mayor contador de cada entrada. */
 export function mergeArchive(a: unknown, b: unknown): Archive {
   const x = normalizeArchive(a), y = normalizeArchive(b), out = emptyArchive();
-  for (const cat of ['bestiary', 'grimoire', 'relics'] as const) {
+  for (const cat of ENTRY_CATS) {
     for (const id of new Set([...Object.keys(x[cat]), ...Object.keys(y[cat])])) {
       const p = x[cat][id], q = y[cat][id];
       out[cat][id] = { lv: Math.max(p?.lv ?? 0, q?.lv ?? 0), seen: Math.max(p?.seen ?? 0, q?.seen ?? 0), n: Math.max(p?.n ?? 0, q?.n ?? 0) };

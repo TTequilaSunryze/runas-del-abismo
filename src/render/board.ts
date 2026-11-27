@@ -1,3 +1,4 @@
+import { STATUSES } from '../core/statuses';
 import { FEATURES, schoolOf } from '../core/tuning';
 import { SPELLS } from '../core/classes/spells';
 // Tablero de combate: dibuja el estado y convierte clics en acciones.
@@ -299,8 +300,9 @@ function buildRoom(seed: number, w: number, h: number, zone = 0): RoomLook {
 
 /** variante fija por casilla */
 const pick = <T,>(list: T[], x: number, y: number): T => list[(((x * 73856093) ^ (y * 19349663)) >>> 0) % list.length]!;
-const STATUS_COLOR: Record<string, string> = { burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0', charm: '#ff9ad8', vuln: '#c9a0ff', bleed: '#e03040', hobble: '#9ad0e8', guarded: '#7fe0b0', deathmark: '#ff3a4a', verdugo: '#ff8a30', frenzy: '#ff5030', orbita: '#b07cff', chained: '#a0a8c0', rooted: '#c89a5a', anchor: '#5ac8ff', silver: '#e0e8ff', smoke: '#9a8ab8', immune: '#7ae8ff', kinetic: '#58a6ff', prism: '#c8a0ff', fading: '#b0b8d0' };
-export const STATUS_NAME: Record<string, string> = { burn: 'Quemadura', poison: 'Veneno', slow: 'Ralentizado', stun: 'Aturdido', mark: 'Marcado', empower: 'Potenciado', reach: 'Alcance+', invis: 'Invisible', exposed: 'Expuesto', charm: 'Encantado', vuln: 'Vulnerable', bleed: 'Sangrado', hobble: 'Atrapado', guarded: 'Protegido', deathmark: 'Marca de la muerte', verdugo: 'Presa', frenzy: 'Frenesí', orbita: 'Órbita', chained: 'Encadenado', rooted: 'Inmovilizado', anchor: 'Sello de anclaje', silver: 'Balas de plata', smoke: 'En el humo', immune: 'Inmune', kinetic: 'Barrera cinética', prism: 'Baluarte prismático', fading: 'Desvaneciéndose' };
+/** Colores y nombres de los estados: salen del catálogo único (core/statuses.ts); se conservan los colores de siempre. */
+const STATUS_COLOR: Record<string, string> = { ...Object.fromEntries(Object.values(STATUSES).map((x) => [x.kind, x.color])), burn: '#ff8a30', poison: '#7fe05a', slow: '#8ae0ff', stun: '#ffe84a', mark: '#ff5ad0', charm: '#ff9ad8', vuln: '#c9a0ff', bleed: '#e03040', hobble: '#9ad0e8', guarded: '#7fe0b0', deathmark: '#ff3a4a', verdugo: '#ff8a30', frenzy: '#ff5030', orbita: '#b07cff', chained: '#a0a8c0', rooted: '#c89a5a', anchor: '#5ac8ff', silver: '#e0e8ff', smoke: '#9a8ab8', immune: '#7ae8ff', kinetic: '#58a6ff', prism: '#c8a0ff', fading: '#b0b8d0' };
+export const STATUS_NAME: Record<string, string> = Object.fromEntries(Object.values(STATUSES).map((x) => [x.kind, x.name]));
 
 interface Float { x: number; y: number; text: string; color: string; t0: number }
 interface Shot { x0: number; y0: number; x1: number; y1: number; color: string; t0: number; dur: number; orb?: boolean }
@@ -1624,7 +1626,7 @@ export class Board {
     const u = c.units.find((x) => alive(x) && x.pos.x === h.x && x.pos.y === h.y);
     if (!u) return;
     const g = this.g;
-    const st = [...Object.entries(u.statuses).map(([k, v]) => `${STATUS_NAME[k]} ${v!.turns}${k === 'deathmark' ? ` (guarda ${v!.stacks})` : ''}`), ...(u.essence !== undefined ? [`Esencia ${u.essence}/${essenceNeed(u)}${u.essence >= essenceNeed(u) ? ' ¡cura!' : ''}`] : []), ...(u.souls !== undefined ? [`Almas ${u.souls} (${u.soulBank ?? 0} para gastar)`] : []), ...(u.fury !== undefined ? [`Furia ${u.fury}: +${furyPower(u)}% daño, +${furyCrit(u)}% crít.`] : [])].join(', ');
+    const st = [...Object.entries(u.statuses).map(([k, v]) => `${STATUS_NAME[k]}${STATUSES[k as keyof typeof STATUSES]?.stack === 'add' && v!.stacks > 1 ? ` ×${v!.stacks}` : ''} ${v!.turns}${k === 'deathmark' || k === 'doom' ? ` (guarda ${v!.stacks})` : ''}`), ...(u.essence !== undefined ? [`Esencia ${u.essence}/${essenceNeed(u)}${u.essence >= essenceNeed(u) ? ' ¡cura!' : ''}`] : []), ...(u.souls !== undefined ? [`Almas ${u.souls} (${u.soulBank ?? 0} para gastar)`] : []), ...(u.fury !== undefined ? [`Furia ${u.fury}: +${furyPower(u)}% daño, +${furyCrit(u)}% crít.`] : [])].join(', ');
     const res = !FEATURES.resistances ? '' : Object.entries(u.resist ?? {}).filter(([, v]) => v).map(([k, v]) => (v! > 0 ? `Resiste ${ELEMENT_NAME[k]} ${v}%` : `Débil a ${ELEMENT_NAME[k]} ${-v!}%`)).join(' · ');
     // daño estimado del hechizo elegido sobre esta unidad
     let est = '';

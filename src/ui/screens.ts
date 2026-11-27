@@ -11,6 +11,8 @@ import { ASCENSION, DAILY_MODS, MAX_MODS, OMENS, modConflict, modDef, modEcos } 
 import { ALLIES } from '../content/enemies';
 import { readSnapshot } from '../game/snapshot';
 import { RELICS } from '../content/relics';
+import { FAMILY_COLOR, RUNES } from '../core/runes';
+import { runeArchivePanel, runeSheet } from './runes';
 import { championOf, dailyOf, dailyScore, lastZone } from '../game/run';
 import { CLASS_STORY, ENDING_LOST, ENDING_WON, TUTORIAL, ZONE_STORY } from '../content/story';
 import { esc, mine, store, tip, today, ui } from './ctx';
@@ -197,6 +199,7 @@ function archiveExtra(): string {
 function archivePanel(): string {
   if (ui.arcCat === 'contracts') return contractsPanel();
   if (ui.arcCat === 'atlas' || ui.arcCat === 'chronicles') return archiveExtra();
+  if (ui.arcCat === 'runes' || ui.arcCat === 'synergies' || ui.arcCat === 'relics') return runeArchivePanel(archiveHeader('El Grimorio rúnico: las runas y sinergias que descubres se recuerdan para siempre, aunque las runas equipadas se pierdan al acabar cada expedición.'));
   const cat = ui.arcCat;
   const f2: Array<[string, string]> = cat === 'bestiary' ? [['', 'Todas las zonas'], ['z1', 'Zona 1'], ['z2', 'Zona 2'], ['z3', 'Zona 3'], ['z4', 'Abismo']]
     : cat === 'grimoire' ? [['', 'Todas las clases'], ...PLAYABLE.map((c): [string, string] => [c, CLASSES[c].name]), ['blessing', 'Solo bendiciones']]
@@ -626,11 +629,12 @@ function voteRow(run: RunState): string {
 export function shopScreen(): void {
   const s = ui.session!, run = s.run!;
   const h = mine(run);
-  frame(run, `<div class="row"><h2>💰 Mercader de reliquias</h2></div>${advanceBar(run, 'Salir de la tienda →')}
+  frame(run, `<div class="row"><h2>💰 Mercader</h2></div>${advanceBar(run, 'Salir de la tienda →')}
   <div class="dim sm">Cada objeto solo puede comprarlo un jugador. Para vender, selecciona un objeto de tu mochila (un tercio de su precio).</div>
   <div class="cards c3">${(run.shop ?? []).map((sl, i) => { const it = sl.item; const rl = sl.relic ? RELICS[sl.relic] : undefined;
     const cs = sl.consumable ? CONSUMABLES[sl.consumable] : undefined;
     if (cs) { const have = h?.bag2[sl.consumable!] ?? 0; const d = SPELLS[sl.consumable!]!; return `<div class="lootcard r1"><div class="row">${spellIcon(d)}<div><b>${esc(cs.name)}</b><div class="dim sm">Consumible de combate · llevas ${have}/${MAX_CONSUMABLE}</div><div class="sm">${esc(d.text)}</div></div></div><button class="pri" data-act="buy" data-id="${i}" ${!h || h.gold < sl.price || have >= MAX_CONSUMABLE ? 'disabled' : ''}>Comprar · ${sl.price} 💰</button></div>`; }
+    if (sl.rune && RUNES[sl.rune]) { const r = RUNES[sl.rune]!; return `<div class="lootcard runecard rr${r.rarity} ${sl.sold ? 'off' : ''}" style="--fam:${FAMILY_COLOR[r.family]}">${runeSheet(r, h ?? undefined)}<button class="pri" data-act="buy" data-id="${i}" ${sl.sold || !h || h.gold < sl.price ? 'disabled' : ''}>${sl.sold ? 'Vendida' : `Comprar runa · ${sl.price} 💰`}</button></div>`; }
     if (rl) return `<div class="lootcard ${rl.rare ? 'r3' : 'r2'} ${sl.sold ? 'off' : ''}"><div class="row"><div class="cell big ${rl.rare ? 'r3' : 'r2'}"><span class="emo">${rl.icon}</span></div><div><b>${esc(rl.name)}</b><div class="dim sm">Reliquia ${rl.rare ? 'rara' : 'común'} · para toda la partida</div><div class="sm">${esc(rl.text)}</div></div></div><button class="pri" data-act="buy" data-id="${i}" ${sl.sold || !h || h.gold < sl.price || h.relics.includes(rl.id) ? 'disabled' : ''}>${sl.sold ? 'Vendido' : h?.relics.includes(rl.id) ? 'Ya la tienes' : `Comprar · ${sl.price} 💰`}</button></div>`;
     return `<div class="lootcard ${RAR[it?.rarity ?? 0]} ${sl.sold ? 'off' : ''}">${it ? `<div class="row"><div class="cell big ${RAR[it.rarity]}">${itemIcon(it)}</div><div>${itemHtml(it)}</div></div>${h ? diffHtml(it, h) : ''}` : ''}
       <button class="pri" data-act="buy" data-id="${i}" ${sl.sold || !h || h.gold < sl.price ? 'disabled' : ''}>${sl.sold ? 'Vendido' : `Comprar · ${sl.price} 💰`}</button></div>`; }).join('')}
