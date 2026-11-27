@@ -78,6 +78,8 @@ export interface Unit {
   statusBonus: number;
   statuses: Partial<Record<StatusKind, StatusState>>;
   spells: SpellSlot[];
+  /** Runas universales que transforman las habilidades de esta unidad. */
+  runes?: string[];
   ai: 'melee' | 'ranged' | 'boss' | 'pillar' | 'champ' | 'decoy' | null;
   /**
    * Rasgos especiales: puddle (al morir deja una casilla pegajosa), guard (empieza su turno con escudo),
