@@ -68,7 +68,7 @@ export function editorScreen(opts: { onTest: (r: RoomDef) => void; onExit: () =>
   ed.room = (opts.open ? list.find((r) => r.id === opts.open) : null) ?? (ed.room ? list.find((r) => r.id === ed.room!.id) ?? ed.room : null) ?? list.at(-1) ?? newRoom();
   ed.sel = -1;
   ui.screen = 'editor';
-  ui.root.classList.add('combatmode');
+  ui.root.classList.add('toolmode');
   ui.root.innerHTML = `<div id="edtop" class="bar cinfo edtop"></div>
     <div class="edgrid"><aside id="edleft" class="cside edside"></aside>
     <div class="stage edstage"><canvas id="edcv"></canvas><div id="edhint" class="edhint dim sm"></div></div>
@@ -86,7 +86,7 @@ export function closeEditor(): void {
   flush();
   ed.board?.destroy();
   ed.board = null;
-  ui.root.classList.remove('combatmode');
+  ui.root.classList.remove('toolmode');
 }
 
 /** Guarda enseguida si hay cambios pendientes. */
@@ -154,7 +154,7 @@ function leftPanel(r: RoomDef): string {
   const builtin = allRooms().filter((x) => !list.some((y) => y.id === x.id));
   return `<div class="cbox"><div class="cboxh">📚 Mis salas (${list.length})</div>
       <div class="edlist">${list.map((x) => `<button class="edroom ${x.id === r.id ? 'on' : ''}" data-ed="open" data-id="${esc(x.id)}"><b>${esc(x.name)}</b><small>Zona ${x.zone + 1} · ${KIND_NAME[x.kind]} · ${x.w}×${x.h} · ${x.enemies.length} enem.${x.published ? ` · ${syncBadge(x)}` : ''}</small></button>`).join('')}</div>
-      <div class="row" style="flex-wrap:wrap;gap:4px;margin-top:6px"><button class="mini" data-ed="new">＋ Nueva</button><button class="mini" data-ed="dup">⧉ Duplicar</button><button class="mini danger" data-ed="del">🗑 Borrar</button></div>
+      <div class="row" style="flex-wrap:wrap;gap:4px;margin-top:6px"><button class="mini" data-ed="new">＋ Nueva</button><button class="mini" data-ed="dup">⧉ Duplicar</button><button class="mini danger" data-ed="del">🗑 Borrar</button>${list.length > 1 ? '<button class="mini danger" data-ed="delall">🗑 Borrar todas</button>' : ''}</div>
       <div class="row" style="gap:4px;margin-top:4px"><select id="edtpl" class="edsel">${templateOptions()}</select><button class="mini" data-ed="tpl">Crear</button></div></div>
     ${isCreatorAccount() ? globalPanel(list) : '<div class="cbox sm dim">🧪 Eres tester: tus salas solo las ves tú. Para que salgan en el juego, usa «Exportar» y pásale el archivo al creador.</div>'}
     ${builtin.length ? `<div class="cbox"><div class="cboxh">🎮 Salas del juego</div><div class="dim sm">Salen para todos. Para cambiar una, duplícala.</div><div class="edlist">${builtin.map((x) => `<button class="edroom" data-ed="copy" data-id="${esc(x.id)}"><b>${esc(x.name)}</b><small>Zona ${x.zone + 1} · ${KIND_NAME[x.kind]}</small></button>`).join('')}</div></div>` : ''}
@@ -320,6 +320,15 @@ function act(el: HTMLElement): void {
       if (ed.saveTimer) { clearTimeout(ed.saveTimer); ed.saveTimer = 0; }
       dropRoom(r.id);
       ed.room = myRooms().at(-1) ?? newRoom(r.zone); ed.sel = -1; ed.msg = 'Sala borrada';
+      return refresh();
+    }
+    case 'delall': {
+      if (!el.classList.contains('armed')) { el.classList.add('armed'); el.textContent = `¿Borrar las ${myRooms().length}? Pulsa otra vez`; return; }
+      if (ed.saveTimer) { clearTimeout(ed.saveTimer); ed.saveTimer = 0; }
+      const n = myRooms().length;
+      for (const x of myRooms()) dropRoom(x.id);
+      ed.room = newRoom(r.zone); ed.sel = -1;
+      ed.msg = `${n} salas borradas${isCreatorAccount() && globalRooms().length ? ': pulsa «Subir las publicadas a todos» para quitarlas también del juego' : ''}`;
       return refresh();
     }
     case 'export': flush(); download(`sala_${slug(r.name)}.json`, r); return;

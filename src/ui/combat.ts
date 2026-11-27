@@ -205,6 +205,7 @@ export function combatScreen(events: GameEvent[]): void {
       ui.log.push(`<div class="lfx lnote">❗ ${esc(name)} marca una casilla</div>`); ui.rerender();
     };
   }
+  ui.root.classList.remove('toolmode');
   ui.root.classList.add('combatmode');
   document.querySelector('.cgrid')?.classList.toggle('logopen', ui.logOpen);
   document.getElementById('logbtn')?.classList.toggle('on', ui.logOpen);
