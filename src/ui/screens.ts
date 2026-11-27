@@ -250,20 +250,23 @@ function settlementPanel(): string {
       <div class="row"><span class="pill">Expediciones: ${m.stats.runs}</span><span class="pill">Victorias: ${m.stats.wins}</span><span class="pill">Archivo: ${total.pct}%</span></div>
     </div>
     <div class="cards c2">
-      <div class="lootcard">
-        <div class="row"><b>🍺 La Taberna</b><span class="grow"></span><span class="dim sm">Punto de encuentro</span></div>
-        <p class="sm">Aquí se cruzan exploradores, comerciantes y supervivientes. Los relatos cambian de boca en boca; las cicatrices, no.</p>
+      <div class="lootcard resident">
+        <div class="row"><b>🍺 La Taberna · Irena</b><span class="grow"></span><span class="dim sm">Tabernera</span></div>
+        <p class="sm">Mantiene la taberna abierta porque la gente necesita un sitio donde sentarse antes de decidir si vuelve a bajar. No pregunta por las cicatrices; pregunta quién necesita una silla.</p>
+        <blockquote class="sm">«La primera ronda es para los que vuelven. La segunda, para los que todavía no saben si se van a quedar.»</blockquote>
         <button class="pri" data-act="htab" data-id="jugar">Preparar una expedición</button>
       </div>
-      <div class="lootcard">
-        <div class="row"><b>📚 Archivo del Abismo</b><span class="grow"></span><span class="dim sm">Registros y hallazgos</span></div>
-        <p class="sm">Bestiario, Grimorio, reliquias, Atlas y Crónicas. No todo lo escrito aquí es una certeza; algunas páginas conservan testimonios incompatibles.</p>
+      <div class="lootcard resident">
+        <div class="row"><b>📚 Archivo del Abismo · Sava</b><span class="grow"></span><span class="dim sm">Archivera</span></div>
+        <p class="sm">Ordena testimonios, objetos y hallazgos. Separa lo observado de lo supuesto; no tolera que una teoría se copie como si fuera un hecho.</p>
+        <blockquote class="sm">«No escribas “ocurrió”. Escribe “alguien asegura que ocurrió”. La diferencia ha mantenido vivos a más investigadores que sus armaduras.»</blockquote>
         <button data-act="htab" data-id="archivo">Consultar el Archivo</button>
       </div>
-      <div class="lootcard">
-        <div class="row"><b>🛡️ El Vigía</b><span class="grow"></span><span class="dim sm">Guardia de la Puerta</span></div>
-        <p class="sm">Alguien vigila la entrada y cuenta a quienes salen. No siempre puede contar a quienes vuelven.</p>
-        <button data-act="htab" data-id="jugar">Acercarse a la Puerta</button>
+      <div class="lootcard resident">
+        <div class="row"><b>🛡️ La Puerta · Darel</b><span class="grow"></span><span class="dim sm">Vigía</span></div>
+        <p class="sm">Cuenta a quienes parten, revisa el equipo y escucha el silencio que queda después de cada expedición. No promete que todos regresen.</p>
+        <blockquote class="sm">«Puedo contar los que salen. Los que vuelven… a veces tengo que aprender a reconocerlos.»</blockquote>
+        <button data-act="htab" data-id="jugar">Preparar la salida</button>
       </div>
       <div class="lootcard">
         <div class="row"><b>🏛️ Salón de héroes</b><span class="grow"></span><span class="dim sm">Memoria de expediciones</span></div>
