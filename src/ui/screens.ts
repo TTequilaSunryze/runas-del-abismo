@@ -22,6 +22,7 @@ import { CONSUMABLES, MAX_CONSUMABLE } from '../content/boons';
 import { CHEST_CURSE_CHANCE, HEAT, HEAT_HOT, HEAT_MAX, HEAT_OVERLOAD, HONE_COST, SCRAP_YIELD, curseOf, heatTier, pactOf, recalibratePrice } from '../content/pacts';
 import { REST_OPTIONS, itemByRef, recalStats, restHeal, restText } from '../game/rooms';
 import { altarScene, chestScene, forgeScene, restScene, shrineScene } from './scenes';
+import { refugeScene } from './refuge';
 import { STAT_NAME, type Item } from '../core/items/items';
 import { MAX_SPELL_UPS, UPGRADES } from '../core/upgrades';
 import { archiveTotal, BESTIARY, CATEGORIES, CAT_NAME, DOCUMENTED_KILLS, GRIMOIRE, LEVEL_NAME, beastDef, completion, entriesOf } from '../game/archive';
@@ -249,37 +250,14 @@ function settlementPanel(): string {
       <p>Las defensas se refuerzan cada vez que alguien vuelve. Nadie llama seguro a este lugar. Simplemente, todavía sigue en pie.</p>
       <div class="row"><span class="pill">Expediciones: ${m.stats.runs}</span><span class="pill">Victorias: ${m.stats.wins}</span><span class="pill">Archivo: ${total.pct}%</span></div>
     </div>
-    <div class="cards c2">
-      <div class="lootcard resident">
-        <div class="row"><b>🍺 La Taberna · Irena</b><span class="grow"></span><span class="dim sm">Tabernera</span></div>
-        <p class="sm">Mantiene la taberna abierta porque la gente necesita un sitio donde sentarse antes de decidir si vuelve a bajar. No pregunta por las cicatrices; pregunta quién necesita una silla.</p>
-        <blockquote class="sm">«La primera ronda es para los que vuelven. La segunda, para los que todavía no saben si se van a quedar.»</blockquote>
-        <button class="pri" data-act="htab" data-id="jugar">Preparar una expedición</button>
-      </div>
-      <div class="lootcard resident">
-        <div class="row"><b>📚 Archivo del Abismo · Sava</b><span class="grow"></span><span class="dim sm">Archivera</span></div>
-        <p class="sm">Ordena testimonios, objetos y hallazgos. Separa lo observado de lo supuesto; no tolera que una teoría se copie como si fuera un hecho.</p>
-        <blockquote class="sm">«No escribas “ocurrió”. Escribe “alguien asegura que ocurrió”. La diferencia ha mantenido vivos a más investigadores que sus armaduras.»</blockquote>
-        <button data-act="htab" data-id="archivo">Consultar el Archivo</button>
-      </div>
-      <div class="lootcard resident">
-        <div class="row"><b>🛡️ La Puerta · Darel</b><span class="grow"></span><span class="dim sm">Vigía</span></div>
-        <p class="sm">Cuenta a quienes parten, revisa el equipo y escucha el silencio que queda después de cada expedición. No promete que todos regresen.</p>
-        <blockquote class="sm">«Puedo contar los que salen. Los que vuelven… a veces tengo que aprender a reconocerlos.»</blockquote>
-        <button data-act="htab" data-id="jugar">Preparar la salida</button>
-      </div>
-      <div class="lootcard">
-        <div class="row"><b>🏛️ Salón de héroes</b><span class="grow"></span><span class="dim sm">Memoria de expediciones</span></div>
-        <p class="sm">Los nombres y equipos de quienes llegaron lejos quedan registrados. Algunos héroes terminan enfrentándose a otros grupos como Némesis.</p>
-        <button data-act="htab" data-id="salon">Entrar al Salón</button>
-      </div>
-    </div>
-    <div class="panel">
+    ${refugeScene()}
+    <div class="panel refuge-links">
       <h3>Entre una expedición y la siguiente</h3>
       <div class="cards c2">
-        <div><b>⚒️ La Forja</b><p class="sm dim">Los herreros trabajan con materiales recuperados. Por ahora, sus servicios se encuentran en las salas de expedición.</p></div>
+        <div><b>⚒️ La Forja</b><p class="sm dim">Los herreros trabajan con materiales recuperados. Sus servicios se encuentran en las salas de expedición.</p></div>
         <div><b>🕯️ El Santuario</b><p class="sm dim">Un lugar de recogimiento levantado junto a la entrada. Sus altares y bendiciones aparecen durante las expediciones.</p></div>
       </div>
+      <div class="row"><button data-act="htab" data-id="salon">Visitar el Salón de héroes</button><button data-act="htab" data-id="jugar">Preparar una expedición</button></div>
     </div>`;
 }
 
