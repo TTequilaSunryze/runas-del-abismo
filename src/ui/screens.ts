@@ -449,10 +449,28 @@ function modsSummary(list: readonly string[], host: boolean): string {
 /** Color de ambiente de cada héroe en la selección (tiñe el fondo; no es una ilustración). */
 const HERO_TINT: Record<string, string> = { zorro: '#d9702a', esferas: '#4f6fe0', acechador: '#7a3aa0', carcelero: '#2fa08a', barbaro: '#c0412a', arquitecto: '#8a8fa6', pistolero: '#b0803a', arquero: '#4f9a4a', guerrero: '#b0432f', mago: '#3f5fd0', clerigo: '#d8b24a', picaro: '#4a8a5a' };
 /**
- * Ilustración a pantalla completa de cada héroe (public/heroes/<clase>.png).
- * Vacío hasta tener las ilustraciones: mientras tanto se muestra el sprite del juego.
+ * Arte de selección de cada clase jugable (rutas relativas a public/):
+ * - ilustración 16:9 a pantalla completa: heroes/<clase>.jpg
+ * - retrato vertical 3:4 dentro del marco común: heroes/<clase>_retrato.jpg
+ * Una clase sin arte (las retiradas) vuelve al sprite del juego.
  */
-const HERO_ART: Partial<Record<ClassId, string>> = {};
+const HERO_ART: Partial<Record<ClassId, string>> = Object.fromEntries(PLAYABLE.map((c) => [c, `heroes/${c}.jpg`]));
+const HERO_PORTRAIT: Partial<Record<ClassId, string>> = Object.fromEntries(PLAYABLE.map((c) => [c, `heroes/${c}_retrato.jpg`]));
+const artUrl = (path: string): string => `${import.meta.env.BASE_URL}${path}`;
+/** Precarga una sola vez las ilustraciones para que el cambio de héroe no parpadee. */
+let heroArtPreloaded = false;
+function preloadHeroArt(): void {
+  if (heroArtPreloaded || typeof Image === 'undefined') return;
+  heroArtPreloaded = true;
+  for (const path of [...Object.values(HERO_PORTRAIT), ...Object.values(HERO_ART)]) if (path) new Image().src = artUrl(path);
+}
+/**
+ * Estado del marco de cada retrato. Hoy ninguna clase jugable tiene condición de desbloqueo,
+ * así que siempre es ''; el marco ya admite 'locked' (bloqueada) y 'new' (recién desbloqueada).
+ */
+function heroTileState(_id: ClassId): '' | 'locked' | 'new' {
+  return '';
+}
 
 /** Jugadores de la sala, arriba a la izquierda (como en Slay the Spire II). */
 function lobbyPlayers(): string {
@@ -501,8 +519,12 @@ function heroSelectScreen(): void {
   const kit = kitFor(m, me.cls);
   const passive = CLASS_PASSIVE[me.cls];
   const players = s.lobby();
+  preloadHeroArt();
+  // fundido cruzado: la ilustración anterior queda debajo mientras entra la nueva
+  const fresh = ui.picked?.cls === me.cls && ui.picked.from !== me.cls;
+  const prevArt = fresh && ui.picked?.from ? HERO_ART[ui.picked.from as ClassId] : undefined;
   ui.root.innerHTML = `<div class="hsel" style="--tint:${HERO_TINT[me.cls] ?? '#8a6a4a'}">
-    <div class="hsel-bg ${ui.picked?.cls === me.cls ? 'fresh' : ''}">${art ? `<img class="hsel-art" src="${import.meta.env.BASE_URL}${art}" alt="">` : `<span class="hsel-sprite" style="background-image:url(${unitPortraitUrl(me.cls, 'hero', 0, currentLook(m, me.cls).skin)})"></span>`}</div>
+    <div class="hsel-bg ${fresh ? 'fresh' : ''} ${art ? 'has-art' : ''}">${prevArt ? `<img class="hsel-art prev" src="${artUrl(prevArt)}" alt="">` : ''}${art ? `<img class="hsel-art cur" src="${artUrl(art)}" alt="${esc(cls.name)}">` : `<span class="hsel-sprite" style="background-image:url(${unitPortraitUrl(me.cls, 'hero', 0, currentLook(m, me.cls).skin)})"></span>`}</div>
     ${lobbyPlayers()}
     <div class="hsel-card">
       <span class="hero-kicker">MAESTRÍA ${masteryOf(me.cls)}/5</span>
@@ -515,8 +537,9 @@ function heroSelectScreen(): void {
       ${masteryBar(me.cls)}
     </div>
     ${difficultyCard()}
-    <div class="hsel-roster">${PLAYABLE.map((id) => { const mates = players.filter((p) => p.id !== ui.myId && p.cls === id);
-      return `<button class="raw hsel-tile ${id === me.cls ? 'on' : ''}" data-act="cls" data-id="${id}" style="--tint:${HERO_TINT[id] ?? '#8a6a4a'}" ${tip(esc(CLASSES[id].name))} aria-label="Seleccionar ${esc(CLASSES[id].name)}"><span style="background-image:url(${unitPortraitUrl(id, 'hero', 0)})"></span>${mates.length ? `<i>${mates.length}</i>` : ''}</button>`; }).join('')}</div>
+    <div class="hsel-roster" role="radiogroup" aria-label="Héroes">${PLAYABLE.map((id) => { const mates = players.filter((p) => p.id !== ui.myId && p.cls === id);
+      const name = CLASSES[id].name, state = heroTileState(id), por = HERO_PORTRAIT[id], on = id === me.cls;
+      return `<button class="raw hsel-tile hframe ${on ? 'on' : ''} ${state}" data-act="cls" data-id="${id}" style="--tint:${HERO_TINT[id] ?? '#8a6a4a'}" ${state === 'locked' ? 'disabled' : ''} ${tip(esc(state === 'locked' ? `${name} · bloqueado` : name))} role="radio" aria-checked="${on}" aria-label="Seleccionar ${esc(name)}">${por ? `<img src="${artUrl(por)}" alt="" draggable="false">` : `<span style="background-image:url(${unitPortraitUrl(id, 'hero', 0)})"></span>`}<b class="hframe-name">${esc(name.split(' ')[0]!)}</b>${state === 'new' ? '<em class="hframe-new">NUEVO</em>' : ''}${mates.length ? `<i>${mates.length}</i>` : ''}</button>`; }).join('')}</div>
     <button class="raw hsel-back" data-act="home" ${tip('Volver al menú')}>↩</button>
     <button class="raw hsel-ok" data-act="herook" ${tip('Elegir este héroe e ir al Asentamiento')}>✔</button>
     ${lobbyOverlay()}
