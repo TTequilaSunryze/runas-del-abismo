@@ -42,7 +42,7 @@ export function applyRunes(base: SpellDef, ids: string[]): SpellDef {
   const known = ids.map(id => RUNES[id]).filter((r): r is RuneDef => !!r);
   for (const rune of known) rune.apply(spell);
   const families = [...new Set(known.map(r => r.family))].sort();
-  if (families.length >= 2) SYNERGIES[families.join('+')]?.(spell);
+  for (let i = 0; i < families.length; i++) for (let j = i + 1; j < families.length; j++) SYNERGIES[`${families[i]}+${families[j]}`]?.(spell);
   return spell;
 }
 export function runeNames(ids: string[]): string[] { return ids.map(id => RUNES[id]?.name).filter((x): x is string => !!x); }
