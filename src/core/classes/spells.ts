@@ -1,5 +1,6 @@
 // Definición de hechizos (datos). El motor los interpreta en combat/engine.ts.
 import type { Element, StatusKind } from '../state';
+import type { RuneTrigger } from '../runeCatalog';
 
 export interface SpellDef {
   id: string;
@@ -148,6 +149,12 @@ export interface SpellDef {
   bonusVs?: { kind: StatusKind; dmg: number };
   /** invoca un aliado controlado por la IA (uno a la vez) */
   summon?: { kind: string; name: string; hpPct: number; armor: number; ap: number; mp: number; initiative: number; spell: string };
+  /** Runas: estados extra que aplica cada golpe (los añade core/runes.ts, nunca las definiciones base) */
+  runeStatus?: Array<{ kind: StatusKind; turns: number; stacks: number }>;
+  /** Runas: daño extra contra objetivos con estos estados */
+  runeBonusVs?: Array<{ kind: StatusKind; dmg: number }>;
+  /** Runas: efectos de combate que ejecuta core/combat/runefx.ts (uno por tipo) */
+  runeFx?: Array<{ t: RuneTrigger; v: number; n?: number }>;
   text: string;
 }
 
