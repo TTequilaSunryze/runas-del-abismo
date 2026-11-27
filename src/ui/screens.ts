@@ -271,7 +271,7 @@ export function residentModal(id: string): string {
   };
   const r = residents[id];
   if (!r) return '';
-  return `<div class="modal resident-modal" data-act="residentclose"><div class="panel resident-dialog" role="dialog" aria-modal="true" aria-labelledby="resident-title" data-stop-close="true">
+  return `<div class="modal resident-modal"><div class="resident-backdrop" data-act="residentclose"></div><div class="panel resident-dialog" role="dialog" aria-modal="true" aria-labelledby="resident-title" data-stop-close="true">
     <div class="dim sm">${r.role.toUpperCase()}</div><h2 id="resident-title">${r.name}</h2><p>${r.detail}</p><blockquote>${r.line}</blockquote>
     <div class="row"><button data-act="residentclose">Volver</button><span class="grow"></span><button class="pri" data-act="htab" data-id="${r.action}">${r.label}</button></div>
   </div></div>`;
