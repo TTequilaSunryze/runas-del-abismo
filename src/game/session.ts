@@ -43,7 +43,8 @@ export interface LobbyPlayer {
 }
 
 export const TURN_SECONDS = 60;
-const AI_DELAY = 750;
+/** pausa antes de cada turno de la IA (antes 750 ms: los turnos enemigos se hacían lentos) */
+const AI_DELAY = 420;
 const HEARTBEAT = 3000;
 const BEACON = 2000;
 const BEACON_TTL = 8000;
