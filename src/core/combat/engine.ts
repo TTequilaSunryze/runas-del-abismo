@@ -39,7 +39,7 @@ export interface CombatSetup {
 
 export type ActionResult = { ok: true; events: GameEvent[] } | { ok: false; reason: string };
 
-const BURN_DMG = 3;
+const BURN_DMG = DOT.burn;
 /** Encantado: +2 de daño de cada golpe recibido */
 const CHARM_FLAT = 2;
 /** Estados perjudiciales (para la inmunidad de la Ciudadela de cristal). */
@@ -52,7 +52,7 @@ const GEO_SHIELD = 4;
 const GEO_FLAT = 2;
 const GLYPH_MAX = 6;
 const ANCHOR_FLAT = 4;
-const POISON_DMG = 2;
+const POISON_DMG = DOT.poison;
 /** v12 daño plano: Marcado y crítico suman daño fijo. */
 const MARK_FLAT = 2;
 export const CRIT_FLAT = 5;
@@ -93,7 +93,7 @@ export const FURY_MAX = 100;
 export const essenceNeed = (u: Unit): number => (hasTrait(u, 'esencia2') ? 2 : 3);
 const VULN_FLAT = 2;
 const FRENZY_FLAT = 1;
-const BLEED_DMG = 3;
+const BLEED_DMG = DOT.bleed;
 const DEATHMARK_PCT = 0.5;
 /** Cadenas vinculantes: parte del daño que pasa al otro encadenado */
 const CHAIN_SHARE = 0.5;

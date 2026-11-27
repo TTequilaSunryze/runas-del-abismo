@@ -39,7 +39,7 @@ const S = (kind: StatusKind, name: string, icon: string, color: string, cat: Sta
   ({ kind, name, icon, color, cat, negative, stack, max, rank, text, ...(rankText ? { rankText } : {}) });
 
 /** Daño por carga de los estados de daño progresivo (al empezar el turno de quien los lleva). */
-export const DOT = { burn: 3, burnPerStack: 2, poison: 2, bleed: 2 } as const;
+export const DOT = { burn: 3, burnPerStack: 2, poison: 2, bleed: 3 } as const;
 /** Escarcha: cargas que congelan. */
 export const FREEZE_AT = 3;
 /** Resonancia rúnica: cargas que la hacen estallar y daño por carga. */

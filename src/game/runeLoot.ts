@@ -69,7 +69,7 @@ export function makeOffer(box: RngBox, h: Pick<RuneHolder, 'runes' | 'runeBag'>,
   const out: string[] = [];
   const free = RUNE_LIST.filter((r) => !r.boss && !r.final && available(h, r));
   // jefe: su runa exclusiva va siempre entre las opciones (si no la lleva ya)
-  if (opts.boss) { const own = RUNE_LIST.find((r) => r.boss === opts.boss && available(h, r)); if (own) out.push(own.id); }
+  if (opts.boss) { const own = RUNE_LIST.find((r) => r.boss === opts.boss && available(h, r) && (src !== 'final' || r.rarity === 5)); if (own) out.push(own.id); }
   // jefe final: el Juicio del Segador siempre, y legendarias de cualquier origen
   if (src === 'final') {
     const fin = RUNE_LIST.find((r) => r.final && available(h, r));
