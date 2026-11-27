@@ -25,6 +25,10 @@ export interface TalkCtx {
   /** regiones que se distinguen desde la Puerta (zonas del Atlas descubiertas) */
   regionsSeen: number;
   regionNames: string[];
+  /** Salón: héroes guardados, cuántos cayeron (y volvieron), y el último guardián del que hay constancia */
+  hallCount: number;
+  hallFallen: number;
+  lastBossZone: string;
 }
 
 export interface TalkOption {
@@ -52,7 +56,7 @@ export interface Npc {
 }
 
 /** Rumores de Irena: se desbloquean con lo que el jugador ha vivido. */
-const IRENA_RUMORS: Array<{ need: (c: TalkCtx) => boolean; hint: string; lines: string[] }> = [
+export const IRENA_RUMORS: Array<{ need: (c: TalkCtx) => boolean; hint: string; lines: string[] }> = [
   { need: () => true, hint: '', lines: ['Dicen que en las Catacumbas los muertos no atacan por odio, sino por costumbre.', 'Yo no lo sé. Pero quien lo contó volvió sin un rasguño y no quiso volver a bajar.'] },
   { need: (c) => c.runs >= 3, hint: 'Vuelve cuando hayas bajado unas cuantas veces.', lines: ['Los que regresan de la segunda zona huelen a musgo durante días. Ni el jabón de lejía se lo quita.', 'Ten cuidado con lo que crece allí abajo. A veces crece sobre la gente.'] },
   { need: (c) => c.bosses >= 1, hint: 'Vuelve cuando hayas derrotado a un guardián.', lines: ['Desde que tumbaste a aquel guardián, la mesa del rincón brinda por ti cada noche.', 'No te lo tomes como un halago. Brindan por cualquiera que les dé una excusa para beber.'] },
@@ -126,6 +130,25 @@ const DAREL_MENU = (c: TalkCtx): TalkOption[] => [
   { label: '¿Para qué es la campana?', to: 'campana' },
   { label: 'Háblame de ti.', to: 'el' },
   { label: c.since === null ? 'Gracias, Darel.' : 'Vuelvo luego. Vigila bien.', to: '' },
+];
+
+const CUSTODIO_HERO: Record<string, string> = {
+  zorro: 'Nueve colas. Recuerdo a otra como tú. O quizá eras tú. Aquí las dos cosas suelen ser verdad.',
+  esferas: 'Tus esferas giran despacio aquí dentro. Les pasa a todas. El Salón pesa.',
+  acechador: 'No hace falta que te escondas. En este lugar nadie busca a nadie: solo recordamos.',
+  carcelero: 'Esa linterna lleva voces. Si alguna quiere quedarse en el muro, dímelo.',
+  barbaro: 'Grita si quieres. Las placas aguantan. Los recuerdos, menos.',
+  arquitecto: 'Fíjate en las piedras del muro. Alguien las puso antes que yo, y no sé quién.',
+  pistolero: 'Aquí no se dispara. Aquí se apunta. Con tiza, en una tablilla.',
+  arquero: 'Tienes buena vista. Úsala aquí: hay nombres que solo se leen de lejos.',
+};
+
+const CUSTODIO_MENU = (): TalkOption[] => [
+  { label: '¿Qué es el Muro de los Recuerdos?', to: 'muro' },
+  { label: '¿Qué nos pasa cuando caemos?', to: 'regresos' },
+  { label: '¿Recuerdas algo de mí que yo no?', to: 'recuerda' },
+  { label: '¿Y tú, quién eres?', to: 'el' },
+  { label: 'Te dejo con tus placas.', to: '' },
 ];
 
 export const NPCS: Record<string, Npc> = {
@@ -286,6 +309,62 @@ export const NPCS: Record<string, Npc> = {
           'Puedo contar los que salen. Los que vuelven… a veces tengo que aprender a reconocerlos.',
         ],
         options: DAREL_MENU,
+      },
+    },
+  },
+  custodio: {
+    id: 'custodio',
+    name: 'El Custodio',
+    role: 'Custodio de los Recuerdos',
+    portrait: 'npc/custodio_retrato.jpg',
+    figure: 'npc/custodio.png',
+    start: 'saludo',
+    nodes: {
+      saludo: {
+        lines: (c) => {
+          if (c.since === null) return ['Pasa. Aquí no enterramos a nadie. Aquí guardamos lo que se recuerda… y lo que se olvida.', 'Me llaman el Custodio. No es un nombre, es un oficio. El nombre lo dejé en alguna parte.', CUSTODIO_HERO[c.cls] ?? 'Tu cara no está en el muro. Todavía.'];
+          const d = c.since, out: string[] = [];
+          if (d.losses) out.push(d.losses === 1 ? 'Te reconozco. Tú a mí no, ¿verdad? Volviste hace poco, con la mirada de los que han caído. Siempre es la misma.' : `Has vuelto ${d.losses} veces de caer desde la última vez que hablamos. Cada vez te reconozco un poco antes.`);
+          if (d.wins) out.push(d.wins === 1 ? 'Y una vez volviste entero. Esa la he grabado entre los hechos.' : `Y ${d.wins} veces volviste entero. Esas las grabo entre los hechos.`);
+          if (d.bosses) out.push(d.bosses === 1 ? 'Ha caído un guardián. Ya está en el muro; mañana alguien contará otra versión, y también la guardaré.' : `Han caído ${d.bosses} guardianes. El muro empieza a necesitar más piedra.`);
+          if (!d.runs) out.push('No has bajado desde la última vez. Bien. Los recuerdos también necesitan descanso.');
+          out.push(CUSTODIO_HERO[c.cls] ?? 'Siéntate un momento, si quieres.');
+          return out;
+        },
+        options: CUSTODIO_MENU,
+      },
+      muro: {
+        lines: () => [
+          'El muro guarda lo que sabemos, y también cómo lo sabemos. No es lo mismo.',
+          'Hay hechos: lo que vio Darel, lo que confirmó más de uno. Hay testimonios: lo que alguien jura. Hay teorías, las de Romi. Rumores, los de la Taberna.',
+          'Y hay contradicciones. Esas son las que más cuido. Cuando dos verdades no encajan, alguien se ha dejado algo ahí abajo.',
+        ],
+        options: CUSTODIO_MENU,
+      },
+      regresos: {
+        lines: (c) => [
+          'No lo sé. Nadie lo sabe, aunque muchos dicen que sí.',
+          'Sé que caéis, y que volvéis. Sé que volvéis con menos de lo que llevasteis: un objeto, un nombre, una tarde entera.',
+          c.losses ? `Tú has vuelto así ${c.losses === 1 ? 'una vez' : `${c.losses} veces`}. No te pregunto qué recuerdas. Lo apunto igual.` : 'Tú todavía no has tenido que volver así. Ojalá no tengas que aprender cómo es.',
+        ],
+        options: CUSTODIO_MENU,
+      },
+      recuerda: {
+        lines: (c) => {
+          if (c.losses && c.lastBossZone) return [`Cuando volviste de ${c.lastBossZone}, traías polvo en las botas que no era de aquí. No supiste decirme de dónde.`, 'También dijiste un nombre. No era el tuyo. Lo tengo apuntado, por si algún día lo necesitas.', 'No, no te lo voy a decir hoy. Hay recuerdos que hay que estar preparado para recibir.'];
+          if (c.losses) return ['La primera vez que volviste de caer preguntaste qué día era. Luego preguntaste quién eras. Luego, por qué te miraba así.', 'Respondí a las dos primeras. La tercera aún la estoy pensando.'];
+          if (c.hallCount) return [`Tengo ${c.hallCount === 1 ? 'un nombre tuyo' : `${c.hallCount} nombres tuyos`} en el armero. Héroes que dejaste aquí para que otros los recuerden.`, c.hallFallen ? `${c.hallFallen === 1 ? 'Uno cayó' : `${c.hallFallen} cayeron`} antes de que los guardaras. Y aun así están aquí. Eso no lo explico yo: lo guardo.` : 'Todos volvieron por la Puerta. Es raro. Me alegra.'];
+          return ['Todavía nada. Eres casi nuevo para el muro.', 'Vuelve cuando hayas bajado. Siempre hay algo que se queda conmigo en vez de contigo.'];
+        },
+        options: CUSTODIO_MENU,
+      },
+      el: {
+        lines: () => [
+          'Un viejo con un cincel. Llevo aquí más de lo que recuerdo, y recuerdo bastante.',
+          'Antes también bajé. Volví tantas veces que dejé de saber cuál de ellas fue la primera.',
+          'Por eso me quedé. Alguien tiene que acordarse por vosotros.',
+        ],
+        options: CUSTODIO_MENU,
       },
     },
   },

@@ -60,11 +60,19 @@ export function playEvents(events: GameEvent[]): void {
   }
 }
 
-// Música: pistas propias (public/music) según la situación, con fundido entre ellas.
-// Cada pista se carga solo cuando hace falta y recuerda por dónde iba.
-const TRACKS: Record<string, string> = {
-  menu: 'menu', lobby: 'aldea', map0: 'ruta_nocturna', map1: 'bosque_nocturno', map2: 'isla_volcanica', map3: 'bosque_acido',
-  combat: 'combate', boss: 'jefe', calm: 'descanso', tavern: 'descanso', archive: 'torre', gate: 'ruta_nocturna', choice: 'torre', end: 'final',
+// Música: pistas propias (public/music) en listas por situación. Dentro de cada lista suenan en orden
+// aleatorio, sin repetir la misma seguida; al cambiar de situación, fundido a otra pista de la nueva lista
+// (si la que suena también pertenece a ella, sigue sonando).
+const POOLS: Record<string, string[]> = {
+  menu: ['menu', 'aldea', 'torre', 'descanso', 'ruta_nocturna', 'bosque_nocturno', 'final'],
+  lobby: ['aldea', 'descanso', 'menu', 'torre'],
+  tavern: ['descanso', 'aldea'],
+  archive: ['torre', 'descanso'],
+  gate: ['ruta_nocturna', 'bosque_nocturno'],
+  hall: ['torre', 'final', 'descanso'],
+  map0: ['ruta_nocturna', 'bosque_nocturno'], map1: ['bosque_nocturno', 'ruta_nocturna'], map2: ['isla_volcanica', 'bosque_acido'], map3: ['bosque_acido', 'isla_volcanica'],
+  combat: ['combate', 'isla_volcanica', 'bosque_acido'], boss: ['jefe', 'combate'],
+  calm: ['descanso', 'aldea'], choice: ['torre', 'descanso'], end: ['final', 'descanso'],
 };
 export const TRACK_TITLE: Record<string, string> = {
   menu: 'Aventura nocturna', aldea: 'La aldea', ruta_nocturna: 'Ruta nocturna', bosque_nocturno: 'Bosque de noche', isla_volcanica: 'Isla volcánica',
@@ -99,34 +107,49 @@ function fade(a: HTMLAudioElement, to: number, then?: () => void): void {
   requestAnimationFrame(step);
 }
 
-function playWanted(): void {
-  if (!unlocked || muted) return;
-  const file = TRACKS[wanted] ?? 'menu';
+let current = '';
+/** Elige la siguiente pista de la lista (la primera de la lista al entrar en una zona de mapa; si no, al azar sin repetir). */
+function pick(pool: string[], avoid: string, first = false): string {
+  if (first || pool.length === 1) return pool[0]!;
+  const opts = pool.filter((f) => f !== avoid);
+  return opts[Math.floor(Math.random() * opts.length)] ?? pool[0]!;
+}
+function start(file: string): void {
   let a = players.get(file);
-  // la misma pista: si estaba en pausa (silenciada), vuelve a sonar con su volumen
-  if (a && a === playing) { if (a.paused || a.volume < VOL) { void a.play().then(() => fade(a!, VOL)).catch(() => {}); } return; }
   if (!a) {
     a = new Audio(`${import.meta.env.BASE_URL}music/${file}.mp3`);
-    a.loop = true;
     a.preload = 'auto';
+    // al acabar, otra pista de la misma lista (sin bucles)
+    a.addEventListener('ended', () => { if (playing === a) { current = ''; playWanted(true); } });
     players.set(file, a);
   }
+  a.loop = false;
   const old = playing;
-  if (old) fade(old, 0, () => old.pause());
+  if (old && old !== a) fade(old, 0, () => old.pause());
+  if (a !== old) { try { if (a.ended || a.duration - a.currentTime < 3) a.currentTime = 0; } catch { /* aún sin cargar */ } }
   playing = a;
-  a.volume = 0;
+  current = file;
+  a.volume = a === old ? a.volume : 0;
   void a.play().then(() => fade(a!, VOL)).catch(() => { /* el navegador aún no deja sonar */ });
 }
 
-/** Contextos: menu, lobby, map0..map3, combat, boss, calm, choice, end. */
+function playWanted(next = false): void {
+  if (!unlocked || muted) return;
+  const pool = POOLS[wanted] ?? POOLS.menu!;
+  // la que suena sigue si pertenece a la nueva lista (y no ha terminado)
+  if (!next && playing && pool.includes(current)) { if (playing.paused || playing.volume < VOL) void playing.play().then(() => fade(playing!, VOL)).catch(() => {}); return; }
+  start(pick(pool, current, !next && wanted.startsWith('map')));
+}
+
+/** Contextos: menu, lobby, tavern, archive, gate, hall, map0..map3, combat, boss, calm, choice, end. */
 export function setZoneMusic(name: string): void {
-  if (!TRACKS[name] || name === wanted) return;
+  if (!POOLS[name] || name === wanted) return;
   wanted = name;
   playWanted();
 }
 
 export function nowPlaying(): string {
-  return TRACK_TITLE[TRACKS[wanted] ?? ''] ?? '';
+  return TRACK_TITLE[current] ?? '';
 }
 
 export function isMuted(): boolean {

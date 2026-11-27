@@ -7,6 +7,8 @@ import { meta } from '../game/meta';
 import { DOSSIER_KINDS, allDossiers, dossiers, investigated, ready, type Dossier, type DossierKind } from '../game/research';
 import { CHRONICLES, CHRONICLE_NAME, chronicleState } from '../game/atlas';
 import { deepestName, inspectView, seenZones } from './watch';
+import { hallView, isHallView } from './hall';
+import { atlasEntry } from '../game/atlas';
 import { ZONES } from '../content/zones';
 import type { MenuScene } from '../render/menubg';
 import { esc, tip, ui } from './ctx';
@@ -23,14 +25,14 @@ const SPOTS: Spot[] = [
   { id: 'taberna', name: 'Taberna', poly: '295,395 355,322 445,328 505,398 562,420 562,565 330,585 200,565 212,402', at: [380, 322], act: 'place', arg: 'taberna', hint: 'Irena y las noticias de quienes vuelven' },
   { id: 'archivo', name: 'Archivo', poly: '495,240 520,192 722,192 742,250 742,332 500,342', at: [620, 194], act: 'place', arg: 'archivo', hint: 'Romi y las investigaciones del Abismo' },
   { id: 'mercader', name: 'Mercader de ecos', poly: '0,418 70,398 155,438 162,600 0,612', at: [86, 402], act: 'htab', arg: 'tienda', hint: 'Habilidades y aspectos' },
-  { id: 'memorial', name: 'Memorial de los héroes', poly: '600,125 640,60 760,40 885,88 905,205 625,205', at: [752, 96], act: 'htab', arg: 'salon', hint: 'Tus campeones guardados y los duelos' },
+  { id: 'memorial', name: 'Campo de las espadas', poly: '600,125 640,60 760,40 885,88 905,205 625,205', at: [752, 96], locked: true },
   { id: 'barracones', name: 'Barracones', poly: '0,0 232,0 252,62 205,135 0,142', at: [116, 100], act: 'htab', arg: 'clases', hint: 'Maestría de cada clase' },
   { id: 'atalaya', name: 'Atalaya', poly: '905,40 960,5 1000,40 1000,180 990,270 905,270', at: [952, 112], act: 'htab', arg: 'logros', hint: 'Logros y estadísticas' },
   { id: 'palomar', name: 'Palomar', poly: '430,0 625,0 625,150 600,205 470,205 430,120', at: [528, 110], act: 'htab', arg: 'amigos', hint: 'Amigos e invitaciones' },
   { id: 'tablon', name: 'Tablón del reto', poly: '725,285 820,262 905,300 905,470 760,480 720,420', at: [815, 266], act: 'htab', arg: 'diario', hint: 'Clasificación del reto del día' },
   { id: 'puerta', name: 'La Puerta del Abismo', poly: '1008,200 1100,140 1165,250 1140,500 1172,700 1000,745 1030,450', at: [1088, 150], act: 'place', arg: 'puerta', hint: 'Darel, el puesto de vigilancia y la salida al Abismo' },
   { id: 'forja', name: 'La Forja', poly: '395,600 500,530 560,535 605,598 670,598 705,640 705,768 395,768', at: [550, 534], locked: true },
-  { id: 'santuario', name: 'El Santuario', poly: '80,250 100,165 170,138 262,168 300,228 300,372 90,382', at: [190, 142], locked: true },
+  { id: 'salon', name: 'Salón de los Héroes', poly: '80,250 100,165 170,138 262,168 300,228 300,372 90,382', at: [190, 142], act: 'place', arg: 'salon', hint: 'El Custodio, el Muro de los Recuerdos y los duelos' },
   { id: 'guardia', name: 'Puesto de guardia', poly: '1255,320 1376,290 1376,560 1265,560', at: [1316, 330], locked: true },
 ];
 
@@ -64,7 +66,6 @@ const coverBox = (ar: number, inner: string, cls: string): string => `<div class
 
 function panorama(): string {
   const s = ui.session!;
-  const g = gateAct();
   const lbl = (p: Spot): string => `<div class="slbl ${p.locked ? 'locked' : ''}" data-lbl="${p.id}" style="left:${(p.at[0] / 1376) * 100}%;top:${(p.at[1] / 768) * 100}%;--tx:${p.at[0] < 170 ? '-12%' : p.at[0] > 1200 ? '-88%' : '-50%'}"><b>${p.locked ? '🔒 ' : ''}${esc(p.name)}</b><small>${p.locked ? 'Próximamente' : esc(p.hint ?? '')}</small></div>`;
   const spot = (p: Spot): string => {
     const act = p.locked ? '' : `data-act="${p.act}" data-id="${p.arg}"`;
@@ -77,17 +78,16 @@ function panorama(): string {
   return `${coverBox(1376 / 768, `${SPOTS.map(lit).join('')}<svg class="spots" viewBox="0 0 1376 768" preserveAspectRatio="none">${SPOTS.map(spot).join('')}</svg>${SPOTS.map(lbl).join('')}`, 'settle-scene')}
     <style>${hover}{opacity:1;transform:translate(var(--tx,-50%),-4px)}${hoverLit}{opacity:1}</style>
     ${hud('El Asentamiento', `${esc(CLASSES[ui.me.cls].name)} · ${s.t.kind === 'local' ? 'un jugador' : `sala ${esc(s.code)}`}${ui.daily ? ' · reto del día' : ui.asc ? ` · ascensión ${ui.asc}` : ''}`, 'herochange', 'Cambiar de héroe')}
-    <div class="sgate"><span class="dim sm shint">Pasa el ratón por los edificios · haz clic para entrar</span>
-      <button class="pri sgate-btn" data-act="${g.act}" ${g.disabled ? 'disabled' : ''}>${g.label}${g.sub ? `<small>${g.sub}</small>` : ''}</button></div>
+    <div class="sgate"><span class="dim sm shint">Pasa el ratón por los edificios · haz clic para entrar · para descender, ve a la Puerta</span></div>
     <nav class="slist">${SPOTS.filter((p) => !p.locked && p.act !== 'gate').map((p) => `<button class="mini" data-act="${p.act}" data-id="${p.arg}">${esc(p.name)}</button>`).join('')}</nav>`;
 }
 
 /** Habitante dentro de un lugar: caja en % de la imagen y tiras de 4 fotogramas (reposo y saludo). */
-interface PlaceNpc { id: string; box: [number, number, number, number]; inner: number; idle: string; wave: string; lbl: [number, number]; /** saluda al hacer clic (no al pasar el ratón) */ waveOnClick?: boolean }
+interface PlaceNpc { id: string; box: [number, number, number, number]; inner: number; idle: string; wave: string; lbl: [number, number]; /** fotogramas de la tira de reposo (4 por defecto) */ frames?: number; /** saluda al hacer clic (no al pasar el ratón) */ waveOnClick?: boolean }
 /** Objeto clicable dentro de un lugar (coordenadas en píxeles de la imagen de referencia). */
 interface PlaceSpot { id: string; name: string; hint: string; poly: string; at: [number, number]; act: string; arg: string }
 interface PlaceDef { title: string; scene: MenuScene; bg: string; w: number; h: number; npcs: PlaceNpc[]; spots: PlaceSpot[]; /** lugar al que se vuelve (por defecto, el panorama) */ parent?: Place }
-type Place = 'taberna' | 'archivo' | 'puerta' | 'puesto';
+type Place = 'taberna' | 'archivo' | 'puerta' | 'puesto' | 'salon';
 export const placeParent = (p: Place): Place | '' => PLACES[p].parent ?? '';
 const PLACES: Record<Place, PlaceDef> = {
   // Irena tras la barra, entre las jarras y el mortero: solo se ve por encima del mostrador
@@ -118,13 +118,23 @@ const PLACES: Record<Place, PlaceDef> = {
       { id: 'tablero', name: 'Tablero de avisos', hint: 'Avisos y noticias del Refugio', poly: '1320,480 1775,480 1775,830 1320,830', at: [1548, 470], act: 'inspect', arg: 'tablero' },
       { id: 'catalejo', name: 'Catalejo', hint: 'El territorio exterior', poly: '2030,820 2050,740 2240,690 2310,720 2300,780 2230,820 2200,1000 2290,1290 2080,1290 2160,1000 2140,850', at: [2170, 680], act: 'inspect', arg: 'catalejo' },
     ] },
+  // el Salón de los Héroes: el Custodio trabaja junto a la mesa pequeña, a la derecha del altar
+  salon: { title: 'Salón de los Héroes', scene: 'hall', bg: 'bg/salon.jpg', w: 1376, h: 768,
+    npcs: [{ id: 'custodio', box: [79.43, 64.06, 13.37, 25.78], inner: 100, idle: 'npc/custodio_loop.png', wave: 'npc/custodio_greet.png', lbl: [86.1, 62.5], waveOnClick: true, frames: 24 }],
+    spots: [
+      { id: 'muro', name: 'Muro de los Recuerdos', hint: 'Hechos, testimonios, teorías, rumores y contradicciones', poly: '550,220 850,220 850,470 550,470', at: [700, 212], act: 'inspect', arg: 'muro' },
+      { id: 'libro', name: 'Libro de regresos', hint: 'Quienes cayeron y volvieron', poly: '620,538 785,538 790,588 615,588', at: [702, 530], act: 'inspect', arg: 'libro' },
+      { id: 'armero', name: 'Armero de los héroes', hint: 'Héroes guardados y duelos 3 contra 3', poly: '230,395 520,395 520,600 300,610 230,600', at: [375, 388], act: 'htab', arg: 'salon' },
+      { id: 'objetos', name: 'Estantes de objetos', hint: 'Lo que trajeron de vuelta', poly: '860,395 1145,395 1150,600 860,600', at: [1000, 388], act: 'dossier', arg: 'objetos' },
+      { id: 'placas', name: 'Placas de los ausentes', hint: 'Lo que sigue sin resolverse', poly: '285,248 485,248 485,350 285,350', at: [385, 240], act: 'inspect', arg: 'placas' },
+    ] },
 };
 
 /** Interior de un lugar: fondo animado, habitantes y objetos clicables. */
 function placeView(id: Place): string {
   const p = PLACES[id];
   const npcs = p.npcs.map((n) => { const d = NPCS[n.id]!;
-    return `<button class="raw npc ${n.waveOnClick ? 'clickwave' : ''}" data-act="talk" data-id="${n.id}" style="left:${n.box[0]}%;top:${n.box[1]}%;width:${n.box[2]}%;height:${n.box[3]}%;--wipe:url(${abs(n.idle)});--wave:url(${abs(n.wave)});--inner:${n.inner}%" aria-label="Hablar con ${d.name}"><span class="npc-spr"></span></button>
+    return `<button class="raw npc ${n.waveOnClick ? 'clickwave' : ''} ${n.frames === 24 ? 'f24' : ''}" data-act="talk" data-id="${n.id}" style="left:${n.box[0]}%;top:${n.box[1]}%;width:${n.box[2]}%;height:${n.box[3]}%;--wipe:url(${abs(n.idle)});--wave:url(${abs(n.wave)});--inner:${n.inner}%" aria-label="Hablar con ${d.name}"><span class="npc-spr"></span></button>
     <div class="slbl npclbl" data-lbl="${n.id}" style="left:${n.lbl[0]}%;top:${n.lbl[1]}%"><b>${d.name}</b><small>${d.role} · haz clic para hablar</small></div>`; }).join('');
   const pct = (x: number, y: number): string => `${((x / p.w) * 100).toFixed(2)}% ${((y / p.h) * 100).toFixed(2)}%`;
   const lit = p.spots.map((sp) => `<div class="spotlit" data-lit="${sp.id}" style="background-image:url(${abs(p.bg)});clip-path:polygon(${sp.poly.split(' ').map((xy) => { const [x, y] = xy.split(',').map(Number); return pct(x!, y!); }).join(',')})"></div>`).join('');
@@ -148,9 +158,11 @@ function talkCtx(): TalkCtx {
   // la pista más cercana: el expediente con pista al que le falten menos evidencias
   const next = open.filter((d) => d.known && !ready(d)).map((d) => ({ d, miss: d.evidence.find((e) => e.have < e.need)!, left: d.evidence.reduce((n, e) => n + Math.max(0, e.need - e.have), 0) })).sort((a, b) => a.left - b.left)[0];
   return { cls: ui.me.cls, clsName: CLASSES[ui.me.cls].name, runs: m.stats.runs, wins: m.stats.wins, bosses: m.stats.bosses, kills: m.stats.kills, archivePct: archiveTotal().pct, maxAsc: m.maxAsc,
-    since: ui.talk?.npc === 'darel' && ui.talkBase !== undefined ? (ui.talkBase === null ? null : { runs: m.stats.runs - ui.talkBase.runs, wins: m.stats.wins - ui.talkBase.wins, losses: (m.stats.runs - m.stats.wins) - (ui.talkBase.runs - ui.talkBase.wins), bosses: m.stats.bosses - ui.talkBase.bosses, deeper: m.stats.bestZone > ui.talkBase.bestZone }) : null,
+    since: (ui.talk?.npc === 'darel' || ui.talk?.npc === 'custodio') && ui.talkBase !== undefined ? (ui.talkBase === null ? null : { runs: m.stats.runs - ui.talkBase.runs, wins: m.stats.wins - ui.talkBase.wins, losses: (m.stats.runs - m.stats.wins) - (ui.talkBase.runs - ui.talkBase.wins), bosses: m.stats.bosses - ui.talkBase.bosses, deeper: m.stats.bestZone > ui.talkBase.bestZone }) : null,
     losses: Math.max(0, m.stats.runs - m.stats.wins), bestZone: m.stats.bestZone, deepest: deepestName(m.stats.bestZone),
     regionsSeen: seenZones().length, regionNames: seenZones().map((i) => ZONES[i]!.name),
+    hallCount: m.hall.length, hallFallen: m.hall.filter((c) => !c.won).length,
+    lastBossZone: [...ZONES.keys()].reverse().map((i) => (atlasEntry(m, 'zones', `z${i + 1}`)?.completions ? ZONES[i]!.name : '')).find(Boolean) ?? '',
     researched: all.length - open.length, researchTotal: all.length, researchReady: rd.map((d) => d.name), researchNext: next ? `${next.d.name}: ${next.miss.text.toLowerCase()} (${next.miss.have}/${next.miss.need})` : '' };
 }
 
@@ -219,7 +231,7 @@ export function settlementScreen(): void {
   ui.root.innerHTML = `<div class="settle2">${ui.place ? placeView(ui.place) : panorama()}
     ${ui.talk ? talkOverlay() : ''}
     ${ui.dossier ? dossierView() : ''}
-    ${ui.inspect ? inspectView() : ''}
+    ${ui.inspect ? (isHallView(ui.inspect) ? hallView(talkCtx()) : inspectView()) : ''}
     ${ui.bldgOpen ? `<div class="fover"><div class="fover-box wide"><div class="row"><span class="grow"></span><button data-act="bldgclose">Volver al Asentamiento</button></div>${metaPanel()}</div></div>` : ''}
   </div>`;
   if (ui.talk) startTyping();
@@ -269,4 +281,31 @@ function dossierView(): string {
     <div class="dtop"><div><span class="hero-kicker">ARCHIVO DEL ABISMO · ROMI</span><h2>${kind === 'registro' ? 'Registro de expediciones' : DOSSIER_KINDS[kind].title}</h2><p class="dim sm">${intro}</p></div><span class="grow"></span><button data-act="dossierclose">Cerrar</button></div>
     <div class="dtabs">${tabs}</div>${body}
   </div></div>`;
+}
+
+// ---------- descenso al Abismo: fundido a negro y, si existe, vídeo de entrada que se puede saltar ----------
+/** Vídeo opcional (public/video/intro_abismo.mp4). Si no está, solo hay fundido. */
+const INTRO = 'video/intro_abismo.mp4';
+let introOk: boolean | null = null;
+function probeIntro(): Promise<boolean> {
+  if (introOk !== null) return Promise.resolve(introOk);
+  return fetch(BASE() + INTRO, { method: 'HEAD' }).then((r) => (introOk = r.ok && (r.headers.get('content-type') ?? '').startsWith('video'))).catch(() => (introOk = false));
+}
+export function descendFx(): void {
+  let f = document.getElementById('fade');
+  if (!f) { document.body.insertAdjacentHTML('beforeend', '<div id="fade"></div>'); f = document.getElementById('fade')!; }
+  f.style.transition = 'none'; f.classList.add('on'); void f.offsetWidth; f.style.transition = '';
+  const reveal = (): void => { setTimeout(() => f!.classList.remove('on'), 120); };
+  void probeIntro().then((ok) => {
+    if (!ok) { setTimeout(reveal, 700); return; }
+    document.body.insertAdjacentHTML('beforeend', `<div id="introvid"><video src="${BASE()}${INTRO}" playsinline autoplay></video><button class="introskip">Saltar ⏭</button></div>`);
+    const box = document.getElementById('introvid')!, v = box.querySelector('video')!;
+    const end = (): void => { removeEventListener('keydown', key); box.remove(); reveal(); };
+    const key = (e: KeyboardEvent): void => { if (e.key === 'Escape' || e.key === ' ' || e.key === 'Enter') { e.preventDefault(); end(); } };
+    addEventListener('keydown', key);
+    box.addEventListener('click', end);
+    v.addEventListener('ended', end);
+    v.addEventListener('error', end);
+    void v.play().catch(() => { v.muted = true; void v.play().catch(end); });
+  });
 }

@@ -9,7 +9,7 @@ import { Session } from '../game/session';
 import { dailyScore, dailyZone, loadable } from '../game/run';
 import { joinRoom, loadRun, submitDaily, topDaily } from '../net/transport';
 import { clearSnapshot, readSnapshot } from '../game/snapshot';
-import { fadeTo, finishTyping, lobbyScene, placeParent, talkLines } from './settlement';
+import { descendFx, fadeTo, finishTyping, lobbyScene, placeParent, talkLines } from './settlement';
 import { NPCS } from '../content/dialogues';
 import { investigate } from '../game/research';
 import { addLog, closeIntro, combatScreen, labClick } from './combat';
@@ -162,12 +162,12 @@ function render(events: GameEvent[]): void {
   const run = s.run;
   const want = !run ? 'lobby' : run.phase === 'combat' && run.combat ? 'combat' : run.phase === 'event' && run.event ? 'event' : run.phase === 'shop' ? 'shop' : run.phase === 'room' && run.room ? 'room' : run.phase === 'map' ? 'map' : 'end';
   // sin cambios reales no se redibuja: así un latido de red no interrumpe un clic
-  const key = want + JSON.stringify([meta().ecos, ui.asc, ui.daily, ui.mods, ui.abyss, run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), s.t.connected(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selItem, ui.tab, ui.logOpen, ui.statsOpen, ui.mapOpen, ui.forgeRef, ui.forgeAffix, ui.forgeSpell, ui.sideOpen, ui.picked, ui.lobbyReady, ui.lobbyStage, ui.overlay, ui.bldgOpen, ui.homeTab, ui.place, ui.talk, ui.dossier, ui.dossierSel, (meta().research ?? []).length, ui.inspect]);
+  const key = want + JSON.stringify([meta().ecos, ui.asc, ui.daily, ui.mods, ui.abyss, run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), s.t.connected(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selItem, ui.tab, ui.logOpen, ui.statsOpen, ui.mapOpen, ui.forgeRef, ui.forgeAffix, ui.forgeSpell, ui.sideOpen, ui.picked, ui.lobbyReady, ui.lobbyStage, ui.overlay, ui.bldgOpen, ui.homeTab, ui.place, ui.talk, ui.dossier, ui.dossierSel, (meta().research ?? []).length, ui.inspect, ui.wallKind, meta().hall.length]);
   if (key === lastKey && want === ui.screen && !events.length) return;
   lastKey = key;
   if (want !== ui.screen) hideTip();
   const meH = run?.heroes.find((h) => h.owner === ui.myId);
-  setZoneMusic(!run ? (ui.lobbyStage === 'settlement' && ui.place ? ({ taberna: 'tavern', archivo: 'archive', puerta: 'gate', puesto: 'gate' } as const)[ui.place] : 'lobby') : want === 'combat' ? (run.kind === 'boss' ? 'boss' : 'combat') : want === 'end' ? 'end' : want === 'shop' ? 'calm'
+  setZoneMusic(!run ? (ui.lobbyStage === 'settlement' && ui.place ? ({ taberna: 'tavern', archivo: 'archive', puerta: 'gate', puesto: 'gate', salon: 'hall' } as const)[ui.place] : 'lobby') : want === 'combat' ? (run.kind === 'boss' ? 'boss' : 'combat') : want === 'end' ? 'end' : want === 'shop' ? 'calm'
     : want === 'event' || want === 'room' || meH?.boonOffer || meH?.bossOffer ? 'choice' : `map${Math.min(3, run.zone)}`);
   if (want === 'combat') combatScreen(events);
   else {
@@ -176,6 +176,8 @@ function render(events: GameEvent[]): void {
     ui.board = null;
     ({ lobby: lobbyScreen, event: eventScreen, shop: shopScreen, room: roomScreen, map: mapScreen, end: endScreen })[want]();
   }
+  // al descender desde la sala: fundido a negro (y vídeo de entrada, si lo hay)
+  if (ui.screen === 'lobby' && want !== 'lobby' && run && !run.arena) descendFx();
   ui.screen = want;
   setMenuScene(want === 'combat' ? null : want === 'lobby' ? lobbyScene() : 'game');
   document.body.classList.toggle('menu-dim', want === 'lobby' && ui.lobbyStage === 'hero');
@@ -283,6 +285,7 @@ document.addEventListener('click', (e) => {
     // la Puerta: ventanas de inspección del puesto de vigilancia
     case 'inspect': ui.inspect = id as typeof ui.inspect; ui.refreshLobby(); break;
     case 'inspectclose': ui.inspect = ''; ui.refreshLobby(); break;
+    case 'wallkind': ui.wallKind = id; ui.refreshLobby(); break;
     // Archivo: fichas de investigación (examinar / investigar)
     case 'dossier': ui.dossier = id as typeof ui.dossier; ui.dossierSel = ''; ui.refreshLobby(); break;
     case 'dossel': ui.dossierSel = id; ui.refreshLobby(); break;

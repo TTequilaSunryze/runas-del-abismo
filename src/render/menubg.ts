@@ -1,7 +1,7 @@
 // Fondo de los menús: una ilustración (public/bg) con una capa animada encima en pixel art
 // (luz de antorchas que parpadea, ascuas, chispas rúnicas y niebla). Solo decoración.
 
-export type MenuScene = 'home' | 'game' | 'settle' | 'tavern' | 'archive' | 'gate' | 'post';
+export type MenuScene = 'home' | 'game' | 'settle' | 'tavern' | 'archive' | 'gate' | 'post' | 'hall';
 /** La capa animada mide 1/4 de la ilustración (1376×768): sus coordenadas son las de la imagen / 4. */
 const W = 344, H = 192, FPS = 20;
 
@@ -94,6 +94,15 @@ const SCENES: Record<MenuScene, SceneDef> = {
     glows: [{ x: 300.5, y: 64.1, r: 42, col: '120,150,200' }],
     fog: '90,90,100',
     fogA: 0.03,
+    fit: 'contain',
+  },
+  // el Salón de los Héroes: decenas de velas
+  hall: {
+    img: 'bg/salon.jpg',
+    fires: [{ x: 40.75, y: 82.5, r: 9, col: FIRE, ember: false }, { x: 61.25, y: 96.25, r: 7, col: FIRE, ember: false }, { x: 67.5, y: 96.25, r: 7, col: FIRE, ember: false }, { x: 123.75, y: 96.25, r: 9, col: FIRE, ember: false }, { x: 132.5, y: 100, r: 7, col: FIRE, ember: false }, { x: 101.25, y: 136.25, r: 7, col: FIRE, ember: false }, { x: 96.25, y: 160, r: 9, col: FIRE, ember: false }, { x: 146.25, y: 160, r: 7, col: FIRE, ember: false }, { x: 151.25, y: 137.5, r: 7, col: FIRE, ember: false }, { x: 161.25, y: 125, r: 9, col: FIRE, ember: false }, { x: 185, y: 126.25, r: 7, col: FIRE, ember: false }, { x: 200, y: 137.5, r: 7, col: FIRE, ember: false }, { x: 211.25, y: 100, r: 9, col: FIRE, ember: false }, { x: 220, y: 97.5, r: 7, col: FIRE, ember: false }, { x: 243.75, y: 137.5, r: 7, col: FIRE, ember: false }, { x: 246.25, y: 158.75, r: 9, col: FIRE, ember: false }, { x: 295, y: 106.25, r: 7, col: FIRE, ember: false }, { x: 303.75, y: 136.25, r: 7, col: FIRE, ember: false }, { x: 36.25, y: 157.5, r: 9, col: FIRE, ember: false }, { x: 308.75, y: 121.25, r: 7, col: FIRE, ember: false }, { x: 37, y: 115, r: 7, col: FIRE, ember: false }, { x: 192.5, y: 160, r: 9, col: FIRE, ember: false }],
+    glows: [{ x: 175, y: 140, r: 60, col: '255,170,90' }],
+    fog: '140,100,70',
+    fogA: 0.04,
     fit: 'contain',
   },
   game: {
