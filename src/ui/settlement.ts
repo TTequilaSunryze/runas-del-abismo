@@ -13,6 +13,7 @@ import { ZONES } from '../content/zones';
 import type { MenuScene } from '../render/menubg';
 import { esc, tip, ui } from './ctx';
 import { volumeControl } from './panels';
+import { duckMusic } from '../audio/sfx';
 import { metaPanel } from './screens';
 
 const BASE = (): string => import.meta.env.BASE_URL;
@@ -147,6 +148,7 @@ function placeView(id: Place): string {
   return `${coverBox(p.w / p.h, `${lit}${svg}${npcs}${lbls}`, `${id}-scene`)}
     <style>${hover}{opacity:1;transform:translate(var(--tx,-50%),-4px)}${hoverLit ? `${hoverLit}{opacity:1}` : ''}</style>
     ${hud(p.title, p.parent ? PLACES[p.parent].title.toUpperCase() : 'EL ASENTAMIENTO', 'placeexit', p.parent ? `Volver a ${PLACES[p.parent].title}` : 'Volver al Asentamiento')}
+    ${id === 'puerta' ? (warmIntro(), '') : ''}
     ${id === 'puerta' ? (() => { const g = gateAct(); return `<div class="sgate"><button class="pri sgate-btn" data-act="${g.act}" ${g.disabled ? 'disabled' : ''}>${g.label}${g.sub ? `<small>${g.sub}</small>` : ''}</button></div>`; })() : ''}`;
 }
 
@@ -291,6 +293,9 @@ function probeIntro(): Promise<boolean> {
   if (introOk !== null) return Promise.resolve(introOk);
   return fetch(BASE() + INTRO, { method: 'HEAD' }).then((r) => (introOk = r.ok && (r.headers.get('content-type') ?? '').startsWith('video'))).catch(() => (introOk = false));
 }
+/** Al llegar a la Puerta se descarga el vídeo, para que al descender empiece al instante. */
+let warmed = false;
+function warmIntro(): void { if (warmed) return; warmed = true; void probeIntro().then((ok) => { if (ok) void fetch(BASE() + INTRO).catch(() => {}); }); }
 export function descendFx(): void {
   let f = document.getElementById('fade');
   if (!f) { document.body.insertAdjacentHTML('beforeend', '<div id="fade"></div>'); f = document.getElementById('fade')!; }
@@ -300,7 +305,8 @@ export function descendFx(): void {
     if (!ok) { setTimeout(reveal, 700); return; }
     document.body.insertAdjacentHTML('beforeend', `<div id="introvid"><video src="${BASE()}${INTRO}" playsinline autoplay></video><button class="introskip">Saltar ⏭</button></div>`);
     const box = document.getElementById('introvid')!, v = box.querySelector('video')!;
-    const end = (): void => { removeEventListener('keydown', key); box.remove(); reveal(); };
+    duckMusic(true);
+    const end = (): void => { removeEventListener('keydown', key); box.remove(); duckMusic(false); reveal(); };
     const key = (e: KeyboardEvent): void => { if (e.key === 'Escape' || e.key === ' ' || e.key === 'Enter') { e.preventDefault(); end(); } };
     addEventListener('keydown', key);
     box.addEventListener('click', end);

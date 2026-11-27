@@ -28,3 +28,10 @@
 
 ## Recursos
 `public/bg/salon.jpg`, `public/npc/custodio*.png|jpg` (`custodio_loop` = 24 fotogramas).
+
+## Vídeo de entrada al Abismo
+- `public/video/intro_abismo.mp4` (7,9 s, 1280×720, con sonido; recomprimido de 5,8 MB a 2,8 MB).
+- Suena cada vez que se desciende, con sonido; la música se silencia mientras dura y vuelve después.
+- Se salta con un clic, el botón «Saltar», Esc, Espacio o Intro.
+- Se descarga al entrar en la Puerta, para que empiece al instante.
+- Si el navegador no deja reproducir con sonido (sin ninguna interacción previa), se reproduce en silencio.

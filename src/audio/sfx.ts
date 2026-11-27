@@ -130,14 +130,14 @@ function start(file: string): void {
   playing = a;
   current = file;
   a.volume = a === old ? a.volume : 0;
-  void a.play().then(() => fade(a!, VOL)).catch(() => { /* el navegador aún no deja sonar */ });
+  void a.play().then(() => fade(a!, ducked ? 0 : VOL)).catch(() => { /* el navegador aún no deja sonar */ });
 }
 
 function playWanted(next = false): void {
   if (!unlocked || muted) return;
   const pool = POOLS[wanted] ?? POOLS.menu!;
   // la que suena sigue si pertenece a la nueva lista (y no ha terminado)
-  if (!next && playing && pool.includes(current)) { if (playing.paused || playing.volume < VOL) void playing.play().then(() => fade(playing!, VOL)).catch(() => {}); return; }
+  if (!next && playing && pool.includes(current)) { if (playing.paused || playing.volume < VOL) void playing.play().then(() => fade(playing!, ducked ? 0 : VOL)).catch(() => {}); return; }
   start(pick(pool, current, !next && wanted.startsWith('map')));
 }
 
@@ -151,6 +151,15 @@ export function setZoneMusic(name: string): void {
 export function nowPlaying(): string {
   return TRACK_TITLE[current] ?? '';
 }
+
+/** Baja la música a cero (p. ej. mientras suena el vídeo de entrada) o la devuelve a su volumen. */
+let ducked = false;
+export function duckMusic(on: boolean): void {
+  ducked = on;
+  if (!playing || muted) return;
+  fade(playing, on ? 0 : VOL);
+}
+export const isDucked = (): boolean => ducked;
 
 export function isMuted(): boolean {
   return muted;
