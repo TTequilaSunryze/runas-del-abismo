@@ -5,6 +5,8 @@ import { SPELLS, type SpellDef } from '../classes/spells';
 import { rand, randInt } from '../rng';
 import { tuned } from '../upgrades';
 import { applyRunes } from '../runes';
+import { CORRUPT_HEAL, DOOM_PCT, DOT, FREEZE_AT, NEGATIVE_STATUSES, REGEN_PER, STATUSES, THERMAL_DMG, WEAK_PCT } from '../statuses';
+import { afterRuneCast, onRuneCare, onRuneHit, runEchoes, type FxCtx } from './runefx';
 import { key, type BoardMark, type CombatGoal, type CombatState, type Element, type GameEvent, type Pos, type StatusKind, type Unit } from '../state';
 import { alive, dist, hasLineOfSight, isFree, lineCells, pathTo, reachable, same, unitAt } from './grid';
 import { addMark, clearMarksOf, coneCells, dirOf, marksAt, marksOf, removeMark, tickMarks } from './marks';
@@ -41,7 +43,7 @@ const BURN_DMG = 3;
 /** Encantado: +2 de daño de cada golpe recibido */
 const CHARM_FLAT = 2;
 /** Estados perjudiciales (para la inmunidad de la Ciudadela de cristal). */
-const NEGATIVE = new Set<StatusKind>(['burn', 'poison', 'slow', 'stun', 'mark', 'exposed', 'charm', 'vuln', 'bleed', 'hobble', 'deathmark', 'verdugo', 'chained', 'rooted', 'anchor']);
+const NEGATIVE: ReadonlySet<StatusKind> = NEGATIVE_STATUSES;
 /** Pistolero Arcano: cargas del cargador y daño elemental del disparo con el cargador lleno. */
 export const MAG_MAX = 4;
 const MAG_FULL_FLAT = 6;
@@ -272,6 +274,14 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
     const g = gd.from === undefined ? undefined : s.units.find((x) => x.id === gd.from);
     if (g && alive(g) && g !== u) { hurt(s, g, raw * GUARD_SHARE * (hasTrait(g, 'custodia') ? 0.85 : 1), ev, 'guardian', { ...opts, crit: false }); raw *= 1 - GUARD_SHARE; }
   }
+  // Debilitado: quien golpea hace menos daño
+  if (attacker?.statuses.weak) raw *= 1 - WEAK_PCT;
+  // Choque térmico: el fuego rompe la Escarcha y la Congelación con daño extra
+  if (opts.element === 'fire' && (u.statuses.chill || u.statuses.frozen) && source !== 'termico') {
+    delete u.statuses.chill; delete u.statuses.frozen;
+    ev.push({ t: 'resist', unit: u.id, what: '¡Choque térmico!' });
+    raw += THERMAL_DMG;
+  }
   // GANCHO DAÑOS CON EFECTO (FEATURES.effectDamage): el tipo de daño llegará en opts.element; las resistencias se reactivan con FEATURES.resistances
   const res = FEATURES.resistances && opts.element ? Math.min(75, u.resist[opts.element] ?? 0) : 0;
   raw *= 1 - res / 100;
@@ -333,6 +343,9 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
   // Marca de la muerte: guarda el 50% del daño que le hacen el Acechador y sus sombras
   const dm = u.statuses.deathmark;
   if (dm && dmg > 0 && casting !== null && dm.from === casting && source !== 'marca') dm.stacks += Math.round(dmg * DEATHMARK_PCT);
+  // Condena: guarda parte de todo el daño recibido (salvo el suyo propio)
+  const doom = u.statuses.doom;
+  if (doom && dmg > 0 && source !== 'condena') doom.stacks += Math.round(dmg * DOOM_PCT);
   if (!alive(u)) {
     ev.push({ t: 'death', unit: u.id });
     clearMarksOf(s, u.id, ev);
@@ -358,6 +371,8 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
     }
     // Alianza de la Viuda Eterna: si cae un aliado, +20% de daño
     if (u.summoner === undefined) for (const a of s.units) if (a !== u && alive(a) && a.team === u.team && hasTrait(a, 'viuda')) a.power += 2;
+    // Corrupción: al morir contagia Corrupción y Veneno a sus vecinos
+    if (u.statuses.corrupt) for (const o of s.units.filter((x) => x !== u && alive(x) && x.team === u.team && dist(x.pos, u.pos) <= 1)) { addStatus(o, 'corrupt', 2, 1, ev); addStatus(o, 'poison', 2, 1, ev); }
     if (hasTrait(u, 'puddle') && !s.puddles.includes(key(u.pos))) s.puddles.push(key(u.pos));
     if (hasTrait(u, 'split') && u.maxHp >= 16) splitUnit(s, u, ev);
     if (hasTrait(u, 'bomb')) {
@@ -423,13 +438,16 @@ function splitUnit(s: CombatState, u: Unit, ev: GameEvent[]): void {
   }
 }
 
-export function heal(u: Unit, amount: number, ev: GameEvent[]): void {
-  if (!alive(u)) return;
+/** Cura a `u` (la Corrupción la reduce). Devuelve la vida recuperada de verdad. */
+export function heal(u: Unit, amount: number, ev: GameEvent[]): number {
+  if (!alive(u)) return 0;
+  if (u.statuses.corrupt) amount *= 1 - CORRUPT_HEAL;
   const real = Math.min(u.maxHp - u.hp, Math.round(amount));
   if (real > 0) {
     u.hp += real;
     ev.push({ t: 'heal', unit: u.id, amount: real });
   }
+  return Math.max(0, real);
 }
 
 function addStatus(u: Unit, kind: StatusKind, turns: number, stacks: number, ev: GameEvent[]): void {
@@ -438,10 +456,28 @@ function addStatus(u: Unit, kind: StatusKind, turns: number, stacks: number, ev:
   if (kind === 'burn' && hasTrait(u, 'ignifugo')) return;
   // Ciudadela de cristal: inmune a estados alterados
   if (u.statuses.immune && NEGATIVE.has(kind)) { ev.push({ t: 'resist', unit: u.id, what: 'Inmune' }); return; }
+  const info = STATUSES[kind];
+  // Barrera rúnica: cada carga bloquea un estado negativo
+  const ward = u.statuses.ward;
+  if (ward && info?.negative) { if (--ward.stacks <= 0) delete u.statuses.ward; ev.push({ t: 'resist', unit: u.id, what: 'Barrera rúnica' }); return; }
+  // élites y jefes: versiones reducidas del control (nunca inmunidad total)
+  const big = !!u.rank || u.ai === 'boss';
+  if (big && (kind === 'stun' || kind === 'frozen')) {
+    const ap = kind === 'stun' ? 2 : 1, mp = kind === 'frozen' ? 2 : 0;
+    u.apMod -= ap; u.mpMod -= mp;
+    ev.push({ t: 'resist', unit: u.id, what: kind === 'stun' ? 'Aturdimiento parcial: −2 PA' : 'Congelación parcial: −1 PA y −2 PM' });
+    ev.push({ t: 'drain', unit: u.id, ap: -ap, mp: -mp });
+    return;
+  }
+  if (u.ai === 'boss' && kind === 'rooted') { u.mpMod -= 2; ev.push({ t: 'resist', unit: u.id, what: 'Raíces: −2 PM' }); return; }
   const cur = u.statuses[kind];
-  const stackable = kind === 'poison';
-  u.statuses[kind] = { turns: Math.max(turns, cur?.turns ?? 0), stacks: stackable ? (cur?.stacks ?? 0) + stacks : Math.max(stacks, cur?.stacks ?? 0) };
+  const add = info?.stack === 'add';
+  const cap = info?.max ?? 99;
+  const next = add ? (cur?.stacks ?? 0) + stacks : Math.max(stacks, cur?.stacks ?? 0);
+  u.statuses[kind] = { ...(cur ?? {}), turns: Math.max(turns, cur?.turns ?? 0), stacks: Math.min(cap, next) };
   ev.push({ t: 'status', unit: u.id, kind, turns });
+  // Escarcha: al llegar al tope, congela
+  if (kind === 'chill' && (u.statuses.chill?.stacks ?? 0) >= FREEZE_AT) { delete u.statuses.chill; addStatus(u, 'frozen', 1, 1, ev); }
 }
 
 function tick(u: Unit, kind: StatusKind): void {
@@ -499,12 +535,28 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     // muerte súbita: desde la ronda 30 el Abismo consume a todos, cada vez más
     if (s.round >= SUDDEN_ROUND && u.ai !== 'pillar') hurt(s, u, u.maxHp * 0.05 * (s.round - SUDDEN_ROUND + 1), ev, 'abismo', { pierce: true });
     if (!alive(u) || s.over) continue;
-    if (u.statuses.burn) hurt(s, u, BURN_DMG, ev, 'burn', { pierce: true, element: 'fire' });
-    if (alive(u) && u.statuses.poison) hurt(s, u, POISON_DMG * u.statuses.poison.stacks, ev, 'poison', { pierce: true, element: 'poison' });
+    if (u.statuses.burn) hurt(s, u, BURN_DMG + DOT.burnPerStack * Math.max(0, u.statuses.burn.stacks - 1), ev, 'burn', { pierce: true, element: 'fire' });
+    if (alive(u) && u.statuses.poison) hurt(s, u, POISON_DMG * u.statuses.poison.stacks * (u.statuses.corrupt ? 1.5 : 1), ev, 'poison', { pierce: true, element: 'poison' });
     if (alive(u) && u.statuses.bleed) hurt(s, u, BLEED_DMG * u.statuses.bleed.stacks, ev, 'bleed', { pierce: true });
+    if (alive(u) && u.statuses.regen && !late) heal(u, REGEN_PER * u.statuses.regen.stacks, ev);
     tick(u, 'burn');
     tick(u, 'poison');
     tick(u, 'bleed');
+    tick(u, 'regen');
+    // Condena: al acabarse, recibe de golpe lo que guardó
+    const dm0 = u.statuses.doom;
+    if (dm0 && alive(u) && --dm0.turns <= 0) {
+      delete u.statuses.doom;
+      if (dm0.stacks > 0) { ev.push({ t: 'note', text: `La Condena de ${u.name} se cumple.` }); hurt(s, u, dm0.stacks, ev, 'condena', { pierce: true }); }
+    }
+    if (!alive(u) || s.over) continue;
+    // Runas: los ecos pendientes de este héroe golpean al empezar su turno
+    u.runeKillAp = false;
+    if (u.runeEchoes?.length) {
+      const prev = casting; casting = u.id;
+      try { runEchoes(s, u, (id) => spellOf(u, id), (t) => dmgFlat(u, t), (a, b) => randInt(s, a, b), FX, ev); } finally { casting = prev; }
+      if (!alive(u) || s.over) continue;
+    }
     // Marca de la muerte: si quien la puso ya no está, se pierde (estalla al final del turno de su dueño, en endTurn)
     const dmk = u.statuses.deathmark;
     if (dmk && !s.units.some((x) => x.id === dmk.from && alive(x))) delete u.statuses.deathmark;
@@ -515,6 +567,7 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     if (!alive(u) || s.over) continue;
     u.ap = Math.max(0, u.maxAp + u.apMod);
     u.mp = Math.max(0, u.maxMp + u.mpMod - (u.statuses.slow?.stacks ?? 0));
+    if (u.statuses.haste) { const n = u.statuses.haste.stacks; u.ap += 1; u.mp += n; ev.push({ t: 'drain', unit: u.id, ap: 1, mp: n }); }
     u.apMod = 0;
     u.mpMod = 0;
     u.gunKill = false;
@@ -528,7 +581,7 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     tick(u, 'reach');
     tick(u, 'invis');
     tick(u, 'exposed');
-    for (const k of ['charm', 'vuln', 'hobble', 'guarded', 'verdugo', 'frenzy', 'orbita', 'chained', 'rooted', 'anchor', 'silver', 'smoke', 'immune', 'kinetic', 'prism'] as const) tick(u, k);
+    for (const k of ['charm', 'vuln', 'hobble', 'guarded', 'verdugo', 'frenzy', 'orbita', 'chained', 'rooted', 'anchor', 'silver', 'smoke', 'immune', 'kinetic', 'prism', 'chill', 'weak', 'corrupt', 'resonance', 'haste', 'ward'] as const) tick(u, k);
     // Mirada del verdugo: si su presa sigue marcada, el Bárbaro gana 1 PM para ir a por ella
     if (s.units.some((x) => alive(x) && x.statuses.verdugo?.from === u.id)) { u.mp++; ev.push({ t: 'drain', unit: u.id, ap: 0, mp: 1 }); }
     turnStartBlessings(s, u, ev);
@@ -538,8 +591,9 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
       else if (!u.scytheUsed) u.scytheCharge = Math.min(3, u.scytheCharge + 1);
       u.scytheUsed = false;
     }
-    if (u.statuses.stun) {
+    if (u.statuses.stun || u.statuses.frozen) {
       tick(u, 'stun');
+      tick(u, 'frozen');
       ev.push({ t: 'skip', unit: u.id, reason: 'stun' });
       continue;
     }
@@ -692,7 +746,7 @@ function springSnare(s: CombatState, u: Unit, ev: GameEvent[]): boolean {
 }
 
 /** El hechizo tal como lo lanza `u`: con sus mejoras y su runa aplicadas. */
-export function spellOf(u: Unit, id: string): SpellDef | undefined {
+export function spellOf<T extends Pick<Unit, 'spells' | 'runes'>>(u: T, id: string): SpellDef | undefined {
   const def = SPELLS[id];
   return def && applyRunes(tuned(def, u.spells.find((x) => x.id === id)), u.runes ?? []);
 }
@@ -868,6 +922,8 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
   const def = spellOf(u, spellId)!;
 
   const ev: GameEvent[] = [{ t: 'cast', unit: u.id, spell: def.id, at: { ...at }, element: def.element }];
+  // runas: quién estaba vivo antes del lanzamiento (para los efectos de remate)
+  const foesBefore = def.runeFx?.length ? s.units.filter((x) => alive(x) && x.team !== u.team) : [];
   const slotUsed = u.spells.find((x) => x.id === def.id)!;
   const cost = apCost(u, def.id, s);
   if (!slotUsed.free && (u.discount ?? 0) > 0) u.discount = 0;
@@ -1078,6 +1134,8 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
   const mend = hasTrait(u, 'mender') ? MENDER_MULT : 1;
   let dealt = 0;
   let hits = 0;
+  let mainRaw = 0;
+  const cared = new Set<number>();
   // el orbe rebota: recorre la línea dos veces
   for (let pass = 0; pass < (def.bounce ?? 1); pass++)
   for (const t of pass ? [...targets].reverse() : targets) {
@@ -1099,9 +1157,12 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
       // Lanza resonante: +4 contra enemigos sobre o junto a un glifo tuyo
       const lres = def.id === 'r_lanza' && hasTrait(u, 'lanzares') && marksOf(s, 'glyph', u.id).some((m) => dist(m.pos, t.pos) <= 1) ? 4 : 0;
       // G3.4: daño extra contra objetivos con un estado concreto (Flecha ígnea contra quemados…); G3.3: Distancia letal
-      const vs = def.bonusVs && t.statuses[def.bonusVs.kind] ? def.bonusVs.dmg : 0;
+      const vs = (def.bonusVs && t.statuses[def.bonusVs.kind] ? def.bonusVs.dmg : 0) + (def.runeBonusVs ?? []).reduce((n, b) => n + (t.statuses[b.kind] ? b.dmg : 0), 0);
+      if (!pass && (t === main || !mainRaw)) mainRaw = raw + vs;
       const prey = hasTrait(u, 'presa') && slowed(t) ? PREY_BONUS : 0;
       const got = hurt(s, t, raw + lres + vs + prey + archerBonus(u, t), ev, def.id, { crit, element: fullMag ? 'fire' : def.element, pierce: def.pierce || (crit && opposite) || (!!def.gun && !!u.statuses.silver), armorPen: pen, armorFlat: def.armorIgnore });
+      // Runas: efectos sobre cada objetivo del golpe principal (una vez por objetivo)
+      if (!pass) onRuneHit(s, u, t, def, got, FX, ev);
       // Munición incendiaria: el disparo con el cargador lleno quema
       if (fullMag && hasTrait(u, 'incendiaria') && alive(t) && !pass) addStatus(t, 'burn', 2, 1, ev);
       if (!pass) {
@@ -1138,13 +1199,15 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
     }
     // a la vuelta del orbe solo se repite el daño: los efectos se aplican una vez
     if (pass) continue;
-    if (def.heal) heal(t, def.heal * mend, ev);
-    if (def.healPct) heal(t, t.maxHp * def.healPct * mend, ev);
+    let healed = 0, over = 0;
+    if (def.heal) { const want = Math.round(def.heal * mend * (t.statuses.corrupt ? 0.5 : 1)); const got = heal(t, def.heal * mend, ev); healed += got; over += Math.max(0, want - got); }
+    if (def.healPct) { const want = Math.round(t.maxHp * def.healPct * mend * (t.statuses.corrupt ? 0.5 : 1)); const got = heal(t, t.maxHp * def.healPct * mend, ev); healed += got; over += Math.max(0, want - got); }
     if (def.shield && alive(t)) {
       const sh = Math.round(def.shield * mend);
       t.shield += sh;
       ev.push({ t: 'shield', unit: t.id, amount: sh });
     }
+    if ((def.heal || def.healPct || def.shield) && t.team === u.team && !cared.has(t.id)) { cared.add(t.id); onRuneCare(s, u, t, def, healed, over, FX, ev); }
     applyStatuses(s, u, t, def, ev);
     if (def.drainAp && alive(t)) {
       const n = t.team !== u.team ? landed(s, t, def.drainAp) : def.drainAp;
@@ -1223,7 +1286,16 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
   if (def.special === 'singularity' && alive(u)) for (const p of [at, square2[3]!]) if (p.x < s.w && p.y < s.h && !s.obstacles.includes(key(p))) addSphere(s, u, p, 2, 4, ev);
   if (u.essence !== undefined && hits > 0 && !essenceSpent) gainEssence(u, 1, ev);
   if (u.essence !== undefined && def.pull && hasTrait(u, 'mirada') && main && !essenceSpent) gainEssence(u, 1, ev);
-  if (def.lifesteal && dealt > 0) heal(u, dealt * def.lifesteal, ev);
+  if (def.lifesteal && dealt > 0) {
+    const want = Math.round(dealt * def.lifesteal * (u.statuses.corrupt ? 0.5 : 1)), got = heal(u, dealt * def.lifesteal, ev);
+    if (want > got && !cared.has(u.id)) { cared.add(u.id); onRuneCare(s, u, u, { ...def, runeFx: def.runeFx?.filter((x) => x.t === 'overheal') }, 0, want - got, FX, ev); }
+  }
+  // Runas: golpes secundarios, ecos y remates (después de todos los golpes; no vuelven a disparar runas)
+  if (def.runeFx?.length && !s.over) {
+    const killed = foesBefore.filter((x) => !alive(x));
+    const { reset } = afterRuneCast(s, u, def, at, main, targets, mainRaw, killed, FX, ev);
+    if (reset && !slotUsed.free && alive(u)) { slotUsed.uses = 0; slotUsed.free = true; slotUsed.cd = 0; ev.push({ t: 'reset', unit: u.id, spell: def.id }); }
+  }
   if (def.retreat && main && alive(u)) {
     const dx = Math.abs(u.pos.x - main.pos.x) >= Math.abs(u.pos.y - main.pos.y) ? Math.sign(u.pos.x - main.pos.x) || 1 : 0;
     const dy = dx === 0 ? Math.sign(u.pos.y - main.pos.y) || 1 : 0;
@@ -1237,6 +1309,7 @@ function castInner(s: CombatState, unitId: number, spellId: string, at: Pos): Ac
   if (def.selfShield && alive(u)) {
     u.shield += def.selfShield;
     ev.push({ t: 'shield', unit: u.id, amount: def.selfShield });
+    if (!cared.has(u.id)) { cared.add(u.id); onRuneCare(s, u, u, def, 0, 0, FX, ev); }
   }
   return { ok: true, events: ev };
 }
@@ -1259,8 +1332,7 @@ function coneBlast(s: CombatState, u: Unit, def: SpellDef, at: Pos, targets: Uni
     hurt(s, foe, randInt(s, sh.dmg[0], sh.dmg[1]) + dmgFlat(u, foe), ev, 'esfera', { element: def.element });
     if (!alive(foe) || stunned.has(foe.id)) return;
     stunned.add(foe.id);
-    if (foe.rank) ev.push({ t: 'resist', unit: foe.id, what: 'Inmune a aturdir' });
-    else addStatus(foe, 'stun', sh.stun, 1, ev);
+    addStatus(foe, 'stun', sh.stun, 1, ev);
   };
   for (const m of marksOf(s, 'sphere', u.id).filter((m) => cone.some((p) => same(p, m.pos))).sort((a, b) => far(a.pos) - far(b.pos))) {
     const from = { ...m.pos }, hitBy = new Set<number>();
@@ -1284,12 +1356,13 @@ function coneBlast(s: CombatState, u: Unit, def: SpellDef, at: Pos, targets: Uni
 
 /** Aplica los estados de un hechizo a `t` (resistencias de élites y jefes incluidas). */
 function applyStatuses(s: CombatState, u: Unit, t: Unit, def: SpellDef, ev: GameEvent[]): void {
-  for (const st of [def.status, def.extraStatus]) {
+  for (const st of [def.status, def.extraStatus, ...(t.team !== u.team ? def.runeStatus ?? [] : [])]) {
     if (!st || !alive(t)) continue;
     // el encanto de élites y jefes exige las dos tiradas
     if (st.kind === 'charm' && t.rank && !landed(s, t, 1)) { ev.push({ t: 'resist', unit: t.id, what: 'Resiste el encanto' }); continue; }
     // élites y jefes: inmunes a aturdir y resisten la ralentización punto a punto
-    if (st.kind === 'stun' && (t.rank || t.statuses.frenzy)) { ev.push({ t: 'resist', unit: t.id, what: 'Inmune a aturdir' }); continue; }
+    // (élites y jefes reciben un aturdimiento parcial: ver addStatus)
+    if ((st.kind === 'stun' || st.kind === 'frozen') && t.statuses.frenzy) { ev.push({ t: 'resist', unit: t.id, what: 'Inmune a aturdir' }); continue; }
     let stacks = (st.stacks ?? 1) + (st.kind === 'poison' && hasTrait(u, 'venom') ? 1 : 0);
     if (st.kind === 'slow' && t.team !== u.team) {
       const want = stacks;
@@ -2060,3 +2133,10 @@ function hitBraziers(s: CombatState, u: Unit, def: SpellDef, at: Pos, ev: GameEv
   if (def.area) for (const k of [...s.braziers!]) { const [x, y] = k.split(',').map(Number) as [number, number]; if (dist({ x, y }, at) <= def.area) cells.push({ x, y }); }
   for (const p of cells) if ((s.braziers ?? []).includes(key(p))) breakBrazier(s, p, dirOf(u.pos, p), ev);
 }
+
+/** Primitivas del motor que usan los efectos rúnicos (core/combat/runefx.ts). */
+const FX: FxCtx = {
+  hurt: (s, u, raw, ev, source, opts) => hurt(s, u, raw, ev, source, opts),
+  addStatus: (u, kind, turns, stacks, ev) => addStatus(u, kind, turns, stacks, ev),
+  heal: (u, amount, ev) => heal(u, amount, ev),
+};
