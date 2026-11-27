@@ -1187,14 +1187,14 @@ body:has(#app > .front) #build { display: block; }
 #fade.on { opacity: 1; pointer-events: auto; }
 .settle2 { position: relative; height: 100%; overflow: hidden; }
 /* reproduce el encuadre «cover» del fondo animado (#menubg, 100vw × 100vh) */
-.scene { position: fixed; left: 50%; top: 50%; width: max(100vw, calc(100vh * var(--ar))); height: max(100vh, calc(100vw / var(--ar))); transform: translate(-50%, -50%); z-index: 1; }
+.stscene { position: fixed; left: 50%; top: 50%; width: min(100vw, calc(100vh * var(--ar))); height: min(100vh, calc(100vw / var(--ar))); transform: translate(-50%, -50%); z-index: 1; }
 .spots { position: absolute; inset: 0; width: 100%; height: 100%; }
 .spot { fill: transparent; pointer-events: all; cursor: pointer; outline: none; }
 .spot.locked { cursor: not-allowed; }
 .spotlit { position: absolute; inset: 0; opacity: 0; pointer-events: none; transition: opacity .25s; background: center / 100% 100% no-repeat; image-rendering: pixelated; filter: brightness(1.45) saturate(1.12); }
 .spotlit.abyss { filter: brightness(1.3) saturate(1.3); }
 .spotlit.locked { filter: brightness(1.15) grayscale(.6); }
-.slbl { position: absolute; transform: translate(-50%, 4px); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 3; text-align: center; white-space: nowrap;
+.slbl { position: absolute; transform: translate(var(--tx, -50%), 4px); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 3; text-align: center; white-space: nowrap;
   padding: 5px 12px; background: rgba(12, 10, 14, .86); border: 2px solid #b8873a; border-radius: 6px; box-shadow: 0 6px 16px rgba(0, 0, 0, .6); }
 .slbl b { display: block; font-family: var(--head); font-size: 18px; color: #ffe3a6; text-shadow: 0 2px 0 #000; }
 .slbl small { color: #cfc2a8; font-size: 12px; }
@@ -1209,7 +1209,7 @@ body.has-menubg .sgate-btn { font-family: var(--head); font-size: 20px; padding:
 .sgate-btn small { font-family: var(--body); font-size: 12px; opacity: .85; }
 .slist { display: none; }
 @media (hover: none), (max-width: 700px) {
-  .slbl { opacity: .85; transform: translate(-50%, 0); }
+  .slbl { opacity: .85; transform: translate(var(--tx, -50%), 0); }
   .slbl small { display: none; }
   .slbl b { font-size: 13px; }
   .slist { position: fixed; z-index: 5; left: 0; right: 0; bottom: 92px; display: flex; gap: 6px; overflow-x: auto; padding: 0 12px; }
@@ -1217,8 +1217,9 @@ body.has-menubg .sgate-btn { font-family: var(--head); font-size: 20px; padding:
 }
 /* habitantes dentro de un lugar: solo se ve la parte por encima de la barra */
 .npc { position: absolute; overflow: hidden; padding: 0; border: 0; background: none; box-shadow: none; cursor: pointer; z-index: 2; }
-.npc-spr { position: absolute; left: 0; top: 0; width: 100%; height: 212.7%; background: var(--wipe) 0 0 / 400% 100% no-repeat; image-rendering: pixelated; animation: npcFrames 1s steps(4) infinite; transition: filter .2s; }
-.npc:hover .npc-spr { background-image: var(--wave); animation-duration: .9s; filter: brightness(1.18) drop-shadow(0 0 6px rgba(255, 210, 140, .8)); }
+.npc-spr { position: absolute; left: 0; top: 0; width: 100%; height: 212.7%; background: var(--wipe) 0 0 / 400% 100% no-repeat; image-rendering: pixelated; animation: npcFrames 1.2s steps(4) infinite; transition: filter .2s; }
+.npc:hover .npc-spr { background-image: var(--wave); animation: npcOnce 1.3s steps(4, jump-none) 1 forwards; filter: brightness(1.18) drop-shadow(0 0 6px rgba(255, 210, 140, .8)); }
+@keyframes npcOnce { from { background-position-x: 0%; } to { background-position-x: 100%; } }
 @keyframes npcFrames { from { background-position-x: 0%; } to { background-position-x: 133.333%; } }
 .npc:hover { background: none !important; filter: none !important; }
 /* conversación */
@@ -1250,3 +1251,8 @@ body.has-menubg .sgate-btn { font-family: var(--head); font-size: 20px; padding:
 }
 .sgate-btn { white-space: nowrap; }
 @media (max-width: 700px) { body.has-menubg .sgate-btn { font-size: 17px; padding: 8px 18px; } .sgate .shint { display: none; } }
+
+/* escenas que se ven enteras: bandas laterales con la misma imagen, desenfocada */
+#menubgfill { position: fixed; inset: -40px; z-index: 0; display: none; pointer-events: none; background: center / cover no-repeat; filter: blur(22px) brightness(.38) saturate(.9); }
+#menubg { background-repeat: no-repeat; background-position: center; background-color: transparent; }
+body.has-menubg { background: #05060a; }

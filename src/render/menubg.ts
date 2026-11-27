@@ -17,6 +17,8 @@ interface SceneDef {
   fog: string;
   /** columnas de humo (chimeneas, hogueras) */
   smoke?: Array<{ x: number; y: number }>;
+  /** 'contain': la imagen se ve entera (bandas laterales desenfocadas) en vez de recortarse */
+  fit?: 'contain';
   /** intensidad de la niebla baja (0 la quita) */
   fogA?: number;
 }
@@ -46,6 +48,7 @@ const SCENES: Record<MenuScene, SceneDef> = {
     sparks: { x: 255, y: 40, w: 35, h: 150, col: '170,190,255' },
     smoke: [{ x: 149, y: 134 }, { x: 119, y: 133 }],
     fog: '110,130,180',
+    fit: 'contain',
   },
   // interior de la Taberna
   tavern: {
@@ -54,6 +57,7 @@ const SCENES: Record<MenuScene, SceneDef> = {
     glows: [],
     fog: '150,100,60',
     fogA: 0.05,
+    fit: 'contain',
   },
   game: {
     img: 'bg/sala.jpg',
@@ -64,6 +68,8 @@ const SCENES: Record<MenuScene, SceneDef> = {
 };
 
 let canvas: HTMLCanvasElement | null = null;
+/** relleno desenfocado detrás de las escenas que se ven enteras */
+let fill: HTMLDivElement | null = null;
 let ctx: CanvasRenderingContext2D | null = null;
 let scene: MenuScene | null = null;
 let raf = 0, last = 0;
@@ -128,7 +134,7 @@ export function setMenuScene(s: MenuScene | null): void {
   if (s) document.body.dataset.scene = s; else delete document.body.dataset.scene;
   if (s === scene) { if (s && !raf && !reduce) raf = requestAnimationFrame(loop); return; }
   scene = s;
-  if (!s) { if (raf) cancelAnimationFrame(raf); raf = 0; if (canvas) canvas.style.display = 'none'; return; }
+  if (!s) { if (raf) cancelAnimationFrame(raf); raf = 0; if (canvas) canvas.style.display = 'none'; if (fill) fill.style.display = 'none'; return; }
   if (!canvas) {
     canvas = document.createElement('canvas');
     canvas.id = 'menubg'; canvas.width = W; canvas.height = H; canvas.setAttribute('aria-hidden', 'true');
@@ -138,7 +144,13 @@ export function setMenuScene(s: MenuScene | null): void {
   }
   const d = SCENES[s];
   canvas.style.display = 'block';
-  canvas.style.backgroundImage = `url(${import.meta.env.BASE_URL}${d.img})`;
+  const url = `url(${import.meta.env.BASE_URL}${d.img})`;
+  canvas.style.backgroundImage = url;
+  canvas.style.objectFit = d.fit ?? 'cover';
+  canvas.style.backgroundSize = d.fit ?? 'cover';
+  if (!fill) { fill = document.createElement('div'); fill.id = 'menubgfill'; fill.setAttribute('aria-hidden', 'true'); document.body.prepend(fill); }
+  fill.style.display = d.fit ? 'block' : 'none';
+  fill.style.backgroundImage = url;
   motes = Array.from({ length: 46 }, () => { const m = { x: 0, y: 0, vx: 0, vy: 0, life: 0, cold: false }; respawn(m, d); m.life = Math.random(); return m; });
   frame(performance.now());
   if (!raf && !reduce) raf = requestAnimationFrame(loop);
