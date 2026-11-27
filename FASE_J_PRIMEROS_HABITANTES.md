@@ -10,7 +10,7 @@ Dar identidad humana al asentamiento sin añadir gestión, misiones ni una nueva
 - **Carácter:** práctica, cálida sin sentimentalismo; evita interrogar a quienes regresan.
 - **Voz:** «La primera ronda es para los que vuelven. La segunda, para los que todavía no saben si se van a quedar.»
 
-### Sava · Archivera
+### Romi · Archivera (antes Sava)
 - **Función:** clasifica testimonios, objetos y hallazgos en el Archivo.
 - **Carácter:** rigurosa, escéptica y consciente de que la información incompleta puede ser peligrosa.
 - **Voz:** «No escribas “ocurrió”. Escribe “alguien asegura que ocurrió”. La diferencia ha mantenido vivos a más investigadores que sus armaduras.»

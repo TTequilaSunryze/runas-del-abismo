@@ -3,7 +3,7 @@
 export function refugeScene(): string {
   return `
   <div class="refuge-stage" role="group" aria-label="Vista del último Refugio">
-    <svg class="refuge-art" viewBox="0 0 960 360" role="img" aria-label="La taberna, el Archivo y la Puerta del Refugio, con Irena, Sava y Darel">
+    <svg class="refuge-art" viewBox="0 0 960 360" role="img" aria-label="La taberna, el Archivo y la Puerta del Refugio, con Irena, Romi y Darel">
       <defs>
         <linearGradient id="refugeSky" x2="0" y2="1"><stop stop-color="#161b2b"/><stop offset="1" stop-color="#49352d"/></linearGradient>
         <linearGradient id="refugeStone" x2="0" y2="1"><stop stop-color="#75675d"/><stop offset="1" stop-color="#332d32"/></linearGradient>
@@ -78,8 +78,8 @@ export function refugeScene(): string {
         <text x="160" y="308" fill="#f3d49a" font-size="12" text-anchor="middle" font-family="monospace">IRENA</text>
         <rect class="npc-hit" x="112" y="180" width="96" height="137" fill="transparent"/>
       </g>
-      <!-- Sava: túnica azul grisácea, libros -->
-      <g class="refuge-npc" data-act="resident" data-id="sava" role="button" tabindex="0" aria-label="Hablar con Sava, archivera; abrir Archivo">
+      <!-- Romi: túnica azul grisácea, libros -->
+      <g class="refuge-npc" data-act="resident" data-id="sava" role="button" tabindex="0" aria-label="Hablar con Romi, archivera; abrir Archivo">
         <ellipse cx="478" cy="288" rx="31" ry="7" fill="#09090d" opacity=".55"/>
         <rect x="463" y="222" width="30" height="46" fill="#536477"/>
         <path d="M456 231H500L496 268H460Z" fill="#77879a"/>
@@ -92,7 +92,7 @@ export function refugeScene(): string {
         <rect x="498" y="244" width="18" height="21" fill="#8b583a" stroke="#d6b77c" stroke-width="2"/>
         <path d="M502 250H512M502 255H512" stroke="#e4d3a9" stroke-width="2"/>
         <rect x="453" y="295" width="50" height="18" fill="#17151b" opacity=".88"/>
-        <text x="478" y="308" fill="#e4d3a9" font-size="12" text-anchor="middle" font-family="monospace">SAVA</text>
+        <text x="478" y="308" fill="#e4d3a9" font-size="12" text-anchor="middle" font-family="monospace">ROMI</text>
         <rect class="npc-hit" x="430" y="178" width="96" height="139" fill="transparent"/>
       </g>
       <!-- Darel: capa oscura y hombreras de guardia -->

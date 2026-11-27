@@ -64,7 +64,7 @@ export function playEvents(events: GameEvent[]): void {
 // Cada pista se carga solo cuando hace falta y recuerda por dónde iba.
 const TRACKS: Record<string, string> = {
   menu: 'menu', lobby: 'aldea', map0: 'ruta_nocturna', map1: 'bosque_nocturno', map2: 'isla_volcanica', map3: 'bosque_acido',
-  combat: 'combate', boss: 'jefe', calm: 'descanso', tavern: 'descanso', choice: 'torre', end: 'final',
+  combat: 'combate', boss: 'jefe', calm: 'descanso', tavern: 'descanso', archive: 'torre', choice: 'torre', end: 'final',
 };
 export const TRACK_TITLE: Record<string, string> = {
   menu: 'Aventura nocturna', aldea: 'La aldea', ruta_nocturna: 'Ruta nocturna', bosque_nocturno: 'Bosque de noche', isla_volcanica: 'Isla volcánica',

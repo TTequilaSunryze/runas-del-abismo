@@ -45,6 +45,8 @@ export interface Meta {
   friends: string[];
   /** Archivo del Abismo (bestiario, grimorio, reliquias). Opcional: las Meta anteriores no lo tienen. */
   archive?: Archive;
+  /** expedientes del Archivo ya investigados (Romi) */
+  research?: string[];
   /** Contratos del Abismo (diarios y semanales). Opcional: las Meta anteriores no lo tienen. */
   contracts?: ContractBook;
   /** títulos y marcos desbloqueados y equipados (solo visuales). Opcional. */
@@ -186,6 +188,7 @@ export function mergeMeta(a: Meta, b: Partial<Meta>): Meta {
     claimed: uniq([...a.claimed, ...(b.claimed ?? [])]).slice(-40), mastery: maxRec(a.mastery, b.mastery), hall: hall.slice(-HALL_SIZE),
     team: (a.team?.length ? a.team : b.team) ?? [], t: Date.now(), acct: a.acct, friends: uniq([...(a.friends ?? []), ...(b.friends ?? [])]).slice(0, 30),
     archive: mergeArchive(a.archive, b.archive),
+    research: uniq([...(a.research ?? []), ...(b.research ?? [])]),
     contracts: mergeContracts(a.contracts, b.contracts),
     cosmetics: mergeCosmetics(a.cosmetics, b.cosmetics),
     // H3: la configuración de este dispositivo manda; de la otra, solo las clases que aquí no se han tocado

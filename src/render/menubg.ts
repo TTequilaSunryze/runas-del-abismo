@@ -1,7 +1,7 @@
 // Fondo de los menús: una ilustración (public/bg) con una capa animada encima en pixel art
 // (luz de antorchas que parpadea, ascuas, chispas rúnicas y niebla). Solo decoración.
 
-export type MenuScene = 'home' | 'game' | 'settle' | 'tavern';
+export type MenuScene = 'home' | 'game' | 'settle' | 'tavern' | 'archive';
 /** La capa animada mide 1/4 de la ilustración (1376×768): sus coordenadas son las de la imagen / 4. */
 const W = 344, H = 192, FPS = 20;
 
@@ -59,6 +59,20 @@ const SCENES: Record<MenuScene, SceneDef> = {
     fogA: 0.05,
     fit: 'contain',
   },
+  // el Archivo: velas sobre la mesa, faroles y el brillo frío de las vitrinas rúnicas
+  archive: {
+    img: 'bg/archivo.jpg',
+    fires: [
+      { x: 147.6, y: 109.5, r: 12, col: FIRE, ember: false }, { x: 152.2, y: 106.8, r: 12, col: FIRE, ember: false }, { x: 180.3, y: 113.5, r: 11, col: FIRE, ember: false },
+      { x: 217.7, y: 124.2, r: 11, col: FIRE, ember: false }, { x: 243.7, y: 76.1, r: 11, col: FIRE, ember: false }, { x: 285.1, y: 118.9, r: 10, col: FIRE, ember: false },
+      { x: 95.9, y: 46.7, r: 16, col: FIRE, ember: false }, { x: 273.1, y: 62.8, r: 16, col: FIRE, ember: false },
+    ],
+    glows: [{ x: 200.3, y: 109.5, r: 24, col: '120,200,255' }, { x: 303.1, y: 114.8, r: 14, col: '140,200,255' }],
+    sparks: { x: 190, y: 98, w: 22, h: 14, col: '150,215,255' },
+    fog: '120,110,100',
+    fogA: 0.04,
+    fit: 'contain',
+  },
   game: {
     img: 'bg/sala.jpg',
     fires: [{ x: 33, y: 73, r: 30, col: FIRE }, { x: 310, y: 73, r: 30, col: FIRE }],
@@ -85,9 +99,9 @@ function glow(g: CanvasRenderingContext2D, l: Light, a: number): void {
 }
 function respawn(m: Mote, d: SceneDef): void {
   const sp = d.sparks;
-  m.cold = !!sp && Math.random() < 0.45;
+  m.cold = !!sp && (Math.random() < 0.45 || d.fires.every((x) => x.ember === false));
   if (m.cold && sp) Object.assign(m, { x: sp.x + Math.random() * sp.w, y: sp.y + Math.random() * sp.h, vx: (Math.random() - 0.5) * 0.15, vy: -0.08 - Math.random() * 0.15, life: 0.5 + Math.random() * 0.8 });
-  else { const pool = d.fires.filter((x) => x.ember !== false); const f = pool[Math.floor(Math.random() * pool.length)]!; Object.assign(m, { x: f.x + (Math.random() - 0.5) * 3, y: f.y - 3, vx: (Math.random() - 0.5) * 0.25, vy: -0.25 - Math.random() * 0.45, life: 0.5 + Math.random() * 0.7 }); }
+  else { const pool = d.fires.filter((x) => x.ember !== false); if (!pool.length) { Object.assign(m, { x: -9, y: -9, vx: 0, vy: 0, life: 0.3 + Math.random() }); return; } const f = pool[Math.floor(Math.random() * pool.length)]!; Object.assign(m, { x: f.x + (Math.random() - 0.5) * 3, y: f.y - 3, vx: (Math.random() - 0.5) * 0.25, vy: -0.25 - Math.random() * 0.45, life: 0.5 + Math.random() * 0.7 }); }
 }
 function frame(now: number): void {
   if (!ctx || !scene) return;

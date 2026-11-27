@@ -265,7 +265,7 @@ function settlementPanel(): string {
 export function residentModal(id: string): string {
   const residents: Record<string, { name: string; role: string; line: string; detail: string; action: string; label: string }> = {
     irena: { name: 'Irena', role: 'Tabernera', line: '«La primera ronda es para los que vuelven. La segunda, para los que todavía no saben si se van a quedar.»', detail: 'Irena deja un vaso limpio sobre la barra. No pregunta qué viste ahí abajo. Espera a que decidas si querés contarlo.', action: 'jugar', label: 'Preparar una expedición' },
-    sava: { name: 'Sava', role: 'Archivera', line: '«No escribas “ocurrió”. Escribe “alguien asegura que ocurrió”.»', detail: 'Sava mantiene una mano sobre el registro abierto. Antes de aceptar un hallazgo, quiere saber quién lo encontró y qué parte vio con sus propios ojos.', action: 'archivo', label: 'Consultar el Archivo' },
+    sava: { name: 'Romi', role: 'Archivera', line: '«No escribas “ocurrió”. Escribe “alguien asegura que ocurrió”.»', detail: 'Romi mantiene una mano sobre el registro abierto. Antes de aceptar un hallazgo, quiere saber quién lo encontró y qué parte vio con sus propios ojos.', action: 'archivo', label: 'Consultar el Archivo' },
     darel: { name: 'Darel', role: 'Vigía', line: '«Puedo contar los que salen. Los que vuelven… a veces tengo que aprender a reconocerlos.»', detail: 'Darel revisa las correas de tu equipo. Al terminar, vuelve a mirar la entrada. No te desea suerte; parece considerarlo una promesa demasiado grande.', action: 'jugar', label: 'Preparar la salida' },
   };
   const r = residents[id];
