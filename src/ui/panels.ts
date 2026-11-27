@@ -10,7 +10,8 @@ import { RELICS } from '../content/relics';
 import { PATRONS, patronBonus, patronOf } from '../content/boons';
 import { BLESSINGS, BOON_MODS } from '../core/boonmods';
 import { MAX_SPELL_UPS, UPGRADES, tuned } from '../core/upgrades';
-import { SOULS_PER_ARMOR, SOUL_ARMOR } from '../core/combat/engine';
+import { SOULS_PER_ARMOR, SOUL_ARMOR, spellOf } from '../core/combat/engine';
+import { runeNames, RUNES } from '../core/runes';
 import { consequences, secretOpen } from '../content/branching';
 import { NODE_HINT, NODE_NAME, availableNodes, heroMaxHp, heroSpec, pendingOf, statBreakdown, upCount, zoneOf, type BossOption, type HeroSave, type RunState } from '../game/run';
 import { esc, mine, tip, ui } from './ctx';
@@ -97,9 +98,13 @@ function gearTab(run: RunState, h: HeroSave, selling: boolean): string {
 }
 
 function spellsTab(h: HeroSave): string {
-  const all = heroSpec(h).spells.filter((sp) => sp.charges === undefined);
-  return `<div class="lbl">Tus hechizos</div>
-  <div class="spells">${all.map((sp) => { const d = tuned(SPELLS[sp.id]!, { ups: h.ups[sp.id] }); const ups = (h.ups[sp.id] ?? []).map((u) => UPGRADES[u]?.icon ?? '').join('');
+  const unit = heroSpec(h);
+  const all = unit.spells.filter((sp) => sp.charges === undefined);
+  const runes = h.runes ?? ['fractura'];
+  return `<div class="lbl">Runas activas <span class="dim">${runes.length}</span></div>
+  <div class="chips">${runes.map((id) => RUNES[id]).filter(Boolean).map((r) => `<span class="chip r3" ${tip(`<b>${esc(r!.name)}</b><div class="sm">${esc(r!.description)}</div><div class="dim sm">Familia: ${r!.family}</div>`)}>✧ ${esc(r!.name)}</span>`).join('') || '<span class="dim sm">Sin runas activas</span>'}</div>
+  <div class="lbl">Tus hechizos</div>
+  <div class="spells">${all.map((sp) => { const d = spellOf(unit, sp.id) ?? tuned(SPELLS[sp.id]!, { ups: h.ups[sp.id] }); const ups = (h.ups[sp.id] ?? []).map((u) => UPGRADES[u]?.icon ?? '').join('');
     return `<div class="srow" ${tip(spellTip(d))}>${spellIcon(d)}<span class="grow">${esc(d.name)} ${ups}</span></div>`; }).join('')}</div>`;
 }
 
