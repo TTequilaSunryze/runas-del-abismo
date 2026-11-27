@@ -22,6 +22,7 @@ import { CONSUMABLES, MAX_CONSUMABLE } from '../content/boons';
 import { CHEST_CURSE_CHANCE, HEAT, HEAT_HOT, HEAT_MAX, HEAT_OVERLOAD, HONE_COST, SCRAP_YIELD, curseOf, heatTier, pactOf, recalibratePrice } from '../content/pacts';
 import { REST_OPTIONS, itemByRef, recalStats, restHeal, restText } from '../game/rooms';
 import { altarScene, chestScene, forgeScene, restScene, shrineScene } from './scenes';
+import { refugeScene } from './refuge';
 import { STAT_NAME, type Item } from '../core/items/items';
 import { MAX_SPELL_UPS, UPGRADES } from '../core/upgrades';
 import { archiveTotal, BESTIARY, CATEGORIES, CAT_NAME, DOCUMENTED_KILLS, GRIMOIRE, LEVEL_NAME, beastDef, completion, entriesOf } from '../game/archive';
@@ -249,35 +250,31 @@ function settlementPanel(): string {
       <p>Las defensas se refuerzan cada vez que alguien vuelve. Nadie llama seguro a este lugar. Simplemente, todavía sigue en pie.</p>
       <div class="row"><span class="pill">Expediciones: ${m.stats.runs}</span><span class="pill">Victorias: ${m.stats.wins}</span><span class="pill">Archivo: ${total.pct}%</span></div>
     </div>
-    <div class="cards c2">
-      <div class="lootcard">
-        <div class="row"><b>🍺 La Taberna</b><span class="grow"></span><span class="dim sm">Punto de encuentro</span></div>
-        <p class="sm">Aquí se cruzan exploradores, comerciantes y supervivientes. Los relatos cambian de boca en boca; las cicatrices, no.</p>
-        <button class="pri" data-act="htab" data-id="jugar">Preparar una expedición</button>
-      </div>
-      <div class="lootcard">
-        <div class="row"><b>📚 Archivo del Abismo</b><span class="grow"></span><span class="dim sm">Registros y hallazgos</span></div>
-        <p class="sm">Bestiario, Grimorio, reliquias, Atlas y Crónicas. No todo lo escrito aquí es una certeza; algunas páginas conservan testimonios incompatibles.</p>
-        <button data-act="htab" data-id="archivo">Consultar el Archivo</button>
-      </div>
-      <div class="lootcard">
-        <div class="row"><b>🛡️ El Vigía</b><span class="grow"></span><span class="dim sm">Guardia de la Puerta</span></div>
-        <p class="sm">Alguien vigila la entrada y cuenta a quienes salen. No siempre puede contar a quienes vuelven.</p>
-        <button data-act="htab" data-id="jugar">Acercarse a la Puerta</button>
-      </div>
-      <div class="lootcard">
-        <div class="row"><b>🏛️ Salón de héroes</b><span class="grow"></span><span class="dim sm">Memoria de expediciones</span></div>
-        <p class="sm">Los nombres y equipos de quienes llegaron lejos quedan registrados. Algunos héroes terminan enfrentándose a otros grupos como Némesis.</p>
-        <button data-act="htab" data-id="salon">Entrar al Salón</button>
-      </div>
-    </div>
-    <div class="panel">
+    ${refugeScene()}
+    <div class="panel refuge-links">
       <h3>Entre una expedición y la siguiente</h3>
       <div class="cards c2">
-        <div><b>⚒️ La Forja</b><p class="sm dim">Los herreros trabajan con materiales recuperados. Por ahora, sus servicios se encuentran en las salas de expedición.</p></div>
+        <div><b>⚒️ La Forja</b><p class="sm dim">Los herreros trabajan con materiales recuperados. Sus servicios se encuentran en las salas de expedición.</p></div>
         <div><b>🕯️ El Santuario</b><p class="sm dim">Un lugar de recogimiento levantado junto a la entrada. Sus altares y bendiciones aparecen durante las expediciones.</p></div>
       </div>
+      <div class="row"><button data-act="htab" data-id="salon">Visitar el Salón de héroes</button><button data-act="htab" data-id="jugar">Preparar una expedición</button></div>
     </div>`;
+}
+
+
+/** Diálogo breve de cada habitante; la acción final reutiliza las pantallas ya existentes. */
+export function residentModal(id: string): string {
+  const residents: Record<string, { name: string; role: string; line: string; detail: string; action: string; label: string }> = {
+    irena: { name: 'Irena', role: 'Tabernera', line: '«La primera ronda es para los que vuelven. La segunda, para los que todavía no saben si se van a quedar.»', detail: 'Irena deja un vaso limpio sobre la barra. No pregunta qué viste ahí abajo. Espera a que decidas si querés contarlo.', action: 'jugar', label: 'Preparar una expedición' },
+    sava: { name: 'Sava', role: 'Archivera', line: '«No escribas “ocurrió”. Escribe “alguien asegura que ocurrió”.»', detail: 'Sava mantiene una mano sobre el registro abierto. Antes de aceptar un hallazgo, quiere saber quién lo encontró y qué parte vio con sus propios ojos.', action: 'archivo', label: 'Consultar el Archivo' },
+    darel: { name: 'Darel', role: 'Vigía', line: '«Puedo contar los que salen. Los que vuelven… a veces tengo que aprender a reconocerlos.»', detail: 'Darel revisa las correas de tu equipo. Al terminar, vuelve a mirar la entrada. No te desea suerte; parece considerarlo una promesa demasiado grande.', action: 'jugar', label: 'Preparar la salida' },
+  };
+  const r = residents[id];
+  if (!r) return '';
+  return `<div class="modal resident-modal"><div class="resident-backdrop" data-act="residentclose"></div><div class="panel resident-dialog" role="dialog" aria-modal="true" aria-labelledby="resident-title" data-stop-close="true">
+    <div class="dim sm">${r.role.toUpperCase()}</div><h2 id="resident-title">${r.name}</h2><p>${r.detail}</p><blockquote>${r.line}</blockquote>
+    <div class="row"><button data-act="residentclose">Volver</button><span class="grow"></span><button class="pri" data-act="htab" data-id="${r.action}">${r.label}</button></div>
+  </div></div>`;
 }
 
 function metaPanel(): string {
