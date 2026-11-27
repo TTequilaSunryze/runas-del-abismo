@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CURSES, HEAT_OVERLOAD, PACTS } from '../src/content/pacts';
 import { makeActMap } from '../src/game/map';
 import { chooseNode, heroMaxHp, heroSpec, upgradeChoices, leaveNode, metaAction, newRun, type RunState } from '../src/game/run';
-import { recalStats } from '../src/game/rooms';
+import { enterRoom, recalStats } from '../src/game/rooms';
 import { roomStep } from './helpers';
 
 const P = [{ owner: 'a', name: 'A', cls: 'barbaro' as const, routes: [] }, { owner: 'b', name: 'B', cls: 'zorro' as const, routes: [] }];
@@ -11,6 +11,8 @@ function into(run: RunState, kind: string): void {
   run.map[run.step] = [kind as never];
   run.at = -1;
   chooseNode(run, 0);
+  // un Tesoro puede ser cofre o santuario: para probar el cofre, se fuerza
+  if (kind === 'treasure' && run.room?.kind !== 'chest') { for (const h of run.heroes) h.bossOffer = null; enterRoom(run, 'chest'); }
 }
 
 describe('salas especiales v14', () => {
@@ -18,8 +20,20 @@ describe('salas especiales v14', () => {
     expect(PACTS.length).toBeGreaterThanOrEqual(10);
     expect(CURSES.length).toBeGreaterThanOrEqual(5);
   });
-  it('cada acto tiene al menos una forja', () => {
-    for (let seed = 1; seed < 40; seed++) expect(makeActMap({ rng: seed * 31 }).layers.flat()).toContain('forge');
+  it('la Forja del Abismo sale detrás de un «?» (como mucho una por zona) y el Tesoro es cofre o santuario', () => {
+    for (let seed = 1; seed < 40; seed++) expect(makeActMap({ rng: seed * 31 }).layers.flat()).not.toContain('forge');
+    const seen = { forge: 0, chest: 0, shrine: 0 };
+    for (let seed = 1; seed < 120; seed++) {
+      const run = roomStep(newRun('T', seed, P));
+      run.map[run.step] = ['event']; run.at = -1; chooseNode(run, 0);
+      if (run.room?.kind === 'forge') { seen.forge++; expect(run.flags).toContain(`forja_z${run.zone}`); }
+      const r2 = roomStep(newRun('T', seed, P));
+      r2.map[r2.step] = ['treasure']; r2.at = -1; chooseNode(r2, 0);
+      if (r2.room?.kind === 'chest') seen.chest++; else if (r2.room?.kind === 'shrine') seen.shrine++;
+    }
+    expect(seen.forge).toBeGreaterThan(3);
+    expect(seen.chest).toBeGreaterThan(20);
+    expect(seen.shrine).toBeGreaterThan(20);
   });
   it('la partida empieza en el altar: 2 pactos a votar (apagado en la primera partida)', () => {
     const run = newRun('T', 4, P);

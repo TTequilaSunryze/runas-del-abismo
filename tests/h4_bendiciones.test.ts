@@ -72,12 +72,10 @@ describe('H4 · Santuario y eventos', () => {
     let tested = 0;
     for (let seed = 1; seed <= 40 && !tested; seed++) {
       const run = roomStep(mk('pistolero', undefined, seed));
-      const l = run.map.findIndex((row, i) => i > 0 && row.includes('shrine'));
-      if (l < 0) continue;
-      const i = run.map[l]!.indexOf('shrine'), from = run.links[l - 1]!.findIndex((to) => to.includes(i));
-      if (from < 0) continue;
-      run.phase = 'map'; run.step = l; run.at = from; run.trail = Array.from({ length: l }, () => 0); run.trail[l - 1] = from;
-      chooseNode(run, i);
+      // el Santuario sale detrás de un Tesoro (la mitad de las veces)
+      run.phase = 'map'; run.map[run.step] = ['treasure']; run.at = -1;
+      chooseNode(run, 0);
+      if (run.room?.kind !== 'shrine') continue;
       const h = run.heroes[0]!;
       expect(h.boonOffer).toBeNull();
       expect(h.bossOffer!.length).toBeGreaterThanOrEqual(2);

@@ -20,12 +20,22 @@ export const ZONA3_ITEMS: ItemTheme = {
 };
 
 export const ZONA3_EVENTS: EventDef[] = [
+  // Encuentro con Kael (sustituye a «La Forja que Aún Arde»; mismo id para el Atlas y las partidas guardadas, mismos efectos).
+  // Kael es el gemelo de Odran, el herrero del Refugio: se quedó a trabajar junto a una fuente de calor antigua.
   {
-    id: 'forja', title: 'La Forja que Aún Arde',
-    text: 'Entre los escombros, una fragua sigue encendida sin nadie que la alimente. El yunque espera.',
+    id: 'forja', title: 'La Forja de Kael', scene: 'abyssforge',
+    text: 'El calor llega antes que la luz. Alguien ha levantado una fragua con piedras sueltas y cadenas alrededor de una grieta que respira fuego desde muy abajo. Un herrero de barba gris os mira sin dejar de golpear.',
+    npc: {
+      id: 'kael', name: 'Kael',
+      lines: [
+        '¿Exploradores? Bien. Hace semanas que no hablo con nada que conteste.',
+        'Me llamo Kael. El fuego ya estaba aquí cuando llegué; yo solo le puse un yunque encima. No preguntéis de dónde sale. Yo tampoco lo sé.',
+        'Arriba, en el Refugio, trabaja otro con mi cara. Odran mide dos veces antes de golpear. Yo golpeo y luego miro. Elegid qué queréis que golpee.',
+      ],
+    },
     options: [
-      { label: 'Templar las armas', hint: 'Todos: +2 de daño. El calor cuesta el 20% de la vida actual.', apply: (run) => { for (const h of run.heroes) { boon(h, 'power', 2); losePct(h, 0.2); } return 'El acero canta. Vuestra piel, también.'; } },
-      { label: 'Reforzar las armaduras', hint: 'Todos: +2 de armadura.', apply: (run) => { for (const h of run.heroes) { boon(h, 'armor', 2); boon(h, 'resFire', 15); } return 'Salís de la forja más pesados y más seguros.'; } },
+      { label: 'Templar las armas', hint: 'Todos: +2 de daño. El calor cuesta el 20% de la vida actual.', apply: (run) => { for (const h of run.heroes) { boon(h, 'power', 2); losePct(h, 0.2); } return 'Kael hunde el acero en la grieta sin esperar a que digáis que sí. El acero canta. Vuestra piel, también.'; } },
+      { label: 'Reforzar las armaduras', hint: 'Todos: +2 de armadura.', apply: (run) => { for (const h of run.heroes) { boon(h, 'armor', 2); boon(h, 'resFire', 15); } return 'Remacha placas encima de lo que lleváis, deprisa y sin medir. «Odran tardaría un día en esto», gruñe. Salís más pesados y más seguros.'; } },
     ],
   },
   {

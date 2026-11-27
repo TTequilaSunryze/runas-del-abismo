@@ -1,9 +1,9 @@
 // Fase G4: rutas alternativas, decisiones con consecuencias y acontecimientos ramificados.
 import { describe, expect, it } from 'vitest';
-import { BRANCH_EVENTS, consequences, followUps, hasMark, keyFlag, secretOpen, weakBossFlag } from '../src/content/branching';
+import { BRANCH_EVENTS, consequences, followUps, hasMark, keyFlag, weakBossFlag } from '../src/content/branching';
 import { createCombat } from '../src/core/combat/engine';
-import { allPaths, makeActMap, pathOk, pathStats, vaultAt } from '../src/game/map';
-import { availableNodes, buildFight, chooseNode, eventDef, finishFight, heroMaxHp, newRun, resolveEvent, vote, type RunState } from '../src/game/run';
+import { makeActMap, mapOk } from '../src/game/map';
+import { buildFight, chooseNode, eventDef, finishFight, heroMaxHp, newRun, resolveEvent, vote, type RunState } from '../src/game/run';
 import { roomStep } from './helpers';
 
 const box = (rng: number) => ({ rng });
@@ -17,48 +17,26 @@ const decide = (r: RunState, id: string, i: number): void => { r.phase = 'event'
 const at = (r: RunState, l: number, from: number): void => { r.phase = 'map'; r.step = l; r.at = from; r.trail = Array.from({ length: l }, () => 0); r.trail[l - 1] = from; };
 
 describe('G4 · rutas', () => {
-  it('todas las rutas (también las del pasaje secreto) cumplen las garantías y nunca hay callejones sin salida', () => {
-    let vaults = 0, sangre = 0;
-    for (let seed = 1; seed <= 300; seed++) {
+  it('el mapa solo muestra la leyenda; la Senda de sangre sale detrás de un «?» como mucho una vez por zona', () => {
+    let sangre = 0;
+    for (let seed = 1; seed <= 200; seed++) {
       const m = makeActMap(box(seed * 7919));
-      for (const p of allPaths(m)) expect(pathOk(pathStats(m, p)), `seed ${seed}`).toBe(true);
-      for (const row of m.layers.slice(0, -1)) expect(row.length).toBeLessThanOrEqual(4);
-      const v = vaultAt(m.layers);
-      if (v) {
-        vaults++;
-        // el nodo que lleva al pasaje tiene otra salida, y el pasaje sigue hacia el jefe
-        m.links[v.l - 1]!.forEach((to) => { if (to.includes(v.i)) expect(to.some((j) => j !== v.i)).toBe(true); });
-        expect(m.links[v.l]![v.i]!.length).toBeGreaterThan(0);
-        // sin el pasaje, cada nodo sigue teniendo una salida
-        m.links.forEach((rows, l) => rows.forEach((to, i) => { if (m.layers[l]![i] !== 'vault') expect(to.filter((j) => m.layers[l + 1]![j] !== 'vault').length).toBeGreaterThan(0); }));
-      }
-      if (m.layers.flat().includes('sangre')) sangre++;
-    }
-    expect(vaults).toBeGreaterThan(250);
-    expect(sangre).toBeGreaterThan(150);
-  });
-  it('el pasaje sellado no se puede elegir hasta tener la llave (o un jefe anterior sin bajas)', () => {
-    let tested = 0;
-    for (let seed = 1; seed <= 40 && tested < 5; seed++) {
+      expect(mapOk(m)).toBe(true);
+      expect(m.layers.flat().some((k) => k === 'vault' || k === 'sangre' || k === 'cage')).toBe(false);
       const r = mk(seed);
-      const v = vaultAt(r.map);
-      if (!v) continue;
-      const from = r.links[v.l - 1]!.findIndex((to) => to.includes(v.i));
-      at(r, v.l, from);
-      expect(availableNodes(r)).not.toContain(v.i);
-      expect(availableNodes(r).length).toBeGreaterThan(0);
-      expect(chooseNode(r, v.i)).toEqual([]);
-      expect(r.phase).toBe('map');
-      r.flags.push(keyFlag(r.zone));
-      expect(availableNodes(r)).toContain(v.i);
-      chooseNode(r, v.i);
-      expect(r.phase).toBe('event');
-      expect(r.event?.id).toBe('g4_camara');
-      expect(r.flags).not.toContain(keyFlag(r.zone));
-      tested++;
+      for (let n = 0; n < 6; n++) { r.phase = 'map'; r.map[r.step] = ['event']; r.at = -1; chooseNode(r, 0); if (r.flags.includes('g4_sangre')) { sangre++; break; } }
+      expect(r.flags.filter((f) => f === `sangre_z${r.zone}`).length).toBeLessThanOrEqual(1);
     }
-    expect(tested).toBeGreaterThan(0);
-    const r = mk(); r.zone = 1; expect(secretOpen(r)).toBe(false); r.flags.push('flawless_0'); expect(secretOpen(r)).toBe(true);
+    expect(sangre).toBeGreaterThan(20);
+  });
+  it('la Cámara Rúnica: con la llave de la zona, el siguiente «?» lleva a ella (y gasta la llave)', () => {
+    const r = mk(5);
+    r.phase = 'map'; r.map[r.step] = ['event']; r.at = -1;
+    r.flags.push(keyFlag(r.zone));
+    chooseNode(r, 0);
+    expect(r.phase).toBe('event');
+    expect(r.event?.id).toBe('g4_camara');
+    expect(r.flags).not.toContain(keyFlag(r.zone));
   });
   it('Senda de sangre: enemigos más duros, recompensa conocida y se cobra al ganar', () => {
     const r = mk();

@@ -103,7 +103,7 @@ export const ui = {
   /** edificio abierto en el Asentamiento (muestra el panel de ui.homeTab) */
   bldgOpen: false,
   /** lugar del Asentamiento en el que se ha entrado ('' = panorama) */
-  place: '' as '' | 'taberna' | 'archivo' | 'puerta' | 'puesto' | 'salon',
+  place: '' as '' | 'taberna' | 'archivo' | 'puerta' | 'puesto' | 'salon' | 'forja',
   /** ventana de inspección abierta en la Puerta (registro, catalejo, campana, tablero) */
   inspect: '' as '' | 'registro' | 'catalejo' | 'campana' | 'tablero' | 'muro' | 'libro' | 'placas',
   /** filtro del Muro de los Recuerdos ('' = todo) */

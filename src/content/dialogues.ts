@@ -29,6 +29,8 @@ export interface TalkCtx {
   hallCount: number;
   hallFallen: number;
   lastBossZone: string;
+  /** Odran: si ya te has cruzado con su hermano Kael en la forja del Abismo (lo registra el Atlas de acontecimientos) */
+  kaelMet: boolean;
 }
 
 export interface TalkOption {
@@ -151,7 +153,77 @@ const CUSTODIO_MENU = (): TalkOption[] => [
   { label: 'Te dejo con tus placas.', to: '' },
 ];
 
+// Odran: herrero de la Forja del Refugio. Metódico, prudente, de pocas palabras. Gemelo de Kael, que trabaja ahí abajo.
+// Su oficio entre expediciones todavía no tiene servicios propios: solo conversación (ver ODRAN_SERVICES).
+const ODRAN_HERO: Record<string, string> = {
+  zorro: 'Seda y fuego azul. No es mi oficio. Pero esa armadura de los brazos sí: está bien remachada.',
+  esferas: 'Esas esferas no se forjan. Lo sé porque lo intenté una vez con una piedra parecida. Perdí un yunque.',
+  acechador: 'Hojas curvas, filo por dentro. Quien te las hizo sabía lo que hacía. O tú las cuidas mejor que nadie.',
+  carcelero: 'Cadenas, guadaña y una linterna fría. El hierro de esa hoja no es de aquí arriba.',
+  barbaro: 'Ese filo se ha mellado contra algo más duro que el hueso. Déjalo en el banco cuando quieras.',
+  arquitecto: 'Piedra que flota. No la toco. Mi padre decía que lo que no pesa no se puede templar.',
+  pistolero: 'El tambor está bien. El cañón, no tanto. Las runas no sustituyen a un buen ánima.',
+  arquero: 'Las puntas de flecha se hacen de diez en diez y se pierden de una en una. Lo sé bien.',
+};
+const ODRAN_MENU = (c: TalkCtx): TalkOption[] => [
+  { label: '¿Qué haces aquí?', to: 'oficio' },
+  { label: '¿Puedes mejorar mi equipo?', to: 'trabajo' },
+  { label: c.kaelMet ? 'Conocí a alguien con tu cara ahí abajo' : '¿Trabajas solo?', to: 'hermano' },
+  { label: 'Hasta luego', to: '' },
+];
+/** Servicios de la Forja del Refugio entre expediciones: aún sin definir (ni costes ni efectos). Odran solo conversa. */
+export const ODRAN_SERVICES: readonly string[] = [];
+
 export const NPCS: Record<string, Npc> = {
+  odran: {
+    id: 'odran',
+    name: 'Odran',
+    role: 'Herrero de la Forja',
+    portrait: 'npc/odran_retrato.jpg',
+    figure: 'npc/odran.png',
+    start: 'saludo',
+    nodes: {
+      saludo: {
+        lines: (c) => [
+          c.runs === 0 ? 'Cierra la puerta. El calor se escapa y el frío entra, y yo no me gano la vida calentando el Refugio.' : 'Otra vez tú. Bien. Los que vuelven a mi puerta suelen volver también de ahí abajo.',
+          'Soy Odran. Arreglo lo que se rompe y no prometo lo que no sé hacer.',
+          ODRAN_HERO[c.cls] ?? 'Enséñame lo que llevas. Sin tocar nada.',
+        ],
+        options: ODRAN_MENU,
+      },
+      oficio: {
+        lines: (c) => [
+          'Hierro, fuelle y paciencia. Lo demás es ruido.',
+          'Lo que subís del Abismo llega mellado, quemado o con cosas pegadas que prefiero no nombrar. Primero se limpia, luego se mira, y solo después se decide si vale la pena el fuego.',
+          c.kills >= 100 ? 'Por cómo vienen tus filos, no te escondes de nada. Eso se nota en el acero antes que en la cara.' : 'Ese horno lleva encendido más años de los que tengo. Las runas de la boca las puso alguien antes que yo. Funcionan. No pregunto.',
+        ],
+        options: ODRAN_MENU,
+      },
+      trabajo: {
+        lines: () => [
+          'Todavía no.',
+          'No trabajo sobre lo que no entiendo, y lo que traéis de ahí abajo aún no lo entiendo del todo. Cuando sepa qué aguanta el fuego y qué no, hablaremos de precio.',
+          'Hasta entonces, cuida lo que llevas. Un arma bien tratada vale por dos mal templadas.',
+        ],
+        options: ODRAN_MENU,
+      },
+      hermano: {
+        lines: (c) => c.kaelMet
+          ? [
+            '…Kael.',
+            'Somos gemelos. Aprendimos en la misma fragua, con el mismo padre gritándonos lo mismo. Él siempre golpeaba antes de que el hierro estuviera listo. A veces le salía bien.',
+            'Bajó con una expedición y no subió con ella. Decidió quedarse junto a un fuego que yo no he visto nunca.',
+            'Si está vivo y trabajando, está bien. Si le haces caso en todo, no lo estarás tú. No le digas que te lo he dicho.',
+          ]
+          : [
+            'Ahora sí.',
+            'Antes éramos dos. Mi hermano bajó con una expedición y no volvió con ella. Dicen los que suben que ahí abajo hay una fragua encendida donde no debería haber ninguna.',
+            'No sé si es él. No bajo a comprobarlo. Uno de los dos tenía que quedarse con el fuego de aquí.',
+          ],
+        options: ODRAN_MENU,
+      },
+    },
+  },
   irena: {
     id: 'irena',
     name: 'Irena',

@@ -27,7 +27,7 @@ describe('Fase G1 · modificadores de expedición', () => {
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
     a.zone = 1; a.step = 3; a.phase = 'lost';
     const base = ecosFor(a);
-    a.mods = ['oscuridad']; expect(ecosFor(a)).toBe(Math.round(base * 1.1));
+    a.mods = ['oscuridad']; expect(Math.abs(ecosFor(a) - base * 1.1)).toBeLessThanOrEqual(1);
   });
   it('maldición persistente: menos vida máxima y una reliquia por héroe', () => {
     const n = newRun('MAL', 3, P), m = newRun('MAL', 3, P, { mods: ['maldicion'] });

@@ -1,7 +1,7 @@
 // Fondo de los menús: una ilustración (public/bg) con una capa animada encima en pixel art
 // (luz de antorchas que parpadea, ascuas, chispas rúnicas y niebla). Solo decoración.
 
-export type MenuScene = 'home' | 'game' | 'settle' | 'tavern' | 'archive' | 'gate' | 'post' | 'hall';
+export type MenuScene = 'home' | 'game' | 'settle' | 'tavern' | 'archive' | 'gate' | 'post' | 'hall' | 'altar' | 'abyssforge' | 'forge';
 /** La capa animada mide 1/4 de la ilustración (1376×768): sus coordenadas son las de la imagen / 4. */
 const W = 344, H = 192, FPS = 20;
 
@@ -21,6 +21,10 @@ interface SceneDef {
   fit?: 'contain';
   /** intensidad de la niebla baja (0 la quita) */
   fogA?: number;
+  /** destellos que saltan de vez en cuando (relámpagos entre las piedras rúnicas) */
+  flashes?: Light[];
+  /** los fuegos crecen con el calor de la forja (setSceneHeat) */
+  heated?: boolean;
 }
 const FIRE = '255,150,60';
 const SCENES: Record<MenuScene, SceneDef> = {
@@ -105,6 +109,37 @@ const SCENES: Record<MenuScene, SceneDef> = {
     fogA: 0.04,
     fit: 'contain',
   },
+  // el Altar de los Pactos: círculo rúnico en una caverna, un cristal flotante y menhires que se lanzan rayos
+  altar: {
+    img: 'bg/altar.jpg',
+    fires: [],
+    glows: [{ x: 172, y: 82, r: 34, col: '150,110,255' }, { x: 172, y: 146, r: 70, col: '120,90,220' }, { x: 74, y: 104, r: 14, col: '150,110,255' }, { x: 119, y: 72, r: 14, col: '90,200,230' }, { x: 225, y: 72, r: 14, col: '90,200,230' }, { x: 270, y: 108, r: 14, col: '150,110,255' }],
+    flashes: [{ x: 146, y: 84, r: 40, col: '140,220,255' }, { x: 200, y: 86, r: 40, col: '190,150,255' }, { x: 172, y: 82, r: 56, col: '200,170,255' }],
+    sparks: { x: 150, y: 50, w: 44, h: 70, col: '190,170,255' },
+    fog: '110,100,150',
+    fogA: 0.12,
+  },
+  // la Forja del Abismo: una fragua improvisada alrededor de una fuente de calor antigua (la salida, a la izquierda)
+  abyssforge: {
+    img: 'bg/forja_abismo.jpg',
+    fires: [{ x: 252, y: 120, r: 40, col: FIRE }, { x: 249, y: 44, r: 16, col: FIRE }, { x: 244, y: 135, r: 22, col: '255,110,40' }],
+    glows: [{ x: 250, y: 144, r: 36, col: '80,220,230' }, { x: 207, y: 145, r: 18, col: '80,220,230' }, { x: 290, y: 144, r: 18, col: '80,220,230' }],
+    sparks: { x: 225, y: 60, w: 50, h: 60, col: '255,190,110' },
+    smoke: [{ x: 249, y: 30 }],
+    fog: '120,90,70',
+    fogA: 0.06,
+    heated: true,
+  },
+  // la Forja del Refugio: el horno rúnico de Odran
+  forge: {
+    img: 'bg/forja.jpg',
+    fires: [{ x: 216, y: 106, r: 40, col: FIRE }, { x: 224, y: 40, r: 16, col: FIRE }, { x: 212, y: 130, r: 18, col: '255,110,40' }],
+    glows: [{ x: 216, y: 70, r: 30, col: '80,220,230' }, { x: 194, y: 96, r: 12, col: '80,220,230' }, { x: 240, y: 96, r: 12, col: '80,220,230' }],
+    sparks: { x: 205, y: 24, w: 36, h: 40, col: '255,190,110' },
+    smoke: [{ x: 224, y: 26 }],
+    fog: '130,90,60',
+    fogA: 0.04,
+  },
   game: {
     img: 'bg/sala.jpg',
     fires: [{ x: 33, y: 73, r: 30, col: FIRE }, { x: 310, y: 73, r: 30, col: FIRE }],
@@ -114,6 +149,10 @@ const SCENES: Record<MenuScene, SceneDef> = {
 };
 
 let canvas: HTMLCanvasElement | null = null;
+/** Calor de la forja (0 a 1): aviva las llamas, suelta más ascuas y tiñe la escena. */
+let heat = 0;
+export function setSceneHeat(x: number): void { heat = Math.max(0, Math.min(1, x)); document.body.style.setProperty('--heat', heat.toFixed(2)); }
+let flashAt = 0, flashIdx = 0;
 /** relleno desenfocado detrás de las escenas que se ven enteras */
 let fill: HTMLDivElement | null = null;
 let ctx: CanvasRenderingContext2D | null = null;
@@ -140,11 +179,19 @@ function frame(now: number): void {
   const g = ctx, t = now / 1000, d = SCENES[scene];
   g.clearRect(0, 0, W, H);
   g.save(); g.globalCompositeOperation = 'lighter';
-  for (const f of d.fires) glow(g, f, 0.16 + 0.07 * Math.sin(t * 9 + f.x) + 0.04 * Math.sin(t * 23 + f.y));
+  const hk = d.heated ? heat : 0;
+  for (const f of d.fires) glow(g, hk ? { ...f, r: f.r * (1 + hk * 0.9) } : f, (0.16 + 0.07 * Math.sin(t * 9 + f.x) + 0.04 * Math.sin(t * 23 + f.y)) * (1 + hk * 1.6));
+  // destellos: cada pocos segundos salta un rayo entre las piedras (con un segundo parpadeo)
+  if (d.flashes?.length) {
+    if (t > flashAt + 3.2 + ((flashIdx * 7) % 5)) { flashAt = t; flashIdx++; }
+    const k = t - flashAt, a = k < 0.08 ? 0.55 : k < 0.14 ? 0.1 : k < 0.22 ? 0.4 : Math.max(0, 0.25 - k);
+    if (a > 0) glow(g, d.flashes[flashIdx % d.flashes.length]!, a);
+  }
   for (const l of d.glows) glow(g, l, 0.12 + 0.07 * Math.sin(t * 1.6));
   g.restore();
   for (const m of motes) {
     m.x += m.vx + Math.sin(t * 2 + m.y * 0.15) * 0.12; m.y += m.vy; m.life -= m.cold ? 0.008 : 0.012;
+    if (hk) { m.y += m.vy * hk * 1.2; }
     if (m.life <= 0 || m.y < 0) respawn(m, d);
     const a = Math.min(1, m.life * 1.4);
     g.fillStyle = m.cold ? `rgba(${d.sparks!.col},${a})` : `rgba(255,${150 + Math.round(m.life * 80)},60,${a})`;

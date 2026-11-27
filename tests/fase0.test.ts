@@ -76,7 +76,7 @@ describe('Fase 0 · salas recorridas, ecos y maestría', () => {
   });
 });
 
-describe('Fase 0 · maestría 5: cuatro opciones', () => {
+describe('Fase 0 · ofertas: 3 como máximo, también con maestría 5', () => {
   it('con maestría menor que 5 las ofertas son de 3', () => {
     for (const m of [0, 1, 4]) {
       const run = mk(m), h = run.heroes[0]!;
@@ -87,19 +87,18 @@ describe('Fase 0 · maestría 5: cuatro opciones', () => {
       expect(hb.boonOffer!.spells).toHaveLength(3);
     }
   });
-  it('con maestría 5 la oferta del jefe y la del santuario muestran 4, sin duplicados', () => {
+  it('con maestría 5 la oferta del jefe y la del santuario siguen siendo de 3, sin duplicados', () => {
     const run = mk(5), h = run.heroes[0]!;
-    expect(offerSize(h)).toBe(4);
+    expect(offerSize(h)).toBe(3);
     for (let i = 0; i < 40; i++) {
       const o = buildBossOffer(run, h, { spells: true });
-      expect(o).toHaveLength(4);
+      expect(o).toHaveLength(3);
       const keys = o.map((x) => x.kind === 'spell' ? `s:${x.id}` : x.kind === 'up' ? `u:${x.spell}` : x.kind);
-      expect(new Set(keys).size).toBe(4);
+      expect(new Set(keys).size).toBe(3);
     }
     const rb = mk(5, 'arquitecto'), hb = rb.heroes[0]!;
     offerBoon(rb, hb);
-    expect(hb.boonOffer!.spells).toHaveLength(4);
-    expect(new Set(hb.boonOffer!.spells).size).toBe(4);
+    expect(hb.boonOffer!.spells).toHaveLength(3);
   });
   it('fallback: sin hechizos ni mejoras que ofrecer se queda en 3 (oro/curación), nunca relleno en la 4.ª', () => {
     const run = mk(5), h = run.heroes[0]!;
