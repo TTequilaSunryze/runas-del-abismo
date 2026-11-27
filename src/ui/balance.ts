@@ -33,12 +33,12 @@ export function balanceScreen(opts: { onTest: (cls: ClassId) => void; onExit: ()
   testDraft(true);
   ui.screen = 'balance';
   requestAnimationFrame(previewLoop);
-  ui.root.classList.add('combatmode');
+  ui.root.classList.add('toolmode');
   ui.root.innerHTML = `<div id="batop" class="bar cinfo edtop"></div><div class="bagrid"><aside id="baleft" class="cside edside"></aside><main id="bamain" class="bamain"></main></div>`;
   paint();
 }
 
-export function closeBalance(): void { testDraft(false); ui.root.classList.remove('combatmode'); }
+export function closeBalance(): void { testDraft(false); ui.root.classList.remove('toolmode'); }
 
 function paint(): void {
   const b = draftBalance(), n = balanceSize(b), pending = draftPending(), live = liveBalance();
