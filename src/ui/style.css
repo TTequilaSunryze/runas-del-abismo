@@ -340,17 +340,63 @@ input:focus { outline: none; border-color: var(--gold); }
 .evtitle { text-align: center; font-size: 26px; }
 .evtext { font-size: 15px; line-height: 1.6; text-align: center; color: #e8dcc0; max-width: 620px; margin: 0 auto; font-style: italic; }
 .evhint { text-align: center; }
-.evopts { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-.evcard { text-align: left; display: flex; flex-direction: column; gap: 6px; padding: 12px; background: var(--noise), linear-gradient(180deg, #2c241c, #191410); border: 2px solid var(--iron); border-radius: 4px; }
-.evcard:hover:not(:disabled) { border-color: var(--gold); transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0, 0, 0, .5), 0 0 0 1px rgba(227, 176, 75, .25); }
-.evcard.on { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(227, 176, 75, .5), 0 0 18px rgba(227, 176, 75, .25); }
-.evcard b { font-family: var(--head); font-size: 17px; color: var(--gold); font-weight: 500; }
-.evcard ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-weight: 400; font-size: 13px; }
-.evcard li { padding-left: 18px; position: relative; }
-.evcard li.up { color: var(--grn); } .evcard li.up::before { content: '▲'; position: absolute; left: 0; font-size: 10px; top: 2px; }
-.evcard li.down { color: var(--red); } .evcard li.down::before { content: '▼'; position: absolute; left: 0; font-size: 10px; top: 2px; }
-.evcard .votes { font-size: 12px; color: var(--dim); }
-.evresult { text-align: center; font-size: 16px; }
+.evopts { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(220px, 290px)); justify-content: center; margin-top: 4px; }
+/* tarjeta de decisión: losa de piedra oscura con un sello rúnico arriba y la runa de la opción grabada al fondo */
+.evcard { --cc: 227, 176, 75; position: relative; isolation: isolate; text-align: left; display: flex; flex-direction: column; gap: 8px; min-height: 150px; padding: 20px 16px 12px; color: #eadfc6; font: inherit; cursor: pointer;
+  background: radial-gradient(120% 60% at 50% 0%, rgba(var(--cc), .13), transparent 65%), linear-gradient(180deg, rgba(27, 23, 31, .92), rgba(10, 9, 12, .95));
+  border: 1px solid rgba(var(--cc), .38); border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .75), inset 0 0 28px rgba(0, 0, 0, .6), 0 12px 26px rgba(0, 0, 0, .55);
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
+.evcard::before { content: ''; position: absolute; top: -6px; left: 50%; width: 10px; height: 10px; transform: translateX(-50%) rotate(45deg); background: #0d0b10; border: 1px solid rgba(var(--cc), .8); box-shadow: 0 0 8px rgba(var(--cc), .45); }
+.evcard::after { content: 'ᚠ'; position: absolute; right: 10px; bottom: 0; z-index: -1; font: 64px/1 serif; color: rgba(var(--cc), .07); pointer-events: none; }
+.evcard:nth-child(2)::after { content: 'ᚱ'; } .evcard:nth-child(3)::after { content: 'ᛟ'; } .evcard:nth-child(4)::after { content: 'ᛉ'; }
+.evcard:hover:not(:disabled) { transform: translateY(-4px); border-color: rgba(var(--cc), .85); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .75), inset 0 0 28px rgba(0, 0, 0, .5), 0 16px 30px rgba(0, 0, 0, .6), 0 0 20px rgba(var(--cc), .22); }
+.evcard:hover:not(:disabled)::after { color: rgba(var(--cc), .16); }
+.evcard.on { border-color: rgb(var(--cc)); box-shadow: inset 0 0 30px rgba(var(--cc), .16), 0 0 0 1px rgba(var(--cc), .55), 0 0 24px rgba(var(--cc), .3), 0 12px 26px rgba(0, 0, 0, .55); }
+.evcard.on::before { background: rgb(var(--cc)); box-shadow: 0 0 12px rgba(var(--cc), .9); }
+.evcard:disabled { cursor: default; }
+.evcard > b:first-child { font-family: var(--head); font-size: 18px; line-height: 1.2; color: rgb(var(--cc)); font-weight: 500; padding-bottom: 8px; border-bottom: 1px solid rgba(var(--cc), .22); text-shadow: 0 2px 0 #000; }
+.evcard ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-weight: 400; font-size: 13.5px; line-height: 1.4; }
+.evcard li { padding-left: 16px; position: relative; }
+.evcard li.up { color: #8fdc8a; } .evcard li.up::before { content: '◆'; position: absolute; left: 0; font-size: 9px; top: 4px; color: #5fbf64; }
+.evcard li.down { color: #ef8a7e; } .evcard li.down::before { content: '◆'; position: absolute; left: 0; font-size: 9px; top: 4px; color: #c9524a; }
+.evcard .votes { margin-top: auto; padding-top: 7px; border-top: 1px solid rgba(255, 255, 255, .06); font-size: 12px; color: #a99c84; }
+.pactcard { --cc: 190, 150, 255; }
+.restwin .evcard { --cc: 255, 170, 90; }
+.forgewin .evcard, .npc-kael .evcard { --cc: 255, 140, 70; }
+.evresult { text-align: center; font-size: 17px; color: #ffe2a2; text-shadow: 0 2px 2px #000, 0 0 12px rgba(0, 0, 0, .95), 0 0 24px rgba(0, 0, 0, .8); max-width: 680px; margin: 0 auto; }
+
+/* ---------- salas como escenario: el fondo manda; títulos y textos sin recuadro ---------- */
+.stage { position: relative; z-index: 1; max-width: 1000px; width: 100%; margin: 6px auto 0; display: flex; flex-direction: column; gap: 14px; padding: 8px 12px 14px; }
+.stage-title { margin: 0; text-align: center; font-family: var(--head); font-size: clamp(26px, 3vw, 38px); font-weight: 500; letter-spacing: 1px; color: #f3d68e; text-shadow: 0 3px 0 #000, 0 0 14px rgba(0, 0, 0, .95), 0 0 34px rgba(0, 0, 0, .8); }
+.stage-text { margin: 0 auto; max-width: 680px; text-align: center; font-size: 16px; line-height: 1.6; font-style: italic; color: #f1e6cf; text-shadow: 0 2px 2px #000, 0 0 10px rgba(0, 0, 0, .95), 0 0 24px rgba(0, 0, 0, .85); }
+.stage .evhint, .stage > .row .dim, .stage .dim.sm { text-align: center; color: #cdbf9f; text-shadow: 0 1px 2px #000, 0 0 8px #000; }
+.stage > .row { justify-content: center; }
+.stage .evart { background: none; box-shadow: none; height: 110px; width: auto; margin: 0 auto -4px; }
+.stage .evart::after { background: radial-gradient(circle at 50% 55%, var(--evc, #e3b04b), transparent 45%); opacity: .22; }
+.stage .evart.scenebox { height: 160px; width: min(520px, 90%); border-radius: 50%; box-shadow: inset 0 0 40px #000, 0 0 30px rgba(0, 0, 0, .6); }
+.stage .evbadge { align-self: center; }
+/* lo que dice un personaje: retrato y voz, sin caja */
+.npcsay { display: flex; gap: 14px; align-items: flex-start; max-width: 700px; margin: 0 auto; text-align: left; }
+.npcsay img { width: 68px; height: 68px; border-radius: 50%; object-fit: cover; flex: none; border: 2px solid rgba(255, 150, 70, .7); box-shadow: 0 0 0 2px #0b0806, 0 0 18px rgba(255, 120, 40, .35); }
+.npcsay b { font-family: var(--head); font-size: 17px; color: #ffb36a; text-shadow: 0 2px 0 #000, 0 0 10px #000; }
+.npcsay p { margin: 4px 0 0; font-size: 15px; line-height: 1.5; color: #f3e3c4; text-shadow: 0 2px 2px #000, 0 0 10px rgba(0, 0, 0, .95), 0 0 20px rgba(0, 0, 0, .8); }
+/* figura animada de pie sobre el fondo (Kael en su fragua) */
+.stage-npc { position: fixed; z-index: 0; right: clamp(12px, 9vw, 180px); bottom: 5vh; height: min(46vh, 430px); aspect-ratio: 241 / 265; pointer-events: none;
+  background: var(--spr) 0 0 / 400% 100% no-repeat; image-rendering: pixelated; animation: npcFrames 1.6s steps(4) infinite; filter: drop-shadow(0 0 18px rgba(0, 0, 0, .7)) drop-shadow(0 6px 4px rgba(0, 0, 0, .6)); }
+.stage-npc.heat-hot { animation-duration: 1.1s; } .stage-npc.heat-overload { animation-duration: .8s; filter: drop-shadow(0 0 14px rgba(255, 110, 40, .55)) drop-shadow(0 6px 4px rgba(0, 0, 0, .6)); }
+@media (max-width: 1100px) { .stage-npc { display: none; } }
+/* paneles de herramientas de la forja: translúcidos para que se vea la fragua detrás */
+body.has-menubg .stage .heat, body.has-menubg .stage .forgecol { background: rgba(8, 6, 6, .62); border: 1px solid rgba(255, 140, 70, .3); box-shadow: inset 0 0 18px rgba(0, 0, 0, .6); backdrop-filter: blur(2px); }
+.stage .heat .sm, .stage .forgecol .sm { text-shadow: 0 1px 1px #000; }
+.stage .forgelog { background: none !important; border: 0 !important; box-shadow: none !important; text-shadow: 0 1px 2px #000, 0 0 8px #000; }
+.stage.forgewin { max-width: 1040px; background: none; }
+/* luz de las escenas: viñeta suave (sin tapar el fondo) y, en la forja, el calor tiñe la sala */
+body[data-scene="altar"]::before { background: radial-gradient(ellipse at 50% 40%, rgba(4, 4, 10, .05), rgba(4, 4, 10, .55) 80%), linear-gradient(0deg, rgba(4, 4, 10, .55), transparent 35%); }
+body[data-scene="abyssforge"]::before { background: radial-gradient(ellipse at 74% 58%, rgba(255, 110, 30, calc(var(--heat, 0) * .32)), transparent 55%), radial-gradient(ellipse at 50% 40%, rgba(6, 3, 2, .05), rgba(6, 3, 2, calc(.6 - var(--heat, 0) * .2)) 82%), linear-gradient(0deg, rgba(6, 3, 2, .55), transparent 35%); transition: background .6s; }
+body[data-scene="forge"]::before { background: linear-gradient(0deg, rgba(6, 3, 2, .35), transparent 30%); }
+body[data-scene="abyssforge"] #menubg { filter: saturate(calc(1 + var(--heat, 0) * .35)) brightness(calc(.95 + var(--heat, 0) * .18)); transition: filter .6s; }
+@media (prefers-reduced-motion: reduce) { .stage-npc { animation: none; } }
 
 /* cartel «Has obtenido» */
 .gotcard { max-width: 420px !important; width: 100%; text-align: center; overflow: hidden; }
@@ -1382,3 +1428,16 @@ body.has-menubg .dinv { align-self: flex-start; font-size: 17px; padding: 9px 22
 .introskip { position: absolute; right: 20px; bottom: 20px; }
 .dsheet .dtab { background: rgba(90, 60, 30, .12); color: #4a2a0e; border-color: #c4a97a; }
 .dsheet .dtab.on, .dsheet .dtab:hover { border-color: #b0661e; color: #7a3e12; background: rgba(176, 102, 30, .15); }
+.stage.evwin.evspecial, .stage.evwin.ev-raro { border: 0 !important; box-shadow: none !important; background: none !important; }
+/* barra de «Continuar» dentro de una sala: sin caja, solo el botón y el estado del grupo */
+body.has-menubg .stage .advance, body.has-menubg .stage .bar { background: none !important; border: 0 !important; box-shadow: none !important; text-shadow: 0 1px 2px #000, 0 0 8px #000; justify-content: center; }
+/* Altar: título arriba, el cristal libre en el centro y los pactos abajo, sobre el círculo rúnico */
+@media (min-width: 900px) and (min-height: 640px) {
+  .stage.altarwin { min-height: calc(100vh - 100px); }
+  .stage.altarwin .evopts, .stage.altarwin .evresult { margin-top: auto; }
+}
+/* iconos del arte del juego en línea con el texto */
+img.gi { display: inline-block; height: 1.2em; width: auto; vertical-align: -0.24em; margin: 0 .05em; image-rendering: auto; pointer-events: none; filter: drop-shadow(0 1px 0 rgba(0, 0, 0, .6)); }
+h1 img.gi, h2 img.gi, .stage-title img.gi { height: 1em; vertical-align: -0.12em; }
+.pactseal img.gi, .curseicon img.gi { height: 1.6em; }
+.evart span img.gi { height: 72px; }

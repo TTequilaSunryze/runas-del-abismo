@@ -11,8 +11,8 @@ export interface ActMap {
   links: number[][][];
 }
 
-/** Salas hasta el jefe (sin contarlo). */
-export const ACT_ROOMS = 7;
+/** Salas hasta el jefe (sin contarlo). La sala 15 de cada zona es el jefe. */
+export const ACT_ROOMS = 14;
 
 const nearest = (x: number, n: number): number => Math.max(0, Math.min(n - 1, Math.floor(x * n)));
 
@@ -61,87 +61,155 @@ export function allPaths(m: ActMap): number[][] {
   return out;
 }
 
-/** Garantías de cada ruta: entre 3 y 5 combates normales (las jaulas cuentan), como mucho un élite, al menos un descanso
- * antes del jefe y nunca 3 salas de combate seguidas. */
-export const MIN_FORKS = 4, MIN_PATHS = 6;
-export const PATH_RULES = { minFights: 3, maxFights: 5, maxElites: 1, maxStreak: 2 };
-export interface PathStats { fights: number; elites: number; rests: number; streak: number }
+/**
+ * Guía de cada ruta (las 14 salas antes del jefe), orientativa y con margen: unos 3 combates normales, 2 élites, 2 descansos
+ * (uno es siempre la sala justo antes del jefe), 2 tesoros o bendiciones, unos 4 eventos «?» y un comerciante. Nunca 3 salas
+ * de combate seguidas.
+ */
+export const MIN_FORKS = 6, MIN_PATHS = 6;
+export const PATH_RULES = {
+  fights: [2, 6], elites: [1, 2], rests: [2, 2], treasures: [1, 4], events: [2, 7], shops: [0, 2], maxStreak: 2,
+  // compatibilidad con la guía anterior
+  minFights: 2, maxFights: 6, maxElites: 2,
+} as const;
+export interface PathStats { fights: number; elites: number; rests: number; treasures: number; events: number; shops: number; streak: number }
+const isFight = (k: MapKind): boolean => k === 'combat' || k === 'cage' || k === 'elite' || k === 'sangre';
+const statKey = (k: MapKind): Exclude<keyof PathStats, 'streak'> | null =>
+  k === 'combat' || k === 'cage' || k === 'sangre' ? 'fights' : k === 'elite' ? 'elites' : k === 'rest' ? 'rests'
+    : k === 'treasure' || k === 'shrine' ? 'treasures' : k === 'event' || k === 'forge' || k === 'vault' ? 'events' : k === 'shop' ? 'shops' : null;
 export function pathStats(m: ActMap, path: number[]): PathStats {
-  let fights = 0, elites = 0, rests = 0, streak = 0, run = 0;
+  const st: PathStats = { fights: 0, elites: 0, rests: 0, treasures: 0, events: 0, shops: 0, streak: 0 };
+  let run = 0;
   path.forEach((i, l) => {
     const k = m.layers[l]![i]!;
     if (k === 'boss') return;
-    const fight = k === 'combat' || k === 'cage' || k === 'elite' || k === 'sangre';
-    if (k === 'combat' || k === 'cage' || k === 'sangre') fights++;
-    if (k === 'elite') elites++;
-    if (k === 'rest') rests++;
-    run = fight ? run + 1 : 0; streak = Math.max(streak, run);
+    const key = statKey(k);
+    if (key) st[key]++;
+    run = isFight(k) ? run + 1 : 0; st.streak = Math.max(st.streak, run);
   });
-  return { fights, elites, rests, streak };
+  return st;
 }
+const RANGE_KEYS = ['fights', 'elites', 'rests', 'treasures', 'events', 'shops'] as const;
 export function pathOk(st: PathStats): boolean {
-  return st.fights >= PATH_RULES.minFights && st.fights <= PATH_RULES.maxFights && st.elites <= PATH_RULES.maxElites && st.rests >= 1 && st.streak <= PATH_RULES.maxStreak;
+  return RANGE_KEYS.every((k) => st[k] >= PATH_RULES[k][0] && st[k] <= PATH_RULES[k][1]) && st.streak <= PATH_RULES.maxStreak;
 }
 
-type W = Partial<Record<MapKind, number>>;
-/** Papel de cada fila: de combate, mixta o tranquila. Marca el ritmo sin fijar qué sala va en cada sitio. */
-type Role = 'F' | 'M' | 'N';
-function weights(role: Role, l: number, last: number): W {
-  if (l === last) return { rest: 9, shop: 1, event: 1 };
-  if (role === 'F') return { combat: 7, elite: l >= 2 ? 4 : 0, cage: 1, event: 1 };
-  if (role === 'M') return { combat: 5, elite: l >= 2 ? 3 : 0, cage: 1, event: 2, shop: l >= 1 ? 1 : 0, shrine: l >= 1 ? 1 : 0, rest: l >= 3 ? 1 : 0 };
-  return { event: 3, shop: 2, shrine: l >= 1 ? 2 : 0, treasure: l >= 1 ? 1 : 0, forge: l >= 1 ? 2 : 0, rest: l >= 3 ? 1 : 0 };
-}
-function roll(box: RngBox, w: W): MapKind {
-  const e = Object.entries(w).filter(([, v]) => (v ?? 0) > 0) as Array<[MapKind, number]>;
-  let r = rand(box) * e.reduce((n, [, v]) => n + v, 0);
-  for (const [k, v] of e) if ((r -= v) < 0) return k;
-  return e[0]![0];
-}
-/** Ritmo de las 6 primeras filas: 3 o 4 de combate (nunca 3 seguidas), el resto mixtas o tranquilas; la primera nunca es tranquila. */
-function rhythm(box: RngBox): Role[] {
-  for (;;) {
-    const r: Role[] = Array.from({ length: ACT_ROOMS - 1 }, (_, l): Role => { const x = rand(box); return l === 0 ? (x < 0.6 ? 'F' : 'M') : x < 0.5 ? 'F' : x < 0.75 ? 'M' : 'N'; });
-    const f = r.filter((x) => x === 'F').length, streak = r.join('').includes('FFF');
-    if (f >= 2 && f <= 4 && !streak && r.includes('N')) return r;
+/**
+ * Mínimo y máximo de cada cuenta sobre TODAS las rutas, y la racha de combates más larga, sin enumerar las rutas
+ * (con 14 filas pueden ser decenas de miles): programación dinámica fila a fila.
+ */
+export function pathRange(m: ActMap): { min: PathStats; max: PathStats } {
+  type Acc = { lo: number[]; hi: number[]; run: number; best: number };
+  const nk = RANGE_KEYS.length;
+  const own = (k: MapKind): number[] => RANGE_KEYS.map((key) => (statKey(k) === key ? 1 : 0));
+  let cur: Acc[] = m.layers[0]!.map((k) => { const o = own(k), f = isFight(k) ? 1 : 0; return { lo: o, hi: [...o], run: f, best: f }; });
+  for (let l = 0; l < m.links.length; l++) {
+    const row = m.layers[l + 1]!;
+    const next: Array<Acc | null> = row.map(() => null);
+    m.links[l]!.forEach((to, i) => to.forEach((j) => {
+      const k = row[j]!, o = k === 'boss' ? Array(nk).fill(0) as number[] : own(k), src = cur[i]!;
+      const run = k !== 'boss' && isFight(k) ? src.run + 1 : 0;
+      const cand: Acc = { lo: src.lo.map((v, x) => v + o[x]!), hi: src.hi.map((v, x) => v + o[x]!), run, best: Math.max(src.best, run) };
+      const n = next[j];
+      next[j] = n ? { lo: n.lo.map((v, x) => Math.min(v, cand.lo[x]!)), hi: n.hi.map((v, x) => Math.max(v, cand.hi[x]!)), run: Math.max(n.run, cand.run), best: Math.max(n.best, cand.best) } : cand;
+    }));
+    cur = next.map((n) => n ?? { lo: Array(nk).fill(99) as number[], hi: Array(nk).fill(-1) as number[], run: 0, best: 0 });
   }
+  const lo = RANGE_KEYS.map((_, x) => Math.min(...cur.map((c) => c.lo[x]!)));
+  const hi = RANGE_KEYS.map((_, x) => Math.max(...cur.map((c) => c.hi[x]!)));
+  const best = Math.max(...cur.map((c) => c.best));
+  const mk = (v: number[], streak: number): PathStats => ({ ...Object.fromEntries(RANGE_KEYS.map((k, x) => [k, v[x]!])), streak } as PathStats);
+  return { min: mk(lo, best), max: mk(hi, best) };
 }
 
+/** Nº de rutas distintas (sin enumerarlas). */
+export function pathCount(m: ActMap): number {
+  let ways = m.layers[0]!.map(() => 1);
+  m.links.forEach((rows, l) => { const next = m.layers[l + 1]!.map(() => 0); rows.forEach((to, i) => to.forEach((j) => { next[j] = (next[j] ?? 0) + ways[i]!; })); ways = next; });
+  return ways.reduce((a, b) => a + b, 0);
+}
+
+/** La fila justo antes del jefe es siempre de descanso. */
+const restRow = (): number => ACT_ROOMS - 1;
+/** Sala «principal» de cada fila (0..12): marca el ritmo; los demás nodos de la fila son alternativas cercanas. */
+const PLAN: MapKind[] = ['elite', 'elite', 'rest', 'treasure', 'treasure', 'event', 'event', 'event', 'event', 'combat', 'combat', 'combat', 'shop'];
+function allowed(k: MapKind, l: number): boolean {
+  if (l === 0) return k === 'combat' || k === 'event';
+  if (k === 'elite') return l >= 3;
+  if (k === 'rest') return l >= 5 && l <= restRow() - 2;
+  if (k === 'shop') return l >= 2;
+  return true;
+}
+function rhythm(box: RngBox): MapKind[] {
+  for (let t = 0; t < 500; t++) {
+    const p = shuffleBox(box, PLAN);
+    if (!p.every((k, l) => allowed(k, l))) continue;
+    if (p.some((k, l) => l > 0 && k === 'elite' && p[l - 1] === 'elite')) continue;
+    // nunca 3 filas de combate seguidas
+    if (p.some((k, l) => l > 1 && isFight(k) && isFight(p[l - 1]!) && isFight(p[l - 2]!))) continue;
+    return p;
+  }
+  return ['combat', 'event', 'treasure', 'elite', 'event', 'combat', 'rest', 'event', 'shop', 'elite', 'treasure', 'event', 'combat'];
+}
+function shuffleBox<T>(box: RngBox, xs: readonly T[]): T[] {
+  const a = [...xs];
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand(box) * (i + 1)); [a[i], a[j]] = [a[j]!, a[i]!]; }
+  return a;
+}
+/** Alternativa a la sala principal de una fila mixta: un solo tipo cercano, para que las rutas varíen sin romper el ritmo. */
+function alternative(box: RngBox, k: MapKind, l: number): MapKind | null {
+  const opts: MapKind[] = k === 'elite' ? ['combat'] : k === 'combat' ? ['event'] : k === 'event' ? ['combat', 'treasure'] : k === 'treasure' ? ['event', 'shop'] : k === 'shop' ? ['treasure', 'event'] : [];
+  const ok = opts.filter((x) => allowed(x, l));
+  return ok.length ? ok[Math.floor(rand(box) * ok.length)]! : null;
+}
 function build(box: RngBox): ActMap {
-  const L = ACT_ROOMS + 1, last = L - 2, roles = rhythm(box);
-  const widths = Array.from({ length: L }, (_, l) => (l === 0 ? 3 : l === L - 1 ? 1 : l === last ? randInt(box, 2, 3) : randInt(box, 2, 4)));
-  const layers: MapKind[][] = widths.map((w, l) => Array.from({ length: w }, (): MapKind => (l === L - 1 ? 'boss' : roll(box, weights(roles[l] ?? 'N', l, last)))));
+  const L = ACT_ROOMS + 1, plan = rhythm(box);
+  const widths = Array.from({ length: L }, (_, l) => (l === 0 ? 3 : l === L - 1 ? 1 : l === restRow() ? randInt(box, 2, 3) : randInt(box, 2, 4)));
+  const layers: MapKind[][] = widths.map((w, l) => {
+    if (l === L - 1) return ['boss'];
+    if (l === restRow()) return Array.from({ length: w }, (): MapKind => 'rest');
+    const main = plan[l]!, alt = rand(box) < 0.65 ? alternative(box, main, l) : null;
+    if (!alt) return Array.from({ length: w }, (): MapKind => main);
+    // fila mixta: los dos tipos aparecen siempre
+    const row = Array.from({ length: w }, (): MapKind => (rand(box) < 0.5 ? main : alt));
+    row[0] = main; row[w - 1] = alt;
+    return shuffleBox(box, row);
+  });
   return { layers, links: makeLinks(box, widths) };
 }
 
 /** ¿Cumple el mapa todas las garantías? (cada ruta y el contenido mínimo de la zona) */
 export function mapOk(m: ActMap): boolean {
-  const n = (k: MapKind): number => m.layers.flat().filter((x) => x === k).length;
-  if (n('forge') < 1 || n('shop') < 1 || n('event') < 1 || n('elite') > 3) return false;
-  // caminos que se separan y vuelven a unirse: varias bifurcaciones y bastantes rutas distintas
+  if (m.layers.length !== ACT_ROOMS + 1 || m.layers.at(-1)?.[0] !== 'boss') return false;
+  if (!m.layers[restRow()]!.every((k) => k === 'rest')) return false;
+  if (!m.layers.flat().includes('shop')) return false;
   const forks = m.links.flat().filter((to) => to.length > 1).length;
-  const paths = allPaths(m);
-  if (forks < MIN_FORKS || paths.length < MIN_PATHS) return false;
-  return paths.every((p) => pathOk(pathStats(m, p)));
+  if (forks < MIN_FORKS || pathCount(m) < MIN_PATHS) return false;
+  const { min, max } = pathRange(m);
+  return RANGE_KEYS.every((k) => min[k] >= PATH_RULES[k][0] && max[k] <= PATH_RULES[k][1]) && max.streak <= PATH_RULES.maxStreak;
 }
 
 /** Mapa de reserva (por si la generación no encontrara uno válido): ramificado y válido sea cual sea el camino. */
 function fallback(): ActMap {
   const rows: MapKind[][] = [
-    ['combat', 'combat', 'combat'], ['shrine', 'event', 'shop'], ['combat', 'cage', 'combat'], ['forge', 'treasure', 'event'],
-    ['combat', 'combat', 'combat'], ['event', 'elite', 'shop'], ['rest', 'rest', 'rest'], ['boss'],
+    ['combat', 'event', 'combat'], ['event', 'treasure', 'event'], ['combat', 'event', 'combat'], ['elite', 'elite', 'elite'],
+    ['event', 'shop', 'event'], ['treasure', 'treasure', 'treasure'], ['rest', 'rest', 'rest'], ['combat', 'event', 'combat'],
+    ['event', 'event', 'event'], ['elite', 'elite', 'elite'], ['event', 'treasure', 'event'], ['combat', 'combat', 'combat'],
+    ['shop', 'shop', 'shop'], ['rest', 'rest', 'rest'], ['boss'],
   ];
   const links = rows.slice(0, -1).map((r, l) => r.map((_, i) => (rows[l + 1]!.length === 1 ? [0] : [...new Set([i, Math.min(r.length - 1, i + 1)])])));
   return { layers: rows, links };
 }
 
 /**
- * Genera una zona: 7 salas jugables y el jefe, en un grafo ramificado de 2 a 4 nodos por capa. Cada ruta completa se valida
- * (3-5 combates normales, máximo un élite, un descanso como mínimo y sin 3 combates seguidos); si no cumple, se vuelve a generar
- * con la misma semilla de la partida, así que el resultado es reproducible.
+ * Genera una zona: 14 salas jugables y el jefe, en un grafo ramificado de 2 a 4 nodos por fila. La sala justo antes del jefe es
+ * siempre un descanso. Cada ruta se valida (ver PATH_RULES); si no cumple, se vuelve a generar con la misma semilla de la
+ * partida, así que el resultado es reproducible. Las salas especiales (forja, santuario, jaula, senda de sangre, pasaje secreto)
+ * ya no son nodos del mapa: salen al entrar en un «?» o en un Tesoro.
  */
 export function makeActMap(box: RngBox): ActMap {
-  return addRoutes(box, baseMap(box));
+  for (let t = 0; t < 600; t++) { const m = build(box); if (mapOk(m)) return m; }
+  return fallback();
 }
 
 /** Probabilidad de que la zona tenga una Senda de sangre. */
@@ -181,21 +249,3 @@ export function vaultAt(layers: readonly (readonly string[])[]): { l: number; i:
   return null;
 }
 
-function baseMap(box: RngBox): ActMap {
-  for (let t = 0; t < 400; t++) {
-    const m = build(box);
-    if (!mapOk(m)) continue;
-    // riesgo y recompensa: si la zona no tiene élite, se intenta convertir un combate en élite sin romper ninguna ruta
-    if (!m.layers.flat().includes('elite')) {
-      const cand = m.layers.flatMap((row, l) => row.map((k, i) => ({ l, i, k }))).filter((x) => x.k === 'combat' && x.l >= 2 && x.l < m.layers.length - 2);
-      for (let n = cand.length; n > 0; n--) {
-        const c = cand.splice(Math.floor(rand(box) * n), 1)[0]!;
-        m.layers[c.l]![c.i] = 'elite';
-        if (mapOk(m)) break;
-        m.layers[c.l]![c.i] = 'combat';
-      }
-    }
-    return m;
-  }
-  return fallback();
-}

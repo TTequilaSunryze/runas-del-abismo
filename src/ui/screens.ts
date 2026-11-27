@@ -641,7 +641,7 @@ export function shopScreen(): void {
 function eventArt(key: string): { i: string; c: string } {
   const k = key.toLowerCase();
   const table: Array<[RegExp, string, string]> = [
-    [/fuente|manantial|agua|lago|pozo/, '⛲', '#5fb4ff'], [/fuego|brasa|llama|volc|ceniza|forja|horno/, '🔥', '#ff7a3a'], [/altar|santuario|vela|oraci|templo/, '🕯️', '#ffd27a'],
+    [/fuente|manantial|agua|lago|pozo/, '⛲', '#5fb4ff'], [/fuego|brasa|llama|volc|ceniza|forja|horno|lava/, '🔥', '#ff7a3a'], [/altar|santuario|vela|oraci|templo/, '🕯️', '#ffd27a'],
     [/espejo|reflej/, '🪞', '#b9a6ff'], [/hongo|seta|espora|semilla|raíz|bosque|árbol|roble/, '🍄', '#7fd36a'], [/cofre|tesoro|oro|mercader|comerci/, '💰', '#ffcc4d'],
     [/espíritu|fantasma|alma|eco|susurro/, '👻', '#9fe0ff'], [/libro|pergamino|runa|oráculo|biblioteca/, '📜', '#e8c27a'], [/sangre|pacto|demonio|maldi/, '🩸', '#ff4a5a'],
     [/prision|jaula|cadena|preso/, '⛓️', '#c0c0c0'], [/lobo|bestia|criatura|nido/, '🐺', '#d0a070'], [/estatua|ídolo|reliquia/, '🗿', '#d8c8a0'],
@@ -665,16 +665,18 @@ export function eventScreen(): void {
   const art = eventArt(def.id + ' ' + def.title);
   const sp = def.special;
   const br = branchDef(def.id);
-  frame(run, `<div class="panel evwin ${sp ? `evspecial ev-${sp}` : ''}">
+  const who = def.npc;
+  frame(run, `<div class="stage evwin ${sp ? `evspecial ev-${sp}` : ''} ${who ? `npcev npc-${who.id}` : ''}">
   ${sp ? `<div class="evbadge">${sp === 'raro' ? '✦ Encuentro poco frecuente' : '✦ Evento especial'}</div>` : ''}${br?.requires ? '<div class="evbadge chain">↪ Consecuencia de una decisión anterior</div>' : br?.starter ? '<div class="evbadge chain">⑂ Decisión con consecuencias más adelante</div>' : ''}
-  <div class="evart" style="--evc:${art.c}"><span>${art.i}</span></div>
-  <h2 class="evtitle">${esc(def.title)}</h2>
-  <p class="evtext">${esc(def.text)}</p>
-  ${ev.result ? `<div class="panel note evresult"><b>${esc(ev.result)}</b></div>${advanceBar(run, 'Continuar →')}` : `
+  ${who ? '' : `<div class="evart" style="--evc:${art.c}"><span>${art.i}</span></div>`}
+  <h2 class="stage-title">${esc(def.title)}</h2>
+  <p class="stage-text">${esc(def.text)}</p>
+  ${who && !ev.result ? npcSay(who.id, who.name, who.lines) : ''}
+  ${ev.result ? `<div class="evresult"><b>${esc(ev.result)}</b></div>${advanceBar(run, 'Continuar →')}` : `
   <div class="dim sm evhint">Evento de grupo: decide la mayoría y afecta a todos. En empate decide el anfitrión.</div>
-  <div class="evopts">${def.options.map((o, i) => { const open = optionOpen(run, o), need = (o as BranchOption).need; return `<button class="evcard ${ev.votes[ui.myId] === i ? 'on' : ''} ${open ? '' : 'locked'}" data-act="vote" data-id="${i}" ${canVote && open ? '' : 'disabled'}><b>${open ? '' : '🔒 '}${esc(o.label)}</b>${outcomeList(o.hint)}${need ? `<span class="sm ${open ? 'good' : 'dim'}">${open ? '⑂ Disponible por una decisión anterior' : esc(need)}</span>` : ''}<span class="votes">${voters(i) ? `🗳️ ${voters(i)}` : 'Sin votos'}</span></button>`; }).join('')}</div>
+  <div class="evopts">${def.options.map((o, i) => { const open = optionOpen(run, o), need = (o as BranchOption).need; return `<button class="raw evcard ${ev.votes[ui.myId] === i ? 'on' : ''} ${open ? '' : 'locked'}" data-act="vote" data-id="${i}" ${canVote && open ? '' : 'disabled'}><b>${open ? '' : '🔒 '}${esc(o.label)}</b>${outcomeList(o.hint)}${need ? `<span class="sm ${open ? 'good' : 'dim'}">${open ? '⑂ Disponible por una decisión anterior' : esc(need)}</span>` : ''}<span class="votes">${voters(i) ? `🗳️ ${voters(i)}` : 'Sin votos'}</span></button>`; }).join('')}</div>
   <div class="row">${s.isHost ? `<button data-act="resolve" ${Object.keys(ev.votes).length ? '' : 'disabled'}>Cerrar la votación ya</button>` : '<span class="dim sm">Votad todos para continuar.</span>'}</div>`}
-  </div>${pendingRows(run)}`);
+  </div>${who ? stageNpc(who.id, ev.result ? 'work' : 'talk') : ''}${pendingRows(run)}`);
 }
 
 export function endScreen(): void {
@@ -711,8 +713,22 @@ export function endScreen(): void {
 // ---------------------------------------------------------------------------
 // Salas especiales (v14): Altar, Forja, Cofre y Descanso
 // ---------------------------------------------------------------------------
+/**
+ * Sala como escenario: el fondo ilustrado (o la escena dibujada, si la sala no tiene ilustración propia) manda; título y texto
+ * van sin recuadro, legibles por la sombra, y debajo las tarjetas de decisión.
+ */
 function roomWin(scene: string, title: string, text: string, inner: string, cls = ''): string {
-  return `<div class="panel evwin roomwin ${cls}"><div class="evart scenebox">${scene}</div><h2 class="evtitle">${title}</h2>${text ? `<p class="evtext">${text}</p>` : ''}${inner}</div>`;
+  return `<div class="stage roomwin ${cls}">${scene ? `<div class="evart scenebox">${scene}</div>` : ''}<h2 class="stage-title">${title}</h2>${text ? `<p class="stage-text">${text}</p>` : ''}${inner}</div>`;
+}
+
+/** Figura animada de un personaje de pie sobre el fondo (tiras de 4 fotogramas en npc/). */
+export function stageNpc(id: string, anim: string, cls = ''): string {
+  return `<div class="stage-npc ${cls}" style="--spr:url(${import.meta.env.BASE_URL}npc/${id}_${anim}.png)" aria-hidden="true"></div>`;
+}
+
+/** Lo que dice un personaje al llegar: retrato y líneas, sin recuadro. */
+function npcSay(id: string, name: string, lines: string[]): string {
+  return `<div class="npcsay"><img src="${import.meta.env.BASE_URL}npc/${id}_retrato.jpg" alt=""><div><b>${esc(name)}</b>${lines.map((l) => `<p>«${esc(l)}»</p>`).join('')}</div></div>`;
 }
 
 export function roomScreen(): void {
@@ -723,11 +739,11 @@ export function roomScreen(): void {
     const voters = (i: number): string => run.heroes.filter((x) => r.votes[x.owner] === i).map((x) => esc(x.name)).join(', ');
     const chosen = pactOf(run.pact);
     const inner = r.result
-      ? `<div class="panel note evresult">${chosen ? `<div class="pactseal">${chosen.icon}</div>` : ''}<b>${esc(r.result)}</b></div>${chosen ? `<div class="evopts one"><div class="evcard on"><b>${chosen.icon} ${esc(chosen.name)}</b><ul><li class="up">${esc(chosen.boon)}</li><li class="down">${esc(chosen.bane)}</li></ul><span class="votes">Dura toda la partida</span></div></div>` : ''}${advanceBar(run, 'Descender a la mazmorra →')}`
+      ? `<div class="evresult">${chosen ? `<div class="pactseal">${chosen.icon}</div>` : ''}<b>${esc(r.result)}</b></div>${chosen ? `<div class="evopts one"><div class="raw evcard on"><b>${chosen.icon} ${esc(chosen.name)}</b><ul><li class="up">${esc(chosen.boon)}</li><li class="down">${esc(chosen.bane)}</li></ul><span class="votes">Dura toda la partida</span></div></div>` : ''}${advanceBar(run, 'Descender a la mazmorra →')}`
       : `<div class="dim sm evhint">Pacto Mayor: decide la mayoría y cambia las reglas de toda la partida. En empate decide el anfitrión.</div>
-      <div class="evopts">${pacts.map((p, i) => `<button class="evcard pactcard ${r.votes[ui.myId] === i ? 'on' : ''}" data-act="pact" data-id="${i}" ${h ? '' : 'disabled'}><b>${p.icon} ${esc(p.name)}</b><ul><li class="up">${esc(p.boon)}</li><li class="down">${esc(p.bane)}</li></ul><span class="votes">${voters(i) ? `🗳️ ${voters(i)}` : 'Sin votos'}</span></button>`).join('')}</div>
+      <div class="evopts">${pacts.map((p, i) => `<button class="raw evcard pactcard ${r.votes[ui.myId] === i ? 'on' : ''}" data-act="pact" data-id="${i}" ${h ? '' : 'disabled'}><b>${p.icon} ${esc(p.name)}</b><ul><li class="up">${esc(p.boon)}</li><li class="down">${esc(p.bane)}</li></ul><span class="votes">${voters(i) ? `🗳️ ${voters(i)}` : 'Sin votos'}</span></button>`).join('')}</div>
       <div class="row">${s.isHost ? `<button data-act="seal" ${Object.keys(r.votes).length ? '' : 'disabled'}>Sellar el pacto ya</button>` : '<span class="dim sm">Votad todos para sellarlo.</span>'}</div>`;
-    frame(run, roomWin(altarScene(!!pacts.length, pacts.map((p) => p.icon)), 'El Altar de los Pactos',
+    frame(run, roomWin('', 'El Altar de los Pactos',
       pacts.length ? 'Antes de bajar, la piedra exige un precio. Dos pactos arden sobre el altar: elegid uno y la mazmorra entera obedecerá sus reglas.' : '', inner, 'altarwin') + pendingRows(run));
     return;
   }
@@ -756,7 +772,7 @@ export function roomScreen(): void {
     const mine2 = h ? r.picks[h.owner] : undefined;
     const who = (i: number): string => run.heroes.filter((x) => r.picks[x.owner] === i).map((x) => esc(x.name)).join(', ');
     const heal = h ? Math.ceil(heroMaxHp(h) * restHeal(run, h)) : 0;
-    const inner = `<div class="evopts">${REST_OPTIONS.map((o, i) => `<button class="evcard ${mine2 === i ? 'on' : ''}" data-act="restpick" data-id="${i}" ${h && mine2 === undefined ? '' : 'disabled'}><b>${o.icon} ${esc(o.name)}</b><ul><li class="${o.id === 'rest' && !heal ? 'down' : 'up'}">${o.id === 'rest' ? (heal ? `Recuperas ${heal} de vida (${h ? `${h.hp}/${heroMaxHp(h)}` : ''})` : 'El pacto no te deja curarte') : esc(o.text)}</li></ul><span class="votes">${who(i) ? `✔ ${who(i)}` : '—'}</span></button>`).join('')}</div>
+    const inner = `<div class="evopts">${REST_OPTIONS.map((o, i) => `<button class="raw evcard ${mine2 === i ? 'on' : ''}" data-act="restpick" data-id="${i}" ${h && mine2 === undefined ? '' : 'disabled'}><b>${o.icon} ${esc(o.name)}</b><ul><li class="${o.id === 'rest' && !heal ? 'down' : 'up'}">${o.id === 'rest' ? (heal ? `Recuperas ${heal} de vida (${h ? `${h.hp}/${heroMaxHp(h)}` : ''})` : 'El pacto no te deja curarte') : esc(o.text)}</li></ul><span class="votes">${who(i) ? `✔ ${who(i)}` : '—'}</span></button>`).join('')}</div>
       ${r.lines.length ? `<div class="panel note">${r.lines.map((l) => `<div class="sm good">${esc(l)}</div>`).join('')}</div>` : ''}
       <div class="row"><button data-act="side" class="mobonly">🎒 Revisar inventario</button><button data-act="stats">📊 Ver ficha</button><span class="dim sm deskonly">Tu equipo y mochila están en el panel de la derecha.</span></div>
       ${advanceBar(run, 'Continuar →')}`;
@@ -788,5 +804,5 @@ export function roomScreen(): void {
     tools = `<div class="forgegrid">${recal}${scrap}${hone}</div>`;
   }
   const inner = `${heat}${tools}${r.log.length ? `<div class="panel note forgelog">${r.log.slice(-6).map((l) => `<div class="sm">🔥 ${esc(l)}</div>`).join('')}</div>` : ''}${advanceBar(run, 'Salir de la forja →')}`;
-  frame(run, roomWin(forgeScene(r.heat), 'La Forja del Crisol', 'Yunques de transformación y un crisol que nunca se enfría. Cada golpe de martillo aviva el fuego… y lo que espera en la siguiente sala lo sentirá.', inner, `forgewin ${tier.id}`) + pendingRows(run));
+  frame(run, roomWin('', 'La Forja del Abismo', 'Kael ha levantado su fragua sobre una grieta que respira fuego. Os deja usar el yunque y el crisol, pero cada golpe aviva la grieta… y lo que espera en la siguiente sala lo sentirá.', inner, `forgewin ${tier.id}`) + stageNpc('kael', r.heat ? 'work' : 'idle', `heat-${tier.id}`) + pendingRows(run));
 }

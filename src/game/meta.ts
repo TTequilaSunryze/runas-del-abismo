@@ -236,7 +236,7 @@ export function dropRoom(id: string): void {
 // ---------- maestría de clase ----------
 /** Experiencia necesaria para cada nivel de maestría (1 a 5). */
 export const MASTERY_XP = [40, 110, 220, 380, 600];
-export const MASTERY_TEXT = ['Desbloquea un 2.º kit inicial', 'Desbloquea un 3.er kit inicial', 'Desbloquea un 4.º kit inicial', 'Desbloquea un 5.º kit inicial', 'Maestro: tus ofertas de hechizos y bendiciones muestran 4 opciones'];
+export const MASTERY_TEXT = ['Desbloquea un 2.º kit inicial', 'Desbloquea un 3.er kit inicial', 'Desbloquea un 4.º kit inicial', 'Desbloquea un 5.º kit inicial', 'Maestro: dominas la clase por completo'];
 /** Oro inicial extra por cada nivel de maestría que no abre un kit nuevo. */
 export const MASTERY_GOLD = 25;
 /** Lo que da el nivel `i + 1` de maestría de una clase. */

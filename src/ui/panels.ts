@@ -15,6 +15,7 @@ import { consequences, secretOpen } from '../content/branching';
 import { NODE_HINT, NODE_NAME, availableNodes, heroMaxHp, heroSpec, pendingOf, statBreakdown, upCount, zoneOf, type BossOption, type HeroSave, type RunState } from '../game/run';
 import { esc, mine, tip, ui } from './ctx';
 import { NODE_ICON, itemIcon, spellIcon, spellTip } from './icons';
+import { NODE_ART, iconUrl } from './gameicons';
 import { rangeText, spellSummary } from './spellicons';
 
 const RAR = ['ir0', 'ir1', 'ir2', 'ir3'];
@@ -322,14 +323,15 @@ export function mapSvg(run: RunState, pick = false): string {
     const voteMarks = vs.map((v, n) => `<g><circle cx="${x - 18 + n * 12}" cy="${y - 24}" r="7" fill="${v.col}" stroke="#000" stroke-width="2"/><text x="${x - 18 + n * 12}" y="${y - 20.5}" text-anchor="middle" font-size="9" font-weight="bold" fill="#000" pointer-events="none">${esc(v.name.charAt(0).toUpperCase())}</text></g>`).join('');
     const ring = vs.length ? `<circle cx="${x}" cy="${y}" r="29" fill="none" stroke="${vs.find((v) => v.mine)?.col ?? vs[0]!.col}" stroke-width="2" stroke-dasharray="4 3" class="voting"/>` : '';
     const tipHtml = dark ? '<b>❔ En sombra</b><div class="sm">La Oscuridad profunda no deja ver qué hay aquí.</div>' : `<b>${esc(NODE_NAME[k])}</b><div class="sm">${esc(NODE_HINT[k] ?? '')}</div>${k === 'vault' ? `<div class="sm ${sealed ? 'bad' : 'good'}">${sealed ? '🔒 Sellado: aún no podéis entrar.' : '🔓 Abierto: podéis tomar este camino.'}</div>` : ''}${vs.length ? `<div class="sm">Quieren ir: ${vs.map((v) => `<b style="color:${v.col}">${esc(v.name)}</b>`).join(', ')}</div>` : ''}${can && pick ? '<div class="sm good">Haz clic para votar este camino</div>' : ''}`;
-    return `<g ${click} ${tip(tipHtml)} opacity="${l < run.step && !done ? 0.35 : 1}">${ring}${can ? `<circle cx="${x}" cy="${y}" r="27" fill="#ff9a3a" opacity=".35" class="mpulse"/>` : ''}<circle cx="${x}" cy="${y}" r="${can ? 23 : 19}" fill="${can ? '#3b2a18' : '#24201c'}" stroke="${stroke}" stroke-width="${can || done ? 3 : 2}"${sealed ? ' stroke-dasharray="4 3"' : ''}${can || done ? ' filter="url(#mglow)"' : ''}/><circle cx="${x}" cy="${y}" r="${can ? 18 : 15}" fill="none" stroke="#000" stroke-opacity=".45"/><text x="${x}" y="${y + 7}" text-anchor="middle" font-size="20" pointer-events="none">${dark ? '❔' : sealed ? '🔒' : NODE_ICON[k]}</text>${label}${voteMarks}</g>`;
+    return `<g ${click} ${tip(tipHtml)} opacity="${l < run.step && !done ? 0.35 : 1}">${ring}${can ? `<circle cx="${x}" cy="${y}" r="27" fill="#ff9a3a" opacity=".35" class="mpulse"/>` : ''}<circle cx="${x}" cy="${y}" r="${can ? 23 : 19}" fill="${can ? '#3b2a18' : '#24201c'}" stroke="${stroke}" stroke-width="${can || done ? 3 : 2}"${sealed ? ' stroke-dasharray="4 3"' : ''}${can || done ? ' filter="url(#mglow)"' : ''}/><circle cx="${x}" cy="${y}" r="${can ? 18 : 15}" fill="none" stroke="#000" stroke-opacity=".45"/><image href="${iconUrl(dark ? 'desconocido' : sealed ? 'st_silencio' : NODE_ART[k] ?? 'desconocido')}" x="${x - (can ? 16 : 13)}" y="${y - (can ? 16 : 13)}" width="${can ? 32 : 26}" height="${can ? 32 : 26}" pointer-events="none"/>${label}${voteMarks}</g>`;
   }).join('')).join('');
   const grid = Array.from({ length: Math.ceil(W / 40) }, (_, i) => `<line x1="${i * 40}" y1="0" x2="${i * 40}" y2="${H}"/>`).join('') + Array.from({ length: Math.ceil(H / 40) }, (_, i) => `<line x1="0" y1="${i * 40}" x2="${W}" y2="${i * 40}"/>`).join('');
   const defs = '<defs><filter id="mglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>';
   return `<div class="mapscroll parchment"><svg class="actmap" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${defs}<g class="mgrid">${grid}</g>${lines}${nodes}</svg></div>`;
 }
 
-const mapLegend = (): string => (['combat', 'elite', 'sangre', 'event', 'shrine', 'shop', 'treasure', 'forge', 'rest', 'vault', 'altar', 'boss'] as const).map((k) => `<span class="chip">${NODE_ICON[k]} ${esc(NODE_NAME[k].replace(/^\S+\s/, ''))}</span>`).join('');
+/** Leyenda del mapa: ? Desconocido, Comerciante, Tesoro, Descanso, Enemigo y Élite (y el jefe al final). */
+const mapLegend = (): string => (['event', 'shop', 'treasure', 'rest', 'combat', 'elite', 'boss'] as const).map((k) => `<span class="chip">${NODE_ICON[k]} ${esc(NODE_NAME[k].replace(/^\S+\s/, ''))}</span>`).join('');
 
 /** Mapa del acto como cartel (para consultarlo desde cualquier pantalla). */
 export function mapModal(run: RunState): string {

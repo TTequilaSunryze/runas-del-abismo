@@ -32,7 +32,7 @@ const SPOTS: Spot[] = [
   { id: 'palomar', name: 'Palomar', poly: '430,0 625,0 625,150 600,205 470,205 430,120', at: [528, 110], act: 'htab', arg: 'amigos', hint: 'Amigos e invitaciones' },
   { id: 'tablon', name: 'Tablón del reto', poly: '725,285 820,262 905,300 905,470 760,480 720,420', at: [815, 266], act: 'htab', arg: 'diario', hint: 'Clasificación del reto del día' },
   { id: 'puerta', name: 'La Puerta del Abismo', poly: '1008,200 1100,140 1165,250 1140,500 1172,700 1000,745 1030,450', at: [1088, 150], act: 'place', arg: 'puerta', hint: 'Darel, el puesto de vigilancia y la salida al Abismo' },
-  { id: 'forja', name: 'La Forja', poly: '395,600 500,530 560,535 605,598 670,598 705,640 705,768 395,768', at: [550, 534], locked: true },
+  { id: 'forja', name: 'La Forja', poly: '395,600 500,530 560,535 605,598 670,598 705,640 705,768 395,768', at: [550, 534], act: 'place', arg: 'forja', hint: 'Odran, el herrero del Refugio' },
   { id: 'salon', name: 'Salón de los Héroes', poly: '80,250 100,165 170,138 262,168 300,228 300,372 90,382', at: [190, 142], act: 'place', arg: 'salon', hint: 'El Custodio, el Muro de los Recuerdos y los duelos' },
   { id: 'guardia', name: 'Puesto de guardia', poly: '1255,320 1376,290 1376,560 1265,560', at: [1316, 330], locked: true },
 ];
@@ -88,9 +88,12 @@ interface PlaceNpc { id: string; box: [number, number, number, number]; inner: n
 /** Objeto clicable dentro de un lugar (coordenadas en píxeles de la imagen de referencia). */
 interface PlaceSpot { id: string; name: string; hint: string; poly: string; at: [number, number]; act: string; arg: string }
 interface PlaceDef { title: string; scene: MenuScene; bg: string; w: number; h: number; npcs: PlaceNpc[]; spots: PlaceSpot[]; /** lugar al que se vuelve (por defecto, el panorama) */ parent?: Place }
-type Place = 'taberna' | 'archivo' | 'puerta' | 'puesto' | 'salon';
+type Place = 'taberna' | 'archivo' | 'puerta' | 'puesto' | 'salon' | 'forja';
 export const placeParent = (p: Place): Place | '' => PLACES[p].parent ?? '';
 const PLACES: Record<Place, PlaceDef> = {
+  // la Forja del Refugio: Odran junto al yunque central, delante del horno rúnico
+  forja: { title: 'La Forja', scene: 'forge', bg: 'bg/forja.jpg', w: 1376, h: 768, spots: [],
+    npcs: [{ id: 'odran', box: [45.6, 50.5, 13.2, 36.5], inner: 100, idle: 'npc/odran_idle.png', wave: 'npc/odran_wave.png', lbl: [52.2, 48] }] },
   // Irena tras la barra, entre las jarras y el mortero: solo se ve por encima del mostrador
   taberna: { title: 'La Taberna', scene: 'tavern', bg: 'bg/taberna.jpg', w: 2576, h: 1438, spots: [],
     npcs: [{ id: 'irena', box: [43.48, 46.70, 12.42, 12.55], inner: 212.7, idle: 'npc/irena_wipe.png', wave: 'npc/irena_wave.png', lbl: [49.7, 38.5] }] },
@@ -163,7 +166,7 @@ function talkCtx(): TalkCtx {
     since: (ui.talk?.npc === 'darel' || ui.talk?.npc === 'custodio') && ui.talkBase !== undefined ? (ui.talkBase === null ? null : { runs: m.stats.runs - ui.talkBase.runs, wins: m.stats.wins - ui.talkBase.wins, losses: (m.stats.runs - m.stats.wins) - (ui.talkBase.runs - ui.talkBase.wins), bosses: m.stats.bosses - ui.talkBase.bosses, deeper: m.stats.bestZone > ui.talkBase.bestZone }) : null,
     losses: Math.max(0, m.stats.runs - m.stats.wins), bestZone: m.stats.bestZone, deepest: deepestName(m.stats.bestZone),
     regionsSeen: seenZones().length, regionNames: seenZones().map((i) => ZONES[i]!.name),
-    hallCount: m.hall.length, hallFallen: m.hall.filter((c) => !c.won).length,
+    hallCount: m.hall.length, hallFallen: m.hall.filter((c) => !c.won).length, kaelMet: !!atlasEntry(m, 'events', 'forja'),
     lastBossZone: [...ZONES.keys()].reverse().map((i) => (atlasEntry(m, 'zones', `z${i + 1}`)?.completions ? ZONES[i]!.name : '')).find(Boolean) ?? '',
     researched: all.length - open.length, researchTotal: all.length, researchReady: rd.map((d) => d.name), researchNext: next ? `${next.d.name}: ${next.miss.text.toLowerCase()} (${next.miss.have}/${next.miss.need})` : '' };
 }

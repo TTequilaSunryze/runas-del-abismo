@@ -128,18 +128,18 @@ export interface GroupEvent {
 }
 
 export type NodeKind = 'combat' | 'elite' | 'event' | 'rest' | 'shop' | 'boss' | 'cage' | 'shrine' | 'treasure' | 'forge' | 'altar' | 'sangre' | 'vault';
-export const NODE_NAME: Record<NodeKind, string> = { forge: '⚒️ Forja', altar: '🕯️ Altar de Pactos', combat: '⚔️ Combate', elite: '☠️ Élite', event: '❓ Evento de grupo', rest: '🔥 Descanso', shop: '💰 Tienda', boss: '👑 Jefe', cage: '⛓️ Jaula', shrine: '✨ Santuario', treasure: '🎁 Botín', sangre: '🩸 Senda de sangre', vault: '🗝️ Pasaje secreto' };
+export const NODE_NAME: Record<NodeKind, string> = { forge: '⚒️ Forja', altar: '🕯️ Altar de Pactos', combat: '⚔️ Enemigo', elite: '☠️ Élite', event: '❓ Desconocido', rest: '🔥 Descanso', shop: '💰 Comerciante', boss: '👑 Jefe', cage: '⛓️ Jaula', shrine: '✨ Santuario', treasure: '🎁 Tesoro', sangre: '🩸 Senda de sangre', vault: '🗝️ Pasaje secreto' };
 /** G4: Senda de sangre. */
 export const SANGRE_HP = 0.25, SANGRE_POWER = 2;
 /** G4: el sello de la Fuente quita este % de vida al jefe de la zona. */
 export const WEAK_BOSS = 0.15;
 export const NODE_HINT: Record<NodeKind, string> = {
-  treasure: 'Un cofre para el grupo: botín para todos… o una maldición (30%).',
+  treasure: 'Un tesoro para el grupo: un cofre (botín para todos… o una maldición) o un santuario donde cada uno mejora un hechizo.',
   forge: 'Recalibra afijos, desguaza objetos en Escofinas de Eco y mejora hechizos. Cuidado con el calor: endurece el siguiente combate.',
   altar: 'Aquí empieza la partida: el grupo sella un Pacto Mayor.',
   combat: 'Enemigos normales. Oro y, a veces, un objeto.', elite: 'El campeón de la zona, con modificadores. Oro y objetos mejores.',
-  event: 'Una decisión que se vota y afecta a todos.', rest: 'Cada uno elige: descansar (40% de vida) o meditar (2 Escofinas de Eco).',
-  shop: 'Gastad vuestro oro en objetos y pociones.', boss: 'El guardián de la zona. Dos fases. Objetos, una reliquia y una mejora o un hechizo nuevo.',
+  event: 'No se sabe qué hay. Casi siempre una decisión que se vota; a veces un combate, una jaula, la Senda de sangre o una forja.', rest: 'Cada uno elige: descansar (30% de vida) o meditar (2 Escofinas de Eco).',
+  shop: 'El comerciante: gastad vuestro oro en objetos y pociones.', boss: 'El guardián de la zona. Dos fases. Objetos, una reliquia y una mejora o un hechizo nuevo.',
   cage: 'Un prisionero vigilado: venced a sus captores y luchará con vosotros hasta el final de la zona.',
   shrine: 'Cada uno elige una mejora para uno de sus hechizos.',
   sangre: `Riesgo: combate endurecido (enemigos con +${Math.round(SANGRE_HP * 100)}% de vida y +${SANGRE_POWER} de daño). Recompensa: +50% de oro y una reliquia para cada uno.`,
@@ -361,9 +361,9 @@ export function upgradeChoices(h: HeroSave, id: string): string[] {
   return generic;
 }
 
-/** Opciones que ve cada jugador en las ofertas de hechizos y bendiciones: 3, o 4 con maestría 5 (promesa de MASTERY_TEXT). */
+/** Opciones que ve cada jugador en las ofertas de hechizos y bendiciones: siempre 3 como máximo, en todas las salas. */
 export const OFFER_BASE = 3;
-export const OFFER_MASTER = 4;
+export const OFFER_MASTER = 3;
 export const MASTER_LEVEL = 5;
 export const offerSize = (h: Pick<HeroSave, 'mastery'>): number => ((h.mastery ?? 0) >= MASTER_LEVEL ? OFFER_MASTER : OFFER_BASE);
 
@@ -409,8 +409,8 @@ export function offerBossReward(run: RunState, h: HeroSave): void {
 export function buildBossOffer(run: RunState, h: HeroSave, opts: { spells?: boolean; size?: number } = {}): BossOption[] {
   const spells = heroSpec(h).spells.filter((sp) => sp.charges === undefined).map((sp) => sp.id);
   const choices = (id: string): string[] => upCount(h, id) >= MAX_SPELL_UPS ? [] : [...upgradeChoices(h, id), ...Object.keys(BOON_MODS).filter((m) => BOON_MODS[m]!.target === id && !h.boons.includes(m) && !(h.ups[id] ?? []).includes(m))];
-  // v12: el jefe ofrece 3 hechizos nuevos de la clase (4 con maestría 5). Si ya no quedan, mejoras de los que tienes;
-  // y si tampoco, oro o curación hasta las 3 de base. La 4.ª opción de la maestría nunca se rellena con oro o curación:
+  // el jefe ofrece hasta 3 opciones. Si ya no quedan hechizos, mejoras de los que tienes;
+  // y si tampoco, oro o curación hasta las 3 de base:
   // si no hay un hechizo o una mejora distintos que ofrecer, la oferta se queda en 3 (así no hay duplicados ni relleno).
   const n = opts.size ?? offerSize(h);
   // H4: las habilidades nuevas ya no salen de recompensas (se desbloquean en la tienda); solo si se pide expresamente
@@ -865,10 +865,33 @@ function dropLoot(run: RunState, h: HeroSave, kind: DropKind, report: Item[]): v
   }
 }
 
+/**
+ * Qué hay detrás de un «?» o de un Tesoro (el mapa solo muestra ? Desconocido, Comerciante, Tesoro, Descanso, Enemigo y Élite).
+ * - ?: un evento casi siempre; a veces un combate, una jaula, la Senda de sangre (una por zona) o la Forja del Abismo
+ *   (una por zona). Si la llave rúnica de la zona está lista, la Cámara Rúnica. Una continuación pendiente manda sobre todo.
+ * - Tesoro: el cofre del grupo o un Santuario de bendiciones, a partes iguales.
+ * Usa el dado de la partida, así que es igual en todos los clientes. Las partidas guardadas con salas antiguas siguen igual.
+ */
+export const UNKNOWN_ODDS = { combat: 0.2, cage: 0.07, sangre: 0.07, forge: 0.12 };
+export function resolveNode(run: RunState, node: NodeKind): NodeKind {
+  if (run.arena) return node;
+  if (node === 'treasure') return rand(run) < 0.5 ? 'treasure' : 'shrine';
+  if (node !== 'event' || followUps(run).length) return node;
+  const z = run.zone;
+  if (secretOpen({ flags: run.flags, zone: z }) && !run.flags.includes(`g4_camara_${z}`)) return 'vault';
+  const r = rand(run), o = UNKNOWN_ODDS;
+  if (r < o.combat) return 'combat';
+  if (r < o.combat + o.cage) return 'cage';
+  if (r < o.combat + o.cage + o.sangre && !run.flags.includes(`sangre_z${z}`)) { run.flags.push(`sangre_z${z}`); return 'sangre'; }
+  if (r < o.combat + o.cage + o.sangre + o.forge && !run.flags.includes(`forja_z${z}`)) { run.flags.push(`forja_z${z}`); return 'forge'; }
+  return 'event';
+}
+
 /** El anfitrión elige uno de los nodos de la sala actual. */
 export function chooseNode(run: RunState, idx: number): GameEvent[] {
-  const node = run.map[run.step]?.[idx];
-  if (run.phase !== 'map' || !node || !availableNodes(run).includes(idx)) return [];
+  const shown = run.map[run.step]?.[idx];
+  if (run.phase !== 'map' || !shown || !availableNodes(run).includes(idx)) return [];
+  const node = resolveNode(run, shown);
   run.at = idx;
   run.trail[run.step] = idx;
   run.mapVotes = {};

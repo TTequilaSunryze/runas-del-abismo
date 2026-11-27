@@ -18,6 +18,10 @@ export interface EventDef {
   options: EventOption[];
   /** eventos especiales de la Fase G2 (se marcan en la interfaz) */
   special?: 'especial' | 'raro';
+  /** encuentro con un personaje: id del NPC (retrato y figura en npc/) y lo que dice al llegar */
+  npc?: { id: string; name: string; lines: string[] };
+  /** fondo ilustrado propio del encuentro (escena de menubg) */
+  scene?: 'abyssforge';
 }
 
 export const boon = (h: HeroSave, k: StatKey, v: number): void => { h.boon[k] = (h.boon[k] ?? 0) + v; };

@@ -27,7 +27,9 @@ import { grantUnlocks, kitFor, resetKit, setKitSlot } from '../game/shop';
 import { claimContractReward } from '../game/contracts';
 import { applyLoadout, buyItem, currentLook, emblemOf, deleteLoadout, equipItem, resetLook, saveLoadout, unequip } from '../game/shop';
 import { setLooks } from '../render/looks';
-import { setCombatBg, setMenuScene } from '../render/menubg';
+import { setCombatBg, setMenuScene, setSceneHeat, type MenuScene } from '../render/menubg';
+import { HEAT_MAX } from '../content/pacts';
+import { eventDef, type RunState as RunS } from '../game/run';
 import { claimSpecialReward, equipCosmetic } from '../game/specials';
 import { canRooms, canTest, onRoleChange, creatorOn, isCreatorAccount, maxAscOf, masteryOf, meta, myNemesis, myRooms, myTeam, openRoutes, removeChampion, saveChampion, saveMeta, toggleTeam } from '../game/meta';
 import { currentAccount, fetchTeam, restoreAccount, signIn, signOut, signUp } from '../net/account';
@@ -36,6 +38,7 @@ import { championOf } from '../game/run';
 import { MAX_ASC, MAX_MODS, modConflict } from '../content/modes';
 import { setMusicVolume, setZoneMusic } from '../audio/sfx';
 import { gotFromBoss, gotModal, itemHtml, mapModal, statsModal, victoryModal } from './panels';
+import { installIcons } from './gameicons';
 import { endScreen, eventScreen, homeScreen, lobbyScreen, mapScreen, residentModal, roomScreen, shopScreen } from './screens';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -154,7 +157,17 @@ function showArchiveNotices(list: ArchiveNotice[]): void {
 /** Clase para la que se equipan aspectos en la tienda: la del filtro o la elegida para jugar. */
 const shopClass = (): ClassId => ((PLAYABLE as string[]).includes(ui.shopCls) ? ui.shopCls : ui.me.cls) as ClassId;
 
+/** Fondo de las pantallas de la partida: el Altar y la Forja del Abismo tienen ilustración propia; el resto, la sala. */
+function runScene(run: RunS, want: string): MenuScene {
+  if (want === 'room' && run.room?.kind === 'altar') return 'altar';
+  if (want === 'room' && run.room?.kind === 'forge') return 'abyssforge';
+  if (want === 'event' && eventDef(run)?.scene) return eventDef(run)!.scene!;
+  return 'game';
+}
+
 let lastKey = '';
+/** Escena dibujada (pantalla + zona + sala) y cambios retenidos mientras dura el fundido. */
+let lastScene = '', fadeHold = false, held: GameEvent[] = [];
 function render(events: GameEvent[]): void {
   const s = ui.session;
   if (!s) return;
@@ -164,10 +177,20 @@ function render(events: GameEvent[]): void {
   // sin cambios reales no se redibuja: así un latido de red no interrumpe un clic
   const key = want + JSON.stringify([meta().ecos, ui.asc, ui.daily, ui.mods, ui.abyss, run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), s.t.connected(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selItem, ui.tab, ui.logOpen, ui.statsOpen, ui.mapOpen, ui.forgeRef, ui.forgeAffix, ui.forgeSpell, ui.sideOpen, ui.picked, ui.lobbyReady, ui.lobbyStage, ui.overlay, ui.bldgOpen, ui.homeTab, ui.place, ui.talk, ui.dossier, ui.dossierSel, (meta().research ?? []).length, ui.inspect, ui.wallKind, meta().hall.length]);
   if (key === lastKey && want === ui.screen && !events.length) return;
+  // fundido a negro en cada cambio de pantalla y al pasar de sala en sala (el descenso desde el Refugio tiene el suyo)
+  if (fadeHold) { held.push(...events); return; }
+  const scene = want === 'lobby' ? `lobby:${ui.lobbyStage}` : `${want}:${run?.zone ?? 0}:${run?.step ?? 0}`;
+  const own = ui.screen === 'lobby' && want !== 'lobby' && !!run && !run.arena;
+  if (lastScene && scene !== lastScene && !own) {
+    lastScene = scene; fadeHold = true; held.push(...events);
+    fadeTo(() => { fadeHold = false; const ev = held; held = []; lastKey = ''; render(ev); });
+    return;
+  }
+  lastScene = scene;
   lastKey = key;
   if (want !== ui.screen) hideTip();
   const meH = run?.heroes.find((h) => h.owner === ui.myId);
-  setZoneMusic(!run ? (ui.lobbyStage === 'settlement' && ui.place ? ({ taberna: 'tavern', archivo: 'archive', puerta: 'gate', puesto: 'gate', salon: 'hall' } as const)[ui.place] : 'lobby') : want === 'combat' ? (run.kind === 'boss' ? 'boss' : 'combat') : want === 'end' ? 'end' : want === 'shop' ? 'calm'
+  setZoneMusic(!run ? (ui.lobbyStage === 'settlement' && ui.place ? ({ taberna: 'tavern', archivo: 'archive', puerta: 'gate', puesto: 'gate', salon: 'hall', forja: 'gate' } as const)[ui.place] : 'lobby') : want === 'combat' ? (run.kind === 'boss' ? 'boss' : 'combat') : want === 'end' ? 'end' : want === 'shop' ? 'calm'
     : want === 'event' || want === 'room' || meH?.boonOffer || meH?.bossOffer ? 'choice' : `map${Math.min(3, run.zone)}`);
   if (want === 'combat') combatScreen(events);
   else {
@@ -179,7 +202,8 @@ function render(events: GameEvent[]): void {
   // al descender desde la sala: fundido a negro (y vídeo de entrada, si lo hay)
   if (ui.screen === 'lobby' && want !== 'lobby' && run && !run.arena) descendFx();
   ui.screen = want;
-  setMenuScene(want === 'combat' ? null : want === 'lobby' ? lobbyScene() : 'game');
+  setMenuScene(want === 'combat' ? null : want === 'lobby' ? lobbyScene() : runScene(run!, want));
+  setSceneHeat(run?.phase === 'room' && run.room?.kind === 'forge' ? run.room.heat / HEAT_MAX : run?.phase === 'event' && eventDef(run)?.scene === 'abyssforge' ? 0.35 : 0);
   document.body.classList.toggle('menu-dim', want === 'lobby' && ui.lobbyStage === 'hero');
   setCombatBg(want === 'combat' ? run?.zone ?? null : null);
   // ficha del personaje por encima de cualquier pantalla
@@ -197,7 +221,11 @@ function render(events: GameEvent[]): void {
   }
 }
 let submitted = '';
+// iconos del arte del juego en lugar de emojis, en cualquier pantalla
+if (typeof document !== 'undefined') installIcons(document.body);
 ui.rerender = () => render([]);
+// solo en desarrollo: acceso al estado para las pruebas visuales
+if (import.meta.env.DEV) (window as unknown as { __ui: typeof ui }).__ui = ui;
 ui.refreshLobby = () => { lastKey = ''; render([]); };
 
 // las salas creadas por el creador pueden salir en las expediciones que aloje
@@ -341,7 +369,7 @@ document.addEventListener('click', (e) => {
     }
     case 'resume': { const h = JSON.parse(store.get('rda_host') ?? 'null') as { code: string } | null; if (h) void enter(h.code, true, false, true); break; }
     case 'doresume': if (ui.saved) { ui.log.length = 0; s?.resume(ui.saved); } break;
-    case 'home': home(); break;
+    case 'home': fadeTo(() => home()); break;
     case 'statsof': ui.statsOf = String(id); lastKey = ''; render([]); break;
     case 'lready': ui.lobbyReady = !ui.lobbyReady; publish(); render([]); break;
     case 'cls': ui.picked = { cls: String(id), from: ui.me.cls, at: Date.now() }; ui.me.cls = id as ClassId; ui.me.routes = ['base']; publish(); render([]); setTimeout(() => { ui.picked = null; lastKey = ''; render([]); }, 1500); break;
@@ -498,7 +526,7 @@ document.addEventListener('click', (e) => {
     case 'togglelog': ui.logOpen = !ui.logOpen; render([]); break;
     case 'mute': toggleMute(); if (ui.screen === 'home' || ui.screen === 'lobby') homeScreen(''); else { lastKey = ''; render([]); } break;
     case 'leave':
-      if (ui.leaveArmed) { ui.leaveArmed = false; home(); }
+      if (ui.leaveArmed) { ui.leaveArmed = false; fadeTo(() => home()); }
       else { ui.leaveArmed = true; render([]); setTimeout(() => { ui.leaveArmed = false; render([]); }, 4000); }
       break;
   }

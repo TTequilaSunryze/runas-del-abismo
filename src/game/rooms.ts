@@ -57,7 +57,7 @@ export function roomPending(run: RunState, h: HeroSave): string[] {
 
 /** Opciones de la hoguera: descansar (vida) o meditar (Escofinas). */
 export const REST_OPTIONS = [
-  { id: 'rest', name: 'Descansar', icon: '🔥', text: 'Recuperas el 40% de tu vida máxima.' },
+  { id: 'rest', name: 'Descansar', icon: '🔥', text: 'Recuperas el 30% de tu vida máxima.' },
   { id: 'meditate', name: 'Meditar', icon: '🔔', text: 'Ganas 2 Escofinas de Eco para la Forja (3 = una mejora de hechizo a elegir).' },
 ];
 
@@ -144,7 +144,9 @@ export function roomAction(run: RunState, h: HeroSave, a: RoomOp): string | null
 }
 
 /** Curación de la hoguera (0 con el Pacto de la Magia Desatada). */
-export const restHeal = (run: RunState, h: HeroSave): number => (run.pact === 'desatada' ? 0 : healOf(run, h, 0.4));
+export const restHeal = (run: RunState, h: HeroSave): number => (run.pact === 'desatada' ? 0 : healOf(run, h, REST_HEAL));
+/** El descanso cura el 30% de la vida máxima. */
+export const REST_HEAL = 0.3;
 
 function heat(r: Extract<RoomState, { kind: 'forge' }>, run: RunState, n: number, line: string): void {
   r.heat = Math.min(HEAT_MAX, r.heat + n);

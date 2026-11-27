@@ -11,6 +11,17 @@ import type { Session } from '../game/session';
 import { PLAYER_COLORS, drawUnit, isModel, lookKind } from './sprites';
 import { lookOf } from './looks';
 import { auraDef, drawAura } from './palettes';
+import { STATUS_ART, iconUrl } from '../ui/gameicons';
+
+/** Iconos de estado (se cargan una vez; mientras tanto, el cuadradito de color). */
+const statusImg = new Map<string, HTMLImageElement>();
+function statusIcon(k: string): HTMLImageElement | null {
+  const name = STATUS_ART[k];
+  if (!name || typeof Image === 'undefined') return null;
+  let im = statusImg.get(name);
+  if (!im) { im = new Image(); im.src = iconUrl(name); statusImg.set(name, im); }
+  return im.complete && im.naturalWidth ? im : null;
+}
 import { ANIM_FRAMES, animFor, type Anim } from './models';
 import { FxLayer, fxCells, recipeFor } from './fx';
 
@@ -1600,7 +1611,7 @@ export class Board {
     // objetivo de la sala creada
     if (u.goal) { g.font = 'bold 16px ui-monospace, monospace'; g.textAlign = 'center'; g.lineWidth = 3; g.strokeStyle = '#000'; g.strokeText('★', x - 9, top + 9); g.fillStyle = '#ffd24a'; g.fillText('★', x - 9, top + 9); }
     let ix = x;
-    for (const k of Object.keys(u.statuses)) { g.fillStyle = STATUS_COLOR[k] ?? '#fff'; g.fillRect(ix, top + 14, 6, 6); ix += 8; }
+    for (const k of Object.keys(u.statuses)) { const im = statusIcon(k); if (im) { g.drawImage(im, ix - 1, top + 11, 12, 12); ix += 12; } else { g.fillStyle = STATUS_COLOR[k] ?? '#fff'; g.fillRect(ix, top + 14, 6, 6); ix += 8; } }
     if (heroIdx !== undefined) {
       g.font = '12px ui-monospace, monospace'; g.textAlign = 'center';
       g.lineWidth = 3; g.strokeStyle = '#000'; g.strokeText(u.name, cx, top + TILE - 2);
