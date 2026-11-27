@@ -334,3 +334,80 @@ describe('runas · persistencia', () => {
     expect(h.runeOffers).toEqual([]);
   });
 });
+
+import { orbsOf, seedsOf } from '../src/core/combat/engine';
+import { availableNodes, bossInfo, chooseNode, leaveNode, resolveEvent } from '../src/game/run';
+import { autoplay, roomStep } from './helpers';
+
+describe('fixes', () => {
+  it('Dispersión empuja también a los aliados del cono, sin dañarlos', () => {
+    const run = newRun('DI', 3, [{ owner: 'a', name: 'A', cls: 'esferas', routes: [] }, { owner: 'b', name: 'B', cls: 'barbaro', routes: [] }]);
+    const t = heroSpec(run.heroes[0]!, { x: 2, y: 2 }), ally = heroSpec(run.heroes[1]!, { x: 3, y: 2 });
+    const s = board([t, ally, enemy({ x: 9, y: 4 })]);
+    const me = s.units[0]!, al = s.units[1]!;
+    turnOf(s, me.id);
+    const hp = al.hp;
+    const r = cast(s, me.id, 't_dispersion', { x: 3, y: 2 });
+    expect(r.ok).toBe(true);
+    expect(al.pos.x).toBeGreaterThan(3);
+    expect(al.hp).toBe(hp);
+  });
+  it('las bendiciones de esferas cuentan las Semillas oscuras', () => {
+    const run = newRun('SE', 3, [{ owner: 'a', name: 'A', cls: 'esferas', routes: [] }]);
+    const h = run.heroes[0]!; h.kit = undefined; h.boons = ['t_semilla', 't_implosion', 'tb_orbita'];
+    const s = board([heroSpec(h, { x: 2, y: 2 }), enemy({ x: 9, y: 4 })]);
+    const me = s.units[0]!;
+    turnOf(s, me.id);
+    expect(cast(s, me.id, 't_semilla', { x: 4, y: 2 }).ok).toBe(true);
+    expect(cast(s, me.id, 't_semilla', { x: 4, y: 4 }).ok).toBe(true);
+    expect(seedsOf(s, me)).toHaveLength(2);
+    expect(orbsOf(s, me)).toHaveLength(2);
+    // Órbita protectora: 2 «orbes» (semillas) al empezar el turno dan escudo
+    me.traits = [...(me.traits ?? []), 'orbitaprot'];
+    endTurn(s, me.id); turnOf(s, me.id);
+    expect(me.shield).toBeGreaterThan(0);
+  });
+  it('tras el jefe de zona, primero las recompensas y luego el descenso', () => {
+    const run = newRun('ZC', 3, P);
+    run.kind = 'boss'; run.phase = 'combat';
+    const h = run.heroes[0]!; h.runeOffers = [];
+    run.combat = createCombat({ seed: 1, w: 8, h: 5, obstacles: [], units: [heroSpec(h, { x: 1, y: 1 })] }).state; run.combat.over = 'win';
+    finishFight(run);
+    expect(run.zone).toBe(0);
+    expect(run.zoneClear).toBe(true);
+    expect(pendingOf(run, h).length).toBeGreaterThan(0);
+    leaveNode(run);
+    expect(run.zone).toBe(1);
+    expect(run.zoneClear).toBeUndefined();
+  });
+});
+
+describe('expedición completa con runas', () => {
+  it('las ocho clases eligen runas en cada oferta y terminan la expedición sin atascos ni errores', () => {
+    for (const [i, cls] of PLAYABLE.entries()) {
+      const run = newRun(`FULL${cls}`, 100 + i, [{ owner: 'a', name: 'A', cls, routes: [] }, { owner: 'b', name: 'B', cls: PLAYABLE[(i + 3) % 8]!, routes: [] }]);
+      for (let step = 0; step < 220 && run.phase !== 'won' && run.phase !== 'lost'; step++) {
+        for (const h of run.heroes) {
+          // coge siempre la primera opción; con los espacios llenos, sustituye el primero
+          for (let k = 0; k < 8 && h.runeOffers?.length; k++) if (metaAction(run, h.owner, { a: 'rune', op: 'take', idx: 0 })) metaAction(run, h.owner, { a: 'rune', op: 'take', idx: 0, slot: 0 }) && metaAction(run, h.owner, { a: 'rune', op: 'skip' });
+          expect(h.runes!.length).toBeLessThanOrEqual(RUNE_SLOTS);
+          if (h.bossOffer) metaAction(run, h.owner, { a: 'bossreward', idx: 0 });
+          if (h.boonOffer) metaAction(run, h.owner, { a: 'boon', idx: 0 });
+        }
+        if (run.phase === 'map' && run.zoneClear) leaveNode(run);
+        else if (run.phase === 'map') chooseNode(run, availableNodes(run)[0]!);
+        else if (run.phase === 'event') { for (const h of run.heroes) metaAction(run, h.owner, { a: 'vote', idx: 0 }); resolveEvent(run, 'a'); leaveNode(run); }
+        else if (run.phase === 'room') roomStep(run);
+        else if (run.phase === 'shop') { for (const h of run.heroes) metaAction(run, h.owner, { a: 'buy', idx: 6 }); leaveNode(run); }
+        else {
+          for (const u of run.combat!.units) if (u.team === 'hero' && u.ai === null) u.ai = 'champ';
+          autoplay(run.combat!, 1500, bossInfo(run));
+          if (!run.combat!.over) run.combat!.over = 'lose';
+          finishFight(run);
+        }
+      }
+      expect(['won', 'lost']).toContain(run.phase);
+      expect(run.heroes.every((h) => (h.runes?.length ?? 0) >= 1)).toBe(true);
+    }
+  }, 120000);
+});

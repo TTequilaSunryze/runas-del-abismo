@@ -609,6 +609,7 @@ export function mapScreen(): void {
   ${run.allies.length ? `<div class="panel sm">🤝 Os acompañan: ${run.allies.map((a) => `<b>${esc(ALLIES[a]?.name ?? a)}</b>`).join(', ')} <span class="dim">(hasta el final de la zona)</span></div>` : ''}
   ${run.nextOmen ? `<div class="panel sm">Próximo combate: ${OMENS.find((o) => o.id === run.nextOmen)?.icon} <b>${esc(OMENS.find((o) => o.id === run.nextOmen)?.name ?? '')}</b></div>` : ''}
   ${blessingBar(run)}
+  ${run.zoneClear ? `<div class="panel note zoneclear"><h3>👑 Zona ${run.zone + 1} superada</h3><div class="sm">Elegid primero vuestras recompensas del jefe (bendición y runa). Después, el descenso a la Zona ${run.zone + 2}.</div>${advanceBar(run, `Descender a la Zona ${run.zone + 2} →`)}</div>` : ''}
   <div class="lbl">Zona ${run.zone + 1}/${lastZone(run) + 1} · Sala ${run.step + 1} de ${run.map.length} · ${run.heroes.length > 1 ? 'votad a dónde queréis ir: cuando votéis todos, el grupo va a la más votada (en empate, la del anfitrión)' : 'pulsa en el mapa a dónde vas'}</div>
   ${mapSvg(run, true)}
   ${run.heroes.length > 1 ? voteRow(run) : ''}

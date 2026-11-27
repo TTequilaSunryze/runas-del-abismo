@@ -242,6 +242,11 @@ export interface RunState extends RngBox {
   /** «Listo»: cada jugador marca el paso de sala en el que está listo (ver stamp) */
   ready: Record<string, number>;
   stamp: number;
+  /**
+   * Jefe de zona vencido: el grupo elige primero sus recompensas (bendición y runa) y, cuando todos están listos,
+   * el anfitrión desciende a la zona siguiente (con fundido). Mientras tanto la partida sigue en la zona vencida.
+   */
+  zoneClear?: boolean;
   /** azar propio de las runas (separado del de la partida: añadir runas no cambia mapas, botín ni combates) */
   runeRng?: number;
   /** duelo 3 contra 3: dueños de cada bando (null = IA) y sus nombres */
@@ -1032,6 +1037,7 @@ export function mapChoice(run: RunState, hostId: string): number {
 
 /** Salir de la tienda o de un evento ya resuelto y volver al mapa. */
 export function leaveNode(run: RunState): void {
+  if (run.phase === 'map' && run.zoneClear) { advanceZone(run); return; }
   if (run.phase === 'room') {
     if (!roomDone(run)) return;
     const r = run.room!;
@@ -1180,6 +1186,18 @@ export function finishFight(run: RunState): void {
   if (run.kind === 'boss') {
     const won = bossOf(run).win;
     if (run.zone >= lastZone(run)) { run.phase = 'won'; run.note = won; if (run.abyss) run.flags.push('abyss_won'); return; }
+    // primero las recompensas del jefe (bendición y runa); el descenso a la zona siguiente lo hace advanceZone
+    run.zoneClear = true;
+    run.note = `${won} Elegid vuestras recompensas y descended a la siguiente zona cuando estéis listos.`;
+  }
+}
+
+/** Desciende a la zona siguiente tras vencer a su jefe (lo llama el anfitrión cuando todos han elegido). */
+export function advanceZone(run: RunState): void {
+  if (!run.zoneClear) return;
+  delete run.zoneClear;
+  {
+    const won = bossOf(run).win;
     // siguiente zona: mapa nuevo y un respiro
     run.zone++;
     run.zoneFight = 0;
