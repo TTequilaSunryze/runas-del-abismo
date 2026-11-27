@@ -28,7 +28,7 @@ import { SPECIAL_CHANCE, SPECIAL_EVENTS, specialCandidates, specialWeight } from
 import { validEmblem, validFrame, validTitle } from './cosmetics';
 import { catalogSpells, kitProblem } from '../content/spellCatalog';
 import { BRANCH_EVENTS, branchStarters, followUps, keyFlag, optionOpen, secretOpen, weakBossFlag } from '../content/branching';
-import { RUNES, RUNE_SLOTS, runeUnitBonus, type RuneRarity } from '../core/runes';
+import { RUNES, RUNE_LIST, RUNE_SLOTS, runeUnitBonus, type RuneRarity } from '../core/runes';
 import { COMBAT_RUNE_CHANCE, RUNE_PRICE, SOURCE_NAME, guaranteedOffer, makeOffer, migrateRunes, queueOffer, runeAction, type RuneOffer, type RuneOp, type RuneSource } from './runeLoot';
 export type { RuneOffer, RuneSource } from './runeLoot';
 
@@ -363,6 +363,31 @@ export function giveRuneOffer(run: RunState, h: HeroSave, src: RuneSource = 'eve
   const offer = makeOffer(runeBox(run), h, src, { zone: run.zone, ...(rare ? { min: 3 as RuneRarity } : {}) });
   if (rare === false) offer.runes = offer.runes.map((id) => (RUNES[id]!.rarity <= 2 ? id : null)).filter((x): x is string => !!x);
   return queueOffer(h, offer.runes.length ? offer : makeOffer(runeBox(run), h, 'combat'));
+}
+/**
+ * Eventos rúnicos: transforma la primera runa equipada del héroe en otra de la misma familia y rareza superior
+ * (si ya es legendaria, en otra legendaria). Devuelve el texto del cambio o null si no lleva runas.
+ */
+export function transformRune(run: RunState, h: HeroSave): string | null {
+  const eq = h.runes ?? [];
+  if (!eq.length) return null;
+  const old = RUNES[eq[0]!]!;
+  const pool = RUNE_LIST.filter((r) => r.family === old.family && r.id !== old.id && !r.final && !r.boss && r.rarity === Math.min(4, old.rarity + 1) && (r.stackable || !eq.includes(r.id)));
+  const alt = pool.length ? pool : RUNE_LIST.filter((r) => r.family === old.family && r.id !== old.id && !r.final && !r.boss && r.rarity >= Math.min(4, old.rarity) && !eq.includes(r.id));
+  if (!alt.length) return null;
+  const nu = pick(runeBox(run), alt);
+  const before = heroMaxHp(h);
+  eq[0] = nu.id;
+  h.hp = Math.max(1, Math.min(heroMaxHp(h), h.hp + Math.max(0, heroMaxHp(h) - before)));
+  return `${h.name}: ${old.name} → ${nu.name}`;
+}
+/** Eventos rúnicos: sacrifica la última runa equipada (la pierde). Devuelve su nombre o null. */
+export function sacrificeRune(h: HeroSave): string | null {
+  const id = h.runes?.pop();
+  if (!id) return null;
+  const before = heroMaxHp(h);
+  h.hp = Math.max(1, Math.min(heroMaxHp(h), h.hp - Math.max(0, before - heroMaxHp(h))));
+  return RUNES[id]?.name ?? id;
 }
 /** Línea del botín para una oferta de runas. */
 const runeLoot = (h: HeroSave, o: RuneOffer | null): FightReport['loot'][number] | null => o ? { owner: h.owner, icon: '✧', name: SOURCE_NAME[o.src], text: `Elige entre ${o.runes.map((id) => RUNES[id]!.name).join(', ')}`, rare: o.runes.some((id) => RUNES[id]!.rarity >= 3) } : null;

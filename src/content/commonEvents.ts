@@ -2,7 +2,7 @@
 // Desconocido tengan variedad suficiente. Se vota y el resultado afecta a todos por igual, como el resto de eventos.
 import { MAX_CONSUMABLE } from './boons';
 import { OMENS } from './modes';
-import { giveItem, giveRuneOffer, type HeroSave, type RuneOffer, type RunState } from '../game/run';
+import { giveItem, giveRuneOffer, sacrificeRune, transformRune, type HeroSave, type RuneOffer, type RunState } from '../game/run';
 import { rand, pick } from '../core/rng';
 import { boon, healPct, losePct, type EventDef } from './zona1/events';
 
@@ -94,6 +94,25 @@ export const COMMON_EVENTS: EventDef[] = [
     options: [
       { label: 'Descansar un rato', hint: 'Todos recuperan un 25% de vida', apply: (run) => { for (const h of run.heroes) healPct(h, 0.25); return 'Nadie vuelve a por sus cosas. Dormís a turnos.'; } },
       { label: 'Saquear el campamento', hint: 'Cada uno: +70 de oro', apply: (run) => { for (const h of run.heroes) h.gold += 70; return 'Bolsas de monedas escondidas bajo los petates. Quien fuera, ya no las necesita.'; } },
+    ],
+  },
+  // ---------- eventos rúnicos ----------
+  {
+    id: 'c_forja_runas', title: 'La Forja de Runas Rotas',
+    text: 'Un yunque cubierto de esquirlas rúnicas aún tibias. Quien trabajó aquí sabía rehacer una runa en otra más poderosa… o fundirla para siempre.',
+    options: [
+      { label: 'Reforjar la runa', hint: 'Cada uno: su primera runa equipada se transforma en otra de la misma familia y una rareza más (hasta épica).', apply: (run) => { const t = run.heroes.map((h) => transformRune(run, h)).filter(Boolean); return t.length ? `El yunque canta. ${t.join(' · ')}.` : 'Nadie lleva runas que reforjar.'; } },
+      { label: 'Fundir la runa', hint: 'Cada uno: pierde su última runa equipada; a cambio, 90 de oro y recupera el 30% de la vida.', apply: (run) => { const t = run.heroes.map((h) => { const n = sacrificeRune(h); if (!n) return ''; h.gold += 90; healPct(h, 0.3); return `${h.name} funde ${n}`; }).filter(Boolean); return t.length ? `${t.join(' · ')}. El metal rúnico se vende bien.` : 'Nadie lleva runas que fundir.'; } },
+      { label: 'Llevarse las esquirlas', hint: 'Cada uno: una runa a elegir.', apply: (run) => `Entre las esquirlas, alguna aún brilla. ${relicNames(run, run.heroes.map((h) => giveRuneOffer(run, h, 'event')))}` },
+    ],
+  },
+  {
+    id: 'c_altar_familias', title: 'El Altar de las Cuatro Familias',
+    text: 'Cuatro cuencos de piedra: uno con savia, otro con ceniza de huesos, otro con arena que cae hacia arriba y el último con limaduras de hierro.',
+    options: [
+      { label: 'Ofrecer sangre', hint: 'Cada uno: pierde el 20% de su vida actual y elige entre runas raras o mejores.', apply: (run) => { const o = run.heroes.map((h) => { losePct(h, 0.2); return giveRuneOffer(run, h, 'shrine', true); }); return `Los cuencos se llenan de luz. ${relicNames(run, o)}`; } },
+      { label: 'Dejar una runa', hint: 'Cada uno: pierde su última runa equipada y elige entre 3 runas nuevas.', apply: (run) => { const t = run.heroes.map((h) => (sacrificeRune(h) ? giveRuneOffer(run, h, 'shrine') : null)); return t.some(Boolean) ? `El altar acepta el trueque. ${relicNames(run, t)}` : 'Nadie lleva runas que dejar.'; } },
+      { label: 'Marcharse', hint: 'Nada cambia.', apply: () => 'Las familias pueden esperar.' },
     ],
   },
 ];

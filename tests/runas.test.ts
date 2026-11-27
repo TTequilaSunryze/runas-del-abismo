@@ -411,3 +411,18 @@ describe('expedición completa con runas', () => {
     }
   }, 120000);
 });
+
+import { sacrificeRune, transformRune } from '../src/game/run';
+describe('runas · eventos y cofres', () => {
+  it('reforjar transforma la runa en otra de la misma familia y rareza superior; fundir la quita', () => {
+    const run = newRun('EV', 3, P), h = run.heroes[0]!;
+    h.runes = ['fractura'];
+    const t = transformRune(run, h)!;
+    expect(t).toMatch(/Fractura →/);
+    expect(RUNES[h.runes[0]!]!.family).toBe('materia');
+    expect(RUNES[h.runes[0]!]!.rarity).toBe(2);
+    expect(sacrificeRune(h)).toBeTruthy();
+    expect(h.runes).toEqual([]);
+    expect(transformRune(run, h)).toBeNull();
+  });
+});
