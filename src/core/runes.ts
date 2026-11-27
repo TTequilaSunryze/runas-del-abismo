@@ -14,10 +14,10 @@ const scaleDamage = (s: SpellDef, factor: number): void => {
   if (s.followUp?.dmg) s.followUp.dmg = s.followUp.dmg.map((n) => Math.round(n * factor)) as [number, number];
 };
 export const RUNES: Record<string, RuneDef> = {
-  fractura: { id: 'fractura', name: 'Fractura', family: 'materia', description: 'Perfora un 25% de armadura y aplica Expuesto.', apply: s => { s.armorIgnore = Math.min(1, (s.armorIgnore ?? 0) + .25); addStatus(s, 'exposed'); return s; } },
+  fractura: { id: 'fractura', name: 'Fractura', family: 'materia', description: 'Ignora 2 puntos de armadura y aplica Expuesto.', apply: s => { s.armorIgnore = Math.min(1, (s.armorIgnore ?? 0) + 2); addStatus(s, 'exposed'); return s; } },
   fragmentacion: { id: 'fragmentacion', name: 'Fragmentación', family: 'materia', description: 'Aumenta un 35% el daño.', apply: s => { scaleDamage(s, 1.35); return s; } },
   bastion: { id: 'bastion', name: 'Bastión', family: 'materia', description: 'Aumenta un 50% los escudos generados.', apply: s => { if (s.shield) s.shield = Math.round(s.shield * 1.5); if (s.selfShield) s.selfShield = Math.round(s.selfShield * 1.5); return s; } },
-  perforacion: { id: 'perforacion', name: 'Perforación', family: 'materia', description: 'Ignora un 60% de armadura.', apply: s => { s.armorIgnore = Math.min(1, (s.armorIgnore ?? 0) + .6); return s; } },
+  perforacion: { id: 'perforacion', name: 'Perforación', family: 'materia', description: 'Ignora 4 puntos de armadura.', apply: s => { s.armorIgnore = Math.min(1, (s.armorIgnore ?? 0) + 4); return s; } },
   hemorragia: { id: 'hemorragia', name: 'Hemorragia', family: 'muerte', description: 'Los impactos dañinos aplican Sangrado.', apply: s => { addStatus(s, 'bleed', 3, 2); return s; } },
   condena: { id: 'condena', name: 'Condena', family: 'muerte', description: 'Añade daño contra objetivos marcados por Sangrado.', apply: s => { s.bonusVs = { kind: 'bleed', dmg: (s.bonusVs?.dmg ?? 0) + 6 }; return s; } },
   cosecha: { id: 'cosecha', name: 'Cosecha', family: 'muerte', description: 'Roba un 30% del daño infligido.', apply: s => { s.lifesteal = Math.min(1, (s.lifesteal ?? 0) + .3); return s; } },
