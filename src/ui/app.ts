@@ -9,6 +9,8 @@ import { Session } from '../game/session';
 import { dailyScore, dailyZone, loadable } from '../game/run';
 import { joinRoom, loadRun, submitDaily, topDaily } from '../net/transport';
 import { clearSnapshot, readSnapshot } from '../game/snapshot';
+import { fadeTo, finishTyping, lobbyScene, talkLines } from './settlement';
+import { NPCS } from '../content/dialogues';
 import { addLog, closeIntro, combatScreen, labClick } from './combat';
 import { closeEditor, editorScreen } from './editor';
 import { balanceScreen, closeBalance } from './balance';
@@ -84,6 +86,8 @@ async function enter(code: string, isHost: boolean, local: boolean, resume = fal
   ui.lobbyStage = 'hero';
   ui.overlay = '';
   ui.bldgOpen = false;
+  ui.place = '';
+  ui.talk = null;
   ui.root.innerHTML = `<div class="home"><p>Conectando a la sala ${code}…</p></div>`;
   let secret = '';
   if (isHost) {
@@ -156,12 +160,12 @@ function render(events: GameEvent[]): void {
   const run = s.run;
   const want = !run ? 'lobby' : run.phase === 'combat' && run.combat ? 'combat' : run.phase === 'event' && run.event ? 'event' : run.phase === 'shop' ? 'shop' : run.phase === 'room' && run.room ? 'room' : run.phase === 'map' ? 'map' : 'end';
   // sin cambios reales no se redibuja: así un latido de red no interrumpe un clic
-  const key = want + JSON.stringify([meta().ecos, ui.asc, ui.daily, ui.mods, ui.abyss, run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), s.t.connected(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selItem, ui.tab, ui.logOpen, ui.statsOpen, ui.mapOpen, ui.forgeRef, ui.forgeAffix, ui.forgeSpell, ui.sideOpen, ui.picked, ui.lobbyReady, ui.lobbyStage, ui.overlay, ui.bldgOpen, ui.homeTab]);
+  const key = want + JSON.stringify([meta().ecos, ui.asc, ui.daily, ui.mods, ui.abyss, run, run ? null : s.lobby(), ui.me, ui.notice, s.hostPresent(), s.t.connected(), ui.board?.sel ?? null, s.isMyTurn(), ui.saved?.step, ui.leaveArmed, isMuted(), ui.selItem, ui.tab, ui.logOpen, ui.statsOpen, ui.mapOpen, ui.forgeRef, ui.forgeAffix, ui.forgeSpell, ui.sideOpen, ui.picked, ui.lobbyReady, ui.lobbyStage, ui.overlay, ui.bldgOpen, ui.homeTab, ui.place, ui.talk]);
   if (key === lastKey && want === ui.screen && !events.length) return;
   lastKey = key;
   if (want !== ui.screen) hideTip();
   const meH = run?.heroes.find((h) => h.owner === ui.myId);
-  setZoneMusic(!run ? 'lobby' : want === 'combat' ? (run.kind === 'boss' ? 'boss' : 'combat') : want === 'end' ? 'end' : want === 'shop' ? 'calm'
+  setZoneMusic(!run ? (ui.lobbyStage === 'settlement' && ui.place === 'taberna' ? 'tavern' : 'lobby') : want === 'combat' ? (run.kind === 'boss' ? 'boss' : 'combat') : want === 'end' ? 'end' : want === 'shop' ? 'calm'
     : want === 'event' || want === 'room' || meH?.boonOffer || meH?.bossOffer ? 'choice' : `map${Math.min(3, run.zone)}`);
   if (want === 'combat') combatScreen(events);
   else {
@@ -171,8 +175,8 @@ function render(events: GameEvent[]): void {
     ({ lobby: lobbyScreen, event: eventScreen, shop: shopScreen, room: roomScreen, map: mapScreen, end: endScreen })[want]();
   }
   ui.screen = want;
-  setMenuScene(want === 'combat' ? null : want === 'lobby' ? 'home' : 'game');
-  document.body.classList.toggle('menu-dim', want === 'lobby');
+  setMenuScene(want === 'combat' ? null : want === 'lobby' ? lobbyScene() : 'game');
+  document.body.classList.toggle('menu-dim', want === 'lobby' && ui.lobbyStage === 'hero');
   setCombatBg(want === 'combat' ? run?.zone ?? null : null);
   // ficha del personaje por encima de cualquier pantalla
   document.getElementById('statsmodal')?.remove();
@@ -270,7 +274,13 @@ document.addEventListener('click', (e) => {
     case 'abyssgo': ui.daily = false; void enter(randomText(4, CODE_CHARS), true, true); break;
     case 'dailygo': ui.daily = true; ui.mods = []; void enter(randomText(4, CODE_CHARS), true, true); break;
     case 'herook': ui.lobbyStage = 'settlement'; ui.overlay = ''; ui.refreshLobby(); break;
-    case 'herochange': ui.lobbyStage = 'hero'; ui.bldgOpen = false; ui.refreshLobby(); break;
+    case 'herochange': ui.lobbyStage = 'hero'; ui.bldgOpen = false; ui.place = ''; ui.talk = null; ui.refreshLobby(); break;
+    // El Asentamiento: entrar y salir de un lugar (con fundido) y conversaciones
+    case 'place': fadeTo(() => { ui.place = id as typeof ui.place; ui.talk = null; ui.bldgOpen = false; ui.refreshLobby(); }); break;
+    case 'placeexit': fadeTo(() => { ui.place = ''; ui.talk = null; ui.refreshLobby(); }); break;
+    case 'talk': ui.talk = { npc: id, node: NPCS[id]?.start ?? '', line: 0 }; ui.refreshLobby(); break;
+    case 'dlgnext': if (finishTyping() || !ui.talk) break; if (ui.talk.line < talkLines().length - 1) { ui.talk = { ...ui.talk, line: ui.talk.line + 1 }; ui.refreshLobby(); } break;
+    case 'dlgopt': ui.talk = id && ui.talk ? { npc: ui.talk.npc, node: id, line: 0 } : null; ui.refreshLobby(); break;
     case 'overlay': ui.overlay = (id || '') as typeof ui.overlay; ui.refreshLobby(); break;
     case 'bldgclose': ui.bldgOpen = false; ui.refreshLobby(); break;
     case 'create': void enter(randomText(4, CODE_CHARS), true, false); break;
@@ -382,7 +392,7 @@ document.addEventListener('click', (e) => {
     case 'tutoskip': meta().seenTutorial = true; saveMeta(); homeScreen(''); break;
     case 'ascup': ui.asc = Math.min(maxAscOf(), ui.asc + 1); publish(); render([]); break;
     case 'ascdown': ui.asc = Math.max(0, ui.asc - 1); publish(); render([]); break;
-    case 'again': ui.log.length = 0; ui.lobbyStage = 'settlement'; ui.bldgOpen = false; s?.backToLobby(); break;
+    case 'again': ui.log.length = 0; ui.lobbyStage = 'settlement'; ui.bldgOpen = false; ui.place = ''; ui.talk = null; s?.backToLobby(); break;
     case 'bossreward': {
       const o = s?.run ? mine(s.run)?.bossOffer?.[Number(id)] : undefined;
       if (o) ui.got = gotFromBoss(o);
@@ -482,6 +492,11 @@ document.addEventListener('change', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
+  if (ui.talk && (e.key === 'Escape' || e.key === ' ' || e.key === 'Enter') && (e.target as HTMLElement).tagName !== 'INPUT') {
+    e.preventDefault();
+    if (e.key === 'Escape') { ui.talk = null; ui.refreshLobby(); } else (document.querySelector('.talk-box') as HTMLElement | null)?.click();
+    return;
+  }
   const s = ui.session;
   if ((e.target as HTMLElement).tagName !== 'INPUT' && s?.run && !s.run.arena && (e.key === 'm' || e.key === 'M' || (e.key === 'Escape' && ui.mapOpen))) { ui.mapOpen = e.key === 'Escape' ? false : !ui.mapOpen; lastKey = ''; render([]); return; }
   if ((e.target as HTMLElement).tagName !== 'INPUT' && s?.run && !s.run.arena && (e.key === 's' || e.key === 'S' || (e.key === 'Escape' && ui.statsOpen))) { ui.statsOpen = e.key === 'Escape' ? false : !ui.statsOpen; lastKey = ''; render([]); return; }

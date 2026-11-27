@@ -1,11 +1,11 @@
 // Fondo de los menús: una ilustración (public/bg) con una capa animada encima en pixel art
 // (luz de antorchas que parpadea, ascuas, chispas rúnicas y niebla). Solo decoración.
 
-export type MenuScene = 'home' | 'game';
+export type MenuScene = 'home' | 'game' | 'settle' | 'tavern';
 /** La capa animada mide 1/4 de la ilustración (1376×768): sus coordenadas son las de la imagen / 4. */
 const W = 344, H = 192, FPS = 20;
 
-interface Light { x: number; y: number; r: number; col: string }
+interface Light { x: number; y: number; r: number; col: string; /** suelta ascuas (los faroles no) */ ember?: boolean }
 interface SceneDef {
   img: string;
   /** antorchas y fuegos de la ilustración (luz que parpadea y suelta ascuas) */
@@ -15,6 +15,10 @@ interface SceneDef {
   /** de dónde salen las chispas frías (runas) */
   sparks?: { x: number; y: number; w: number; h: number; col: string };
   fog: string;
+  /** columnas de humo (chimeneas, hogueras) */
+  smoke?: Array<{ x: number; y: number }>;
+  /** intensidad de la niebla baja (0 la quita) */
+  fogA?: number;
 }
 const FIRE = '255,150,60';
 const SCENES: Record<MenuScene, SceneDef> = {
@@ -27,6 +31,30 @@ const SCENES: Record<MenuScene, SceneDef> = {
     fog: '120,140,170',
   },
   // puerta rúnica de la mazmorra (sala y menús de la partida)
+  // el Asentamiento al borde del Abismo (panorama tras elegir héroe)
+  settle: {
+    img: 'bg/asentamiento.jpg',
+    fires: [
+      { x: 155.5, y: 31, r: 12, col: FIRE }, { x: 208, y: 24, r: 12, col: FIRE }, { x: 255.5, y: 43, r: 12, col: FIRE }, { x: 235, y: 52.5, r: 11, col: FIRE },
+      { x: 313, y: 44.5, r: 12, col: FIRE }, { x: 331, y: 54, r: 11, col: FIRE }, { x: 257, y: 122, r: 13, col: FIRE }, { x: 314.5, y: 139, r: 12, col: FIRE },
+      { x: 119, y: 137, r: 16, col: FIRE }, { x: 95, y: 145, r: 14, col: FIRE }, { x: 130.5, y: 168, r: 24, col: FIRE },
+      { x: 107.5, y: 96, r: 8, col: FIRE, ember: false }, { x: 85, y: 116, r: 8, col: FIRE, ember: false }, { x: 99, y: 117.5, r: 7, col: FIRE, ember: false },
+      { x: 45, y: 77.5, r: 22, col: '255,190,90', ember: false }, { x: 135, y: 66, r: 7, col: FIRE, ember: false }, { x: 160, y: 67.5, r: 7, col: FIRE, ember: false },
+      { x: 197.5, y: 145, r: 8, col: FIRE, ember: false }, { x: 32.5, y: 122.5, r: 8, col: FIRE, ember: false },
+    ],
+    glows: [{ x: 270, y: 87, r: 62, col: '130,150,255' }, { x: 270, y: 162, r: 52, col: '160,120,255' }],
+    sparks: { x: 255, y: 40, w: 35, h: 150, col: '170,190,255' },
+    smoke: [{ x: 149, y: 134 }, { x: 119, y: 133 }],
+    fog: '110,130,180',
+  },
+  // interior de la Taberna
+  tavern: {
+    img: 'bg/taberna.jpg',
+    fires: [{ x: 263.7, y: 112, r: 34, col: FIRE }, { x: 50.5, y: 62.8, r: 16, col: FIRE, ember: false }, { x: 112, y: 66, r: 16, col: FIRE, ember: false }, { x: 196, y: 55.4, r: 16, col: FIRE, ember: false }, { x: 288, y: 66.8, r: 16, col: FIRE, ember: false }],
+    glows: [],
+    fog: '150,100,60',
+    fogA: 0.05,
+  },
   game: {
     img: 'bg/sala.jpg',
     fires: [{ x: 33, y: 73, r: 30, col: FIRE }, { x: 310, y: 73, r: 30, col: FIRE }],
@@ -53,7 +81,7 @@ function respawn(m: Mote, d: SceneDef): void {
   const sp = d.sparks;
   m.cold = !!sp && Math.random() < 0.45;
   if (m.cold && sp) Object.assign(m, { x: sp.x + Math.random() * sp.w, y: sp.y + Math.random() * sp.h, vx: (Math.random() - 0.5) * 0.15, vy: -0.08 - Math.random() * 0.15, life: 0.5 + Math.random() * 0.8 });
-  else { const f = d.fires[Math.floor(Math.random() * d.fires.length)]!; Object.assign(m, { x: f.x + (Math.random() - 0.5) * 3, y: f.y - 3, vx: (Math.random() - 0.5) * 0.25, vy: -0.25 - Math.random() * 0.45, life: 0.5 + Math.random() * 0.7 }); }
+  else { const pool = d.fires.filter((x) => x.ember !== false); const f = pool[Math.floor(Math.random() * pool.length)]!; Object.assign(m, { x: f.x + (Math.random() - 0.5) * 3, y: f.y - 3, vx: (Math.random() - 0.5) * 0.25, vy: -0.25 - Math.random() * 0.45, life: 0.5 + Math.random() * 0.7 }); }
 }
 function frame(now: number): void {
   if (!ctx || !scene) return;
@@ -70,11 +98,19 @@ function frame(now: number): void {
     g.fillStyle = m.cold ? `rgba(${d.sparks!.col},${a})` : `rgba(255,${150 + Math.round(m.life * 80)},60,${a})`;
     g.fillRect(Math.round(m.x), Math.round(m.y), 1, 1);
   }
+  // humo: columnas que suben, se ensanchan y se desvanecen
+  for (const sm of d.smoke ?? []) for (let i = 0; i < 6; i++) {
+    const k = ((t * 0.18 + i / 6) % 1), x = sm.x + Math.sin(t * 0.9 + i * 1.7) * 3 * k + k * 6, y = sm.y - k * 42, r = 3 + k * 11;
+    const grd = g.createRadialGradient(x, y, 0, x, y, r);
+    grd.addColorStop(0, `rgba(150,150,160,${0.16 * (1 - k)})`); grd.addColorStop(1, 'rgba(150,150,160,0)');
+    g.fillStyle = grd; g.fillRect(x - r, y - r, r * 2, r * 2);
+  }
   // niebla baja que se desplaza
-  for (let i = 0; i < 7; i++) {
+  const fogA = d.fogA ?? 0.10;
+  for (let i = 0; i < (fogA ? 7 : 0); i++) {
     const x = ((t * (4 + i * 1.5) + i * 60) % (W + 120)) - 60, y = 160 + (i % 3) * 9;
     const grd = g.createRadialGradient(x, y, 0, x, y, 55);
-    grd.addColorStop(0, `rgba(${d.fog},.10)`); grd.addColorStop(1, `rgba(${d.fog},0)`);
+    grd.addColorStop(0, `rgba(${d.fog},${fogA})`); grd.addColorStop(1, `rgba(${d.fog},0)`);
     g.fillStyle = grd; g.fillRect(x - 55, y - 35, 110, 70);
   }
 }

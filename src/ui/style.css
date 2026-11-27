@@ -1179,3 +1179,74 @@ body:has(#app > .front) #build { display: block; }
   .hsel-roster { padding-bottom: 10px; }
 }
 .archnotes { left: 0; right: 0; transform: none; margin: 0 auto; width: fit-content; }
+
+/* =====================================================================
+   v20 · El Asentamiento vivo: panorama con edificios que se iluminan, interiores y diálogos.
+   ===================================================================== */
+#fade { position: fixed; inset: 0; z-index: 200; background: #000; opacity: 0; pointer-events: none; transition: opacity .38s ease; }
+#fade.on { opacity: 1; pointer-events: auto; }
+.settle2 { position: relative; height: 100%; overflow: hidden; }
+/* reproduce el encuadre «cover» del fondo animado (#menubg, 100vw × 100vh) */
+.scene { position: fixed; left: 50%; top: 50%; width: max(100vw, calc(100vh * var(--ar))); height: max(100vh, calc(100vw / var(--ar))); transform: translate(-50%, -50%); z-index: 1; }
+.spots { position: absolute; inset: 0; width: 100%; height: 100%; }
+.spot { fill: transparent; pointer-events: all; cursor: pointer; outline: none; }
+.spot.locked { cursor: not-allowed; }
+.spotlit { position: absolute; inset: 0; opacity: 0; pointer-events: none; transition: opacity .25s; background: center / 100% 100% no-repeat; image-rendering: pixelated; filter: brightness(1.45) saturate(1.12); }
+.spotlit.abyss { filter: brightness(1.3) saturate(1.3); }
+.spotlit.locked { filter: brightness(1.15) grayscale(.6); }
+.slbl { position: absolute; transform: translate(-50%, 4px); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 3; text-align: center; white-space: nowrap;
+  padding: 5px 12px; background: rgba(12, 10, 14, .86); border: 2px solid #b8873a; border-radius: 6px; box-shadow: 0 6px 16px rgba(0, 0, 0, .6); }
+.slbl b { display: block; font-family: var(--head); font-size: 18px; color: #ffe3a6; text-shadow: 0 2px 0 #000; }
+.slbl small { color: #cfc2a8; font-size: 12px; }
+.slbl.locked { border-color: #5d5966; }
+.slbl.locked b { color: #b9b3c2; }
+.shud { position: fixed; top: 0; left: 0; right: 0; z-index: 5; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 16px; background: linear-gradient(180deg, rgba(5, 5, 8, .78), transparent); pointer-events: none; }
+.shud > * { pointer-events: auto; }
+.shud-title h1 { font-family: var(--head); font-size: clamp(22px, 2.6vw, 34px); margin: 0; color: #f6e4c2; text-shadow: 0 3px 0 #000; }
+.sgate { position: fixed; z-index: 5; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.sgate .shint { text-shadow: 0 2px 0 #000; color: #d8ccbd; }
+body.has-menubg .sgate-btn { font-family: var(--head); font-size: 20px; padding: 10px 30px; display: flex; flex-direction: column; align-items: center; }
+.sgate-btn small { font-family: var(--body); font-size: 12px; opacity: .85; }
+.slist { display: none; }
+@media (hover: none), (max-width: 700px) {
+  .slbl { opacity: .85; transform: translate(-50%, 0); }
+  .slbl small { display: none; }
+  .slbl b { font-size: 13px; }
+  .slist { position: fixed; z-index: 5; left: 0; right: 0; bottom: 92px; display: flex; gap: 6px; overflow-x: auto; padding: 0 12px; }
+  .slist button { flex: none; }
+}
+/* habitantes dentro de un lugar: solo se ve la parte por encima de la barra */
+.npc { position: absolute; overflow: hidden; padding: 0; border: 0; background: none; box-shadow: none; cursor: pointer; z-index: 2; }
+.npc-spr { position: absolute; left: 0; top: 0; width: 100%; height: 212.7%; background: var(--wipe) 0 0 / 400% 100% no-repeat; image-rendering: pixelated; animation: npcFrames 1s steps(4) infinite; transition: filter .2s; }
+.npc:hover .npc-spr { background-image: var(--wave); animation-duration: .9s; filter: brightness(1.18) drop-shadow(0 0 6px rgba(255, 210, 140, .8)); }
+@keyframes npcFrames { from { background-position-x: 0%; } to { background-position-x: 133.333%; } }
+.npc:hover { background: none !important; filter: none !important; }
+/* conversación */
+.talk { position: fixed; inset: 0; z-index: 40; }
+.talk-shade { position: absolute; inset: 0; background: rgba(6, 4, 4, .45); backdrop-filter: blur(4px) brightness(.7); animation: foverIn .25s ease-out; }
+.talk-fig { position: absolute; left: 50%; bottom: 0; height: min(92vh, 1000px); transform: translateX(-50%); image-rendering: pixelated; pointer-events: none; filter: drop-shadow(0 0 30px rgba(0, 0, 0, .7)); animation: figIn .35s ease-out; }
+@keyframes figIn { from { opacity: 0; transform: translate(-50%, 24px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.talk-box { position: absolute; left: 50%; bottom: clamp(12px, 3vh, 34px); transform: translateX(-50%); width: min(860px, 94vw); min-height: 150px; display: flex; gap: 16px; align-items: stretch; cursor: pointer;
+  padding: 14px 18px; background: linear-gradient(180deg, #f3e7cc, #e2d0aa); color: #2b1d12; border: 3px solid #8a5a2b; border-radius: 6px;
+  box-shadow: inset 0 0 0 2px #f8eed8, inset 0 0 0 4px #b98a52, 0 12px 30px rgba(0, 0, 0, .7); animation: foverIn .25s ease-out; }
+.talk-port { flex: none; width: clamp(84px, 11vw, 124px); aspect-ratio: 1; align-self: center; border: 3px solid #6a4320; border-radius: 4px; overflow: hidden; box-shadow: 0 3px 0 #3a230f; background: #1a110b; }
+.talk-port img { width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; }
+.talk-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.talk-name { font-family: var(--head); font-size: 22px; color: #7a3e12; }
+.talk-name small { font-family: var(--body); font-size: 12px; color: #8a6a4a; margin-left: 6px; }
+#dlgtext { margin: 0; font-size: clamp(15px, 1.35vw, 18px); line-height: 1.45; font-weight: 600; min-height: 3em; }
+.talk-more { position: absolute; right: 14px; bottom: 8px; color: #b0661e; animation: bob 1s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(3px); } }
+.talk-opts { position: absolute; right: max(3vw, calc(50% - 430px)); bottom: calc(clamp(12px, 3vh, 34px) + 172px); display: flex; flex-direction: column; gap: 6px; align-items: flex-end; opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 94vw; }
+.talk-opts.show { opacity: 1; pointer-events: auto; }
+.topt { padding: 8px 16px; text-align: right; font-size: 15px; font-weight: 600; color: #f6e4c2; background: rgba(20, 14, 10, .9); border: 2px solid #8a5a2b; border-radius: 4px; box-shadow: 0 4px 10px rgba(0, 0, 0, .5); transition: transform .12s, border-color .12s; }
+.topt:hover:not(:disabled) { border-color: #f2c14e; color: #ffe3a6; transform: translateX(-4px); }
+.topt.locked { color: #9a90a6; border-color: #4c4852; cursor: not-allowed; }
+@media (max-width: 700px) {
+  .talk-fig { height: 70vh; }
+  .talk-box { min-height: 0; }
+  .talk-opts { left: 3vw; right: 3vw; align-items: stretch; bottom: calc(3vh + 190px); }
+  .topt { text-align: left; }
+}
+.sgate-btn { white-space: nowrap; }
+@media (max-width: 700px) { body.has-menubg .sgate-btn { font-size: 17px; padding: 8px 18px; } .sgate .shint { display: none; } }

@@ -102,6 +102,10 @@ export const ui = {
   overlay: '' as '' | 'kit' | 'mods',
   /** edificio abierto en el Asentamiento (muestra el panel de ui.homeTab) */
   bldgOpen: false,
+  /** lugar del Asentamiento en el que se ha entrado ('' = panorama) */
+  place: '' as '' | 'taberna',
+  /** conversación abierta: habitante, nodo y línea */
+  talk: null as null | { npc: string; node: string; line: number },
 };
 
 export const mine = (run: RunState): HeroSave | undefined => run.heroes.find((h) => h.owner === ui.myId);

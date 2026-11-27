@@ -21,6 +21,7 @@ import { CHEST_CURSE_CHANCE, HEAT, HEAT_HOT, HEAT_MAX, HEAT_OVERLOAD, HONE_COST,
 import { REST_OPTIONS, itemByRef, recalStats, restHeal, restText } from '../game/rooms';
 import { altarScene, chestScene, forgeScene, restScene, shrineScene } from './scenes';
 import { refugeScene } from './refuge';
+import { settlementScreen } from './settlement';
 import { STAT_NAME, type Item } from '../core/items/items';
 import { MAX_SPELL_UPS, UPGRADES } from '../core/upgrades';
 import { archiveTotal, BESTIARY, CATEGORIES, CAT_NAME, DOCUMENTED_KILLS, GRIMOIRE, LEVEL_NAME, beastDef, completion, entriesOf } from '../game/archive';
@@ -519,42 +520,6 @@ function heroSelectScreen(): void {
     <button class="raw hsel-back" data-act="home" ${tip('Volver al menú')}>↩</button>
     <button class="raw hsel-ok" data-act="herook" ${tip('Elegir este héroe e ir al Asentamiento')}>✔</button>
     ${lobbyOverlay()}
-  </div>`;
-}
-
-/**
- * El Asentamiento: paso previo a la expedición. De momento usa la escena del Refugio que ya existía;
- * cuando lleguen las ilustraciones de los edificios, cada lugar será una zona clicable de la imagen.
- */
-const PLACES: Array<{ id: string; name: string; text: string; act?: string; locked?: boolean }> = [
-  { id: 'irena', name: 'Taberna', text: 'Irena y las noticias de quienes vuelven.', act: 'resident' },
-  { id: 'archivo', name: 'Archivo', text: 'Bestiario, grimorio, atlas, crónicas y contratos.' },
-  { id: 'tienda', name: 'Mercader de ecos', text: 'Habilidades, aspectos y objetos cosméticos.' },
-  { id: 'salon', name: 'Salón de héroes', text: 'Tus campeones guardados y los duelos.' },
-  { id: 'clases', name: 'Campo de maestría', text: 'Progreso y rutas de cada clase.' },
-  { id: 'logros', name: 'Tablón de gestas', text: 'Logros y estadísticas.' },
-  { id: 'diario', name: 'Tablón del reto', text: 'Clasificación del reto del día.' },
-  { id: 'amigos', name: 'Mensajería', text: 'Amigos e invitaciones.' },
-  { id: 'forja', name: 'La Forja', text: 'Próximamente.', locked: true },
-  { id: 'santuario', name: 'El Santuario', text: 'Próximamente.', locked: true },
-];
-
-function settlementScreen(): void {
-  const s = ui.session!, players = s.lobby(), m = meta();
-  const ready = players.slice(0, 4).filter((p) => p.routes.length > 0 && (p.host || p.ready));
-  const total = Math.min(4, players.length);
-  const gate = s.isHost
-    ? `<button class="raw bldg gate" data-act="start" ${ready.length ? '' : 'disabled'} ${ready.length < total ? tip('Aún no están todos listos: si desciendes, entran con lo que tengan elegido') : ''}><b>La Puerta del Abismo</b><small>${total > 1 ? `Listos ${ready.length}/${total} · ` : ''}Descender</small></button>`
-    : `<button class="raw bldg gate ${ui.lobbyReady ? 'on' : ''}" data-act="lready"><b>La Puerta del Abismo</b><small>${ui.lobbyReady ? '✔ Listo (deshacer)' : 'Estoy listo'} · el anfitrión desciende</small></button>`;
-  ui.root.innerHTML = `<div class="settle">
-    <header class="settle-bar"><button class="raw fback" data-act="herochange" ${tip('Cambiar de héroe')}>↩</button>
-      <div><span class="hero-kicker">${esc(CLASSES[ui.me.cls].name)} · ${s.t.kind === 'local' ? 'un jugador' : `sala ${esc(s.code)}`}${ui.daily ? ' · reto del día' : ui.asc ? ` · ascensión ${ui.asc}` : ''}</span><h1>El Asentamiento</h1></div>
-      <span class="grow"></span>${ui.notice ? `<span class="bad sm">${esc(ui.notice)}</span>` : ''}
-      ${s.isHost && ui.saved ? `<button data-act="doresume">Reanudar guardada (zona ${ui.saved.zone + 1}, sala ${ui.saved.step + 1})</button>` : ''}
-      <span class="pill">${m.ecos} ✨</span>${volumeControl()}<button data-act="home">Salir</button></header>
-    <div class="settle-stage">${refugeScene()}</div>
-    <div class="settle-places">${gate}${PLACES.map((p) => `<button class="raw bldg ${p.locked ? 'locked' : ''}" ${p.locked ? 'disabled' : `data-act="${p.act ?? 'htab'}" data-id="${p.id}"`}><b>${p.locked ? '🔒 ' : ''}${esc(p.name)}</b><small>${esc(p.text)}</small></button>`).join('')}</div>
-    ${ui.bldgOpen ? `<div class="fover"><div class="fover-box wide"><div class="row"><span class="grow"></span><button data-act="bldgclose">Volver al Asentamiento</button></div>${metaPanel()}</div></div>` : ''}
   </div>`;
 }
 
