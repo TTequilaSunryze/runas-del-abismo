@@ -361,7 +361,7 @@ export function homeScreen(msg: string): void {
   setCombatBg(null);
   const host = JSON.parse(store.get('rda_host') ?? 'null') as { code: string } | null;
   const m = meta();
-  const pend = contractsReady(m) + specialReady(m), shopNew = unseenOwned(m).length || (m.perksRefundEcos && !m.refundSeen);
+  const shopNew = unseenOwned(m).length || (m.perksRefundEcos && !m.refundSeen);
   const groups: Array<{ id: string; label: string; home: typeof ui.homeTab; tabs: Array<[typeof ui.homeTab, string, string]> }> = [
     { id: 'jugar', label: 'Jugar', home: 'jugar', tabs: [['jugar', 'Expedición', ''], ['salon', 'Salón de héroes', '']] },
     { id: 'refugio', label: 'Refugio', home: 'refugio', tabs: [['refugio', 'Asentamiento', '']] },
@@ -454,7 +454,7 @@ export function lobbyScreen(): void {
         ${masteryBar(me.cls)}
       </div>
       <div class="hero-roster-wrap"><div class="hero-roster-title">ELIGE TU PERSONAJE <span class="dim sm">· ${PLAYABLE.length} HÉROES DISPONIBLES</span></div>
-        <div class="hero-roster">${PLAYABLE.map((id) => { const c = CLASSES[id], st = classStripUrl(id, 'idle'); const mates = players.filter((p) => p.id !== ui.myId && p.cls === id);
+        <div class="hero-roster">${PLAYABLE.map((id) => { const c = CLASSES[id]; const mates = players.filter((p) => p.id !== ui.myId && p.cls === id);
           return `<button class="hero-tile ${id === me.cls ? 'on' : ''}" data-act="cls" data-id="${id}" aria-label="Seleccionar ${esc(c.name)}"><span class="hero-tile-portrait" style="background-image:url(${unitPortraitUrl(id, 'hero', 0)})"></span><b>${esc(c.name)}</b><small>${c.hp} VIDA · ${c.crit}% CRÍT.</small>${mates.length ? `<i>${mates.map((p) => esc(p.name)).join(', ')}</i>` : ''}</button>`; }).join('')}</div>
       </div>
     </div>
