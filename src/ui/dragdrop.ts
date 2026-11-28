@@ -3,8 +3,10 @@
 // - Equipado → zona «Mochila»: se quita y va a la mochila.
 // Marcado: las casillas arrastrables llevan data-drag="bag:i" | "slot:ranura" y data-dslot con su ranura; las zonas
 // de destino llevan data-drop="equip" | "bag".
+// Runas: las piedras llevan data-drag="req:i" (equipada) | "rbag:i" (reserva) y cada hueco data-drop="req:j" | "rbag:j";
+// soltar sobre un hueco ocupado intercambia las dos runas.
 
-type DropFn = (from: string, to: 'equip' | 'bag') => void;
+type DropFn = (from: string, to: string) => void;
 
 const MOVE = 6;
 let start: { x: number; y: number; el: HTMLElement; id: string; pid: number } | null = null;
@@ -19,7 +21,9 @@ function zoneAt(x: number, y: number): HTMLElement | null {
   ghost?.style.removeProperty('display');
   return z;
 }
-const validFor = (id: string, z: HTMLElement | null): boolean => !!z && ((id.startsWith('bag:') && z.dataset.drop === 'equip') || (id.startsWith('slot:') && z.dataset.drop === 'bag'));
+const isRune = (id: string): boolean => id.startsWith('req:') || id.startsWith('rbag:');
+const validFor = (id: string, z: HTMLElement | null): boolean => !!z && ((id.startsWith('bag:') && z.dataset.drop === 'equip') || (id.startsWith('slot:') && z.dataset.drop === 'bag')
+  || (isRune(id) && isRune(z.dataset.drop ?? '') && z.dataset.drop !== id));
 
 function cleanup(): void {
   ghost?.remove(); ghost = null;
@@ -68,7 +72,7 @@ export function installDragDrop(onDrop: DropFn): void {
       const z = zoneAt(e.clientX, e.clientY);
       const id = start.id;
       cleanup();
-      if (validFor(id, z)) onDrop(id, z!.dataset.drop as 'equip' | 'bag');
+      if (validFor(id, z)) onDrop(id, z!.dataset.drop!);
       return;
     }
     start = null;

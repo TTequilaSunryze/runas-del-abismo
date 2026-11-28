@@ -12,7 +12,8 @@ import { clearSnapshot, readSnapshot } from '../game/snapshot';
 import { descendFx, fadeTo, finishTyping, lobbyScene, placeParent, talkLines } from './settlement';
 import { NPCS } from '../content/dialogues';
 import { investigate } from '../game/research';
-import { addLog, closeIntro, combatScreen, labClick } from './combat';
+import { addLog, closeIntro, combatScreen, inspectUnit, labClick, logTab, zoomBoard } from './combat';
+import { trackGroup } from './grouplog';
 import { closeEditor, editorScreen } from './editor';
 import { balanceScreen, closeBalance } from './balance';
 import { testDraft } from '../net/balance';
@@ -127,6 +128,7 @@ async function enter(code: string, isHost: boolean, local: boolean, resume = fal
     const found = drainArchiveNotices();
     if (found.length && session.run) { if (ui.runFinds.code !== session.run.code) ui.runFinds = { code: session.run.code, list: [] }; ui.runFinds.list.push(...found.filter((n) => n.kind !== 'contract')); showArchiveNotices(found); }
     addLog(ev);
+    trackGroup(session.run);
     playEvents(ev);
     const now = session.isMyTurn();
     if (now && !wasMyTurn) sfx.myTurn();
@@ -163,6 +165,7 @@ function runScene(run: RunS, want: string): MenuScene {
   if (want === 'room' && run.room?.kind === 'altar') return 'altar';
   if (want === 'room' && run.room?.kind === 'forge') return 'abyssforge';
   if (want === 'room' && run.room?.kind === 'shrine') return 'shrine';
+  if (want === 'room' && run.room?.kind === 'blessing') return 'altar';
   if (want === 'room' && run.room?.kind === 'rest') return 'rest';
   if (want === 'event' && eventDef(run)?.scene) return eventDef(run)!.scene!;
   return 'game';
@@ -226,7 +229,7 @@ function render(events: GameEvent[]): void {
 let submitted = '';
 // iconos del arte del juego en lugar de emojis, en cualquier pantalla
 if (typeof document !== 'undefined') installIcons(document.body);
-ui.rerender = () => render([]);
+ui.rerender = () => { lastKey = ''; render([]); };
 // solo en desarrollo: acceso al estado para las pruebas visuales
 if (import.meta.env.DEV) (window as unknown as { __ui: typeof ui }).__ui = ui;
 ui.refreshLobby = () => { lastKey = ''; render([]); };
@@ -295,6 +298,20 @@ installDragDrop((from, to) => {
   const s = ui.session;
   if (!s) return;
   const [kind, key] = from.split(':');
+  // runas: entre los espacios equipados y la reserva; soltar sobre una ocupada las intercambia
+  if (kind === 'req' || kind === 'rbag') {
+    const h = s.run ? mine(s.run) : undefined;
+    if (!h) return;
+    const [tk, tv] = to.split(':'), i = Number(key), j = Number(tv);
+    const eq = h.runes ?? [], bag = h.runeBag ?? [];
+    if (kind === 'rbag' && tk === 'req') s.act({ a: 'rune', op: 'equip', idx: i, ...(eq[j] ? { slot: j } : {}) });
+    else if (kind === 'req' && tk === 'rbag') { if (bag[j]) s.act({ a: 'rune', op: 'equip', idx: j, slot: i }); else s.act({ a: 'rune', op: 'unequip', slot: i }); }
+    else if (kind === 'req' && tk === 'req' && eq[j]) s.act({ a: 'rune', op: 'swap', from: i, to: j });
+    else return;
+    sfx.click();
+    ui.selRune = '';
+    return;
+  }
   if (kind === 'bag' && to === 'equip') s.act({ a: 'equip', idx: Number(key) });
   else if (kind === 'slot' && to === 'bag') s.act({ a: 'unequip', slot: key as Slot });
   else return;
@@ -553,7 +570,11 @@ document.addEventListener('click', (e) => {
     case 'logout': ui.busy = true; void signOut().then(() => { ui.busy = false; ui.acctMsg = 'Sesión cerrada. Tu progreso sigue en este navegador.'; if (ui.screen === 'home' || ui.screen === 'lobby') homeScreen(''); }); break;
     case 'end': s?.act({ a: 'end' }); break;
     case 'spell': pickSpell(id); break;
-    case 'togglelog': ui.logOpen = !ui.logOpen; render([]); break;
+    case 'togglelog': ui.logOpen = !ui.logOpen; store.set('rda_logopen', ui.logOpen ? '1' : '0'); render([]); break;
+    case 'logtab': logTab(id); break;
+    case 'uinspect': inspectUnit(id === '' ? null : Number(id)); break;
+    case 'pingmode': if (ui.board) { ui.board.pingMode = !ui.board.pingMode; lastKey = ''; render([]); } break;
+    case 'zoom': zoomBoard(Number(id)); break;
     case 'mute': toggleMute(); if (ui.screen === 'home' || ui.screen === 'lobby') homeScreen(''); else { lastKey = ''; render([]); } break;
     case 'leave':
       if (ui.leaveArmed) { ui.leaveArmed = false; fadeTo(() => home()); }
@@ -586,7 +607,11 @@ document.addEventListener('keydown', (e) => {
   if (ui.screen === 'combat' && (e.target as HTMLElement).tagName !== 'INPUT' && (e.key === 'i' || e.key === 'I') && ui.board) { ui.board.setIso(!ui.board.iso); lastKey = ''; render([]); return; }
   if (ui.screen === 'combat' && (e.target as HTMLElement).tagName !== 'INPUT' && (e.key === 'v' || e.key === 'V')) { ui.hpBars = !ui.hpBars; if (ui.board) ui.board.showBars = ui.hpBars; lastKey = ''; render([]); return; }
   // G: señal táctica en la casilla bajo el ratón (la ven todos)
-  if (ui.screen === 'combat' && (e.key === 'g' || e.key === 'G') && (e.target as HTMLElement).tagName !== 'INPUT') { const p = ui.board?.hoverCell(); if (p && s) s.ping(p.x, p.y); return; }
+  // G: señal táctica en la casilla bajo el ratón (la ven todos); sin casilla debajo, activa el modo «señalar» del botón
+  if (ui.screen === 'combat' && (e.key === 'g' || e.key === 'G') && (e.target as HTMLElement).tagName !== 'INPUT') { const p = ui.board?.hoverCell(); if (p && s) s.ping(p.x, p.y); else if (ui.board) { ui.board.pingMode = !ui.board.pingMode; lastKey = ''; render([]); } return; }
+  // Escape en combate: cancela el modo señalar y cierra la ficha de unidad
+  if (ui.screen === 'combat' && e.key === 'Escape' && ui.board?.pingMode) { ui.board.pingMode = false; lastKey = ''; render([]); return; }
+  if (ui.screen === 'combat' && e.key === 'Escape' && document.getElementById('uinspect')?.classList.contains('open')) { inspectUnit(null); return; }
   // fase de colocación: E = «¡Listo!»
   if (ui.screen === 'combat' && s?.run?.combat?.deploy && (e.target as HTMLElement).tagName !== 'INPUT' && (e.key === 'e' || e.key === 'E')) { if (!s.run.combat.deploy.ready.includes(s.myId)) s.act({ a: 'deployready' }); return; }
   if (ui.screen !== 'combat' || !s?.isMyTurn() || (e.target as HTMLElement).tagName === 'INPUT') return;

@@ -243,7 +243,8 @@ export type CombatGoal = { kind: 'survive'; rounds: number } | { kind: 'targets'
 export type GameEvent =
   | { t: 'turn'; unit: number; round: number }
   | { t: 'move'; unit: number; path: Pos[]; walk?: boolean }
-  | { t: 'cast'; unit: number; spell: string; at: Pos; element?: Element }
+  /** echo: réplica rúnica (eco) de un lanzamiento anterior: se anima como un lanzamiento pero no cuenta como uno */
+  | { t: 'cast'; unit: number; spell: string; at: Pos; element?: Element; echo?: boolean }
   | { t: 'damage'; unit: number; amount: number; absorbed: number; crit: boolean; source: string }
   | { t: 'heal'; unit: number; amount: number }
   | { t: 'shield'; unit: number; amount: number }

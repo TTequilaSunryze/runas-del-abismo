@@ -1575,3 +1575,130 @@ body.dragging .dropzone[data-drop] { box-shadow: 0 0 0 1px rgba(227, 190, 80, .2
 #mapmodal .panel.wide { max-width: min(1600px, 96vw); width: 96vw; max-height: 94vh; }
 #mapmodal .actmap { max-height: 80vh; min-height: 52vh; width: 100%; }
 @media (max-width: 720px) { #mapmodal .panel.wide { width: 100vw; max-width: 100vw; padding: 6px; } #mapmodal .actmap { min-width: 760px; min-height: 0; } #mapmodal .panel.wide { overflow: auto; } }
+
+/* ---------- Combate v2: tablero a pantalla completa, ventanas flotantes y ficha de unidad ---------- */
+/* el tablero usa todo el ancho y también el hueco bajo la barra superior (los muros del fondo quedan detrás de ella) */
+.combatmode .cinfo { background: linear-gradient(180deg, rgba(14, 10, 8, .94), rgba(14, 10, 8, .78)); backdrop-filter: blur(2px); }
+.combatmode .cgrid { top: 0; }
+.combatmode .cgrid .stage { overflow: hidden; }
+.combatmode canvas#cv { width: min(100%, calc((100dvh - var(--chud, 120px) - 8px) * var(--ar))) !important; max-height: calc(100dvh - var(--chud, 120px) - 8px); transform-origin: 50% 50%; transition: transform .08s ease-out; will-change: transform; filter: drop-shadow(0 18px 30px rgba(0, 0, 0, .55)); }
+.combatmode .stage.panning canvas#cv { transition: none; cursor: grabbing; }
+.combatmode .stage.pinging canvas#cv { cursor: crosshair; }
+.combatmode .cside { top: calc(var(--ctop, 48px) + 8px); }
+.combatmode .crail { top: calc(var(--ctop, 48px) + 8px); }
+.czoom { position: absolute; right: 10px; bottom: 10px; z-index: 5; display: flex; gap: 4px; opacity: .75; transition: opacity .15s; }
+.czoom:hover { opacity: 1; }
+.czoom .sq { width: 34px; height: 30px; padding: 0; font-size: 18px; display: grid; place-items: center; }
+.czoom .sq.zl { width: 52px; font-size: 11px; }
+
+/* orden de turnos: miniaturas con la apariencia actual, clicables */
+.combatmode .cturns .tl { cursor: pointer; }
+.combatmode .cturns .tl:hover { filter: brightness(1.18); }
+.combatmode .cturns .tl.insp { outline: 2px solid #f3d68e; outline-offset: 1px; }
+.tl img { object-fit: cover; border-radius: 3px; background: #0c0907; }
+.tl.ally img { object-position: 50% 18%; }
+.tlst { position: absolute; top: 1px; right: 1px; display: flex; flex-direction: column; gap: 0; }
+.combatmode .cturns .tl .tlst img.gi, .tlst img.gi { width: auto; height: 11px; margin: 0; }
+
+/* ventanas flotantes del combate (registro y ficha) */
+.cwin { position: fixed; z-index: 18; display: none; flex-direction: column; min-width: 240px; min-height: 120px; border: 2px solid var(--iron); border-radius: 6px;
+  background: var(--noise), linear-gradient(180deg, #221b15, #120e0b); box-shadow: 0 8px 24px rgba(0, 0, 0, .6), inset 0 0 0 1px #0008; }
+.cwin.open { display: flex; }
+.combatmode .clogbox.cwin { z-index: 18; position: fixed; right: auto; bottom: auto; width: 380px; height: 250px; resize: both; overflow: hidden; opacity: var(--lop, .92); }
+.combatmode .clogbox.cwin.open { display: flex; animation: none; }
+.cwinh { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-bottom: 1px solid #3a3128; cursor: move; user-select: none; touch-action: none; font-family: var(--head); color: var(--gold); font-size: 13px; }
+.cwint { flex: none; white-space: nowrap; }
+.cwinh .sq { padding: 1px 7px; font-size: 12px; cursor: pointer; }
+.ltabs { display: flex; gap: 3px; }
+.ltabs .mini { padding: 1px 6px; font-size: 11px; cursor: pointer; }
+.ltabs .mini small { margin-left: 3px; opacity: .6; font-size: 10px; }
+.lop { display: flex; align-items: center; gap: 3px; font-size: 13px; color: var(--dim); cursor: default; }
+.lop input { width: 64px; accent-color: var(--gold); }
+.clogbox .clog { flex: 1; min-height: 0; padding: 4px 6px 6px; overflow-y: auto; }
+.clog [data-tip] { cursor: help; }
+.clog [data-act="uinspect"] { cursor: pointer; text-decoration: underline dotted rgba(255, 255, 255, .25); }
+/* colores del registro según lo que pasa */
+.clog .kdmg .ldmg { color: #ff6464; }
+.clog .kcrit { background: linear-gradient(90deg, rgba(255, 176, 32, .12), transparent); }
+.clog .kheal { color: #a8e8a0; }
+.clog .kshield { color: #a6d8ff; }
+.clog .kst { border-left: 2px solid var(--st, #c9a0ff); padding-left: 12px; margin-left: 2px; }
+.clog .kst .lst { color: var(--st, #d6a6ff); font-weight: bold; }
+.clog .kst .lwhy { color: #a99f8c; font-size: 11px; }
+.clog .kctl { color: #ffe27a; }
+.clog .krune, .clog .lecho { color: #c9a8ff; }
+.clog .lecho .lsp { color: #d8b8ff; }
+.clog img.gi.st { height: 14px; vertical-align: -3px; }
+.clog .lg { padding: 2px 4px; margin: 2px 0; border-radius: 3px; background: rgba(255, 255, 255, .03); border-left: 3px solid #6a5a48; }
+.clog .lg.lvl { border-left-color: #f2c14e; } .clog .lg.rune { border-left-color: #b07cff; } .clog .lg.boon { border-left-color: #f2c14e; }
+.clog .lg.up { border-left-color: #5fcf80; } .clog .lg.spell { border-left-color: #58a6ff; } .clog .lg.item { border-left-color: #c8a070; }
+.clog .lg.dim { opacity: .7; }
+
+/* ficha de unidad */
+.uinspect { right: 62px; top: calc(var(--ctop, 48px) + 8px); width: min(340px, calc(100vw - 80px)); max-height: calc(100dvh - var(--ctop, 48px) - var(--chud, 120px) - 16px); overflow-y: auto; padding: 8px 10px; gap: 4px; scrollbar-width: thin; }
+.uinspect > * { flex-shrink: 0; }
+.uinspect .uhead { display: flex; gap: 8px; align-items: center; }
+.uinspect .uport { width: 56px; height: 56px; object-fit: cover; object-position: 50% 18%; border: 2px solid #5d4f3e; border-radius: 4px; image-rendering: pixelated; background: #0c0907; }
+.uinspect .uport.enemy { border-color: #8a2b2b; } .uinspect .uport.hero { border-color: #2f6fa8; }
+.uinspect .uname { font-family: var(--head); font-size: 16px; }
+.ubar { position: relative; height: 16px; border: 1px solid #5d544b; background: #2a0f0c; border-radius: 2px; overflow: hidden; }
+.ubar i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(180deg, #ef6a5e, #a83030); }
+.uinspect:has(.uport.hero) .ubar i { background: linear-gradient(180deg, #6fd07a, #2f8a3a); }
+.ubar s { position: absolute; top: 0; bottom: 0; background: #2f7fe0; text-decoration: none; }
+.ubar b { position: relative; display: block; text-align: center; font-size: 11px; line-height: 16px; text-shadow: 0 1px 1px #000; }
+.ustats { display: flex; flex-wrap: wrap; gap: 8px; }
+.ustlist { display: flex; flex-direction: column; gap: 4px; }
+.ust { display: flex; gap: 6px; align-items: flex-start; padding: 4px 6px; border-left: 3px solid var(--st, #888); background: rgba(255, 255, 255, .03); border-radius: 3px; }
+.ust > div > b { color: var(--st, #eee); }
+.ust img.gi.big, img.gi.st.big { height: 26px; flex: none; }
+.fcast { margin-top: 4px; padding: 5px 7px; border: 1px dashed #7a3a3a; border-radius: 4px; background: rgba(120, 20, 20, .12); font-size: 12.5px; }
+.fcast ul { margin: 3px 0 0; padding-left: 16px; }
+.uspells { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* estados en una línea (barra inferior, fichas) */
+.stline { display: inline-flex; align-items: center; gap: 3px; padding: 1px 5px 1px 2px; margin: 1px 3px 1px 0; border: 1px solid var(--st, #888); border-radius: 10px; background: rgba(0, 0, 0, .35); font-size: 11.5px; cursor: help; }
+.stline b { color: var(--st, #eee); font-weight: normal; }
+.stline i { font-style: normal; color: #fff; font-size: 10.5px; }
+.stline small { color: var(--dim); font-size: 10px; }
+.stline img.gi { height: 15px; margin: 0; }
+.mystl { display: flex; flex-wrap: wrap; gap: 2px; max-width: 230px; margin-top: 2px; }
+.mystl .stline { font: 11px/1.2 var(--body, sans-serif); padding: 0 4px 0 1px; margin: 0; }
+.mystl .stline b { display: none; }
+.mystl .stline img.gi { height: 16px; }
+
+/* barra inferior: botón de señalar casilla */
+.dhud .dend { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+.dhud .ping { min-height: 64px; min-width: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 20px; }
+.dhud .ping small { font-size: 10px; opacity: .85; }
+.dhud .ping.on { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(227, 176, 75, .45), 0 0 12px rgba(227, 176, 75, .45); }
+@media (max-width: 760px) {
+  .combatmode .clogbox.cwin { resize: none; }
+  .uinspect { right: 8px; left: 8px; width: auto; }
+  .dhud .ping { min-height: 46px; }
+}
+
+/* runas: arrastrar entre espacios y reserva, y sinergias explicadas */
+.runeslots .slotbox[data-drop] { border-radius: 6px; padding: 2px; transition: box-shadow .12s, background .12s; }
+.runeslots .slotbox.dropok { background: rgba(227, 176, 75, .12); box-shadow: 0 0 0 2px var(--gold), 0 0 12px rgba(227, 176, 75, .45); }
+.runeslots .runestone[data-drag] { cursor: grab; }
+body.dragging .runeslots .slotbox[data-drop] { box-shadow: 0 0 0 1px rgba(227, 176, 75, .35); }
+.synlink { color: #d8c8ff; border-bottom: 1px dotted rgba(216, 200, 255, .55); cursor: help; }
+.synlink.on { color: #8fe08a; border-bottom-color: rgba(143, 224, 138, .6); }
+.synnew { margin: 4px 0; padding: 5px 7px; border: 1px solid rgba(143, 224, 138, .45); border-radius: 4px; background: rgba(60, 120, 60, .14); cursor: help; }
+.synnew b { color: #8fe08a; }
+
+/* Descanso y Sala de los Pactos: título y texto arriba, la ilustración libre en el centro y las elecciones abajo */
+@media (min-width: 900px) and (min-height: 640px) {
+  .stage.restwin { min-height: calc(100vh - 100px); }
+  .stage.restwin > .evopts, .stage.restwin > .evresult { margin-top: auto; }
+  /* las dos opciones del Descanso, una a cada lado de la hoguera */
+  .stage.restwin:not(.blesswin) > .evopts { flex-direction: row; justify-content: space-between; align-items: stretch; width: min(1000px, 100%); }
+  .stage.restwin:not(.blesswin) > .evopts .evcard { flex: 0 1 420px; }
+}
+.blesswin .evcard.blesscard { --cc: 242, 193, 78; }
+.blesswin .stage-title { color: #ffe2a0; }
+.blessrow .evopts { width: 100%; }
+@media (min-width: 900px) and (min-height: 640px) {
+  .stage.blesswin > .evhint { margin-top: auto; }
+  .stage.blesswin > .evhint + .evopts { margin-top: 4px; }
+}

@@ -34,6 +34,26 @@ export function statusChip(kind: StatusKind): string {
 /** Sinergias en las que participa la familia de una runa (solo las reales). */
 const synergiesOfFamily = (r: RuneDef) => SYNERGY_LIST.filter((s) => s.families.includes(r.family));
 
+type Syn = (typeof SYNERGY_LIST)[number];
+/** Familias de una sinergia en palabras («Muerte + Tiempo»). */
+const famWords = (s: Syn): string => s.families.map((f) => `${FAMILY_ICON[f]} ${FAMILY_NAME[f]}`).join(' + ');
+/**
+ * Qué es una sinergia, qué hace y si ya la tienes: con tus runas equipadas (`eq`) dice si está activa o qué familia falta.
+ * Las sinergias no son runas: se activan solas al llevar a la vez runas de varias familias.
+ */
+export function synTip(s: Syn, eq?: readonly string[], extra?: string): string {
+  const on = eq ? activeSynergies(eq).some((x) => x.id === s.id) : false;
+  const have = new Set((eq ?? []).map((id) => RUNES[id]?.family).filter(Boolean));
+  const miss = s.families.filter((f) => !have.has(f));
+  const state = !eq ? '' : on ? '<div class="sm good">✔ La tienes activa.</div>' : `<div class="sm">Te falta${miss.length > 1 ? 'n' : ''}: ${miss.map((f) => `<b style="color:${FAMILY_COLOR[f]}">${FAMILY_ICON[f]} una runa de ${FAMILY_NAME[f]}</b>`).join(' y ')}.</div>`;
+  return `<b>🔗 Sinergia: ${esc(s.name)}</b><div class="sm dim">${famWords(s)}</div><div class="sm">${esc(s.text)}</div>${extra ?? ''}${state}<div class="sm dim">Las sinergias no se equipan: se activan solas al llevar a la vez runas de esas familias.</div>`;
+}
+/** Nombre de sinergia con su explicación al pasar el ratón y la marca ✔ si ya está activa. */
+export function synLink(s: Syn, eq?: readonly string[]): string {
+  const on = eq ? activeSynergies(eq).some((x) => x.id === s.id) : false;
+  return `<span class="synlink ${on ? 'on' : ''}" ${tip(synTip(s, eq))}>${on ? '✔ ' : ''}${esc(s.name)}</span>`;
+}
+
 export function runeTip(r: RuneDef): string {
   return `<b style="color:${FAMILY_COLOR[r.family]}">${esc(r.name)}</b><div class="sm dim">${FAMILY_ICON[r.family]} ${FAMILY_NAME[r.family]} · <span class="rr${r.rarity}t">${RARITY_NAME[r.rarity]}</span> · ${KIND_NAME[r.kind]}${r.stackable ? ' · acumulable' : ''}${r.boss ? ' · de jefe' : ''}</div><div class="sm">${esc(r.text)}</div><i class="sm dim">${esc(r.lore)}</i>`;
 }
@@ -60,7 +80,7 @@ export function runeSheet(r: RuneDef, h?: HeroSave): string {
     <div class="sm"><b>Efecto:</b> ${esc(r.text)}</div>
     <div class="sm dim"><b>Ejemplo:</b> ${esc(r.example)}</div>
     ${sts.length ? `<div class="chips">${sts.map(statusChip).join('')}</div>` : ''}
-    <div class="sm dim"><b>Combina con:</b> ${syn.map((s) => `${FAMILY_ICON[s.families.find((f) => f !== r.family)!]} ${esc(s.name)}`).join(' · ')}</div>
+    <div class="sm dim"><b ${tip('<b>Sinergias</b><div class="sm">Si llevas a la vez esta runa y una runa de la otra familia, se activa la sinergia: un efecto extra que no ocupa espacio. Pasa el ratón por cada una para ver qué hace.</div>')}>Sinergias posibles:</b> ${syn.map((s) => `${FAMILY_ICON[s.families.find((f) => f !== r.family)!]} ${synLink(s, h?.runes)}`).join(' · ')}</div>
     ${spells}</div>`;
 }
 
@@ -76,7 +96,7 @@ export function runeOfferRow(run: RunState, modal = false): string {
     const actions = full
       ? `<div class="sm dim">Espacios llenos: sustituye una</div><div class="affrow">${eq.map((e, slot) => `<button class="mini" data-act="rune" data-op="take" data-id="${i}" data-slot="${slot}" ${tip(`Sustituir <b>${esc(RUNES[e]!.name)}</b> (va a la reserva si cabe)`)}>⟲ ${esc(RUNES[e]!.name)}</button>`).join('')}</div><button class="mini" data-act="rune" data-op="take" data-id="${i}" data-bag="1" ${(h.runeBag?.length ?? 0) >= RUNE_RESERVE ? 'disabled' : ''}>A la reserva (${h.runeBag?.length ?? 0}/${RUNE_RESERVE})</button>`
       : `<button class="pri" data-act="rune" data-op="take" data-id="${i}">Equipar</button>`;
-    return `<div class="lootcard runecard rr${r.rarity}" style="--fam:${FAMILY_COLOR[r.family]}">${runeSheet(r, h)}${after.length ? `<div class="sm good">🔗 Activa: ${after.map((s) => esc(s.name)).join(', ')}</div>` : ''}${actions}</div>`;
+    return `<div class="lootcard runecard rr${r.rarity}" style="--fam:${FAMILY_COLOR[r.family]}">${runeSheet(r, h)}${after.length ? after.map((sy) => `<div class="synnew" ${tip(synTip(sy, [...eq, id]))}><b>🔗 Al equiparla activas la sinergia ${esc(sy.name)}</b><div class="sm">${esc(sy.text)}</div></div>`).join('') : ''}${actions}</div>`;
   };
   const more = (h.runeOffers?.length ?? 1) - 1;
   const body = `<div class="panel loot boon runeoffer ${modal ? 'wide' : ''}"><div class="row"><h3>✧ ${esc(SOURCE_NAME[o.src])}${o.src === 'start' ? ': elige la runa con la que empiezas' : ': elige una'}</h3><span class="grow"></span>${more ? `<span class="pill sm">+${more} pendiente${more > 1 ? 's' : ''}</span>` : ''}${o.src === 'start' ? '' : '<button class="mini" data-act="rune" data-op="skip">Renunciar</button>'}</div>
@@ -115,14 +135,15 @@ export function runesTab(h: HeroSave, canManage: boolean): string {
     detail = `<div class="detail">${runeSheet(r, h)}<div class="acts">${acts}</div></div>`;
   }
   return `<div class="lbl">Runas equipadas <span class="dim">${eq.length}/${RUNE_SLOTS}</span></div>
-  <div class="runeslots">${Array.from({ length: RUNE_SLOTS }, (_, i) => `<div class="slotbox">${runeStone(eq[i], eq[i] ? `data-act="selrune" data-id="eq:${i}"` : '', false, ui.selRune === `eq:${i}`)}<small>${eq[i] ? esc(RUNES[eq[i]!]!.name) : `Espacio ${i + 1}`}</small></div>`).join('')}</div>
+  <div class="runeslots">${Array.from({ length: RUNE_SLOTS }, (_, i) => `<div class="slotbox" ${canManage ? `data-drop="req:${i}"` : ''}>${runeStone(eq[i], eq[i] ? `data-act="selrune" data-id="eq:${i}"${canManage ? ` data-drag="req:${i}"` : ''}` : '', false, ui.selRune === `eq:${i}`)}<small>${eq[i] ? esc(RUNES[eq[i]!]!.name) : `Espacio ${i + 1}`}</small></div>`).join('')}</div>
   <div class="lbl">Reserva <span class="dim">${bag.length}/${RUNE_RESERVE}</span></div>
-  <div class="runeslots small">${Array.from({ length: RUNE_RESERVE }, (_, i) => `<div class="slotbox">${runeStone(bag[i], bag[i] ? `data-act="selrune" data-id="bag:${i}"` : '', false, ui.selRune === `bag:${i}`)}</div>`).join('')}</div>
+  ${canManage ? '<div class="dim sm">Arrastra una runa entre la reserva y tus espacios: si el hueco está ocupado, se intercambian.</div>' : ''}
+  <div class="runeslots small">${Array.from({ length: RUNE_RESERVE }, (_, i) => `<div class="slotbox" ${canManage ? `data-drop="rbag:${i}"` : ''}>${runeStone(bag[i], bag[i] ? `data-act="selrune" data-id="bag:${i}"${canManage ? ` data-drag="rbag:${i}"` : ''}` : '', false, ui.selRune === `bag:${i}`)}</div>`).join('')}</div>
   <div class="lbl">Familias</div>
   <div class="famrow">${FAMILIES.map((f) => { const n = eq.filter((id) => RUNES[id]?.family === f).length; return `<span class="fam ${n ? 'on' : ''}" style="--fam:${FAMILY_COLOR[f]}" ${tip(`${FAMILY_NAME[f]}: ${n} runa${n === 1 ? '' : 's'}`)}>${FAMILY_ICON[f]} ${n}</span>`; }).join('')}</div>
   <div class="lbl">Sinergias activas <span class="dim">${syn.length}</span></div>
-  ${syn.length ? syn.map((s) => `<div class="syn on" ${tip(esc(s.text))}>🔗 <b>${esc(s.name)}</b> <span class="dim sm">${s.families.map((f) => FAMILY_ICON[f]).join('')}</span><div class="sm">${esc(s.text)}</div></div>`).join('') : '<div class="dim sm">Combina runas de dos familias distintas para activar una sinergia.</div>'}
-  ${near.length ? `<div class="sm dim">Con una runa de otra familia: ${near.slice(0, 4).map((n) => `${FAMILY_ICON[n.missing]} ${esc(n.syn.name)}`).join(' · ')}</div>` : ''}
+  ${syn.length ? syn.map((s) => `<div class="syn on" ${tip(synTip(s, eq))}>🔗 <b>${esc(s.name)}</b> <span class="dim sm">${famWords(s)}</span><div class="sm">${esc(s.text)}</div></div>`).join('') : '<div class="dim sm">Combina runas de dos familias distintas para activar una sinergia (un efecto extra que no ocupa espacio).</div>'}
+  ${near.length ? `<div class="sm dim">A una runa de activar: ${near.slice(0, 4).map((n) => `<span ${tip(synTip(n.syn, eq))}>${FAMILY_ICON[n.missing]} ${synLink(n.syn, eq)}</span>`).join(' · ')} <span class="dim">(pasa el ratón para ver qué hacen)</span></div>` : ''}
   ${detail}
   <div class="lbl">Tus habilidades con runas</div>
   <div class="spells">${spells.join('')}</div>`;

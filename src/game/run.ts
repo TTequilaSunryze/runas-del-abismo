@@ -29,7 +29,7 @@ import { validEmblem, validFrame, validTitle } from './cosmetics';
 import { catalogSpells, kitProblem } from '../content/spellCatalog';
 import { BRANCH_EVENTS, branchStarters, followUps, keyFlag, optionOpen, secretOpen, weakBossFlag } from '../content/branching';
 import { RUNES, RUNE_LIST, RUNE_SLOTS, runeUnitBonus, type RuneRarity } from '../core/runes';
-import { COMBAT_RUNE_CHANCE, RUNE_PRICE, SOURCE_NAME, guaranteedOffer, makeOffer, migrateRunes, queueOffer, runeAction, type RuneOffer, type RuneOp, type RuneSource } from './runeLoot';
+import { COMBAT_RUNE_CHANCE, ELITE_RUNE_CHANCE, SHRINE_RUNE_CHANCE, RUNE_PRICE, SOURCE_NAME, guaranteedOffer, makeOffer, migrateRunes, queueOffer, runeAction, type RuneOffer, type RuneOp, type RuneSource } from './runeLoot';
 export type { RuneOffer, RuneSource } from './runeLoot';
 
 /** Una opción de la recompensa del jefe. */
@@ -1041,8 +1041,8 @@ export function chooseNode(run: RunState, idx: number): GameEvent[] {
   } else if (node === 'shrine') {
     // H4: el Santuario mejora uno de tus hechizos (las bendiciones de clase pasan a ser la recompensa de los jefes)
     for (const h of run.heroes) h.bossOffer ??= buildBossOffer(run, h, { size: shrineSize(run, h) });
-    // la mitad de los santuarios también ofrecen runas (de calidad alta)
-    if (rand(runeBox(run)) < 0.5) for (const h of run.heroes) giveRuneOffer(run, h, 'shrine');
+    // algunos santuarios también ofrecen runas (de calidad alta)
+    if (rand(runeBox(run)) < SHRINE_RUNE_CHANCE) for (const h of run.heroes) giveRuneOffer(run, h, 'shrine');
     enterRoom(run, 'shrine');
   }
   return [];
@@ -1066,6 +1066,14 @@ export function leaveNode(run: RunState): void {
   if (run.phase === 'room') {
     if (!roomDone(run)) return;
     const r = run.room!;
+    // Sala de los Pactos: no es una sala del mapa (no cuenta como paso); después, la reliquia de grupo si la hay
+    if (r.kind === 'blessing') {
+      run.room = null;
+      run.phase = 'map';
+      run.note = 'Las llamas del altar se apagan: la bendición ya es vuestra.';
+      if (r.relic && RELIC_EVENTS.some((e) => e.id === r.relic)) { run.event = { id: r.relic, votes: {} }; run.phase = 'event'; }
+      return;
+    }
     run.note = r.kind === 'forge' ? (run.overload === 'overload' ? '¡El crisol se desborda! El próximo combate será una Sobrecarga de fuego.' : run.overload === 'hot' ? 'El crisol arde: el próximo combate será Ardiente.' : 'Dejáis la forja con el metal aún tibio.')
       : r.kind === 'shrine' ? 'La luz del santuario se apaga tras vosotros.' : r.kind === 'rest' ? r.lines.join(' ') : r.kind === 'chest' ? (r.cursed ? 'El cofre maldito queda atrás.' : 'Repartís el botín del cofre.') : (r.kind === 'altar' ? r.result ?? '' : '');
     run.room = null;
@@ -1173,7 +1181,7 @@ export function finishFight(run: RunState): void {
     }
     // objetos según la sala; los hechizos solo llegan al vencer al jefe de la zona
     dropLoot(run, h, dropKindOf(run), (found[h.owner] ??= []));
-    if (run.kind === 'boss' && run.zone < lastZone(run)) offerBossReward(run, h);
+    // la bendición del jefe ya no se elige aquí: se recibe al empezar la zona siguiente, en la Sala de los Pactos (advanceZone)
     const max = heroMaxHp(h);
     // no hay curación gratis tras un combate: solo tras vencer al jefe (o en hogueras, eventos y habilidades).
     // Los caídos se levantan con el 30% de la vida para poder seguir jugando.
@@ -1183,7 +1191,9 @@ export function finishFight(run: RunState): void {
     h.stats.maxGold = Math.max(h.stats.maxGold, h.gold);
     // runas: GARANTIZADAS tras cada élite (y emboscada) y cada jefe; el jefe final, excepcional; a veces tras un combate normal
     const rk = runeKindOf(run);
-    const ro = rk === 'combat' ? (rand(runeBox(run)) < COMBAT_RUNE_CHANCE(run.zone) ? queueOffer(h, makeOffer(runeBox(run), h, 'combat', { zone: run.zone })) : null) : guaranteedOffer(runeBox(run), h, rk, run.zone, rk === 'elite' ? undefined : bossOf(run).id);
+    const ro = rk === 'combat' ? (rand(runeBox(run)) < COMBAT_RUNE_CHANCE(run.zone) ? queueOffer(h, makeOffer(runeBox(run), h, 'combat', { zone: run.zone })) : null)
+      : rk === 'elite' ? (rand(runeBox(run)) < ELITE_RUNE_CHANCE ? guaranteedOffer(runeBox(run), h, 'elite', run.zone) : null)
+      : guaranteedOffer(runeBox(run), h, rk, run.zone, bossOf(run).id);
     const rl = runeLoot(h, ro);
     if (rl) { extra.push(`${h.name}: ${rl.name}`); loot.push(rl); }
     if (run.kind === 'boss' && flawless && run.flags.includes(`promesa_${run.zone}`)) { const l = runeLoot(h, giveRuneOffer(run, h, 'event', true)); if (l) { extra.push(`${h.name} (promesa): ${l.name}`); loot.push(l); } }
@@ -1237,8 +1247,17 @@ export function advanceZone(run: RunState): void {
       for (const h of run.heroes) { if (h.gold >= 100) h.gold -= 100; else { h.gold = 0; h.boon.hp = (h.boon.hp ?? 0) - 15; clampHp(h); } }
       run.note += ' El prestamista de huesos cobra su deuda.';
     }
-    // reliquia de grupo: se vota antes de seguir
+    // la recompensa del jefe vencido: cada uno elige su bendición de clase en la Sala de los Pactos, al empezar la zona
+    // (si ya no le queda ninguna, una mejora de hechizo). La reliquia de grupo se vota al salir de la sala.
     const relic = RELIC_EVENTS[run.zone - 1];
+    for (const h of run.heroes) if (!h.boonOffer && !h.bossOffer) offerBossReward(run, h);
+    if (run.heroes.some((h) => h.boonOffer || h.bossOffer)) {
+      run.room = { kind: 'blessing', zone: run.zone, ...(relic ? { relic: relic.id } : {}) };
+      run.phase = 'room';
+      run.stamp++;
+      return;
+    }
+    // reliquia de grupo: se vota antes de seguir
     if (relic) { run.event = { id: relic.id, votes: {} }; run.phase = 'event'; }
   }
 }

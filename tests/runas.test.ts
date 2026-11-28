@@ -74,17 +74,23 @@ describe('runas · recompensas garantizadas', () => {
     finishFight(run);
     return run;
   };
-  it('todos los élites dan al menos una recompensa rúnica (también las emboscadas), en cualquier zona y semilla', () => {
-    for (let z = 0; z < 3; z++) for (let seed = 0; seed < 25; seed++) {
+  it('los élites (también las emboscadas) dan una recompensa rúnica a menudo pero no siempre, y de calidad de élite', () => {
+    let got = 0, total = 0;
+    for (let z = 0; z < 3; z++) for (let seed = 0; seed < 40; seed++) {
       const run = newRun(`E${seed}`, seed, P); run.zone = z; run.kind = 'elite';
       const h = run.heroes[0]!; h.runeOffers = [];
       run.combat = createCombat({ seed, w: 8, h: 5, obstacles: [], units: [heroSpec(h, { x: 1, y: 1 })] }).state; run.combat.over = 'win'; run.phase = 'combat';
       finishFight(run);
-      expect(h.runeOffers!.length).toBeGreaterThanOrEqual(1);
-      expect(h.runeOffers![0]!.src).toBe('elite');
-      expect(h.runeOffers![0]!.runes.every((id) => RUNES[id]!.rarity >= 2 && RUNES[id]!.rarity <= 4)).toBe(true);
+      total++;
+      const o = h.runeOffers!.find((x) => x.src === 'elite');
+      if (!o) continue;
+      got++;
+      expect(o.runes).toHaveLength(3);
+      expect(o.runes.every((id) => RUNES[id]!.rarity >= 2 && RUNES[id]!.rarity <= 4)).toBe(true);
     }
-    expect(win('elite', 0, { ambush: false }).heroes[0]!.runeOffers![0]!.runes.length).toBe(3);
+    // ELITE_RUNE_CHANCE = 60%: ni todas ni casi ninguna
+    expect(got / total).toBeGreaterThan(0.4);
+    expect(got / total).toBeLessThan(0.8);
     const amb = newRun('AMB', 9, P); amb.kind = 'combat'; amb.ambush = true;
     expect(runeKindOf(amb)).toBe('elite');
   });
