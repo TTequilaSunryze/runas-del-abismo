@@ -63,6 +63,7 @@ export function addLog(events: GameEvent[]): void {
     else if (e.t === 'detonate') s = `<div class="lfx">💥 ${n(e.unit)} detona ${e.amount}</div>`;
     else if (e.t === 'note') s = `<div class="lfx lnote ${/runa|Eco|eco|sinergia|Condena/i.test(e.text) ? 'krune' : ''}">${esc(e.text)}</div>`;
     else if (e.t === 'phase') s = `<div class="lturn bad">¡Segunda fase: ${n(e.unit)}!</div>`;
+    else if (e.t === 'bossEnter') s = `<div class="lturn bad">👑 ¡${n(e.unit)} entra en combate!</div>`;
     else if (e.t === 'over') s = `<div class="lturn"><b>${e.result === 'win' ? '¡Victoria!' : 'Derrota'}</b></div>`;
     if (s) ui.log.push({ at, k: 'c', html: s });
     if (e.t === 'cast') { const d = SPELLS[e.spell]; const u = getUnit(c, e.unit); if (d && u) ui.toast = { text: `${esc(u.name)} · ${esc(d.name)}${e.echo ? ' (eco)' : ''}`, team: u.team, at: Date.now() }; }

@@ -6,6 +6,7 @@ import { ZONES } from '../content/zones';
 import { animMul } from '../content/animSpeed';
 import { CRIT_FLAT, castProblem, current, essenceNeed, furyCrit, furyPower, implodePreview, movePreview, seedLinks, spellOf, usableMp } from '../core/combat/engine';
 import { coneCells } from '../core/combat/marks';
+import { OBJECTIVE_TEXT, objectivesOf, wardOf } from '../core/combat/encounter';
 import { alive, dist, hasLineOfSight, reachable } from '../core/combat/grid';
 import type { CombatState, GameEvent, Pos, Unit } from '../core/state';
 import type { Session } from '../game/session';
@@ -648,6 +649,7 @@ export class Board {
       else if (e.t === 'devour') float(e.unit, 'Devora', '#c9a0ff');
       else if (e.t === 'raise') float(e.unit, 'Alza muertos', '#c9a0ff');
       else if (e.t === 'summon') float(e.unit, 'Invocado', '#c77dff');
+      else if (e.t === 'bossEnter') float(e.unit, '¡LLEGA EL JEFE!', '#ffb030');
       else if (e.t === 'phase') {
         float(e.unit, '¡FASE 2!', '#ff3060');
         // hojas con segunda fase: se ve la transformación (su animación de lanzar)
@@ -1301,6 +1303,25 @@ export class Board {
         continue;
       } else if (m.kind === 'fence') {
         // se dibuja como obstáculo (drawFence)
+      } else if (m.kind === 'arrival') {
+        // Q1: casilla de llegada de una oleada anunciada: portal rojo discontinuo que gira
+        const X = m.pos.x * TILE, Y = m.pos.y * TILE;
+        g.fillStyle = `rgba(200,40,60,${(0.14 + 0.08 * Math.sin(now / 220 + m.id)).toFixed(3)})`; g.fillRect(X + 3, Y + 3, TILE - 6, TILE - 6);
+        g.save(); g.strokeStyle = 'rgba(255,110,120,.85)'; g.lineWidth = 2; g.setLineDash([5, 4]); g.lineDashOffset = -now / 60;
+        g.beginPath(); g.arc(cx, (m.pos.y + 0.5) * TILE, TILE * 0.34, 0, 6.3); g.stroke(); g.restore();
+        g.save(); g.fillStyle = '#ffd0d8'; g.font = 'bold 13px monospace'; g.textAlign = 'center'; g.fillText('▼', cx, cy + 6); g.restore();
+        continue;
+      } else if (m.kind === 'hunt') {
+        // Q1: territorio de caza del Cazador Sin Rostro: hierba pisoteada con huellas
+        const X = m.pos.x * TILE, Y = m.pos.y * TILE;
+        g.fillStyle = 'rgba(120,150,40,.16)'; g.fillRect(X + 1, Y + 1, TILE - 2, TILE - 2);
+        g.fillStyle = 'rgba(210,180,90,.55)'; for (const [dx, dy] of [[0.3, 0.35], [0.55, 0.6], [0.4, 0.8]] as const) { g.beginPath(); g.ellipse(X + dx * TILE, Y + dy * TILE, 3, 4, 0, 0, 6.3); g.fill(); }
+        continue;
+      } else if (m.kind === 'rift') {
+        // Q1: grieta del vacío del Devorador: roba 1 PA a quien empiece su turno en ella
+        const X = m.pos.x * TILE, Y = m.pos.y * TILE;
+        g.strokeStyle = `rgba(190,120,255,${(0.6 + 0.3 * Math.sin(now / 180 + m.id)).toFixed(3)})`; g.lineWidth = 3;
+        g.beginPath(); g.moveTo(X + 6, Y + 8); g.lineTo(X + TILE * 0.45, Y + TILE * 0.45); g.lineTo(X + TILE * 0.35, Y + TILE * 0.6); g.lineTo(X + TILE - 6, Y + TILE - 8); g.stroke();
       } else {
         g.strokeStyle = '#c8c8ff'; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, TILE * 0.2, 0, 6.3); g.stroke();
       }
@@ -1778,6 +1799,10 @@ export class Board {
     if (est) L.push([est, '#f2c14e']);
     L.push([`${u.name}  ${u.hp}/${u.maxHp} PV${u.shield ? `  escudo ${u.shield}` : ''}`, '#e8e0f5']);
     if (u.rank) L.push([`${u.rank === 'boss' ? 'Jefe' : 'Élite'}: inmune a aturdir · resiste PA/PM y empujones`, '#c9a0ff']);
+    // Q1: protección por objetivos y qué hace cada objetivo estructural
+    const ward = wardOf(c, u);
+    if (ward > 0) L.push([`Protegido: −${Math.round(ward * 100)}% de daño mientras sigan en pie sus ${objectivesOf(c).filter((o) => o.objective?.ward).length} objetivos`, '#ffb060']);
+    if (u.objective) L.push([`${u.objective.role === 'required' ? 'Objetivo obligatorio' : 'Objetivo opcional'}: ${OBJECTIVE_TEXT[u.objective.mech]}`, '#ffd24a']);
     L.push([`PA ${apNow}${apNow !== u.maxAp ? `/${u.maxAp}` : ''}${isCur ? '' : ' (próx. turno)'}`, apNow < u.maxAp ? '#f2c14e' : '#9a8fb5']);
     L.push([`PM ${mpNow}${mpNow !== u.maxMp ? `/${u.maxMp}` : ''}${mpNow < u.maxMp ? ` (−${u.maxMp - mpNow})` : ''}`, mpNow < u.maxMp ? '#58a6ff' : '#9a8fb5']);
     L.push([`Armadura ${armorNow}${armorNow !== u.armor ? ` (−${u.armor - armorNow})` : ''} · Huida ${u.dodge ?? 0}${tk}`, '#9a8fb5']);

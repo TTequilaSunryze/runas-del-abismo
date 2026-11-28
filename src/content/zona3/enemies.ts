@@ -15,4 +15,7 @@ export const ZONA3_ENEMIES: Record<string, EnemyDef> = {
   inquisidor: { id: 'inquisidor', name: 'Inquisidor de ceniza', hp: 115, armor: 2, ap: 6, mp: 3, initiative: 12, ai: 'ranged', spell: 'e_bola', more: ['e_avivar'], scales: true, resist: { fire: 60 }, traits: ['enrage', 'trapper'] },
   fundidora: { id: 'fundidora', name: 'La Fundidora', hp: 230, armor: 3, ap: 6, mp: 2, initiative: 8, ai: 'boss', spell: 'e_ascua', more: ['e_fundir'], scales: true, resist: { fire: 75, ice: -30 }, traits: ['enrage'] },
   brasero: { id: 'brasero', name: 'Brasero eterno', hp: 56, armor: 3, ap: 0, mp: 0, initiative: 1, ai: 'pillar', spell: 'e_escoria', resist: { fire: 75, ice: -40 } },
+  // Q1: objetivos estructurales de los jefes de la zona
+  brasero_pira: { id: 'brasero_pira', name: 'Brasero de la Pira', hp: 26, armor: 2, ap: 0, mp: 0, initiative: 1, ai: 'pillar', spell: 'e_escoria', resist: { fire: 75, ice: -50 } },
+  valvula: { id: 'valvula', name: 'Válvula del crisol', hp: 22, armor: 2, ap: 0, mp: 0, initiative: 1, ai: 'pillar', spell: 'e_escoria', resist: { fire: 75 } },
 };

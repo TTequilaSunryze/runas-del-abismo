@@ -16,4 +16,7 @@ export const ZONA2_ENEMIES: Record<string, EnemyDef> = {
   reina: { id: 'reina', name: 'Reina de la zarza', hp: 95, armor: 1, ap: 6, mp: 4, initiative: 13, ai: 'melee', spell: 'e_zarpazo', scales: true, resist: { poison: 75, fire: -30 }, traits: ['puddle', 'trapper'] },
   cazador: { id: 'cazador', name: 'El Cazador Silvano', hp: 170, armor: 1, ap: 6, mp: 4, initiative: 15, ai: 'boss', spell: 'e_saeta', more: ['e_mordida'], scales: true, resist: { poison: 40, fire: -20 }, traits: ['trapper'] },
   brote: { id: 'brote', name: 'Raíz sanadora', hp: 44, armor: 2, ap: 0, mp: 0, initiative: 1, ai: 'pillar', spell: 'e_raiz', resist: { poison: 75, fire: -40 } },
+  // Q1: objetivos estructurales de los jefes de la zona
+  raiz_madre: { id: 'raiz_madre', name: 'Raíz principal', hp: 30, armor: 2, ap: 0, mp: 0, initiative: 1, ai: 'pillar', spell: 'e_raiz', resist: { poison: 75, fire: -40 } },
+  puesto_caza: { id: 'puesto_caza', name: 'Puesto de caza', hp: 24, armor: 1, ap: 0, mp: 0, initiative: 1, ai: 'pillar', spell: 'e_golpe', resist: { poison: 50, fire: -40 } },
 };

@@ -12,7 +12,7 @@ import { archerBonus, cast, castProblem, createCombat, current, endTurn, type Un
 import { marksOf } from '../src/core/combat/marks';
 import type { ClassId, CombatState, Unit } from '../src/core/state';
 import { bossInfo, buildFight, newRun, type RunState } from '../src/game/run';
-import { autoplay } from './helpers';
+import { autoplay, bringBoss } from './helpers';
 
 const P = (n: number) => Array.from({ length: n }, (_, i) => ({ owner: `p${i}`, name: `H${i}`, cls: (['arquero', 'barbaro', 'carcelero', 'esferas'] as ClassId[])[i]!, routes: ['base'] }));
 const BOSSES = ZONES.flatMap((z, zi) => z.bosses.map((b, bi) => ({ id: b.id, zone: zi, idx: bi })));
@@ -131,7 +131,7 @@ describe('G3.2 · invocaciones, fantasmas y esbirros', () => {
     for (const b of BOSSES) for (const n of [1, 2, 3, 4]) {
       const r = bossRun(b.id, n); const info = bossInfo(r); info0 = info;
       const s = createCombat({ ...buildFight(r as never) }).state;
-      const boss = s.units.find((u) => u.rank === 'boss')!;
+      const boss = bringBoss(s)!;
       for (const h of s.units.filter((u) => u.team === 'hero')) { h.hp = h.maxHp = 5000; }
       const cap = BOSS_KITS[b.id]!.minion.cap ?? info.minionCap!;
       let maxAlive = 0;

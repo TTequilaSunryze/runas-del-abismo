@@ -7,12 +7,15 @@ const P = (n: number) => Array.from({ length: n }, (_, i) => ({ owner: 'p' + i, 
 const bossRun = (n: number, z = 1, asc = 0) => { const r = newRun('G3', 7, P(n), { asc }); r.zone = z; r.zoneFight = 5; r.kind = 'boss'; return r; };
 
 describe('G3.0 · reequilibrio del combate', () => {
-  it('escoltas: n − 1 (mínimo 1) y a la profundidad del jefe', () => {
-    expect([1, 2, 3, 4].map(bossEscorts)).toEqual([1, 1, 2, 3]);
-    for (const n of [1, 2, 3, 4]) {
-      const f = buildFight(bossRun(n) as never) as { units: Array<{ team: string; rank?: string; power: number }> };
-      const en = f.units.filter((u) => u.team === 'enemy');
-      expect(en.length).toBe(1 + bossEscorts(n));
+  it('Q1 · escoltas: nunca menos de 4 hostiles con el jefe (3, 3, 3, 4 escoltas) y sin contar los objetivos', () => {
+    expect([1, 2, 3, 4].map(bossEscorts)).toEqual([3, 3, 3, 4]);
+    for (const n of [1, 2, 3, 4]) for (const pickB of [0, 1]) {
+      const r = bossRun(n); r.bossPick[r.zone] = pickB;
+      const f = buildFight(r as never) as { units: Array<{ team: string; rank?: string; ai: string | null }>; waves?: unknown[] };
+      const en = f.units.filter((u) => u.team === 'enemy' && u.ai !== 'pillar');
+      // clásico: jefe + escolta; desgaste: 4 enemigos de la primera oleada, sin jefe todavía
+      if (f.waves?.length) expect(en.length).toBe(4);
+      else expect(en.length).toBe(1 + bossEscorts(n));
     }
   });
   it('esbirros: tope a la vez (1,1,2,2), total n + 1, y nunca más vida que un enemigo normal de la zona', () => {
@@ -32,7 +35,7 @@ describe('G3.0 · reequilibrio del combate', () => {
     expect(bossInfo(a10).pillars).toBe(2 * bossInfo(a0).pillars!);
   });
   it('el jefe no invoca más de lo permitido en 30 rondas y sus invocaciones quedan marcadas como suyas', () => {
-    const r = bossRun(4, 0);
+    const r = bossRun(4, 0); r.bossPick[0] = 0;
     const state = createCombat({ ...buildFight(r as never) }).state;
     const boss = state.units.find((u) => u.rank === 'boss')!;
     const info = bossInfo(r);
