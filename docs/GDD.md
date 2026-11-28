@@ -122,3 +122,10 @@ Tres clases con mecánica propia (nombres y diseños originales). Cada una tiene
 - **Bárbaro Desatado** (60/6/3, armadura 1, placaje 8): Furia de 0 a 100 (+20 al golpear, +10 al recibir daño, −20 por turno sin pelear; cada 20, +5% de daño y +6% de crítico). Kit: Sed de batalla, Tajo despiadado, Embiste giratorio. 6 hechizos: Grito desmoralizador, Golpe colosal, Pacto de sangre, Cuchillada giratoria, Mirada del verdugo, Frenesí imparable. Bendiciones: Furia inagotable, Negarse a morir, Torbellino sangriento. Modelo animado de 32×32 (reposo, andar, ataque, furia y muerte).
 - **Interfaz**: Esencia, Esferas, Almas, Furia y Marcas de la muerte en la barra del héroe y sobre el tablero; llamas, muros de La caja y almas dibujados en el suelo; iconos nuevos.
 - **Simulación** (bots, 30 partidas): tríos con Carcelero y Arquero entre 37% (Zorro) y 60% (Bárbaro); 4 jugadores con clases nuevas, 63%.
+
+## Fase Q · Encuentros de jefe
+- **Nunca solos**: todo jefe lucha con al menos 3 enemigos de papeles distintos (4 con 4 jugadores). Su vida se ajusta al tamaño del grupo.
+- **Desgaste por oleadas** (Plañidera, Rey Calcinado, Eco de los Caídos): 4 enemigos al empezar; 4 más en la ronda 3; en la 5 llega el jefe con un subordinado especial y 2 acompañantes. Cada oleada se anuncia una ronda antes, con las casillas de llegada marcadas.
+- **Objetivos estructurales**: sellos (Prior), raíces (Madre) y almas (Eco) protegen al jefe (−15 % / −10 % de daño cada uno, hasta un 60 %, nunca inmunidad). Puestos de caza, braseros, válvulas, fragmentos rúnicos y ecos del lamento son opcionales: si se ignoran, la presión crece.
+- **Ataques anunciados más peligrosos**: en un encuentro, una parte del daño depende de la vida del héroe, con tope (55 %, o 75 % si se ignoraron mecánicas). En la fase 2 se anuncian más a menudo.
+- Detalle completo en `FASE_Q_JEFES_DESGASTE.md`.

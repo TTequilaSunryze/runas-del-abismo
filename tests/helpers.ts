@@ -57,3 +57,15 @@ export function roomStep(run: RunState): RunState {
   leaveNode(run);
   return run;
 }
+
+import { arrivalCells, summon } from '../src/core/combat/engine';
+/**
+ * Q1: en el desgaste el jefe llega en la 3.ª oleada. Para las pruebas que juegan turnos sueltos del jefe,
+ * hace entrar ya todas las oleadas pendientes (en casillas válidas) y devuelve el jefe.
+ */
+export function bringBoss(s: CombatState): ReturnType<typeof current> {
+  for (const w of s.waves ?? []) for (const spec of w.units) { const at = arrivalCells(s, 1)[0]; if (at) summon(s, spec, at, []); }
+  delete s.waves;
+  if (s.encounter) s.encounter.bossIn = true;
+  return s.units.find((u) => u.rank === 'boss');
+}

@@ -6,6 +6,10 @@ import { LATE_ROUND, apCost, applyStatus, cast, castProblem, current, endTurn, h
 import { alive, dist, hasLineOfSight, isFree, reachable, same } from './grid';
 import { addMark, coneCells, dirOf, marksOf, removeMark } from './marks';
 import { bossKit, type BossKit, type OmenDef } from './bosskits';
+import { afterOmen, bossEncounterEnd, bossEncounterTurn, encounterPower, objectiveTurn, omenBoost, omenHit, type EncounterCtx, type ObjectiveFactory } from './encounter';
+
+/** Q1: primitivas que la IA presta a las mecánicas de encuentro. */
+const ENC: EncounterCtx = { hurt: strike, addStatus: applyStatus, heal, summon };
 
 /** Lo que la zona aporta a la IA: invocaciones del jefe y de los nigromantes. */
 export interface BossInfo {
@@ -18,6 +22,8 @@ export interface BossInfo {
   minionCap?: number;
   /** máximo de invocaciones del jefe en todo el combate (G3.0) */
   minionTotal?: number;
+  /** Q1: crea un objetivo estructural de la zona (ecos del lamento, fragmentos rúnicos…) */
+  objective?: ObjectiveFactory;
 }
 
 const RAISE_AP = 2;
@@ -192,7 +198,8 @@ export function omenCells(s: CombatState, u: Unit, o: OmenDef): Pos[] {
   const t = omenTarget(s, u, o.target, foes);
   let cells: Pos[] = [];
   if (o.shape === 'ring') {
-    for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) { const d = Math.abs(dx) + Math.abs(dy); if (d >= 1 && d <= 2) cells.push({ x: u.pos.x + dx, y: u.pos.y + dy }); }
+    const r = o.radius ?? 2;
+    for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) { const d = Math.abs(dx) + Math.abs(dy); if (d >= 1 && d <= r) cells.push({ x: u.pos.x + dx, y: u.pos.y + dy }); }
   } else if (o.shape === 'heroes') {
     cells = foes.map((f) => ({ ...f.pos }));
   } else if (t && o.shape === 'cross') cells = crossAt(t.pos);
@@ -223,8 +230,11 @@ function placeOmen(s: CombatState, u: Unit, o: OmenDef, ev: GameEvent[]): boolea
   const cells = omenCells(s, u, o);
   if (!cells.length) return false;
   const dmg = omenDamage(u, o);
-  for (const p of cells) addMark(s, { kind: 'omen', pos: p, team: u.team, turns: 2, owner: u.id, dmg, sub: o.effect ?? 'none' }, ev);
-  ev.push({ t: 'note', text: `⚠ ${u.name} prepara ${o.name}. ${o.hint}` });
+  const colada = o.name === 'Colada masiva';
+  for (const p of cells) addMark(s, { kind: 'omen', pos: p, team: u.team, turns: 2, owner: u.id, dmg, sub: colada ? 'colada' : o.effect ?? 'none' }, ev);
+  // Q1: si se han ignorado sus mecánicas, se avisa de cuánto más pegará (y de cómo evitarlo)
+  const boost = omenBoost(s, u);
+  ev.push({ t: 'note', text: `⚠ ${u.name} prepara ${o.name}. ${o.hint}${boost > 1 ? ` (potenciado ×${boost.toFixed(2)} por las mecánicas ignoradas)` : ''}` });
   return true;
 }
 
@@ -234,20 +244,23 @@ function detonateOmens(s: CombatState, u: Unit, kit: BossKit, ev: GameEvent[]): 
   if (!marks.length) return;
   const hit = new Set<number>();
   for (const m of marks) {
-    if (m.sub === 'fire') { s.fire ??= {}; s.fire[`${m.pos.x},${m.pos.y}`] = Math.max(s.fire[`${m.pos.x},${m.pos.y}`] ?? 0, 2); }
+    const fire = m.sub === 'fire' || m.sub === 'colada';
+    if (fire) { s.fire ??= {}; s.fire[`${m.pos.x},${m.pos.y}`] = Math.max(s.fire[`${m.pos.x},${m.pos.y}`] ?? 0, 2); }
     for (const h of s.units.filter((x) => alive(x) && x.team !== u.team && same(x.pos, m.pos) && !hit.has(x.id))) {
       hit.add(h.id);
       if (m.sub === 'strip' && h.shield > 0) { ev.push({ t: 'resist', unit: h.id, what: '¡Escudo devorado!' }); h.shield = 0; }
-      strike(s, h, m.dmg ?? 8, ev, 'omen', { element: SPELLS[u.spells[1]?.id ?? '']?.element });
+      // Q1: en un encuentro el golpe tiene en cuenta la vida del héroe y las mecánicas ignoradas (con tope)
+      strike(s, h, omenHit(s, u, m.dmg ?? 8, h), ev, 'omen', { element: SPELLS[u.spells[1]?.id ?? '']?.element });
       if (!alive(h)) continue;
       if (m.sub === 'root') applyStatus(h, 'rooted', 1, 1, ev);
-      if (m.sub === 'fire') applyStatus(h, 'burn', 2, 1, ev);
+      if (fire) applyStatus(h, 'burn', 2, 1, ev);
       if (m.sub === 'drainap') { h.apMod -= 1; ev.push({ t: 'drain', unit: h.id, ap: -1, mp: 0 }); }
     }
     removeMark(s, m, ev);
     if (s.over) return;
   }
   ev.push({ t: 'note', text: hit.size ? `${u.name} descarga su ataque: alcanza a ${hit.size}.` : `${u.name} descarga su ataque, pero nadie se ha quedado dentro.` });
+  afterOmen(s, u, ev);
   if (kit.after && alive(u)) { applyStatus(u, kit.after.kind, kit.after.turns, kit.after.stacks, ev); ev.push({ t: 'note', text: `${u.name} ${kit.after.text}.` }); }
 }
 
@@ -321,9 +334,12 @@ function bossTurn(s: CombatState, u: Unit, info: BossInfo | undefined, ev: GameE
     summoned = true;
   }
   const phase2 = u.phase === 2;
-  const omen = kit ? (phase2 ? kit.omen2 ?? kit.omen : kit.omen) : undefined;
+  // Q1: mecánicas propias del encuentro (ecos, raíces, puestos, presión, fragmentos…); pueden imponer otro anuncio
+  const special = bossEncounterTurn(s, u, info?.objective, ENC, ev).omen;
+  if (s.over || !alive(u)) return;
+  const omen = special ?? (kit ? (phase2 ? kit.omen2 ?? kit.omen : kit.omen) : undefined);
   // G3.1: el ataque anunciado toca en rondas fijas (nunca dos seguidos) y gasta 3 PA; si toca, ese turno no invoca
-  const omenNow = !!omen && !summoned && s.round % omen.every === omen.at && !marksOf(s, 'omen', u.id).length && u.ap >= 3;
+  const omenNow = !!omen && !summoned && (!!special || s.round % omen.every === omen.at) && !marksOf(s, 'omen', u.id).length && u.ap >= 3;
   const summonNow = !!info && !summoned && !omenNow && room() > 0 && mine().filter(alive).length < cap && minions < heroes + 1
     && (kit ? kit.minion.phases.includes(u.phase ?? 1) && s.round % kit.minion.every === kit.minion.at : !phase2 && s.round % SUMMON_EVERY === 0);
   if (summonNow) {
@@ -334,13 +350,20 @@ function bossTurn(s: CombatState, u: Unit, info: BossInfo | undefined, ev: GameE
   if (hasTrait(u, 'trapper')) trapper(s, u, ev);
   if (hasTrait(u, 'blink')) blink(s, u, ev);
   if (omenNow) u.ap -= 3;
-  // primer hechizo: a distancia (fase 1); segundo: cuerpo a cuerpo en área (fase 2)
-  if (alive(u) && current(s)?.id === u.id) fight(s, u, SPELLS[u.spells[phase2 ? 1 : 0]!.id]!, !phase2, ev);
-  if (omenNow && alive(u) && !s.over && current(s)?.id === u.id) placeOmen(s, u, omen!, ev);
+  // Q1: la presión que se ha dejado crecer da daño plano mientras dura su turno (no se acumula de un turno a otro)
+  const bonus = encounterPower(s, u);
+  u.power += bonus;
+  try {
+    // primer hechizo: a distancia (fase 1); segundo: cuerpo a cuerpo en área (fase 2)
+    if (alive(u) && current(s)?.id === u.id) fight(s, u, SPELLS[u.spells[phase2 ? 1 : 0]!.id]!, !phase2, ev);
+    if (omenNow && alive(u) && !s.over && current(s)?.id === u.id) placeOmen(s, u, omen!, ev);
+  } finally { u.power -= bonus; }
+  if (!s.over && alive(u)) bossEncounterEnd(s, u, ENC, ev);
 }
 
-/** Los pilares no se mueven: curan al jefe en cada uno de sus turnos. */
-function pillarTurn(s: CombatState, ev: GameEvent[]): void {
+/** Los pilares no se mueven: curan al jefe en cada uno de sus turnos. Q1: los objetivos estructurales hacen lo suyo. */
+function pillarTurn(s: CombatState, u: Unit, ev: GameEvent[]): void {
+  if (u.objective) { objectiveTurn(s, u, ENC, s.round >= LATE_ROUND, ev); return; }
   const boss = s.units.find((b) => b.ai === 'boss' && alive(b));
   if (boss && s.round < LATE_ROUND) heal(boss, boss.maxHp * PILLAR_HEAL, ev);
 }
@@ -472,7 +495,7 @@ export function runAiTurn(s: CombatState, info?: BossInfo): GameEvent[] {
   if (!u || !u.ai) return ev;
   // sala de pruebas: el muñeco recupera toda su vida en su turno (daño infinito en la práctica)
   if (hasTrait(u, 'dummy')) u.hp = u.maxHp;
-  if (u.ai === 'pillar') pillarTurn(s, ev);
+  if (u.ai === 'pillar') pillarTurn(s, u, ev);
   else if (u.ai === 'boss') bossTurn(s, u, info, ev);
   else if (u.ai === 'champ') champTurn(s, u, ev);
   else {

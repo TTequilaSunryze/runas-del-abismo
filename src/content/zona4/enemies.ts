@@ -13,4 +13,7 @@ export const ZONA4_ENEMIES: Record<string, EnemyDef> = {
   devorarunas: { id: 'devorarunas', name: 'El Devorador de Runas', hp: 320, armor: 3, ap: 6, mp: 2, initiative: 10, ai: 'boss', spell: 'e_vacio', more: ['e_devorar'], scales: true, resist: { shadow: 75, holy: -25 } },
   eco: { id: 'eco', name: 'El Eco de los Caídos', hp: 290, armor: 2, ap: 6, mp: 3, initiative: 14, ai: 'boss', spell: 'e_eco', more: ['e_mordaza'], scales: true, resist: { shadow: 60, poison: 50 }, traits: ['regen'] },
   obelisco: { id: 'obelisco', name: 'Obelisco hambriento', hp: 70, armor: 4, ap: 0, mp: 0, initiative: 1, ai: 'pillar', spell: 'e_golpe', resist: { shadow: 75, poison: 75 } },
+  // Q1: objetivos estructurales de los jefes de la zona
+  fragmento: { id: 'fragmento', name: 'Fragmento rúnico', hp: 22, armor: 1, ap: 0, mp: 0, initiative: 1, ai: 'pillar', spell: 'e_golpe', resist: { shadow: 75 } },
+  alma_caida: { id: 'alma_caida', name: 'Alma caída', hp: 26, armor: 0, ap: 0, mp: 0, initiative: 12, ai: 'pillar', spell: 'e_golpe', resist: { shadow: 75, holy: -40 } },
 };

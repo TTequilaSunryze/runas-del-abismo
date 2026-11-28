@@ -15,13 +15,14 @@ import { MAX_SPELL_UPS, UPGRADES, canUpgrade } from '../core/upgrades';
 import { makeHero } from '../core/classes/factory';
 import { SOULS_PER_ARMOR, SOUL_ARMOR, createCombat, current, endTurn, summon as engineSummon, type CombatSetup, type UnitSpec } from '../core/combat/engine';
 import { reachable } from '../core/combat/grid';
+import { ATTRITION_ROUNDS, MIN_HOSTILES, bossKit } from '../core/combat/bosskits';
 import { BAG_SIZE, PRICE, SLOTS, STAT_NAME, genItem, sumStats, type DropKind, type Item, type Rarity, type Slot, type StatKey, type Stats } from '../core/items/items';
 import { pick, rand, randInt, seedFrom, shuffle, type RngBox } from '../core/rng';
 import { makeActMap, type ActMap } from './map';
 import { CORRIDOR_CHANCE, genTerrain } from './terrain';
 import { cleanRoom, roomSetup, type RoomDef } from './salas';
 import BUILTIN_ROOMS from '../content/salas.json';
-import type { ClassId, CombatState, GameEvent, Pos } from '../core/state';
+import type { ClassId, CombatState, EncounterWave, GameEvent, Pos } from '../core/state';
 import { enterRoom, roomAction, roomDone, roomPending, type RoomOp, type RoomState } from './rooms';
 import { pactEnemyHp, pactEnemyPower } from '../content/pacts';
 import { SPECIAL_CHANCE, SPECIAL_EVENTS, specialCandidates, specialWeight } from '../content/specialEvents';
@@ -625,8 +626,13 @@ function enemyList(run: RunState): string[] {
   const d = run.zoneFight;
   const z = zoneOf(run);
   const b = bossOf(run);
-  // G3.0: escolta de n − 1 (mínimo 1); antes era una por jugador y se sumaba a las invocaciones y a la vida extra del jefe
-  if (run.kind === 'boss') return [b.id, ...Array.from({ length: bossEscorts(n) }, () => pick(run, b.guard))];
+  // Q1: el jefe nunca está solo: mínimo 4 hostiles con él, con papeles distintos (no depende solo de los jugadores).
+  // En el desgaste el jefe no está al principio: la primera oleada son 4 enemigos de la zona.
+  if (run.kind === 'boss') {
+    const enc = bossKit(b.id)?.encounter;
+    if (enc?.format === 'attrition' && enc.waves) return [...enc.waves.first];
+    return [b.id, ...bossEscortList(run)];
+  }
   const pool = z.pools[d < 1 ? 0 : d < 3 ? 1 : 2];
   const elite = run.kind === 'elite';
   const count = n + (d >= 1 ? 1 : 0) + (d >= 3 && n >= 3 ? 1 : 0) - (elite ? 1 : 0) + (run.ambush ? 2 : 0) + (run.asc >= 7 ? 1 : 0) + (run.mods.includes('horda') ? 1 : 0);
@@ -703,13 +709,23 @@ export function buildFight(run: RunState, forced?: RoomDef): CombatSetup {
     const traps = Array.from({ length: omen === 'puas' ? 6 : 0 }, () => free(3, w - 4));
     const puddles = [...(terrain?.puddles ?? []), ...(omen === 'pantano' ? Array.from({ length: 4 + n * 2 }, () => free(2, w - 4)) : [])];
     // el jefe no crece indefinidamente con los combates previos
-    const enemies = ids.map((id, i) => id.startsWith('nemesis:') ? nemesisUnit(run, id.slice(8), free(w - 4, w - 1)) : makeEnemy(id, free(w - 4, w - 1), Math.min(run.kind === 'boss' || (run.kind === 'elite' && i === 0) ? 2 : 5, run.zoneFight), n, enemyOpts(run, id, i === 0)));
+    const attrition = run.kind === 'boss' && bossKit(bossOf(run).id)?.encounter.format === 'attrition';
+    const enemies = ids.map((id, i) => {
+      if (id.startsWith('nemesis:')) return nemesisUnit(run, id.slice(8), free(w - 4, w - 1));
+      const o = enemyOpts(run, id, i === 0);
+      // Q1: la primera oleada del desgaste son comunes de la zona a su profundidad, con el ajuste de oleada
+      if (attrition) return makeEnemy(id, free(w - 4, w - 1), Math.min(5, run.zoneFight), n, { ...o, hpMul: o.hpMul * ATTRITION_UNIT.hp, power: o.power * ATTRITION_UNIT.power });
+      return makeEnemy(id, free(w - 4, w - 1), Math.min(run.kind === 'boss' || (run.kind === 'elite' && i === 0) ? 2 : 5, run.zoneFight), n, o);
+    });
     if (run.kind === 'elite' && enemies[0]) { enemies[0].rank = 'elite'; enemies[0].tackle = (enemies[0].tackle ?? 0) + 3; }
     // los enemigos salen repartidos a 5 casillas como mucho de alguna casilla de inicio; los que placan o se mueven poco, más cerca
     for (const e of enemies) taken.delete(`${e.pos.x},${e.pos.y}`);
     for (const e of enemies) { const p = enemyCell(run, e, starts, taken, w, h); if (p) { e.pos = p; taken.add(`${p.x},${p.y}`); } else taken.add(`${e.pos.x},${e.pos.y}`); }
     for (const e of enemies) runEnemyMods(run, e);
-    const setup: CombatSetup = { seed: randInt(run, 1, 2 ** 31 - 1), w, h, obstacles, traps, puddles, abyss: terrain?.abyss ?? [], braziers: terrain?.braziers ?? [], roots: terrain?.roots ?? [], biome: terrain?.name, units: [...heroes, ...allies, ...enemies], deployCells: starts };
+    // Q1: objetivos estructurales del jefe (sellos, raíces, puestos, braseros, válvulas, fragmentos) y oleadas del desgaste
+    const objectives = placeObjectives(run, taken, starts, w, h);
+    const enc = bossEncounterSetup(run);
+    const setup: CombatSetup = { seed: randInt(run, 1, 2 ** 31 - 1), w, h, obstacles, traps, puddles, abyss: terrain?.abyss ?? [], braziers: terrain?.braziers ?? [], roots: terrain?.roots ?? [], biome: terrain?.name, units: [...heroes, ...allies, ...enemies, ...objectives], deployCells: starts, ...(enc ?? {}) };
     // todo el mundo debe poder llegar a todo el mundo
     const probe = createCombat(setup).state;
     const walk = reachable(probe, heroes[0]!.pos, 99, true).cost;
@@ -766,6 +782,24 @@ function customFight(run: RunState, r: RoomDef, heroes: UnitSpec[], allies: Unit
     if (!p) continue;
     a.pos = p; taken.add(`${p.x},${p.y}`); setup.units.push(a);
   }
+  // Q1: una sala de jefe creada a mano también respeta el mínimo de 4 hostiles (se completa con su escolta)
+  if (run.kind === 'boss') {
+    const hostiles = setup.units.filter((u) => u.team === 'enemy' && u.ai !== 'pillar').length;
+    const blockedAll = new Set([...blocked, ...setup.units.map((u) => `${u.pos.x},${u.pos.y}`), ...(setup.deployCells ?? []).map((p) => `${p.x},${p.y}`)]);
+    const bossU = setup.units.find((u) => u.ai === 'boss');
+    for (const id of bossEscortList(run).slice(0, Math.max(0, MIN_HOSTILES - hostiles))) {
+      const near = bossU?.pos ?? { x: r.w - 2, y: Math.floor(r.h / 2) };
+      let at: Pos | null = null;
+      for (let d = 1; d <= 6 && !at; d++) for (let dx = -d; dx <= d && !at; dx++) for (let dy = -d; dy <= d && !at; dy++) {
+        const p = { x: near.x + dx, y: near.y + dy };
+        if (p.x >= 0 && p.y >= 0 && p.x < r.w && p.y < r.h && !blockedAll.has(`${p.x},${p.y}`)) at = p;
+      }
+      if (!at) break;
+      blockedAll.add(`${at.x},${at.y}`);
+      setup.units.push(makeEnemy(id, at, Math.min(5, run.zoneFight), n, enemyOpts(run, id, false)));
+    }
+    setup.encounter = { boss: bossOf(run).id, format: 'classic', players: n, bossIn: !!bossU, pressure: 0, broken: 0 };
+  }
   for (const e of setup.units.filter((u) => u.team === 'enemy')) runEnemyMods(run, e);
   for (const w of setup.waves ?? []) for (const e of w.units) runEnemyMods(run, e);
   const probe = createCombat(setup).state;
@@ -818,8 +852,85 @@ function nemesisUnit(run: RunState, id: string, pos: Pos): UnitSpec {
   return championUnit(c, pos, 'enemy', null, { hpMul: 1.9 + 0.7 * (n - 1) + (run.asc >= 1 ? 0.2 : 0), powerMul: 0.5, level, name: `Némesis: ${c.name}` });
 }
 
-/** Escoltas del jefe según el número de jugadores (1→1, 2→1, 3→2, 4→3). */
-export const bossEscorts = (n: number): number => Math.max(1, n - 1);
+/**
+ * Escoltas del jefe según el número de jugadores. Q1: nunca menos de 3 (4 hostiles contando al jefe);
+ * con 4 jugadores, 4. Su vida se ajusta por jugadores (ESCORT_HP) para que el solitario no se ahogue.
+ */
+export const bossEscorts = (n: number): number => Math.max(MIN_HOSTILES - 1, n);
+/** Q1: los comunes de las oleadas del desgaste (son muchos): vida y daño respecto a los de un combate normal. */
+export const ATTRITION_UNIT = { hp: 0.7, power: 0.5 } as const;
+/** Q1: vida de la escolta y de las oleadas del jefe con 1, 2, 3 y 4 jugadores. */
+export const ESCORT_HP = [0.6, 0.75, 0.9, 1] as const;
+/** Q1: escolta del formato clásico, por papeles (daño, control, apoyo, persecución, protección). */
+export function bossEscortList(run: RunState): string[] {
+  const b = bossOf(run), n = run.heroes.length;
+  const enc = bossKit(b.id)?.encounter;
+  const base = [...(enc?.escorts ?? [])];
+  if (n >= 4 && enc?.extra) base.push(enc.extra);
+  while (base.length < bossEscorts(n)) base.push(pick(run, b.guard));
+  return base.slice(0, bossEscorts(n));
+}
+/** Q1: objetivo estructural de la zona (vida por jugadores y por zona). */
+export function objectiveUnit(run: RunState, kind: string, pos: Pos): UnitSpec {
+  return makeEnemy(kind, pos, 0, run.heroes.length, { hpMul: 1 + 0.25 * Math.min(3, run.zone) + (run.asc >= 6 ? 0.1 : 0) });
+}
+
+/** Q1: oleadas del encuentro de desgaste (rondas 3 y 5) y estado del encuentro. */
+function bossEncounterSetup(run: RunState): Pick<CombatSetup, 'waves' | 'encounter' | 'intro'> | null {
+  if (run.kind !== 'boss') return null;
+  const b = bossOf(run), n = run.heroes.length, kit = bossKit(b.id);
+  if (!kit) return null;
+  const enc = kit.encounter;
+  const encounter = { boss: b.id, format: enc.format, players: n, bossIn: enc.format === 'classic', pressure: 0, broken: 0 };
+  if (enc.format !== 'attrition' || !enc.waves) return { encounter, intro: `👑 ${enc.intro}` };
+  const w = enc.waves, at = { x: 0, y: 0 };
+  // las oleadas son presión, no un muro: sus comunes llevan algo menos de vida y daño que en un combate normal
+  const common = (id: string): UnitSpec => { const o = enemyOpts(run, id, false); return makeEnemy(id, at, Math.min(5, run.zoneFight), n, { ...o, hpMul: o.hpMul * ATTRITION_UNIT.hp, power: o.power * ATTRITION_UNIT.power }); };
+  const lt = makeEnemy(w.lieutenant, at, Math.min(5, run.zoneFight), n, enemyOpts(run, w.lieutenant, false));
+  lt.rank = 'elite'; lt.tackle = (lt.tackle ?? 0) + 3; lt.name = w.lieutenantName;
+  lt.hp = lt.maxHp = Math.round(lt.maxHp * 0.85);
+  const boss = makeEnemy(b.id, at, Math.min(2, run.zoneFight), n, enemyOpts(run, b.id, true));
+  const souls = (enc.objectives ?? []).filter((o) => o.with === 'boss').flatMap((o) => Array.from({ length: o.count[n - 1]! }, () => {
+    const u = objectiveUnit(run, o.kind, at);
+    u.objective = { mech: o.mech, role: o.role, ...(o.ward ? { ward: o.ward } : {}) };
+    return u;
+  }));
+  const waves: Array<Omit<EncounterWave, 'units'> & { units: UnitSpec[] }> = [
+    { round: ATTRITION_ROUNDS[0], units: w.second.map(common), warn: true, label: '¡La segunda oleada entra en la sala!' },
+    { round: ATTRITION_ROUNDS[1], units: [boss, lt, ...w.third.map(common), ...souls], warn: true, boss: true, label: `${boss.name} llega con su séquito.` },
+  ];
+  for (const wv of waves) for (const e of wv.units) if (e.ai !== 'pillar') runEnemyMods(run, e);
+  return { encounter, intro: `👑 ${enc.intro}`, waves };
+}
+
+/** Q1: coloca los objetivos estructurales de inicio, repartidos, accesibles y lejos de las casillas de los héroes. */
+function placeObjectives(run: RunState, taken: Set<string>, starts: Pos[], w: number, h: number): UnitSpec[] {
+  if (run.kind !== 'boss') return [];
+  const n = run.heroes.length;
+  const out: UnitSpec[] = [];
+  for (const o of bossKit(bossOf(run).id)?.encounter.objectives ?? []) {
+    if (o.with === 'boss') continue;
+    for (let i = 0; i < o.count[n - 1]!; i++) {
+      const cells: Pos[] = [];
+      for (const gap of [3, 2, 1]) {
+        for (let x = 2; x < w; x++) for (let y = 0; y < h; y++) {
+          const p = { x, y };
+          if (taken.has(`${x},${y}`) || Math.min(...starts.map((s0) => manh(s0, p))) < 3) continue;
+          if (out.some((q) => manh(q.pos, p) < gap + 1)) continue;
+          cells.push(p);
+        }
+        if (cells.length) break;
+      }
+      const at = cells.length ? pick(run, cells) : null;
+      if (!at) continue;
+      taken.add(`${at.x},${at.y}`);
+      const u = objectiveUnit(run, o.kind, at);
+      u.objective = { mech: o.mech, role: o.role, ...(o.ward ? { ward: o.ward } : {}) };
+      out.push(u);
+    }
+  }
+  return out;
+}
 /** Refuerzo de zona, ascensión y tamaño del grupo (multiplica la vida y da daño plano). El Abismo es más duro que todo lo anterior. */
 export function zoneBoost(run: Pick<RunState, 'asc' | 'zone' | 'heroes'>): number {
   const n = run.heroes.length;
@@ -846,10 +957,12 @@ function enemyOpts(run: RunState, id: string, first: boolean) {
   }
   if ((run.mods.includes('llamas') || run.pact === 'ceniza') && !affixes.includes('ardiente')) affixes.push('ardiente');
   const strong = id === bossOf(run).id || (run.kind === 'elite' && first);
+  // Q1: la escolta y las oleadas del jefe ajustan su vida al tamaño del grupo (el jefe ya escala por jugadores)
+  const escort = run.kind === 'boss' && id !== bossOf(run).id ? ESCORT_HP[Math.max(0, Math.min(3, n - 1))]! : 1;
   return {
     affixes,
     laterList: run.kind !== 'boss' && run.zoneFight >= 1,
-    hpMul: 1 + (id === bossOf(run).id && boost > 0 ? boost * BOSS_BOOST : boost) + pactEnemyHp(run.pact, strong) + (run.mods.includes('riesgo') ? 0.12 * Math.min(3, run.zone) : 0) + (id === bossOf(run).id ? (run.asc >= 6 ? 0.2 : 0) + (run.mods.includes('jefes') ? 0.3 : 0) + (run.flags.includes(`g2_carga_${run.zone}`) ? 0.25 : 0) - (run.flags.includes(weakBossFlag(run.zone)) ? WEAK_BOSS : 0) : (run.flags.includes('g4_sangre') ? SANGRE_HP : 0)),
+    hpMul: escort * (1 + (id === bossOf(run).id && boost > 0 ? boost * BOSS_BOOST : boost) + pactEnemyHp(run.pact, strong) + (run.mods.includes('riesgo') ? 0.12 * Math.min(3, run.zone) : 0) + (id === bossOf(run).id ? (run.asc >= 6 ? 0.2 : 0) + (run.mods.includes('jefes') ? 0.3 : 0) + (run.flags.includes(`g2_carga_${run.zone}`) ? 0.25 : 0) - (run.flags.includes(weakBossFlag(run.zone)) ? WEAK_BOSS : 0) : (run.flags.includes('g4_sangre') ? SANGRE_HP : 0))),
     power: boost * 5 + (run.flags.includes('g4_sangre') && id !== bossOf(run).id ? SANGRE_POWER : 0) + (run.mods.includes('frenesi') ? 1 : 0) + (run.mods.includes('riesgo') ? Math.min(3, run.zone) : 0) + pactEnemyPower(run.pact),
   };
 }
@@ -869,6 +982,7 @@ export const bossInfo = (run: RunState): BossInfo => {
     minionCap: minionCap(n),
     minionTotal: n + 1,
     phase2Name: b.phase2,
+    objective: (kind: string, pos: Pos) => objectiveUnit(run, kind, pos),
   };
 };
 

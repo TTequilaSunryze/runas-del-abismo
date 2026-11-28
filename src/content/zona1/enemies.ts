@@ -18,4 +18,7 @@ export const ZONA1_ENEMIES: Record<string, EnemyDef> = {
   abominacion: { id: 'abominacion', name: 'Abominación de huesos', hp: 80, armor: 1, ap: 6, mp: 3, initiative: 9, ai: 'melee', spell: 'e_tajo', scales: true, resist: { poison: 60, holy: -30 }, traits: ['devour', 'split'] },
   planidera: { id: 'planidera', name: 'La Plañidera', hp: 115, armor: 0, ap: 6, mp: 3, initiative: 12, ai: 'boss', spell: 'e_lamento', more: ['e_toque'], scales: true, resist: { shadow: 60, poison: 50, holy: -30 } },
   pilar: { id: 'pilar', name: 'Pilar de huesos', hp: 32, armor: 2, ap: 0, mp: 0, initiative: 1, ai: 'pillar', spell: 'e_golpe', resist: { poison: 75, holy: -30 } },
+  // Q1: objetivos estructurales de los jefes de la zona
+  sello: { id: 'sello', name: 'Sello funerario', hp: 28, armor: 1, ap: 0, mp: 0, initiative: 1, ai: 'pillar', spell: 'e_golpe', resist: { poison: 75, holy: -30 } },
+  eco_lamento: { id: 'eco_lamento', name: 'Eco del lamento', hp: 10, armor: 0, ap: 0, mp: 0, initiative: 13, ai: 'pillar', spell: 'e_toque', resist: { poison: 75, holy: -40 } },
 };

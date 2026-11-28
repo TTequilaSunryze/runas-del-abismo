@@ -49,6 +49,7 @@ export function playEvents(events: GameEvent[]): void {
     else if (e.t === 'death') tone(220, 0.4, 'sawtooth', 0.06, -180, d);
     else if (e.t === 'move') tone(100, 0.05, 'square', 0.025, -30, d);
     else if (e.t === 'summon' || e.t === 'phase') tone(110, 0.5, 'sawtooth', 0.07, 220, d);
+    else if (e.t === 'bossEnter') { tone(80, 0.8, 'sawtooth', 0.09, 160, d); tone(55, 1.1, 'square', 0.05, 110, d + 0.15); }
     else if (e.t === 'stuck' || e.t === 'devour' || e.t === 'raise') tone(150, 0.25, 'sawtooth', 0.06, 120, d);
     else if (e.t === 'explode') tone(80, 0.45, 'sawtooth', 0.09, -40, d);
     else if (e.t === 'blink') tone(1200, 0.15, 'sine', 0.04, -900, d);

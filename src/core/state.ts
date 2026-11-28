@@ -161,6 +161,40 @@ export interface Unit {
   /** placaje (retiene a quien se aleja) y huida (escapa del placaje) */
   tackle?: number;
   dodge?: number;
+  /**
+   * Q1: objetivo estructural de un encuentro de jefe (sello, raíz, brasero, válvula…). Es una unidad inmóvil
+   * (ai 'pillar') con vida propia que se puede golpear; no cuenta para ganar ni perder. `ward` es la fracción de
+   * daño que le quita al jefe mientras siga en pie (se suman, con tope: nunca es inmunidad).
+   */
+  objective?: { mech: ObjectiveMech; role: 'required' | 'optional'; ward?: number };
+}
+
+/** Q1: qué hace un objetivo estructural de jefe (ver core/combat/encounter.ts). */
+export type ObjectiveMech = 'seal' | 'wail' | 'root' | 'post' | 'pyre' | 'valve' | 'shard' | 'soul';
+
+/**
+ * Q1: estado de un encuentro de jefe (solo existe en los combates de jefe de una partida).
+ * Contadores de presión que crecen si se ignoran las mecánicas. Todo JSON plano.
+ */
+export interface EncounterState {
+  /** id del jefe (clave de BOSS_KITS) */
+  boss: string;
+  /** formato: clásico o desgaste por oleadas */
+  format: 'classic' | 'attrition';
+  /** jugadores del grupo (para el escalado de las mecánicas) */
+  players: number;
+  /** el jefe ya está en el tablero (en el desgaste entra en la 3.ª oleada) */
+  bossIn: boolean;
+  /** presión acumulada (Fundidora: crisol; Rey: avivado de la pira; Devorador: runas absorbidas) */
+  pressure: number;
+  /** ronda en la que empezó la segunda fase */
+  p2Round?: number;
+  /** última ronda en que se avivó la pira (una vez por ronda) */
+  pyreRound?: number;
+  /** objetivos destruidos en todo el combate */
+  broken: number;
+  /** daño del último golpe de cada héroe a un enemigo (las almas del Coro lo repiten) */
+  lastHit?: Record<number, number>;
 }
 
 /** Cepo colocado por una unidad: daña y detiene al primer rival que lo pisa. */
@@ -230,10 +264,27 @@ export interface CombatState extends RngBox {
   /** salas creadas: objetivo (sin él, se gana acabando con todos los enemigos) */
   goal?: CombatGoal | null;
   /** salas creadas: refuerzos que entran al empezar la ronda indicada (o en cuanto no quede ningún enemigo) */
-  waves?: Array<{ round: number; units: Array<Omit<Unit, 'id'>> }>;
+  waves?: Array<EncounterWave>;
+  /** Q1: encuentro de jefe (presión, formato, objetivos) */
+  encounter?: EncounterState;
   /** salas creadas: texto al entrar y al ganar, y recompensa extra para cada héroe */
   story?: { title: string; intro?: string; outro?: string };
   reward?: { gold?: number; item?: number; relic?: number; escofinas?: number };
+}
+
+/**
+ * Refuerzos que entran al empezar la ronda indicada. `warn`: se anuncian una ronda antes (con las casillas de llegada
+ * marcadas) y, si el tablero se vacía, se adelantan a la ronda siguiente en vez de entrar de golpe.
+ * `boss`: en esta oleada llega el jefe (entrada propia). `cells`: casillas reservadas al anunciarla.
+ */
+export interface EncounterWave {
+  round: number;
+  units: Array<Omit<Unit, 'id'>>;
+  warn?: boolean;
+  boss?: boolean;
+  label?: string;
+  cells?: Pos[];
+  announced?: boolean;
 }
 
 /** Objetivo de una sala creada: sobrevivir N rondas o acabar con los enemigos marcados. */
@@ -254,6 +305,8 @@ export type GameEvent =
   | { t: 'death'; unit: number }
   | { t: 'summon'; unit: number }
   | { t: 'phase'; unit: number; phase: number }
+  /** Q1: el jefe irrumpe en la sala (encuentro de desgaste) */
+  | { t: 'bossEnter'; unit: number }
   | { t: 'trap'; unit: number }
   | { t: 'stuck'; unit: number }
   | { t: 'snare'; unit: number }

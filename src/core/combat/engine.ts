@@ -7,7 +7,8 @@ import { tuned } from '../upgrades';
 import { applyRunes } from '../runes';
 import { CORRUPT_HEAL, DOOM_PCT, DOT, FREEZE_AT, NEGATIVE_STATUSES, REGEN_PER, STATUSES, THERMAL_DMG, WEAK_PCT } from '../statuses';
 import { afterRuneCast, onRuneCare, onRuneHit, runEchoes, type FxCtx } from './runefx';
-import { key, type BoardMark, type CombatGoal, type CombatState, type Element, type GameEvent, type Pos, type StatusKind, type Unit } from '../state';
+import { key, type BoardMark, type CombatGoal, type CombatState, type Element, type EncounterState, type EncounterWave, type GameEvent, type Pos, type StatusKind, type Unit } from '../state';
+import { encounterTurnStart, objectiveExposes, onObjectiveDown, recordHit, wardApplies, wardOf, type EncounterCtx } from './encounter';
 import { alive, dist, hasLineOfSight, isFree, lineCells, pathTo, reachable, same, unitAt } from './grid';
 import { addMark, clearMarksOf, coneCells, dirOf, marksAt, marksOf, removeMark, tickMarks } from './marks';
 
@@ -32,7 +33,10 @@ export interface CombatSetup {
   /** salas creadas: forma, objetivo y oleadas */
   voids?: Pos[];
   goal?: CombatGoal | null;
-  waves?: Array<{ round: number; units: UnitSpec[] }>;
+  waves?: Array<Omit<EncounterWave, 'units'> & { units: UnitSpec[] }>;
+  /** Q1: encuentro de jefe (formato, presión) y su presentación en el registro */
+  encounter?: EncounterState;
+  intro?: string;
   story?: CombatState['story'];
   reward?: CombatState['reward'];
 }
@@ -180,8 +184,10 @@ export function createCombat(setup: CombatSetup): { state: CombatState; events: 
   if (setup.goal) state.goal = { ...setup.goal };
   if (setup.story) state.story = { ...setup.story };
   if (setup.reward) state.reward = { ...setup.reward };
-  if (setup.waves?.length) state.waves = setup.waves.filter((w) => w.units.length).map((w) => ({ round: Math.max(2, Math.floor(w.round)), units: w.units.map((u) => ({ ...u, pos: { ...u.pos }, statuses: { ...u.statuses }, spells: u.spells.map((sp) => ({ ...sp })) })) })).sort((a, b) => a.round - b.round);
+  if (setup.waves?.length) state.waves = setup.waves.filter((w) => w.units.length).map((w) => ({ ...w, round: Math.max(2, Math.floor(w.round)), units: w.units.map((u) => ({ ...u, pos: { ...u.pos }, statuses: { ...u.statuses }, spells: u.spells.map((sp) => ({ ...sp })) })) })).sort((a, b) => a.round - b.round);
+  if (setup.encounter) state.encounter = { ...setup.encounter };
   const events: GameEvent[] = [];
+  if (setup.intro) events.push({ t: 'note', text: setup.intro });
   if (setup.deploy) {
     // zona de despliegue: las 3 primeras columnas, sin obstáculos, trampas ni enemigos
     const cells: string[] = [];
@@ -241,12 +247,70 @@ function checkOver(s: CombatState, ev: GameEvent[]): void {
   if (!heroes) s.over = 'lose';
   // sala con objetivo marcado: basta con acabar con los marcados
   else if (s.goal?.kind === 'targets' && s.units.some((u) => u.goal)) { if (!s.units.some((u) => u.goal && alive(u))) s.over = 'win'; else if (!enemies && s.waves?.length) spawnWave(s, ev, true); }
-  // sin enemigos: si quedan refuerzos, entran ya
-  else if (!enemies) { if (s.waves?.length) spawnWave(s, ev, true); else s.over = 'win'; }
+  // sin enemigos: si quedan refuerzos, entran ya (los anunciados se adelantan a la ronda siguiente, con aviso)
+  else if (!enemies) { if (s.waves?.[0]?.warn) hastenWave(s, ev); else if (s.waves?.length) spawnWave(s, ev, true); else s.over = 'win'; }
   if (s.over) ev.push({ t: 'over', result: s.over });
 }
 
-/** Entran los refuerzos de esta ronda (o, si `early`, la siguiente oleada pendiente). */
+/** Q1: primitivas del motor para las mecánicas de encuentro (encounter.ts). */
+const ENC: EncounterCtx = {
+  hurt: (s, u, raw, ev, source, opts) => hurt(s, u, raw, ev, source, opts),
+  addStatus: (u, kind, turns, stacks, ev) => addStatus(u, kind, turns, stacks, ev),
+  heal: (u, amount, ev) => heal(u, amount, ev),
+  summon: (s, spec, near, ev) => summon(s, spec, near, ev),
+};
+
+/**
+ * Q1: casillas de llegada de una oleada: libres, accesibles, lejos de los héroes (≥3, si no ≥2, si no ≥1) y, a ser
+ * posible, en la mitad del tablero de los enemigos y sin trampas ni fuego. Nunca encima de un héroe ni de un obstáculo.
+ */
+export function arrivalCells(s: CombatState, n: number, avoid: Pos[] = []): Pos[] {
+  const heroes = s.units.filter((u) => u.team === 'hero' && alive(u));
+  const from = heroes[0]?.pos;
+  const walk = from ? reachable(s, from, 99, true).cost : null;
+  const bad = new Set([...s.traps, ...s.puddles, ...(s.roots ?? []), ...Object.keys(s.fire ?? {}), ...(s.snares ?? []).map((t) => t.k)]);
+  const taken = new Set(avoid.map(key));
+  const all: Pos[] = [];
+  for (let x = 0; x < s.w; x++) for (let y = 0; y < s.h; y++) {
+    const p = { x, y };
+    if (!isFree(s, p) || taken.has(key(p)) || (walk && !walk.has(key(p)))) continue;
+    all.push(p);
+  }
+  const gap = (p: Pos): number => Math.min(99, ...heroes.map((h) => dist(h.pos, p)));
+  const out: Pos[] = [];
+  for (const [minGap, half, clean] of [[3, true, true], [3, false, true], [2, false, false], [1, false, false]] as const) {
+    const pool = all.filter((p) => !out.some((q) => same(p, q)) && gap(p) >= minGap && (!half || p.x >= Math.floor(s.w / 2)) && (!clean || !bad.has(key(p))));
+    while (out.length < n && pool.length) out.push(pool.splice(randInt(s, 0, pool.length - 1), 1)[0]!);
+    if (out.length >= n) break;
+  }
+  return out;
+}
+
+/** Q1: anuncia una oleada (una ronda antes): reserva y marca sus casillas de llegada. */
+function announceWave(s: CombatState, w: EncounterWave, ev: GameEvent[], early = false): void {
+  if (w.announced) return;
+  w.announced = true;
+  w.cells = arrivalCells(s, w.units.length);
+  for (const p of w.cells) addMark(s, { kind: 'arrival', pos: p, team: 'enemy', turns: 2 }, ev);
+  const boss = w.units.find((u) => u.ai === 'boss');
+  const n = w.units.length;
+  ev.push({ t: 'note', text: boss ? `⚠ ${early ? 'Las voces se impacientan: ' : ''}¡${boss.name} irrumpirá la próxima ronda con ${n - 1} acompañantes!` : `⚠ ${early ? 'Habéis despejado la sala: ' : ''}llegan ${n} refuerzos la próxima ronda (casillas marcadas).` });
+}
+
+/** Q1: el tablero se ha quedado sin enemigos: la siguiente oleada anunciada se adelanta a la ronda siguiente. */
+function hastenWave(s: CombatState, ev: GameEvent[]): void {
+  const w = s.waves?.[0];
+  if (!w || w.round <= s.round + 1 && w.announced) return;
+  w.round = Math.min(w.round, s.round + 1);
+  announceWave(s, w, ev, true);
+}
+
+/**
+ * Entran los refuerzos de esta ronda (o, si `early`, la siguiente oleada pendiente).
+ * Q1: las oleadas anunciadas entran en sus casillas reservadas (o en otras válidas si alguien las ocupa); si no cabe
+ * alguien, entra en la ronda siguiente (nunca se pierde una unidad). Como entran al empezar la ronda, el orden de la
+ * ronda se rehace por iniciativa: nadie juega dos veces y el jefe respeta su iniciativa.
+ */
 function spawnWave(s: CombatState, ev: GameEvent[], early = false): void {
   if (!s.waves?.length) return;
   const round = early ? s.waves[0]!.round : s.round;
@@ -254,8 +318,37 @@ function spawnWave(s: CombatState, ev: GameEvent[], early = false): void {
   if (!now.length) return;
   s.waves = s.waves.filter((w) => w.round > round);
   if (!s.waves.length) delete s.waves;
-  ev.push({ t: 'note', text: '¡Llegan refuerzos!' });
-  for (const w of now) for (const spec of w.units) summon(s, spec, spec.pos, ev);
+  let reorder = false;
+  for (const w of now) {
+    if (!w.warn) {
+      ev.push({ t: 'note', text: '¡Llegan refuerzos!' });
+      for (const spec of w.units) summon(s, spec, spec.pos, ev);
+      continue;
+    }
+    reorder = true;
+    for (const m of marksOf(s, 'arrival')) removeMark(s, m, ev);
+    const used: Pos[] = [];
+    const left: UnitSpec[] = [];
+    for (const [i, spec] of w.units.entries()) {
+      const want = w.cells?.[i];
+      const at = want && isFree(s, want) && !used.some((p) => same(p, want)) ? want : arrivalCells(s, 1, used)[0];
+      const u = at ? summon(s, spec, at, ev) : null;
+      if (!u) { left.push(spec); continue; }
+      used.push(u.pos);
+      if (u.ai === 'boss') {
+        ev.push({ t: 'bossEnter', unit: u.id });
+        ev.push({ t: 'note', text: `👑 ¡${u.name} irrumpe en la sala!` });
+        if (s.encounter) s.encounter.bossIn = true;
+      }
+    }
+    if (used.length) ev.push({ t: 'note', text: w.label ?? `¡Llegan ${used.length} refuerzos!` });
+    if (left.length) {
+      // no caben: entran en la ronda siguiente por la entrada de refuerzos
+      (s.waves ??= []).unshift({ ...w, round: s.round + 1, units: left, announced: false, cells: undefined, label: 'Entran los refuerzos que faltaban.' });
+      ev.push({ t: 'note', text: `${left.length} refuerzos esperan en la entrada: llegarán la próxima ronda.` });
+    }
+  }
+  if (reorder && !early) { s.order = interleave(s.units); s.turn = 0; }
 }
 
 /** Aplica daño ya calculado (antes de armadura). Devuelve la vida perdida. */
@@ -276,6 +369,9 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
   }
   // Debilitado: quien golpea hace menos daño
   if (attacker?.statuses.weak) raw *= 1 - WEAK_PCT;
+  // Q1: protección del jefe por sus objetivos estructurales en pie (sellos, raíces, almas): nunca inmunidad
+  const ward = wardOf(s, u);
+  if (ward > 0 && wardApplies(source)) raw *= 1 - ward;
   // Choque térmico: el fuego rompe la Escarcha y la Congelación con daño extra
   if (opts.element === 'fire' && (u.statuses.chill || u.statuses.frozen) && source !== 'termico') {
     delete u.statuses.chill; delete u.statuses.frozen;
@@ -321,6 +417,7 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
   if (hasTrait(u, 'labgod')) dmg = Math.min(dmg, Math.max(0, u.hp - 1));
   u.hp = Math.max(0, u.hp - dmg);
   ev.push({ t: 'damage', unit: u.id, amount: dmg, absorbed, crit: !!opts.crit, source });
+  recordHit(s, attacker, u, dmg + absorbed, source);
   // Cadenas vinculantes: el otro encadenado recibe la mitad del daño
   const chn = u.statuses.chained;
   if (chn && source !== 'cadenas' && dmg + absorbed > 0) {
@@ -391,7 +488,9 @@ function hurt(s: CombatState, u: Unit, raw: number, ev: GameEvent[], source: str
     if (u.ai === 'pillar') {
       u.used = true;
       const boss = s.units.find((b) => alive(b) && b.team === u.team && b.ai === 'boss');
-      if (boss) { addStatus(boss, 'exposed', PILLAR_EXPOSE.turns, PILLAR_EXPOSE.stacks, ev); ev.push({ t: 'note', text: `El pilar cae: ${boss.name} queda Expuesto.` }); }
+      if (boss && objectiveExposes(u)) { addStatus(boss, 'exposed', PILLAR_EXPOSE.turns, PILLAR_EXPOSE.stacks, ev); ev.push({ t: 'note', text: `${u.objective ? u.name : 'El pilar'} cae: ${boss.name} queda Expuesto.` }); }
+      // Q1: objetivos estructurales (sellos, raíces, válvulas…): su efecto propio
+      if (u.objective) onObjectiveDown(s, u, casting !== null ? getUnit(s, casting) : undefined, ENC, ev);
     }
     // G3.2: matar una invocación da ventaja contra quien la creó
     const maker = u.summoner === undefined ? undefined : s.units.find((x) => x.id === u.summoner && alive(x) && x.team === u.team);
@@ -496,6 +595,8 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
       if (s.goal?.kind === 'survive' && s.round > s.goal.rounds) { s.over = 'win'; ev.push({ t: 'over', result: 'win' }); return; }
       if (s.waves?.length) spawnWave(s, ev);
       tickMarks(s, undefined, ev);
+      // Q1: las oleadas anunciadas avisan una ronda antes de llegar
+      for (const w of s.waves ?? []) if (w.warn && w.round === s.round + 1) announceWave(s, w, ev);
       for (const k of Object.keys(s.fire ?? {})) if (--s.fire![k]! <= 0) delete s.fire![k];
     }
     const u = getUnit(s, s.order[s.turn]!)!;
@@ -574,6 +675,7 @@ function beginNext(s: CombatState, ev: GameEvent[]): void {
     // Inmovilizado: sin PM este turno
     if (u.statuses.rooted) { u.mp = 0; ev.push({ t: 'resist', unit: u.id, what: 'Inmovilizado' }); }
     zoneTurnStart(s, u, ev);
+    encounterTurnStart(s, u, ENC, ev);
     if (!alive(u) || s.over) continue;
     tick(u, 'slow');
     tick(u, 'mark');
