@@ -139,6 +139,14 @@ describe('zona 4', () => {
     expect(run.zoneClear).toBe(true);
     leaveNode(run);
     expect(run.zone).toBe(3);
+    // primero la Sala de los Pactos (bendición del jefe); al salir, la reliquia de grupo
+    expect(run.phase).toBe('room');
+    expect(run.room?.kind).toBe('blessing');
+    expect(run.step).toBe(0);
+    const h = run.heroes[0]!;
+    if (h.boonOffer) h.boonOffer = null; else h.bossOffer = null;
+    leaveNode(run);
+    expect(run.step).toBe(0);
     expect(run.phase).toBe('event');
     expect(run.event!.id).toBe('reliquia_2');
   });

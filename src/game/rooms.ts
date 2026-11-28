@@ -5,6 +5,7 @@ import { AFFIX_NAMES, SLOT_POOL, rollAffix, type Item, type StatKey } from '../c
 import { pick, rand, shuffle } from '../core/rng';
 import { schoolOf } from '../core/tuning';
 import { UPGRADES } from '../core/upgrades';
+import { CHEST_RUNE_CHANCE } from './runeLoot';
 import { giveItem, giveRuneOffer, healOf, heroMaxHp, heroSpec, runeBox, upgradeChoices, zoneOf, type HeroSave, type RunState } from './run';
 
 export type RoomState =
@@ -12,7 +13,12 @@ export type RoomState =
   | { kind: 'forge'; heat: number; log: string[] }
   | { kind: 'chest'; opened: boolean; cursed?: string | null; lines?: string[] }
   | { kind: 'rest'; zone: number; picks: Record<string, number>; lines: string[] }
-  | { kind: 'shrine'; zone: number };
+  | { kind: 'shrine'; zone: number }
+  /**
+   * Sala de los Pactos (inicio de cada zona tras vencer a su jefe): cada héroe elige aquí su bendición de clase.
+   * `relic`: votación de reliquia de grupo que espera a que se salga de la sala.
+   */
+  | { kind: 'blessing'; zone: number; relic?: string };
 
 export type RoomOp =
   | { op: 'pact'; idx: number }
@@ -33,6 +39,7 @@ export function enterRoom(run: RunState, kind: RoomState['kind'], firstRun = fal
     // Santuario agrietado: una bendición menos, pero cura al entrar
     if (run.mods.includes('agrietado')) for (const h of run.heroes) if (h.hp > 0) h.hp = Math.min(heroMaxHp(h), h.hp + Math.ceil(heroMaxHp(h) * 0.2));
   }
+  else if (kind === 'blessing') run.room = { kind, zone: run.zone };
   else run.room = { kind: 'rest', zone: run.zone, picks: {}, lines: [] };
   if (run.room.kind === 'altar' && !run.room.pacts.length) run.room.result = 'El altar está frío. Aún no conocéis los nombres de los Pactos: volved cuando hayáis bajado una vez al Abismo.';
   run.phase = 'room';
@@ -229,7 +236,7 @@ function openChest(run: RunState): void {
   for (const h of run.heroes) h.gold += gold;
   r.lines.push(`Y ${gold} de oro para cada uno.`);
   // runas: los cofres a veces guardan una (más a menudo en zonas hondas); azar propio de las runas
-  if (rand(runeBox(run)) < 0.4 + 0.15 * run.zone) for (const h of run.heroes) { const o = giveRuneOffer(run, h, 'chest'); if (o) r.lines.push(`${h.name}: una runa a elegir (${o.runes.length} opciones).`); }
+  if (rand(runeBox(run)) < CHEST_RUNE_CHANCE(run.zone)) for (const h of run.heroes) { const o = giveRuneOffer(run, h, 'chest'); if (o) r.lines.push(`${h.name}: una runa a elegir (${o.runes.length} opciones).`); }
 }
 
 /** Texto de la hoguera según la zona. */

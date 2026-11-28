@@ -211,30 +211,40 @@ export function victoryModal(run: RunState): string {
   <div class="row"><span class="grow"></span><button class="pri" data-act="report">Continuar</button></div></div></div>`;
 }
 
-/** Bendición pendiente: 3 habilidades de un patrón (las del mismo patrón se potencian entre sí). */
+/**
+ * Opciones de una bendición pendiente con el estilo de las elecciones de sala (barras con extremos en punta, una encima de
+ * otra, como el Descanso): icono, nombre, qué hace y qué cambia. Se usan en la Sala de los Pactos y en los eventos.
+ */
+export function blessingOptions(h: HeroSave): string {
+  if (!h.boonOffer) return '';
+  const counts = patronBonus(h.boons).counts;
+  const opt = (i: number, icon: string, title: string, lines: string, foot = '', tipHtml = ''): string =>
+    `<button class="raw evcard blesscard" data-act="boon" data-id="${i}" ${tipHtml ? tip(tipHtml) : ''}><b><span class="evico">${icon}</span>${title}</b><ul>${lines}</ul>${foot ? `<span class="votes">${foot}</span>` : ''}</button>`;
+  return `<div class="evopts">${h.boonOffer.spells.map((id, i) => {
+    const pp = patronOf(id), n = pp ? (counts[pp.id] ?? 0) + 1 : 0;
+    const set = pp && n >= 2 && !pp.noSet ? `Con esta: ${n} de ${esc(pp.name)} → ${esc(n >= 3 ? pp.threeText : pp.twoText)}` : '';
+    const bl = BLESSINGS[id];
+    if (bl) return opt(i, bl.icon, `${esc(bl.name)} <small>· bendición de clase</small>`, `<li class="up">${esc(bl.text)}</li>`, set);
+    const mod = BOON_MODS[id];
+    if (mod) {
+      const base = SPELLS[mod.target]!, have = [...h.boons.filter((b) => BOON_MODS[b]?.target === mod.target), ...(h.ups[mod.target] ?? [])];
+      const now = tuned(base, { ups: have }), next = tuned(base, { ups: [id, ...have] });
+      return opt(i, spellIcon(next, false), `${esc(mod.name)} <small>· mejora de ${esc(base.name)}</small>`, `<li class="up">${esc(mod.text)}</li><li class="up">Después: ${next.ap} PA · ${esc(spellSummary(next))}</li><li class="dim">Ahora: ${now.ap} PA · ${esc(spellSummary(now))}</li>`, set, spellTip(next));
+    }
+    const d = SPELLS[id]!;
+    return opt(i, spellIcon(d, false), `${esc(d.name)} <small>· hechizo nuevo de ${esc(CLASSES[h.cls].name)}</small>`, `<li class="up">${esc(d.text)}</li><li class="dim">${d.ap} PA · ${rangeText(d)}${d.perTurn ? ` · ${d.perTurn} por turno` : ''}${d.cd ? ` · espera ${d.cd + 1}` : ''}</li>`, set, spellTip(d));
+  }).join('')}</div>`;
+}
+
+/** Bendición pendiente (fuera de la Sala de los Pactos, p. ej. tras un evento): las mismas opciones de sala. */
 export function boonRow(run: RunState): string {
   const h = mine(run);
   if (!h?.boonOffer) return '';
   const p = PATRONS[h.boonOffer.patron]!;
-  const counts = patronBonus(h.boons).counts;
-  const card = (id: string, i: number): string => {
-    const pp = patronOf(id)!, n = (counts[pp.id] ?? 0) + 1;
-    const syn = n >= 2 && !pp.noSet ? `<div class="good sm">Con esta: ${n} de ${esc(pp.name)} → ${esc(n >= 3 ? pp.threeText : pp.twoText)}</div>` : '';
-    const bl = BLESSINGS[id];
-    if (bl) return `<div class="lootcard r3"><div class="row"><span class="emo big">${bl.icon}</span><div><b>${esc(bl.name)}</b><div class="pill sm">Bendición de clase (pasiva)</div></div></div><div class="sm">${esc(bl.text)}</div><button class="pri" data-act="boon" data-id="${i}">Elegir</button></div>`;
-    const mod = BOON_MODS[id];
-    if (mod) {
-      const base = SPELLS[mod.target]!, now = tuned(base, { ups: [...h.boons.filter((b) => BOON_MODS[b]?.target === mod.target), ...(h.ups[mod.target] ?? [])] }), next = tuned(base, { ups: [id, ...h.boons.filter((b) => BOON_MODS[b]?.target === mod.target), ...(h.ups[mod.target] ?? [])] });
-      return `<div class="lootcard r2"><div class="row">${spellIcon(next)}<div><b>${esc(mod.name)}</b><div class="pill sm">Mejora: ${esc(base.name)}</div></div></div><div class="sm">${esc(mod.text)}</div><div class="dim sm">Ahora: ${now.ap} PA · ${esc(spellSummary(now))}</div><div class="good sm">Después: ${next.ap} PA · ${esc(spellSummary(next))}</div>${syn}<button class="pri" data-act="boon" data-id="${i}">Elegir</button></div>`;
-    }
-    const d = SPELLS[id]!;
-    return `<div class="lootcard r2" ${tip(spellTip(d))}><div class="row">${spellIcon(d)}<div><b>${esc(d.name)}</b><div class="pill sm">Hechizo nuevo de ${esc(CLASSES[h.cls].name)}</div></div></div><div class="sm">${esc(d.text)}</div><div class="dim sm">${d.ap} PA · ${rangeText(d)}${d.perTurn ? ` · ${d.perTurn} por turno` : ''}${d.cd ? ` · espera ${d.cd + 1}` : ''}</div>${syn}<button class="pri" data-act="boon" data-id="${i}">Elegir</button></div>`;
-  };
   const nBless = h.boons.filter((b) => BLESSINGS[b] || BOON_MODS[b]).length;
-  return `<div class="panel loot boon"><div class="row"><h3>🌟 Bendición de ${esc(CLASSES[h.cls].name)}: elige una</h3><span class="grow"></span><span class="dim sm">Bendiciones: ${nBless}</span></div>
+  return `<div class="panel loot boon blessrow"><div class="row"><h3>🌟 Bendición de ${esc(CLASSES[h.cls].name)}: elige una</h3><span class="grow"></span><span class="dim sm">Bendiciones: ${nBless}</span></div>
   <div class="dim sm">Modifican tus mecánicas de clase o tus habilidades equipadas y duran toda la expedición.${p.noSet ? '' : ` Con 2 de ${esc(p.name)}: ${esc(p.twoText)} · con 3: ${esc(p.threeText)}.`}</div>
-  <div class="cards c${Math.min(4, h.boonOffer.spells.length)}">${h.boonOffer.spells.map(card).join('')}</div>
-  </div>`;
+  ${blessingOptions(h)}</div>`;
 }
 
 /** Todo lo que el jugador tiene pendiente de elegir. */

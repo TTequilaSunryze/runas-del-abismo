@@ -160,6 +160,8 @@ export function runEchoes(s: CombatState, u: Unit, defOf: (id: string) => SpellD
     if (!def?.dmg || s.over || !alive(u)) continue;
     const r = def.area ?? 0;
     const foes = s.units.filter((x) => alive(x) && x.team !== u.team && (def.square ? Math.max(Math.abs(x.pos.x - e.at.x), Math.abs(x.pos.y - e.at.y)) : dist(x.pos, e.at)) <= r);
+    // la réplica se ve como el lanzamiento original (animación, proyectil y efecto en la casilla), marcada como eco
+    ev.push({ t: 'cast', unit: u.id, spell: def.id, at: { ...e.at }, ...(def.element ? { element: def.element } : {}), echo: true });
     ev.push({ t: 'markAdd', kind: 'pulse', at: { ...e.at } });
     ev.push({ t: 'note', text: `Eco de ${def.name} (${Math.round(e.pct * 100)}%).` });
     for (const t of foes) ctx.hurt(s, t, (roll(def.dmg[0], def.dmg[1]) + flat(t)) * e.pct, ev, 'eco_runa', { element: def.element, armorFlat: def.armorIgnore });

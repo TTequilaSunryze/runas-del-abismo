@@ -191,6 +191,35 @@ const sheetOf = (u: { kind: string; team: string; summoner?: number; phase?: num
 /** Para la vista previa del creador: hoja de un enemigo o héroe (imágenes, nº de fotogramas y tamaño de celda). */
 export const sheetPreview = (kind: string, hero = false): { img: Sheet['img']; frames: Sheet['frames']; size: number } | undefined => { const s = hero ? HERO_SHEETS[kind] : SHEETS[kind]; return s && { img: s.img, frames: s.frames, size: s.size }; };
 const sheetReady = (s: Sheet): boolean => Object.values(s.img).every((i) => ready(i ?? null));
+
+/** Clases con retrato ilustrado propio (public/heroes/<clase>_retrato.jpg): la apariencia actual de los héroes. */
+const HERO_PORTRAITS: ReadonlySet<string> = new Set(['zorro', 'esferas', 'acechador', 'carcelero', 'barbaro', 'arquitecto', 'pistolero', 'arquero']);
+const thumbs = new Map<string, string>();
+/**
+ * Miniatura de una unidad con su apariencia actual: el retrato ilustrado de la clase (héroes) o el primer fotograma de reposo
+ * de su hoja de animación isométrica (enemigos y jefes, con la hoja de su fase). Devuelve null si no tiene arte nuevo
+ * o si la hoja aún no ha cargado (quien llama usa entonces el retrato dibujado por código).
+ */
+export function unitThumbUrl(u: { kind: string; team: string; summoner?: number; phase?: number }): string | null {
+  if (u.team === 'hero' && u.summoner === undefined && HERO_PORTRAITS.has(u.kind)) return `${import.meta.env.BASE_URL}heroes/${u.kind}_retrato.jpg`;
+  const s = sheetOf(u);
+  const img = s?.img.idle ?? null;
+  if (!s || !ready(img) || typeof document === 'undefined') return null;
+  const key = `${u.kind}:${u.team}:${u.phase ?? 1}`;
+  const hit = thumbs.get(key);
+  if (hit) return hit;
+  // recorte cuadrado alrededor del cuerpo: de la cabeza (alto real sobre los pies) a los pies, centrado en ellos
+  const head = s.head ?? s.foot[1], side = Math.min(s.size, Math.max(24, head + 10));
+  const sx = Math.max(0, Math.min(s.size - side, s.foot[0] - side / 2)), sy = Math.max(0, Math.min(s.size - side, s.foot[1] - head - 6));
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 64;
+  const g = cv.getContext('2d')!;
+  g.imageSmoothingEnabled = false;
+  g.drawImage(img, sx, sy, side, side, 0, 0, 64, 64);
+  const url = cv.toDataURL();
+  thumbs.set(key, url);
+  return url;
+}
 /** alto del personaje sobre sus pies, en pantalla */
 const sheetHeight = (s: Sheet): number => (s.head ?? s.foot[1]) * s.scale;
 /** Dirección (fila de la hoja) para un desplazamiento en casillas, vista en pantalla isométrica. */
@@ -314,7 +343,7 @@ interface Ring { x: number; y: number; color: string; t0: number; dur: number; r
 /** golpes giratorios: el personaje (y su Sombra) dan una vuelta */
 const SPIN_SPELLS = ['s_tajo', 'k_despellejar', 'k_guadana', 'z_colas', 'g_remolino', 'torbellino'];
 const SPIN_MS = 420;
-interface Ghost { kind: string; team: string; idx: number; x: number; y: number; t0: number; sheet?: string; dir?: number }
+interface Ghost { id: number; kind: string; team: string; idx: number; x: number; y: number; t0: number; sheet?: string; dir?: number; phase?: number }
 const ELEMENT_COLOR: Record<string, string> = { fire: '#ff8a30', ice: '#8ae0ff', poison: '#7fe05a', shadow: '#b07cff', holy: '#ffe9a0' };
 const ELEMENT_NAME: Record<string, string> = { fire: 'fuego', ice: 'hielo', poison: 'veneno', shadow: 'sombra', holy: 'sagrado' };
 const LUNGE_MS = 240;
@@ -335,6 +364,10 @@ export class Board {
   /** hechizo elegido, esperando objetivo */
   sel: string | null = null;
   onSelect: () => void = () => {};
+  /** Clic en una unidad sin hechizo preparado: la interfaz abre su ficha. */
+  onInspect: (id: number) => void = () => {};
+  /** El siguiente clic en el tablero señala la casilla al grupo (como la tecla G). */
+  pingMode = false;
   private g: CanvasRenderingContext2D;
   private hover: Pos | null = null;
   /** editor de salas / laboratorio: si está puesto, los clics van aquí en vez de al combate (drag = arrastrando) */
@@ -485,7 +518,12 @@ export class Board {
   private click(p: Pos | null): void {
     const c = this.c;
     if (!c || !p) return;
+    // modo «señalar casilla» (botón de la barra o tecla G): el clic marca la casilla para el grupo y no hace nada más
+    if (this.pingMode) { this.pingMode = false; this.session.ping(p.x, p.y); this.onSelect(); return; }
     if (c.deploy) { this.session.act({ a: 'deploy', to: p }); return; }
+    // clic sobre una unidad (o un cadáver) sin hechizo preparado: se abre su ficha (vida, estados, rasgos…)
+    const there = c.units.find((u) => u.pos.x === p.x && u.pos.y === p.y && alive(u)) ?? c.units.find((u) => u.pos.x === p.x && u.pos.y === p.y && !u.used && u.seed === undefined);
+    if (!this.sel && there) { this.onInspect(there.id); if (alive(there)) return; }
     if (!this.session.isMyTurn()) return;
     if (this.sel) {
       this.session.act({ a: 'cast', spell: this.sel, at: p });
@@ -583,7 +621,7 @@ export class Board {
           late = Math.max(late, walkLate);
         }
       } else if (e.t === 'death' && u && from) {
-        if (u.seed === undefined) this.ghosts.push({ kind: lookKind(u), team: u.team, idx: heroIdx.get(u.id) ?? 0, x: from.x, y: from.y, t0: now, sheet: sheetOf(u) ? u.kind : undefined, dir: this.facing.get(u.id) ?? 0 });
+        if (u.seed === undefined) this.ghosts.push({ id: u.id, kind: lookKind(u), team: u.team, idx: heroIdx.get(u.id) ?? 0, x: from.x, y: from.y, t0: now, sheet: sheetOf(u) ? ((u.phase ?? 1) >= 2 && SHEETS[`${u.kind}2`] ? `${u.kind}2` : u.kind) : undefined, dir: this.facing.get(u.id) ?? 0, phase: u.phase });
       }
       if (e.t === 'damage' && e.amount > 0) { this.hurtAt.set(e.unit, now); this.hpPend.push({ id: e.unit, t: now, d: e.amount, sh: e.absorbed }); }
       else if (e.t === 'damage' && e.absorbed) this.hpPend.push({ id: e.unit, t: now, d: 0, sh: e.absorbed });
@@ -801,6 +839,40 @@ export class Board {
     for (const [i, t] of this.torches.entries()) {
       if (t.lit) continue;
       this.drawFlame(t.x, t.y + 4, 30, now, i * 3.1);
+    }
+  }
+
+  private mask: { cv: HTMLCanvasElement; g: CanvasRenderingContext2D } | null = null;
+  /** Lienzo auxiliar del tamaño del tablero (silueta de la sala). */
+  private maskCanvas(w: number, h: number): { cv: HTMLCanvasElement; g: CanvasRenderingContext2D } {
+    if (!this.mask) { const cv = document.createElement('canvas'); this.mask = { cv, g: cv.getContext('2d')! }; }
+    if (this.mask.cv.width !== w || this.mask.cv.height !== h) { this.mask.cv.width = w; this.mask.cv.height = h; }
+    return this.mask;
+  }
+
+  /** ¿Tiene esta unidad arte de cadáver (hoja con animación de muerte o modelo animado)? */
+  private corpseArt(u: Unit): boolean {
+    const sh = this.iso ? sheetOf(u) : undefined;
+    return (!!sh && !!sh.frames.death && sheetReady(sh)) || isModel(lookKind(u));
+  }
+
+  /**
+   * Cadáver en el suelo: último fotograma de la animación de muerte, algo apagado y con un charco de sangre.
+   * Los héroes caídos llevan además su nombre (pueden levantarse con una resurrección).
+   */
+  private drawCorpse(c: CombatState, u: Unit, heroIdx: number | undefined): void {
+    const g = this.g, sh = this.iso ? sheetOf(u) : undefined;
+    this.upright(u.pos.x, u.pos.y);
+    const cx = (u.pos.x + 0.5) * TILE, by = (u.pos.y + 1) * TILE - 6;
+    // charco bajo el cuerpo (los no muertos y espectros también dejan su mancha oscura)
+    g.fillStyle = 'rgba(90,8,14,.5)'; g.beginPath(); g.ellipse(cx + 2, by - 3, TILE * 0.34, 8, 0.15, 0, 6.3); g.fill();
+    if (sh && sh.frames.death && sheetReady(sh)) this.sheetFrame(c, sh, 'death', sh.frames.death - 1, this.facing.get(u.id) ?? 0, u.pos.x, u.pos.y, 0.9);
+    else if (isModel(lookKind(u))) drawUnit(g, lookKind(u), u.team, heroIdx ?? 0, cx, by, Math.round(TILE * 1.18), { anim: 'death', frame: ANIM_FRAMES.death - 1, alpha: 0.88 });
+    else { g.fillStyle = 'rgba(210,200,180,.55)'; for (const [ox, oy] of [[-8, -4], [6, -2], [0, -7]] as const) { g.fillRect(cx + ox - 4, by + oy - 1, 8, 2); } }
+    if (u.team === 'hero' && u.summoner === undefined) {
+      this.upright(u.pos.x, u.pos.y);
+      g.font = 'bold 9px "Pixelify Sans", ui-monospace, monospace'; g.textAlign = 'center';
+      g.lineWidth = 3; g.strokeStyle = '#000'; g.strokeText(`✝ ${u.name}`, cx, by + 10); g.fillStyle = heroIdx !== undefined ? PLAYER_COLORS[heroIdx % 4]!.b : '#ff9a9a'; g.fillText(`✝ ${u.name}`, cx, by + 10);
     }
   }
 
@@ -1100,8 +1172,9 @@ export class Board {
       this.shown.clear();
     }
     g.setTransform(1, 0, 0, 1, 0, 0);
-    g.fillStyle = '#07050a';
-    if (this.iso) g.fillRect(0, 0, size.w, size.h); else g.fillRect(0, 0, this.canvas.width, PAD);
+    // isométrico: el lienzo es transparente fuera de la sala, así el escenario se funde con el fondo de la pantalla
+    // (antes se veía un rectángulo negro alrededor de la sala)
+    if (this.iso) g.clearRect(0, 0, size.w, size.h); else { g.fillStyle = '#07050a'; g.fillRect(0, 0, this.canvas.width, PAD); }
     const now = performance.now();
     // H6: temblor de pantalla de los golpes fuertes
     this.shake = this.fx.offset(now);
@@ -1114,12 +1187,16 @@ export class Board {
     if (this.isoFloor) {
       const room = this.roomFor(c);
       if (forest) { this.drawForestFloor(c, room); this.drawForestEdge(c, room); } else { this.drawCryptFloor(c, room); this.drawCryptWalls(c, room); }
+      // silueta de la sala (suelo y muros): el tono y las luces no deben pintar el hueco transparente de alrededor
+      const mask = this.maskCanvas(size.w, size.h);
+      mask.g.clearRect(0, 0, size.w, size.h); mask.g.drawImage(this.canvas, 0, 0);
       // tono de la zona sobre suelo y muros
       g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'multiply'; g.fillStyle = bio ? bio.tint : ZONE_TINT[this.session.run?.zone ?? 0] ?? ZONE_TINT[0]!;
       g.fillRect(0, 0, this.canvas.width, this.canvas.height); g.restore();
       this.drawTorchLight(now);
       if (bio?.fx === 'fireflies') this.drawFireflies(c, now);
       else if (bio?.fx === 'embers') this.drawEmbers(c, now);
+      g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'destination-in'; g.drawImage(mask.cv, 0, 0); g.restore();
     }
     this.ground();
     const zone = ZONES[this.session.run?.zone ?? 0] ?? ZONES[0]!;
@@ -1132,7 +1209,7 @@ export class Board {
       g.fillStyle = 'rgba(190,255,150,.35)'; g.beginPath(); g.ellipse((x + 0.42) * TILE, (y + 0.55) * TILE, TILE * 0.14, TILE * 0.07, 0, 0, 6.3); g.fill();
     }
     // aliados caídos: charco, lápida y su nombre donde cayeron
-    for (const d of c.units.filter((x) => x.hp <= 0 && x.team === 'hero' && x.summoner === undefined && x.ai !== 'decoy' && !c.units.some((o) => o.hp > 0 && o.pos.x === x.pos.x && o.pos.y === x.pos.y))) {
+    for (const d of c.units.filter((x) => x.hp <= 0 && x.team === 'hero' && x.summoner === undefined && x.ai !== 'decoy' && !this.corpseArt(x) && !c.units.some((o) => o.hp > 0 && o.pos.x === x.pos.x && o.pos.y === x.pos.y))) {
       this.upright(d.pos.x, d.pos.y);
       const cx = (d.pos.x + 0.5) * TILE, cy = (d.pos.y + 0.5) * TILE;
       g.fillStyle = 'rgba(110,10,18,.55)'; g.beginPath(); g.ellipse(cx + 3, cy + 12, TILE * 0.36, TILE * 0.17, 0.2, 0, 6.3); g.fill();
@@ -1406,8 +1483,12 @@ export class Board {
         g.globalAlpha = 1;
       }
     };
-    for (const u of c.units.filter(alive).sort((a, b) => depth(a.pos) - depth(b.pos))) {
+    // cadáveres: se quedan en el suelo con el último fotograma de su animación de muerte hasta que se consumen
+    // (devorados, alzados, revividos o usados por una runa); se dibujan antes que los vivos de su misma diagonal
+    const isCorpse = (u: Unit): boolean => !alive(u) && !u.used && u.seed === undefined && u.ai !== 'decoy' && !this.ghosts.some((d) => d.id === u.id);
+    for (const u of c.units.filter((x) => alive(x) || isCorpse(x)).sort((a, b) => depth(a.pos) - depth(b.pos) || Number(alive(a)) - Number(alive(b)))) {
       flushProps(depth(u.pos));
+      if (!alive(u)) { this.drawCorpse(c, u, heroIdx.get(u.id)); continue; }
       // posición mostrada: se acerca suavemente a la real
       const s = this.shown.get(u.id) ?? { ...u.pos };
       const wk = this.walks.get(u.id);
@@ -1476,6 +1557,14 @@ export class Board {
         g.fillStyle = '#1a0610'; g.fillRect(mx - 9, my - 9, 18 + String(dmk.stacks).length * 7, 16);
         g.fillStyle = '#ff3a4a'; g.font = 'bold 12px ui-monospace, monospace'; g.textAlign = 'left'; g.fillText(`☠${dmk.stacks}`, mx - 7, my + 3);
       }
+      // Condena: el daño guardado, a la vista (lo recibirá de golpe cuando se acabe)
+      const doom = u.statuses.doom;
+      if (doom && doom.stacks > 0) {
+        const mx = cx - TILE * 0.32 - 16, my = s.y * TILE + 18, txt = `⌛${doom.stacks}`;
+        g.font = 'bold 12px ui-monospace, monospace'; g.textAlign = 'left';
+        g.fillStyle = '#16061f'; g.fillRect(mx - 3, my - 9, g.measureText(txt).width + 6, 16);
+        g.fillStyle = doom.turns <= 1 ? '#ff7ad8' : '#c08aff'; g.fillText(txt, mx, my + 3);
+      }
       // barra encima de la cabeza: alto del personaje en pantalla pasado a la escala de lo que está de pie
       this.bars(u, cx, s.y * TILE - (sh8 ? Math.round((sheetHeight(sh8) + 8) / ISO_UP - TILE) : 8), heroIdx.get(u.id));
     }
@@ -1487,7 +1576,9 @@ export class Board {
       if (gs && sheetReady(gs)) {
         // hoja de animación: cae (10 fotogramas en 1 s), se queda en el suelo y se desvanece
         const nd = gs.frames.death ?? 1, dm = animMul(d.kind, 'death', d.team === 'enemy'), t0 = (now - d.t0) / dm, fr = Math.min(nd - 1, Math.floor((t0 / 1000) * nd));
-        this.sheetFrame(c, gs, 'death', fr, d.dir ?? 0, d.x, d.y, t0 < 1100 ? 1 : Math.max(0, 1 - (t0 - 1100) / 500));
+        // si queda cadáver, no se desvanece: el cadáver toma el relevo con el mismo fotograma
+        const stays = c.units.some((x) => x.id === d.id && !alive(x) && !x.used);
+        this.sheetFrame(c, gs, 'death', fr, d.dir ?? 0, d.x, d.y, stays ? (t0 < 1100 ? 1 : Math.max(0.9, 1 - (t0 - 1100) / 5000)) : t0 < 1100 ? 1 : Math.max(0, 1 - (t0 - 1100) / 500));
         continue;
       }
       if (isModel(d.kind)) {
@@ -1552,14 +1643,16 @@ export class Board {
     // luz de antorchas en las esquinas y viñeta
     if (this.iso) this.screen();
     const W = this.iso ? size.w : c.w * TILE, H = this.iso ? size.h : c.h * TILE, fl = 0.1 + 0.03 * Math.sin(now / 130);
-    for (const [lx, ly] of (this.isoFloor && this.torches.length ? [] : [[0, 0], [W, 0], [0, H], [W, H]]) as Array<readonly [number, number]>) {
+    for (const [lx, ly] of (this.isoFloor || this.iso ? [] : [[0, 0], [W, 0], [0, H], [W, H]]) as Array<readonly [number, number]>) {
       const gr = g.createRadialGradient(lx, ly, 0, lx, ly, 280);
       gr.addColorStop(0, `rgba(${zone.light},${fl})`); gr.addColorStop(1, `rgba(${zone.light},0)`);
       g.fillStyle = gr; g.fillRect(0, 0, W, H);
     }
+    // viñeta: solo sobre lo dibujado (en isométrico el contorno de la sala es transparente)
     const vg = g.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, W * 0.65);
     vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.45)');
-    g.fillStyle = vg; g.fillRect(0, 0, W, H);
+    g.save(); if (this.iso) g.globalCompositeOperation = 'source-atop';
+    g.fillStyle = vg; g.fillRect(0, 0, W, H); g.restore();
     this.floats = this.floats.filter((f) => now - f.t0 < 1100);
     g.font = 'bold 16px ui-monospace, monospace'; g.textAlign = 'center';
     for (const f of this.floats) {

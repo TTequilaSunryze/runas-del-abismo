@@ -5,7 +5,7 @@ import { cast, createCombat, current, endTurn, move, type UnitSpec } from '../sr
 import { makeHero } from '../src/core/classes/factory';
 import { makeEnemy } from '../src/content/enemies';
 import { tuned, UPGRADES } from '../src/core/upgrades';
-import { championOf, cleanChampion, finishFight, heroSpec, metaAction, newArena, newRun, type Champion } from '../src/game/run';
+import { advanceZone, championOf, cleanChampion, finishFight, heroSpec, metaAction, newArena, newRun, type Champion } from '../src/game/run';
 import { autoplay } from './helpers';
 
 const hero = (cls: 'arquero' | 'guerrero', routes: string[], pos = { x: 1, y: 3 }): UnitSpec => makeHero({ cls, name: 'H', owner: 'p0', routes, pos, level: 3 });
@@ -71,6 +71,10 @@ describe('mejoras de hechizo', () => {
     run.combat = createCombat({ seed: 1, w: 8, h: 5, obstacles: [], units: [heroSpec(h, { x: 1, y: 1 })] }).state;
     run.combat.over = 'win'; run.phase = 'combat'; run.kind = 'boss';
     finishFight(run);
+    // tras el jefe: la runa; la bendición, al descender (Sala de los Pactos)
+    expect(h.boonOffer).toBeNull();
+    advanceZone(run);
+    expect(run.room?.kind).toBe('blessing');
     expect(h.bossOffer).toBeNull();
     const o = h.boonOffer!.spells;
     expect(o).toHaveLength(3);

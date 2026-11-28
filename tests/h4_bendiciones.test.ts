@@ -5,7 +5,7 @@ import { BLESSINGS, BOON_MODS } from '../src/core/boonmods';
 import { PLAYABLE } from '../src/core/classes/classes';
 import { SPELLS } from '../src/core/classes/spells';
 import { createCombat } from '../src/core/combat/engine';
-import { blessingPool, chooseNode, eventDef, finishFight, heroSpec, metaAction, newRun, offerBossReward, resolveEvent, vote, type HeroSave, type RunState } from '../src/game/run';
+import { advanceZone, blessingPool, chooseNode, eventDef, finishFight, heroSpec, metaAction, newRun, offerBossReward, resolveEvent, vote, type HeroSave, type RunState } from '../src/game/run';
 import { roomStep } from './helpers';
 
 const store: Record<string, string> = {};
@@ -16,6 +16,8 @@ const winBoss = (run: RunState): void => {
   run.combat = createCombat({ seed: 1, w: 8, h: 5, obstacles: [], units: [heroSpec(h, { x: 1, y: 1 })] }).state;
   run.combat.over = 'win'; run.phase = 'combat'; run.kind = 'boss';
   finishFight(run);
+  // la bendición llega al descender: en la Sala de los Pactos del inicio de la zona siguiente
+  advanceZone(run);
 };
 
 describe('H4 · bendiciones de clase como recompensa de jefe', () => {
@@ -27,10 +29,12 @@ describe('H4 · bendiciones de clase como recompensa de jefe', () => {
       for (const id of pool) expect(SPELLS[id]?.route === 'boon' && !BLESSINGS[id] && !BOON_MODS[id], id).toBe(false);
     }
   });
-  it('al vencer al jefe: una oferta de bendiciones, sin hechizos nuevos', () => {
+  it('al vencer al jefe: una oferta de bendiciones (en la Sala de los Pactos de la zona siguiente), sin hechizos nuevos', () => {
     for (const c of PLAYABLE) {
       const run = mk(c), h = run.heroes[0]!;
       winBoss(run);
+      expect(run.phase, c).toBe('room');
+      expect(run.room?.kind, c).toBe('blessing');
       expect(h.bossOffer, c).toBeNull();
       expect(h.boonOffer!.spells, c).toHaveLength(3);
       expect(metaAction(run, 'a', { a: 'boon', idx: 1 })).toBeNull();

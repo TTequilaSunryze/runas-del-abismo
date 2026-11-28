@@ -219,7 +219,8 @@ export function recordArchive(run: RunState | null, myId: string, events: readon
           if ((a.bestiary[u.kind]?.n ?? 0) >= DOCUMENTED_KILLS) raise(a, 'bestiary', u.kind, LV.documented);
           contract({ t: 'kill', enemy: u.kind, zone: snap.zone + 1, key: `${snap.k}:k${e.unit}` });
           changed = true;
-        } else if (e.t === 'cast' && snap.units.get(e.unit)?.owner === myId) {
+        } else if (e.t === 'cast' && !e.echo && snap.units.get(e.unit)?.owner === myId) {
+          // los ecos rúnicos repiten la animación del lanzamiento, pero no son un lanzamiento: no cuentan para Grimorio ni contratos
           if (GRIM_IDS.has(e.spell)) changed = raise(a, 'grimoire', e.spell, LV.studied) || changed;
           // héroe propio (no invocaciones): cada lanzamiento se identifica por ronda, turno, PA que le quedan y posición en el lote
           const u = snap.units.get(e.unit)!, live = run.combat?.units.find((x) => x.id === e.unit);

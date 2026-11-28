@@ -17,7 +17,8 @@ import { championOf, dailyOf, dailyScore, lastZone } from '../game/run';
 import { CLASS_STORY, ENDING_LOST, ENDING_WON, TUTORIAL, ZONE_STORY } from '../content/story';
 import { esc, mine, store, tip, today, ui } from './ctx';
 import { NODE_ICON, itemIcon, spellIcon, spellTip } from './icons';
-import { advanceBar, blessingBar, boonRow, diffHtml, itemHtml, mapSvg, pendingRows, shrineOptions, sidePanel, sideRail, topBar, volumeControl } from './panels';
+import { advanceBar, blessingBar, blessingOptions, boonRow, diffHtml, itemHtml, lootRow, mapSvg, pendingRows, shrineOptions, sidePanel, sideRail, stashRow, topBar, volumeControl } from './panels';
+import { runeOfferRow } from './runes';
 import { CONSUMABLES, MAX_CONSUMABLE } from '../content/boons';
 import { CHEST_CURSE_CHANCE, HEAT, HEAT_HOT, HEAT_MAX, HEAT_OVERLOAD, HONE_COST, SCRAP_YIELD, curseOf, heatTier, pactOf, recalibratePrice } from '../content/pacts';
 import { REST_OPTIONS, itemByRef, recalStats, restHeal, restText } from '../game/rooms';
@@ -40,7 +41,7 @@ import { BLESSINGS } from '../core/boonmods';
 import { unitPortraitUrl } from '../render/sprites';
 import { setCombatBg, setMenuScene } from '../render/menubg';
 import { branchDef, optionOpen, type BranchOption } from '../content/branching';
-import { NODE_NAME, heroSpec, upCount, upgradeChoices } from '../game/run';
+import { NODE_NAME, heroSpec, upCount, upgradeChoices, zoneOf } from '../game/run';
 
 const RAR = ['ir0', 'ir1', 'ir2', 'ir3'];
 
@@ -609,7 +610,7 @@ export function mapScreen(): void {
   ${run.allies.length ? `<div class="panel sm">🤝 Os acompañan: ${run.allies.map((a) => `<b>${esc(ALLIES[a]?.name ?? a)}</b>`).join(', ')} <span class="dim">(hasta el final de la zona)</span></div>` : ''}
   ${run.nextOmen ? `<div class="panel sm">Próximo combate: ${OMENS.find((o) => o.id === run.nextOmen)?.icon} <b>${esc(OMENS.find((o) => o.id === run.nextOmen)?.name ?? '')}</b></div>` : ''}
   ${blessingBar(run)}
-  ${run.zoneClear ? `<div class="panel note zoneclear"><h3>👑 Zona ${run.zone + 1} superada</h3><div class="sm">Elegid primero vuestras recompensas del jefe (bendición y runa). Después, el descenso a la Zona ${run.zone + 2}.</div>${advanceBar(run, `Descender a la Zona ${run.zone + 2} →`)}</div>` : ''}
+  ${run.zoneClear ? `<div class="panel note zoneclear"><h3>👑 Zona ${run.zone + 1} superada</h3><div class="sm">Elegid primero la runa del jefe. Al descender, la Sala de los Pactos os espera con vuestra bendición.</div>${advanceBar(run, `Descender a la Zona ${run.zone + 2} →`)}</div>` : ''}
   <div class="lbl">Zona ${run.zone + 1}/${lastZone(run) + 1} · Sala ${run.step + 1} de ${run.map.length} · ${run.heroes.length > 1 ? 'votad a dónde queréis ir: cuando votéis todos, el grupo va a la más votada (en empate, la del anfitrión)' : 'pulsa en el mapa a dónde vas'}</div>
   ${mapSvg(run, true)}
   ${run.heroes.length > 1 ? voteRow(run) : ''}
@@ -736,6 +737,11 @@ function npcSay(id: string, name: string, lines: string[]): string {
   return `<div class="npcsay"><img src="${import.meta.env.BASE_URL}npc/${id}_retrato.jpg" alt=""><div><b>${esc(name)}</b>${lines.map((l) => `<p>«${esc(l)}»</p>`).join('')}</div></div>`;
 }
 
+/** Lo pendiente que una sala no muestra por sí misma (runa, botín sin guardar, botín a elegir). */
+function roomExtras(run: RunState): string {
+  return `${runeOfferRow(run, true)}${stashRow(run)}${lootRow(run)}`;
+}
+
 export function roomScreen(): void {
   const s = ui.session!, run = s.run!, r = run.room!;
   const h = mine(run);
@@ -766,11 +772,24 @@ export function roomScreen(): void {
   }
   if (r.kind === 'shrine') {
     // H4: el Santuario ofrece una mejora de hechizo (bossOffer); se mantiene la bendición por si quedara alguna pendiente
-    const waiting = (x: HeroSave): boolean => !!(x.boonOffer || x.bossOffer);
+    // también cuenta la runa del santuario (antes no se mostraba y el botón «Continuar» quedaba bloqueado para siempre)
+    const waiting = (x: HeroSave): boolean => !!(x.boonOffer || x.bossOffer || x.runeOffers?.length);
     const status = run.heroes.map((x) => `<span class="pill sm ${waiting(x) ? 'dim' : 'good'}">${waiting(x) ? '⏳' : '✔'} ${esc(x.name)}</span>`).join(' ');
     const inner = `${h && waiting(h) ? `${boonRow(run)}${h.bossOffer ? `<div class="dim sm evhint">Elige una mejora: dura toda la expedición.</div>${shrineOptions(h)}` : ''}` : `<div class="evresult"><b>${h ? 'Las runas del arco se apagan: tu hechizo ya lleva su marca.' : 'Estás mirando el santuario.'}</b></div>`}
       ${run.heroes.length > 1 ? `<div class="row">${status}</div>` : ''}${advanceBar(run, 'Continuar →')}`;
-    frame(run, roomWin('', 'El Santuario', 'Las runas del arco despiertan a vuestro paso y la reja se entreabre. Lo que aguarda al otro lado afila tu poder: elige una mejora para uno de tus hechizos.', inner, 'shrinewin'));
+    frame(run, roomWin('', 'El Santuario', 'Las runas del arco despiertan a vuestro paso y la reja se entreabre. Lo que aguarda al otro lado afila tu poder: elige una mejora para uno de tus hechizos.', inner, 'shrinewin') + roomExtras(run));
+    return;
+  }
+  if (r.kind === 'blessing') {
+    // Sala de los Pactos: la recompensa del jefe vencido, al empezar la zona nueva. Cada uno elige su bendición
+    const waiting = (x: HeroSave): boolean => !!(x.boonOffer || x.bossOffer);
+    const status = run.heroes.map((x) => `<span class="pill sm ${waiting(x) ? 'dim' : 'good'}">${waiting(x) ? '⏳' : '✔'} ${esc(x.name)}</span>`).join(' ');
+    const chosen = h ? h.boons.filter((b) => BLESSINGS[b]).slice(-1)[0] : undefined;
+    const inner = `${h?.boonOffer ? `<div class="dim sm evhint">Elige una de las tres: dura toda la expedición.</div>${blessingOptions(h)}`
+      : h?.bossOffer ? `<div class="dim sm evhint">Ya tienes todas las bendiciones de tu clase: elige una mejora para uno de tus hechizos.</div>${shrineOptions(h)}`
+      : `<div class="evresult"><b>${h ? (chosen ? `${BLESSINGS[chosen]!.icon} ${esc(BLESSINGS[chosen]!.name)}: la llama del altar ya arde en ti.` : 'La llama del altar ya arde en ti.') : 'Estás mirando la Sala de los Pactos.'}</b></div>`}
+      ${run.heroes.length > 1 ? `<div class="row">${status}</div>` : ''}${advanceBar(run, `Adentrarse en la Zona ${run.zone + 1} →`)}`;
+    frame(run, roomWin('', 'La Sala de los Pactos', `El guardián de la zona anterior ha caído. Antes de seguir bajando, el altar os ofrece su fuego: cada uno elige la bendición que le acompañará en ${esc(zoneOf(run).name)}.`, inner, 'restwin blesswin') + roomExtras(run));
     return;
   }
   if (r.kind === 'rest') {

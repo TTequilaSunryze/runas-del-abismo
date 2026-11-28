@@ -28,13 +28,27 @@ export const NODE_ART: Record<string, string> = {
   treasure: 'nodo_tesoro', shrine: 'santuario', forge: 'forja', altar: 'altar', cage: 'nodo_jaula', sangre: 'sangre', vault: 'nodo_sello',
 };
 
-/** Icono de cada estado alterado en combate. */
+/**
+ * Icono de cada estado alterado (public/icons, recortados del atlas de estados). Todos los estados del catálogo tienen uno:
+ * se usan en el tablero (debajo de la vida), en el registro, en la ficha de unidad y en las fichas de runas.
+ */
 export const STATUS_ART: Record<string, string> = {
-  burn: 'st_quemadura', slow: 'st_hielo', poison: 'st_veneno', bleed: 'st_sangrado', stun: 'st_aturdido', vuln: 'st_vulnerable', exposed: 'st_vulnerable',
-  mark: 'st_marca', deathmark: 'st_marca', verdugo: 'st_marca', charm: 'st_maldicion', guarded: 'st_protegido', kinetic: 'st_protegido', prism: 'st_protegido',
-  immune: 'st_protegido', empower: 'st_potenciado', frenzy: 'st_potenciado', reach: 'st_potenciado', hobble: 'st_raices', rooted: 'st_raices', chained: 'st_raices',
-  anchor: 'st_piel_piedra', silver: 'st_debilitado', smoke: 'runa_niebla', invis: 'runa_niebla', fading: 'runa_niebla', orbita: 'espiral',
+  // daño progresivo
+  burn: 'st_quemadura', poison: 'st_veneno', bleed: 'st_sangrado',
+  // control
+  stun: 'st_aturdido', slow: 'st_hielo', chill: 'st_hielo', frozen: 'st_hielo', rooted: 'st_raices', hobble: 'st_raices', charm: 'corazon',
+  chained: 'vinculo', anchor: 'sello',
+  // debilitamientos
+  vuln: 'st_vulnerable', exposed: 'st_vulnerable', mark: 'st_marca', weak: 'st_debilitado', corrupt: 'st_maldicion',
+  // marcas
+  deathmark: 'calavera_cuernos', doom: 'reloj', resonance: 'runa_estallido', verdugo: 'st_marca', fading: 'runa_niebla',
+  // beneficios
+  empower: 'st_potenciado', frenzy: 'st_potenciado', reach: 'flecha', invis: 'runa_niebla', smoke: 'runa_niebla', guarded: 'st_protegido',
+  kinetic: 'st_protegido', prism: 'runa_cristal', immune: 'st_bendicion', orbita: 'espiral', silver: 'medallon', regen: 'st_regeneracion',
+  haste: 'velocidad', ward: 'escudo_runico',
 };
+/** Icono en línea de un estado (con el emoji del catálogo si no tuviera arte). */
+export const statusGi = (kind: string, fallback = '', cls = ''): string => (STATUS_ART[kind] ? gi(STATUS_ART[kind]!, `st ${cls}`) : fallback);
 
 const KEYS = Object.keys(EMOJI_ICON).sort((a, b) => b.length - a.length);
 const RE = new RegExp(`(${KEYS.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\uFE0F?`, 'gu');

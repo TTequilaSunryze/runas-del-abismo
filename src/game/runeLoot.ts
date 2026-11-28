@@ -37,8 +37,18 @@ export const RARITY_WEIGHTS: Record<RuneSource, [number, number, number, number,
   boss: [0, 0, 55, 40, 5],
   final: [0, 0, 0, 0, 1],
 };
+/**
+ * Frecuencia de las runas (ajuste «menos runas»: salían en casi todos los combates). Los jefes siguen siendo una recompensa
+ * garantizada; élites, cofres y santuarios las dan a menudo pero no siempre, y un combate normal muy de vez en cuando.
+ */
 /** Probabilidad de que un combate normal suelte una runa menor (no deben ser la fuente principal). */
-export const COMBAT_RUNE_CHANCE = (zone: number): number => Math.min(0.2, 0.08 + 0.03 * zone);
+export const COMBAT_RUNE_CHANCE = (zone: number): number => Math.min(0.12, 0.05 + 0.02 * zone);
+/** Probabilidad de que un élite (o una emboscada) dé una oferta rúnica. */
+export const ELITE_RUNE_CHANCE = 0.6;
+/** Probabilidad de que un cofre guarde una runa para cada uno (sube con la zona). */
+export const CHEST_RUNE_CHANCE = (zone: number): number => Math.min(0.55, 0.25 + 0.1 * zone);
+/** Probabilidad de que un santuario ofrezca además una runa. */
+export const SHRINE_RUNE_CHANCE = 0.35;
 /** Opciones por oferta. */
 export const OFFER_SIZE: Record<RuneSource, number> = { start: 3, combat: 2, chest: 2, event: 3, shop: 1, shrine: 3, elite: 3, boss: 3, final: 3 };
 /** Precio en oro de una runa en la tienda, por rareza. */

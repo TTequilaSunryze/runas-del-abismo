@@ -4,6 +4,12 @@ import type { HeroSave, RunState } from '../game/run';
 import type { Session } from '../game/session';
 import type { Board } from '../render/board';
 
+/**
+ * Entrada del registro: `k` = 'c' (combate) o 'g' (grupo: runas, bendiciones, mejoras, objetos y niveles de cada jugador).
+ * `html` ya viene escapado y coloreado; su detalle va en un data-tip.
+ */
+export interface LogEntry { at: number; k: 'c' | 'g'; html: string }
+
 export const esc = (s: unknown): string => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 export const params = new URLSearchParams(location.search);
 export const store = {
@@ -26,7 +32,9 @@ export const ui = {
   screen: '',
   saved: null as RunState | null,
   notice: '',
-  log: [] as string[],
+  log: [] as LogEntry[],
+  /** registro del grupo (dura toda la expedición) */
+  glog: [] as LogEntry[],
   /** pestaña del panel lateral */
   tab: 'equipo' as 'equipo' | 'hechizos' | 'runas' | 'grupo',
   /** runa seleccionada en la pestaña de runas: "eq:0" o "bag:1" */
@@ -36,7 +44,8 @@ export const ui = {
   /** objeto seleccionado: "bag:3" o "slot:arma" */
   selItem: '',
   leaveArmed: false,
-  logOpen: false,
+  /** ventana del registro abierta (se recuerda; abierta por defecto) */
+  logOpen: store.get('rda_logopen') !== '0',
   /** ascensión elegida (solo cuenta la del anfitrión) y reto diario */
   asc: 0,
   daily: false,
